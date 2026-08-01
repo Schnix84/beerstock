@@ -237,17 +237,20 @@
     el.stand.textContent = standText(daten.stand);
   }
 
-  // Absichtlich nur auf Tage genau - eine Uhrzeit wuerde verraten, wann jemand
-  // am Kuehlschrank war.
-  function standText(datum) {
-    if (!datum) return 'Stand unbekannt';
-    const d = new Date(datum + 'T12:00:00');
+  // `stand` ist der Zeitpunkt des letzten brauchbaren Kuehlschrankfotos, auf die
+  // volle Stunde gerundet und mit Zeitzonen-Offset - die Minute bleibt damit
+  // privat, waehrend die Rechnung auch in einer anderen Zeitzone stimmt.
+  //
+  // Unter 24 h heisst es schlicht "aktuell"; darueber zaehlt die Seite die Tage,
+  // damit man sieht, wenn laengere Zeit niemand am Kuehlschrank war.
+  function standText(zeit) {
+    if (!zeit) return 'Stand unbekannt';
+    const d = new Date(zeit);
     if (isNaN(d)) return 'Stand unbekannt';
-    const heute = new Date(); heute.setHours(12, 0, 0, 0);
-    const tage = Math.round((heute - d) / 86400000);
-    if (tage <= 0) return 'Stand: heute';
-    if (tage === 1) return 'Stand: gestern';
-    return `Stand: vor ${tage} Tagen`;
+    const stunden = (Date.now() - d) / 3600000;
+    if (stunden < 24) return 'aktuell';
+    const tage = Math.floor(stunden / 24);
+    return tage === 1 ? 'vor 1 Tag' : `vor ${tage} Tagen`;
   }
 
   fetch('status.json?t=' + Date.now(), { cache: 'no-store' })
