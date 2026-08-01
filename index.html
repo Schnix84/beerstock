@@ -98,24 +98,15 @@
     font-size: clamp(20px, 6vmin, 34px); fill: var(--rot); opacity: 0.85;
   }
 
-  .fuss {
-    margin-top: clamp(12px, 3vmin, 20px);
-    display: flex; align-items: baseline; justify-content: center;
-    gap: clamp(6px, 1.6vmin, 10px); flex-wrap: wrap;
-  }
-  .zahl {
-    font-family: ui-serif, Georgia, serif; font-weight: 700; line-height: 1;
-    font-size: clamp(21px, 6.4vmin, 34px);
-  }
-  .kalt {
-    font-size: clamp(9px, 2.4vmin, 12px); font-weight: 700;
-    letter-spacing: 0.18em; text-indent: 0.18em; text-transform: uppercase;
-    color: var(--rot);
-  }
   .meta {
-    margin-top: clamp(5px, 1.4vmin, 9px);
+    margin-top: clamp(12px, 3vmin, 20px);
     font-size: clamp(9px, 2.3vmin, 12px);
     letter-spacing: 0.09em; color: var(--blass);
+    white-space: nowrap;              /* der Einzeiler bleibt einzeilig */
+  }
+  .kalt {
+    font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--rot);
   }
   .meta .trenn { opacity: 0.45; margin: 0 0.5em; }
   .zahlen { font-variant-numeric: tabular-nums; }
@@ -136,12 +127,13 @@
         <g id="striche"></g>
       </svg>
 
-      <div class="fuss">
-        <span class="zahl zahlen" id="zahl">–</span>
-        <span class="kalt">kalt</span>
-      </div>
+      <!-- Einzeiler. Die Menge steht ausschliesslich in den Strichen - eine
+           Ziffer daneben waere dieselbe Zahl zweimal und nimmt der Strichliste
+           genau die Aufgabe weg, fuer die sie da ist. -->
       <div class="meta">
-        <span class="zahlen" id="temp">–</span><span class="trenn">·</span><span id="stand">wird geladen</span>
+        <span class="kalt">kalt</span><span class="trenn">·</span><span
+          class="zahlen" id="temp">–</span><span class="trenn">·</span><span
+          id="stand">wird geladen</span>
       </div>
     </div>
   </main>
@@ -164,7 +156,7 @@
       t.setAttribute('text-anchor', 'middle');
       t.setAttribute('class', 'aus');
       // Kein "0": eine leere Strichliste sagt dasselbe freundlicher.
-      t.textContent = anzahl === 0 ? 'ausgetrunken' : '?';
+      t.textContent = anzahl === 0 ? 'leer' : '?';
       g.appendChild(t);
       return;
     }
@@ -222,9 +214,7 @@
   }
 
   function zeichne(daten) {
-    const n = Number(daten.biere);
-    striche(n);
-    document.getElementById('zahl').textContent = Number.isFinite(n) ? n : '–';
+    striche(Number(daten.biere));
 
     const t = Number(daten.temperatur);
     document.getElementById('temp').textContent =
@@ -238,7 +228,6 @@
     .then(zeichne)
     .catch(() => {
       striche(NaN);
-      document.getElementById('zahl').textContent = '–';
       document.getElementById('temp').textContent = 'keine Daten';
       document.getElementById('stand').textContent = 'gerade nicht erreichbar';
     });
