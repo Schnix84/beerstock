@@ -5,244 +5,212 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kaltes Bier</title>
 <meta name="description" content="Wie viele kalte Biere gerade im Kühlschrank stehen.">
-<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#1a120c">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
 <style>
+  /* ==========================================================================
+     Ein Bierdeckel auf einem Wirtshaustisch.
+     Bewusst eine einzige, festgelegte Welt statt hell/dunkel: das Motiv ist ein
+     Gegenstand, der auf etwas liegt. Ein "heller Modus" waere hier kein Thema,
+     sondern ein anderer Tisch - und der zweite Tisch macht das Bild nicht besser.
+     ========================================================================== */
   :root {
-    --page:           #0a0a0c;
-    --page-2:         #121216;
-    --surface-1:      #17171b;
-    --text-primary:   #ffffff;
-    --text-secondary: #b9b8b2;
-    --text-muted:     #7d7c77;
-    --border:         rgba(255,255,255,0.09);
-    --border-hi:      rgba(255,255,255,0.16);
-
-    --beer:      #e8912f;
-    --beer-deep: #c96a12;
-    --beer-lite: #ffc766;
-    --foam:      #fff6e2;
-
-    --cold:      #4aa3f0;
-    --good:      #23c552;
-    --gridline:  #2a2a30;
-  }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --page:           #f2f1ee;
-      --page-2:         #fbfbf9;
-      --surface-1:      #ffffff;
-      --text-primary:   #0b0b0b;
-      --text-secondary: #55544f;
-      --text-muted:     #8b8a84;
-      --border:         rgba(11,11,11,0.09);
-      --border-hi:      rgba(11,11,11,0.14);
-
-      --beer:      #e07c15;
-      --beer-deep: #b45f08;
-      --beer-lite: #ffb84d;
-      --foam:      #fff3dd;
-
-      --cold:      #2a78d6;
-      --good:      #0e9c3c;
-      --gridline:  #e3e2dc;
-    }
+    --tisch-hell:  #2a211a;
+    --tisch-tief:  #150e09;
+    --pappe-hell:  #e3d8c1;
+    --pappe:       #d9cdb4;
+    --pappe-tief:  #c6b898;
+    --pappe-kante: #b3a684;
+    --tinte:       #1d2a24;   /* Druckerschwarz, leicht gruenstichig */
+    --gruen:       #2f5d4a;   /* Brauereigruen */
+    --rot:         #a8342a;   /* Registerrot, nur fuer den Querstrich */
+    --blass:       #6f6653;
   }
 
-  * { box-sizing: border-box; }
+  *, *::before, *::after { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
     margin: 0;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background:
-      radial-gradient(1000px 600px at 15% -10%, rgba(232,145,47,0.10), transparent 60%),
-      radial-gradient(900px 600px at 85% 105%, rgba(74,163,240,0.10), transparent 60%),
-      linear-gradient(180deg, var(--page), var(--page-2));
-    background-attachment: fixed;
-    color: var(--text-primary);
-    display: flex; align-items: center; justify-content: center;
+      radial-gradient(120% 90% at 50% 8%, var(--tisch-hell), var(--tisch-tief) 70%);
+    display: grid; place-items: center;
     padding: 24px;
     -webkit-font-smoothing: antialiased;
   }
+  /* Holzmaserung des Tisches - flach, sie soll nicht mit der Pappe konkurrieren */
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background-image: repeating-linear-gradient(
+      93deg, #ffffff06 0 1px, transparent 1px 3px, #00000010 3px 4px, transparent 4px 11px);
+    mix-blend-mode: overlay;
+  }
 
-  .card {
+  .deckel {
     position: relative;
-    width: 100%; max-width: 360px;
-    border-radius: 26px;
-    border: 1px solid var(--border);
-    background:
-      linear-gradient(165deg, rgba(255,255,255,0.055), rgba(255,255,255,0) 42%),
-      var(--surface-1);
+    width: min(86vw, 86vh, 430px); aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(85% 85% at 30% 22%, var(--pappe-hell), var(--pappe) 55%, var(--pappe-tief));
     box-shadow:
-      0 1px 0 0 var(--border-hi) inset,
-      0 24px 50px -24px rgba(0,0,0,0.75),
-      0 2px 10px -4px rgba(0,0,0,0.4);
-    padding: 32px 26px 26px;
-    text-align: center;
-    overflow: hidden;
+      0 26px 48px -20px rgba(0,0,0,0.85),
+      0 3px 0 0 var(--pappe-kante) inset,
+      0 -4px 0 0 #cdc0a2 inset;
+    transform: rotate(-4deg);
+    display: grid; place-items: center;
+    color: var(--tinte);
   }
-  @media (prefers-color-scheme: light) {
-    .card { box-shadow: 0 1px 0 0 rgba(255,255,255,0.9) inset, 0 20px 42px -26px rgba(0,0,0,0.35), 0 2px 8px -4px rgba(0,0,0,0.12); }
+  /* gestanzter Innenring */
+  .deckel::before {
+    content: ""; position: absolute; inset: 5.5%; border-radius: 50%;
+    border: 1.5px solid var(--gruen); opacity: 0.5;
   }
-  .card::before {
-    content: ""; position: absolute; inset: -55% 15% 45% 15%;
-    background: radial-gradient(closest-side, rgba(232,145,47,0.30), transparent);
-    pointer-events: none; filter: blur(6px);
+  /* Papierfaser */
+  .deckel::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background-image:
+      radial-gradient(#00000012 1px, transparent 1px),
+      radial-gradient(#ffffff1c 1px, transparent 1px);
+    background-size: 5px 5px, 7px 7px;
+    background-position: 0 0, 3px 4px;
+    pointer-events: none;
   }
-  .card > * { position: relative; }
 
-  .eyebrow {
-    font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--text-muted); margin-bottom: 16px;
+  .inhalt { position: relative; z-index: 1; width: 76%; text-align: center; }
+
+  .marke {
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-size: clamp(11px, 3.1vmin, 16px);
+    letter-spacing: 0.28em; text-indent: 0.28em; text-transform: uppercase;
+    color: var(--gruen);
+  }
+  .regel { height: 1px; background: var(--gruen); opacity: 0.38; margin: 9px auto 16px; width: 60%; }
+
+  svg.striche { width: 100%; height: auto; display: block; }
+  .strich {
+    stroke: var(--tinte); stroke-width: 7; stroke-linecap: round;
+    stroke-dasharray: 82; stroke-dashoffset: 82;
+    animation: schreiben .28s ease-out forwards;
+  }
+  .strich.quer { stroke: var(--rot); }
+  @keyframes schreiben { to { stroke-dashoffset: 0; } }
+
+  .aus {
+    font-family: ui-serif, Georgia, serif; font-style: italic;
+    font-size: clamp(20px, 6vmin, 34px); fill: var(--rot); opacity: 0.85;
   }
 
-  .stage { display: flex; align-items: center; justify-content: center; gap: 16px; }
-  .num {
-    font-size: 100px; font-weight: 700; line-height: 0.92; letter-spacing: -0.035em;
-    background: linear-gradient(170deg, var(--beer-lite), var(--beer) 45%, var(--beer-deep));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 6px 18px rgba(232,145,47,0.28));
+  .fuss {
+    margin-top: clamp(12px, 3vmin, 20px);
+    display: flex; align-items: baseline; justify-content: center;
+    gap: clamp(6px, 1.6vmin, 10px); flex-wrap: wrap;
   }
-  .glass { filter: drop-shadow(0 10px 22px rgba(232,145,47,0.3)); flex: none; }
-
-  /* Der Fuellstand entsteht, indem die ganze Inhaltsgruppe nach unten geschoben
-     wird; das Bier-Rechteck ist deshalb absichtlich viel zu hoch. */
-  .brewLevel { transition: transform 900ms cubic-bezier(.22,.8,.3,1); }
-
-  /* Taktung inline am Kreis: nth-of-type wuerde hier die Schaumkuppen mitzaehlen. */
-  .bub { animation: rise 3.4s linear infinite; transform-origin: center; }
-  @keyframes rise {
-    0%   { transform: translateY(0);     opacity: 0; }
-    12%  { opacity: 0.85; }
-    85%  { opacity: 0.65; }
-    100% { transform: translateY(-10px); opacity: 0; }
+  .zahl {
+    font-family: ui-serif, Georgia, serif; font-weight: 700; line-height: 1;
+    font-size: clamp(21px, 6.4vmin, 34px);
   }
+  .kalt {
+    font-size: clamp(9px, 2.4vmin, 12px); font-weight: 700;
+    letter-spacing: 0.18em; text-indent: 0.18em; text-transform: uppercase;
+    color: var(--rot);
+  }
+  .meta {
+    margin-top: clamp(5px, 1.4vmin, 9px);
+    font-size: clamp(9px, 2.3vmin, 12px);
+    letter-spacing: 0.09em; color: var(--blass);
+  }
+  .meta .trenn { opacity: 0.45; margin: 0 0.5em; }
+  .zahlen { font-variant-numeric: tabular-nums; }
+
   @media (prefers-reduced-motion: reduce) {
-    .bub { animation: none; opacity: 0.5; }
-    .brewLevel { transition: none; }
-    .livedot { animation: none; }
-  }
-
-  .cap { font-size: 15px; color: var(--text-secondary); margin-top: 12px; font-weight: 500; }
-
-  .footline {
-    margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--gridline);
-    display: flex; justify-content: center; align-items: center; gap: 12px;
-    font-size: 11.5px; color: var(--text-muted); flex-wrap: wrap;
-  }
-  .sep { color: var(--gridline); }
-
-  .chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 11px 6px 8px; border-radius: 999px;
-    font-size: 13px; font-weight: 650; color: var(--text-primary);
-    background: linear-gradient(160deg, color-mix(in srgb, var(--cold) 26%, transparent), color-mix(in srgb, var(--cold) 10%, transparent));
-    border: 1px solid color-mix(in srgb, var(--cold) 34%, transparent);
-    box-shadow: 0 0 18px -6px color-mix(in srgb, var(--cold) 55%, transparent);
-  }
-  .chip svg { width: 14px; height: 14px; }
-  .chip.off {
-    background: none; border-color: var(--border-hi);
-    box-shadow: none; color: var(--text-muted); font-weight: 500;
+    .strich { animation: none; stroke-dashoffset: 0; }
   }
 </style>
 </head>
 <body>
-  <main class="card">
-    <div class="eyebrow">Im Kühlschrank warten</div>
-    <div class="stage">
-      <div class="num" id="num">–</div>
-      <svg class="glass" width="84" height="103" viewBox="0 0 62 76" fill="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="brew" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stop-color="var(--beer-lite)"/>
-            <stop offset="55%"  stop-color="var(--beer)"/>
-            <stop offset="100%" stop-color="var(--beer-deep)"/>
-          </linearGradient>
-          <linearGradient id="gloss" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"   stop-color="#fff" stop-opacity="0.34"/>
-            <stop offset="26%"  stop-color="#fff" stop-opacity="0.06"/>
-            <stop offset="72%"  stop-color="#fff" stop-opacity="0"/>
-            <stop offset="100%" stop-color="#fff" stop-opacity="0.18"/>
-          </linearGradient>
-          <clipPath id="cup">
-            <path d="M12 8h34l-3.4 54.5A7 7 0 0 1 35.6 69H22.4a7 7 0 0 1-7-6.5L12 8Z"/>
-          </clipPath>
-        </defs>
-        <g clip-path="url(#cup)">
-          <g class="brewLevel" id="brewLevel" transform="translate(0 48)">
-            <rect x="8" y="20" width="46" height="150" fill="url(#brew)"/>
-            <rect x="8" y="11" width="46" height="10" fill="var(--foam)"/>
-            <circle cx="19" cy="12" r="5.5" fill="var(--foam)"/>
-            <circle cx="30" cy="10" r="6.5" fill="var(--foam)"/>
-            <circle cx="41" cy="12" r="5.5" fill="var(--foam)"/>
-            <circle class="bub" cx="23" cy="32" r="2.1" fill="#fff" opacity="0.55"/>
-            <circle class="bub" cx="33" cy="38" r="1.5" fill="#fff" opacity="0.5"  style="animation-duration:4.3s;animation-delay:-1.2s"/>
-            <circle class="bub" cx="39" cy="34" r="2.4" fill="#fff" opacity="0.45" style="animation-duration:3.9s;animation-delay:-2.4s"/>
-            <circle class="bub" cx="28" cy="44" r="1.3" fill="#fff" opacity="0.55" style="animation-duration:4.8s;animation-delay:-0.6s"/>
-          </g>
-          <rect x="8" y="0" width="46" height="76" fill="url(#gloss)"/>
-        </g>
-        <path d="M12 8h34l-3.4 54.5A7 7 0 0 1 35.6 69H22.4a7 7 0 0 1-7-6.5L12 8Z"
-              stroke="var(--text-secondary)" stroke-opacity="0.5" stroke-width="1.6" stroke-linejoin="round"/>
-        <path d="M12 8h34" stroke="var(--text-secondary)" stroke-opacity="0.75" stroke-width="2.4" stroke-linecap="round"/>
-      </svg>
-    </div>
-    <div class="cap">kalte Biere</div>
+  <main class="deckel">
+    <div class="inhalt">
+      <div class="marke">Kühlschrank</div>
+      <div class="regel"></div>
 
-    <div class="footline">
-      <span class="chip" id="chip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--cold)" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10 13.6V4.2a2 2 0 1 1 4 0v9.4a4 4 0 1 1-4 0Z"/>
-        </svg>
-        <span id="temp">–</span>
-      </span>
-      <span class="sep">·</span>
-      <span id="stand">wird geladen …</span>
+      <svg class="striche" viewBox="0 0 300 120" role="img" aria-labelledby="titel">
+        <title id="titel">Strichliste der kalten Biere</title>
+        <g id="striche"></g>
+      </svg>
+
+      <div class="fuss">
+        <span class="zahl zahlen" id="zahl">–</span>
+        <span class="kalt">kalt</span>
+      </div>
+      <div class="meta">
+        <span class="zahlen" id="temp">–</span><span class="trenn">·</span><span id="stand">wird geladen</span>
+      </div>
     </div>
   </main>
 
 <script>
-  // 12 Flaschen = randvolles Glas. Gezeichnet ist der volle Zustand; weniger Bier
-  // entsteht, indem die Inhaltsgruppe nach unten geschoben wird.
-  const KAPAZITAET  = 12;
-  const OBERFLAECHE = { voll: 20, leer: 68 };   // y der Bieroberflaeche im SVG
+  const NS = 'http://www.w3.org/2000/svg';
 
-  const el = {
-    num:   document.getElementById('num'),
-    level: document.getElementById('brewLevel'),
-    temp:  document.getElementById('temp'),
-    chip:  document.getElementById('chip'),
-    stand: document.getElementById('stand'),
-  };
+  // --------------------------------------------------------------------------
+  // Strichliste, wie sie der Wirt anschreibt: Vierergruppe plus Querstrich.
+  // Die Gruppen brechen ab drei Stueck in mehrere Reihen um, sonst laufen sie
+  // bei zwoelf Flaschen ueber den Rand des Deckels hinaus.
+  // --------------------------------------------------------------------------
+  function striche(anzahl) {
+    const g = document.getElementById('striche');
+    g.textContent = '';
 
-  function zeichne(daten) {
-    const n = Number(daten.biere);
-    if (Number.isFinite(n)) {
-      const anteil = Math.max(0, Math.min(n / KAPAZITAET, 1));
-      const dy = (1 - anteil) * (OBERFLAECHE.leer - OBERFLAECHE.voll);
-      el.level.setAttribute('transform', `translate(0 ${dy.toFixed(1)})`);
-      el.num.textContent = n;
+    if (!Number.isFinite(anzahl) || anzahl <= 0) {
+      const t = document.createElementNS(NS, 'text');
+      t.setAttribute('x', 150); t.setAttribute('y', 74);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('class', 'aus');
+      // Kein "0": eine leere Strichliste sagt dasselbe freundlicher.
+      t.textContent = anzahl === 0 ? 'ausgetrunken' : '?';
+      g.appendChild(t);
+      return;
     }
 
-    const t = Number(daten.temperatur);
-    if (Number.isFinite(t)) {
-      el.temp.textContent = t.toFixed(1).replace('.', ',') + ' °C';
-      el.chip.classList.remove('off');
-    } else {
-      el.chip.classList.add('off');
-      el.temp.textContent = 'keine Messung';
-    }
+    const gruppen  = Math.ceil(anzahl / 5);
+    const proReihe = gruppen <= 2 ? gruppen : gruppen <= 4 ? 2 : 3;
+    const reihen   = Math.ceil(gruppen / proReihe);
 
-    el.stand.textContent = standText(daten.stand);
+    const gBreite = 74, gAbstand = 24, zAbstand = 44;
+    const yMitte  = 60;
+    const yStart  = yMitte - ((reihen - 1) * zAbstand) / 2;
+
+    let stift = 0;   // fuer den zeitlichen Versatz beim Anschreiben
+    for (let gi = 0; gi < gruppen; gi++) {
+      const imBund   = Math.min(5, anzahl - gi * 5);
+      const reihe    = Math.floor(gi / proReihe);
+      const spalte   = gi % proReihe;
+      const inReihe  = Math.min(proReihe, gruppen - reihe * proReihe);
+      const gesamt   = inReihe * gBreite + (inReihe - 1) * gAbstand;
+      const x0 = 150 - gesamt / 2 + spalte * (gBreite + gAbstand);
+      const y  = yStart + reihe * zAbstand;
+
+      for (let s = 0; s < Math.min(imBund, 4); s++) {
+        const l = document.createElementNS(NS, 'line');
+        l.setAttribute('class', 'strich');
+        l.setAttribute('x1', x0 + 9 + s * 16); l.setAttribute('y1', y - 15);
+        l.setAttribute('x2', x0 + 13 + s * 16); l.setAttribute('y2', y + 15);
+        l.style.animationDelay = (stift++ * 0.075) + 's';
+        g.appendChild(l);
+      }
+      if (imBund === 5) {
+        const l = document.createElementNS(NS, 'line');
+        l.setAttribute('class', 'strich quer');
+        l.setAttribute('x1', x0 + 2);  l.setAttribute('y1', y + 13);
+        l.setAttribute('x2', x0 + 66); l.setAttribute('y2', y - 13);
+        l.style.animationDelay = (stift++ * 0.075) + 's';
+        g.appendChild(l);
+      }
+    }
   }
 
+  // --------------------------------------------------------------------------
   // `stand` ist der Zeitpunkt des letzten brauchbaren Kuehlschrankfotos, auf die
-  // volle Stunde gerundet und mit Zeitzonen-Offset - die Minute bleibt damit
+  // volle Stunde gerundet und mit Zeitzonen-Offset: die Minute bleibt damit
   // privat, waehrend die Rechnung auch in einer anderen Zeitzone stimmt.
-  //
-  // Unter 24 h heisst es schlicht "aktuell"; darueber zaehlt die Seite die Tage,
-  // damit man sieht, wenn laengere Zeit niemand am Kuehlschrank war.
+  // --------------------------------------------------------------------------
   function standText(zeit) {
     if (!zeit) return 'Stand unbekannt';
     const d = new Date(zeit);
@@ -250,17 +218,29 @@
     const stunden = (Date.now() - d) / 3600000;
     if (stunden < 24) return 'aktuell';
     const tage = Math.floor(stunden / 24);
-    return tage === 1 ? 'vor 1 Tag' : `vor ${tage} Tagen`;
+    return tage === 1 ? 'vor 1 Tag' : 'vor ' + tage + ' Tagen';
+  }
+
+  function zeichne(daten) {
+    const n = Number(daten.biere);
+    striche(n);
+    document.getElementById('zahl').textContent = Number.isFinite(n) ? n : '–';
+
+    const t = Number(daten.temperatur);
+    document.getElementById('temp').textContent =
+      Number.isFinite(t) ? t.toFixed(1).replace('.', ',') + ' °C' : 'keine Messung';
+
+    document.getElementById('stand').textContent = standText(daten.stand);
   }
 
   fetch('status.json?t=' + Date.now(), { cache: 'no-store' })
     .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
     .then(zeichne)
     .catch(() => {
-      el.num.textContent = '?';
-      el.chip.classList.add('off');
-      el.temp.textContent = 'keine Daten';
-      el.stand.textContent = 'gerade nicht erreichbar';
+      striche(NaN);
+      document.getElementById('zahl').textContent = '–';
+      document.getElementById('temp').textContent = 'keine Daten';
+      document.getElementById('stand').textContent = 'gerade nicht erreichbar';
     });
 </script>
 </body>
