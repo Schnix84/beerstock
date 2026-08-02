@@ -134,6 +134,15 @@ Drei Dinge, die dazugehören:
   Antwort sich wirklich geändert hat; während einer Radanimation oder eines
   eigenen Schreibvorgangs wird der Anstoß gemerkt und danach nachgeholt. Beim
   Neuzeichnen des Blattes bleiben Scrollstand und getippter Text stehen.
+- **Auch die Uhr läuft mit.** Ein Abend fängt an und hört auf, ohne dass jemand
+  etwas schreibt — davon käme also nie eine Marke. Statt eines Tickers je
+  Sekunde stellt sich ein einziger Wecker auf den nächsten Zeitpunkt, an dem
+  sich überhaupt etwas ändern kann: Anfang und Ende jedes Abends, dazu die Frist
+  der offenen Ziehung. Dort zeichnet die Seite die Terminliste neu und fragt
+  einmal nach — an der Frist ist das mehr als Kosmetik, das Los ist dann
+  verfallen und das Rad wieder frei. Dazwischen schläft sie, der Wechsel sitzt
+  trotzdem auf der Sekunde. Was im Schlaf des Geräts liegen bleibt, holen der
+  Blick auf die Uhr beim Aufwachen und das 20-Sekunden-Netz nach.
 
 ### API
 

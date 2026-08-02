@@ -1747,6 +1747,11 @@
   let losTag = null;
   let letzteTermine = [];   // fuer das Neuzeichnen nach einer Absage
   let chronikZahl = 0;      // wie viele Abende im Archiv liegen (aus der Bestenliste)
+  /* Das Uhrwerk (weiter unten). Es haelt fest, was gerade gezeichnet dasteht,
+     damit es merkt, wann die Uhr etwas daran umgelegt hat. */
+  let letztesLos = null;    // die geltende Ziehung — wegen ihrer Frist
+  let uhrTimer = null;      // der Wecker auf den naechsten Wechsel
+  let uhrStand = '';        // Zustand der Terminzeilen, wie zuletzt gezeichnet
   let letztesFeld = [];     // die Bestenliste, fuer "wer ist nicht im Topf"
   let selbstGedreht = false;// in DIESER Sitzung gedreht: dann bleibt das Rad stehen
   let dreht = false;        // waehrend der Animation nichts neu zeichnen
@@ -1849,6 +1854,10 @@
   function zeichneTermine(termine, wieViel) {
     letzteTermine = termine;
     if (Number.isFinite(wieViel)) chronikZahl = wieViel;
+    /* Welchen Stand der Uhr dieses Bild zeigt, und wann der naechste faellig
+       ist: beides gehoert vor jeden Rueckweg, auch vor den leeren. */
+    uhrStand = terminStaende();
+    uhrwerk();
     const block = $('termin-block'), ziel = $('termin-liste');
     const darf = !!merke() && !!meinName;
 
@@ -1883,6 +1892,84 @@
     }
   }
 
+  /* --- Das Uhrwerk ---------------------------------------------------------
+     Jede Zeile liest die Uhr genau einmal: beim Zeichnen. Danach stand sie
+     still — wer um 20:55 zusah, las um 21:05 immer noch „läuft", und der Abend
+     rutschte erst unter „gewesen", wenn die Tafel zufällig etwas schickte.
+
+     Ein Ticker je Sekunde wäre die falsche Antwort. Die Zeitpunkte, an denen
+     sich überhaupt etwas ändern KANN, stehen nämlich fest: Anfang und Ende
+     jedes Abends, dazu die Frist der offenen Ziehung. Ein einziger Wecker
+     läuft auf den nächsten davon zu, zeichnet dort neu und stellt sich neu.
+     Dazwischen schläft die Seite stundenlang, und der Wechsel sitzt trotzdem
+     auf der Sekunde.
+     --------------------------------------------------------------------- */
+
+  /* Die Zustände aller Zeilen als eine Zeichenkette: 0 kommend, 1 läuft,
+     2 gewesen. Genau die Unterscheidungen, die `VARIANTE.termin` und die
+     Teilung in kommend/gewesen treffen — woran die Uhr nichts dreht, braucht
+     auch kein Neuzeichnen. */
+  function terminStaende() {
+    const jetzt = Date.now();
+    return letzteTermine.map(t => {
+      const an = new Date(t.beginnt_am).getTime() <= jetzt;
+      const aus = new Date(t.endet_am || t.beginnt_am).getTime() <= jetzt;
+      return aus ? 2 : an ? 1 : 0;
+    }).join('');
+  }
+
+  /* Nachsehen, ob die Uhr etwas umgelegt hat — und den Wecker in jedem Fall
+     neu stellen. Gezeichnet wird nur bei echtem Wechsel: der Aufruf kommt auch
+     alle 20 Sekunden aus `nachfassen` und nach jedem Aufwachen vorbei, und ein
+     Neubau der Liste ohne Anlass fiele irgendwann mitten in einen Tap. */
+  function nachDerUhr() {
+    // Ins laufende Rad nicht hineinzeichnen; der nächste Blick holt es nach.
+    if (!dreht && terminStaende() !== uhrStand) {
+      zeichneTermine(letzteTermine, chronikZahl);   // stellt das Uhrwerk mit
+    } else {
+      uhrwerk();
+    }
+  }
+
+  function uhrwerk() {
+    if (uhrTimer) { clearTimeout(uhrTimer); uhrTimer = null; }
+    const jetzt = Date.now();
+    const marken = [];
+    letzteTermine.forEach(t => {
+      marken.push(t.beginnt_am);
+      if (t.endet_am) marken.push(t.endet_am);
+    });
+    /* Die Frist ist mehr als eine Anzeige: ist sie um, lässt der Worker das Los
+       verfallen und gibt das Rad wieder frei. Davon kommt keine Marke über die
+       Leitung — an dieser Grenze muss die Seite selbst nachfragen. */
+    if (letztesLos && letztesLos.frist) marken.push(letztesLos.frist);
+
+    // Ungültige Daten fallen mit heraus: ein NaN besteht keinen Vergleich.
+    const naechste = Math.min(...marken
+      .map(z => new Date(z).getTime())
+      .filter(z => z > jetzt));
+    if (!Number.isFinite(naechste)) return;   // nichts mehr vor uns
+
+    /* Eine Sekunde Zugabe, damit der Vergleich beim Neuzeichnen sicher auf der
+       anderen Seite der Grenze liegt. Und höchstens eine Stunde am Stück: einen
+       Wecker über Nacht lässt ein schlafendes Gerät irgendwann fallen, ein
+       kurzer stellt sich beim Aufwachen einfach wieder. */
+    const wart = Math.min(naechste - jetzt + 1000, 3600000);
+    uhrTimer = setTimeout(() => {
+      uhrTimer = null;
+      const geschlagen = Date.now() >= naechste;
+      nachDerUhr();
+      /* An einer echten Grenze einmal nachfassen, nicht beim Zwischenwecker:
+         mit dem Abend ändert sich auch, was der Worker erlaubt — bewerten ab
+         dem ersten Bier, drehen wieder nach einer verfallenen Frist. Kostet
+         nichts, wenn nichts dran ist: `hole` vergleicht mit `letzterStand`. */
+      if (geschlagen) {
+        hole(true);
+        if (flyZiel) flyLaden(true);
+      }
+    }, wart);
+  }
+
   /* Das Formular füllt sich aus der Bestenliste — Gastgeber ist, wer in der
      Liste steht. Ids kennt die Seite nicht, sie schickt den Namen. */
   function terminFormular() {
@@ -1913,6 +2000,7 @@
   }
 
   function zeichneRad(los) {
+    letztesLos = los || null;   // das Uhrwerk braucht die Frist daraus
     const block = $('rad-block');
     if (!los) { block.hidden = true; return; }
     block.hidden = false;
@@ -3041,6 +3129,9 @@
 
     setInterval(() => {
       if (document.visibilityState !== 'visible') return;
+      // Das Sicherheitsnetz unter dem Uhrwerk: ein Wecker, den die Laufzeit
+      // hat fallen lassen, kostet so höchstens 20 Sekunden Verzug.
+      nachDerUhr();
       if (stehtDieLeitung()) {
         // Hält die Leitung offen; beantwortet wird das von der Laufzeit selbst,
         // das Durable Object schläft dabei weiter.
@@ -3060,6 +3151,11 @@
          von vorhin — der zählt Fehlversuche, nicht Pausen. */
       wsVersuch = 0;
       if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
+      /* Zuerst die Uhr: im Schlaf feuert kein Timer nach, und ein Handy aus der
+         Tasche zeigte sonst den Stand von vorhin. Das ist auch der einzige Weg
+         dahin — `frisch()` unten lädt zwar, zeichnet aber nichts neu, wenn der
+         Worker Byte für Byte dasselbe sagt wie vor dem Einschlafen. */
+      nachDerUhr();
       strom();
       if (Date.now() - letzte > 20000) frisch();
       if (flyZiel) flyLaden(true);
