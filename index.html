@@ -731,9 +731,11 @@
   body.draussen #rangliste {
     filter: blur(4.5px); opacity: .5; pointer-events: none; user-select: none;
   }
-  /* Fuenf Zeilen Kreide statt der Liste - von weitem die Tafel, aus der Naehe
+  /* Drei Zeilen Kreide statt der Liste - von weitem die Tafel, aus der Naehe
      nichts. Die Masse sind die einer echten Zeile, damit der Block nicht
-     kuerzer wird, sobald die Tuer zugeht. */
+     kuerzer wird, sobald die Tuer zugeht. Drei und nicht fuenf: jede Zeile ist
+     gemessen 57 px hoch, und der Anmeldeknopf stand damit erst bei 882 px -
+     auf keinem Telefon ohne Scrollen zu sehen. */
   .ph-zeile {
     display: flex; align-items: center; gap: 14px;
     padding: 13px 0; border-bottom: 1px dashed #ffffff14;
@@ -1975,7 +1977,7 @@
      wird also nichts Echtes: was nicht da ist, kann auch niemand
      scharfstellen. Feste Breiten und kein Zufall, sonst saehe die Tafel bei
      jedem Aufbau anders aus und faellt als Attrappe auf. */
-  const PLATZHALTER = [[74, 46], [58, 34], [66, 40], [50, 28], [62, 36]];
+  const PLATZHALTER = [[74, 46], [58, 34], [66, 40]];
   function platzhalter() {
     const box = el('div', 'ph');
     PLATZHALTER.forEach(([oben, unten]) => {
