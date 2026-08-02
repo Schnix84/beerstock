@@ -37,7 +37,8 @@ Wen es trifft, der **sagt zu oder ab**. Erst die Zusage macht daraus den Abend �
 vorher steht nur, worauf die Flasche zeigt. Eine Absage gibt den Tag sofort wieder
 frei, und die Flasche darf erneut gedreht werden; wer abgesagt oder drei Stunden
 lang nicht geantwortet hat, ist für heute raus und wird nicht noch einmal gezogen.
-Der Bierabend-Tag endet dabei nicht um Mitternacht, sondern sechs Stunden später.
+Der Bierabend-Tag endet dabei nicht um Mitternacht, sondern um vier Uhr morgens —
+wer um halb zwei dreht, meint den Abend, der gerade läuft.
 
 ## Termine, Sterne, Gesagtes
 

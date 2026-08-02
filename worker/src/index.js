@@ -149,12 +149,17 @@ const BILD_MAX     = 2 * 1024 * 1024;  // Bytes
 const BILDSPERRE   = 10;               // Sekunden zwischen zwei Uploads desselben Nutzers
 const BILDER_TAG   = 30;               // je Nutzer und Tag, wie KOMMENTARE_TAG
 
-/* Der Bierabend-Tag endet nicht um Mitternacht, sondern sechs Stunden spaeter
-   (07:00 bzw. 08:00 Ortszeit) - sonst faellt die Drehung um kurz nach eins auf
+/* Der Bierabend-Tag endet nicht um Mitternacht, sondern zwei Stunden spaeter
+   (03:00 bzw. 04:00 Ortszeit) - sonst faellt die Drehung um kurz nach eins auf
    den naechsten Tag, obwohl sie zu demselben Abend gehoert. Bewusst in UTC
    gerechnet statt ueber eine Zeitzone: die Stunde Sommerzeit-Drift ist an
-   dieser Grenze egal, eine ICU-Abhaengigkeit waere es nicht. */
-const LOS_GRENZE = 6;
+   dieser Grenze egal, eine ICU-Abhaengigkeit waere es nicht.
+
+   Vier Uhr und nicht acht: der Zweck der Grenze - die Drehung um halb zwei
+   gehoert zum Abend davor - reicht nur bis in die Nacht. Alles danach ist
+   Widerspruch zur Datumszeile ueber dem Rad, die um Mitternacht springt.
+   Vier Uhr laesst davon die vier Stunden stehen, in denen niemand hinsieht. */
+const LOS_GRENZE = 2;
 const bierTag = () => new Date(Date.now() - LOS_GRENZE * 3600e3).toISOString().slice(0, 10);
 
 // Magic Links. Kurz gueltig, weil eine Mail im Posteingang liegen bleibt.
@@ -1133,8 +1138,9 @@ const ROUTEN = {
 
        Auch die Vorgabe laeuft durch `pruefeBeginn`, statt ungeprueft in den
        INSERT zu gehen: sie ist ein Zeitpunkt wie jeder andere. Sie kann die
-       Grenzen gar nicht reissen - der Bierabend-Tag liegt hoechstens 13 Stunden
-       zurueck -, aber geprueft ist besser als geglaubt, und `pruefeEnde` braucht
+       Grenzen gar nicht reissen - die Vorgabe (17:00 UTC auf dem Bierabend-Tag)
+       liegt hoechstens 24 - 17 + LOS_GRENZE = 9 Stunden zurueck, `TERMIN_RUECK`
+       erlaubt 24 -, aber geprueft ist besser als geglaubt, und `pruefeEnde` braucht
        den Anfang ohnehin als Datum. */
     const tag = bierTag();
     let beginn = null, ende = null;

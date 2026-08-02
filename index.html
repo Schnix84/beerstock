@@ -1692,7 +1692,9 @@
       const zugesagt = los.status === 'zugesagt';
       ziel.textContent = '';
       ziel.appendChild(el('div', 'erg-oben kr',
-        zugesagt ? 'Heute wird getrunken bei' : 'Die Flasche zeigt auf'));
+        zugesagt
+          ? (losGestern() ? 'Gestern wurde getrunken bei' : 'Heute wird getrunken bei')
+          : 'Die Flasche zeigt auf'));
 
       const name = el('div', 'erg-name kr');
       name.textContent = los.gewinner;
@@ -1922,6 +1924,7 @@
   let letztesLos = null;    // die geltende Ziehung — wegen ihrer Frist
   let uhrTimer = null;      // der Wecker auf den naechsten Wechsel
   let uhrStand = '';        // Zustand der Terminzeilen, wie zuletzt gezeichnet
+  let gesternStand = false; // stand „gestern" am Anschrieb, als er zuletzt kam
   let letztesFeld = [];     // die Bestenliste, fuer "wer ist nicht im Topf"
   let selbstGedreht = false;// in DIESER Sitzung gedreht: dann bleibt das Rad stehen
   let dreht = false;        // waehrend der Animation nichts neu zeichnen
@@ -2000,7 +2003,10 @@
       // Dieselbe Ampel wie oben auf dem Siegerplatz - Wort und Farbe kommen aus
       // STUFEN, nicht aus einer zweiten Tabelle.
       const marke = p.name === heuteBei
-        ? (heuteStatus === 'zugesagt' ? 'heute hier' : 'gezogen') : null;
+        ? (heuteStatus === 'zugesagt'
+            ? (losGestern() ? 'gestern hier' : 'heute hier')
+            : 'gezogen')
+        : null;
       ziel.appendChild(VARIANTE.zeile(p, i, stufe(p.temperatur),
         !!meinName && p.name === meinName, marke));
     });
@@ -2029,6 +2035,23 @@
     p.classList.toggle('schlecht', !!schlecht);
     p.hidden = !text;
   }
+
+  /* Das heutige Datum als 'YYYY-MM-DD', in ORTSZEIT. Nicht über `toISOString`:
+     das rechnet nach UTC um, und abends stünde hier schon der morgige Tag. */
+  function heuteOrt() {
+    const d = new Date();
+    return [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+      .map((n, i) => i ? String(n).padStart(2, '0') : n).join('-');
+  }
+
+  /* Der Bierabend-Tag des Loses endet erst um vier Uhr morgens, das Datum über
+     dem Rad springt um Mitternacht. Dazwischen gilt eine Zusage weiter — nur
+     wurde da nicht mehr HEUTE getrunken, sondern gestern. Genau diese Stunden
+     beschriftet die Seite anders; die Frage einer offenen Ziehung dagegen ist
+     auch um halb eins noch eine von jetzt und bleibt, wie sie ist. */
+  const losGestern = () =>
+    !!(letztesLos && letztesLos.gewinner && letztesLos.tag &&
+       letztesLos.tag !== heuteOrt());
 
   /* Aus einem Tag ('YYYY-MM-DD') und einer Uhrzeit ('HH:MM') den Zeitpunkt in
      UTC. Ohne Zonenangabe liest der Browser das als ORTSZEIT — genau das ist
@@ -2145,7 +2168,19 @@
      Neubau der Liste ohne Anlass fiele irgendwann mitten in einen Tap. */
   function nachDerUhr() {
     // Ins laufende Rad nicht hineinzeichnen; der nächste Blick holt es nach.
-    if (!dreht && terminStaende() !== uhrStand) {
+    if (dreht) { uhrwerk(); return; }
+
+    /* Mitternacht macht aus „heute“ ein „gestern“ — am Anschrieb und an der
+       Marke in der Liste. Das muss hier passieren und kann nicht aus `hole`
+       kommen: der Worker antwortet Byte für Byte dasselbe wie um 23:59, und
+       genau darauf verzichtet `hole` aufs Neuzeichnen. */
+    if (losGestern() !== gesternStand) {
+      gesternStand = losGestern();
+      zeichneRad(letztesLos);
+      liste(letztesFeld);
+    }
+
+    if (terminStaende() !== uhrStand) {
       zeichneTermine(letzteTermine, chronikZahl);   // stellt das Uhrwerk mit
     } else {
       uhrwerk();
@@ -2164,6 +2199,14 @@
        verfallen und gibt das Rad wieder frei. Davon kommt keine Marke über die
        Leitung — an dieser Grenze muss die Seite selbst nachfragen. */
     if (letztesLos && letztesLos.frist) marken.push(letztesLos.frist);
+    /* Mitternacht Ortszeit. Daran hängt keine Zeile, nur die Beschriftung —
+       aber ohne diese Marke schliefe eine offene Seite darüber hinweg. Nur
+       solange eine Zusage steht: sonst gäbe es nichts umzuschreiben. */
+    if (letztesLos && letztesLos.status === 'zugesagt' && !losGestern()) {
+      const m = new Date();
+      m.setHours(24, 0, 0, 0);
+      marken.push(m.toISOString());
+    }
 
     // Ungültige Daten fallen mit heraus: ein NaN besteht keinen Vergleich.
     const naechste = Math.min(...marken
@@ -2204,11 +2247,7 @@
     });
     gast.value = gewaehlt || meinName || (letztesFeld[0] || {}).name || '';
     if (!$('t-datum').value) {
-      // Vorgabe: heute. Ortszeit, nicht UTC — sonst steht abends schon morgen da.
-      const d = new Date();
-      $('t-datum').value =
-        [d.getFullYear(), d.getMonth() + 1, d.getDate()]
-          .map((n, i) => i ? String(n).padStart(2, '0') : n).join('-');
+      $('t-datum').value = heuteOrt();   // Ortszeit, siehe dort
     }
   }
 
@@ -2222,6 +2261,7 @@
 
   function zeichneRad(los) {
     letztesLos = los || null;   // das Uhrwerk braucht die Frist daraus
+    gesternStand = losGestern();// ... und die Beschriftung, die gleich entsteht
     const block = $('rad-block');
     if (!los) { block.hidden = true; return; }
     block.hidden = false;
