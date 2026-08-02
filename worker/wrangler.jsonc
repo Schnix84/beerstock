@@ -51,6 +51,17 @@
     }
   ],
 
+  // Der Verteiler fuer die offenen Seiten (src/tafel.js). Eine einzige Instanz
+  // fuer alle, angesprochen ueber idFromName('tafel'). Sie speichert nichts -
+  // `new_sqlite_classes` steht hier trotzdem, weil nur SQLite-gestuetzte
+  // Klassen im kostenlosen Tarif laufen; die andere Sorte wird abgelehnt.
+  "durable_objects": {
+    "bindings": [{ "name": "TAFEL", "class_name": "Tafel" }]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Tafel"] }
+  ],
+
   // Die Fotos an den Kommentaren. Anlegen:
   //     npx wrangler r2 bucket create beerstock-bilder --location weur
   // Verkleinert wird im Browser (lange Kante 1600 px, JPEG 0.8), es landen

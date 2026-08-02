@@ -15,6 +15,9 @@
 // Token und Magic Links liegen ausschliesslich als SHA-256-Hex.
 // ============================================================================
 
+import { Tafel } from './tafel.js';
+export { Tafel };
+
 /* Nur die eigene Seite darf die API im Browser aufrufen. Der Kopf schuetzt
    nicht davor, dass jemand mit curl vorbeikommt - das tut kein CORS-Kopf -,
    aber er verhindert, dass eine fremde Seite den Browser eines Angemeldeten
@@ -129,7 +132,8 @@ function koepfe(request) {
   const h = { 'Content-Type': 'application/json; charset=utf-8', 'Vary': 'Origin' };
   if (herkunft && ERLAUBTE_HERKUNFT.has(herkunft)) {
     h['Access-Control-Allow-Origin'] = herkunft;
-    h['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+    // X-Tab ist die zufaellige Kennung des schreibenden Tabs, siehe `anstoss`.
+    h['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Tab';
     h['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
     h['Access-Control-Max-Age'] = '86400';
   }
@@ -140,6 +144,24 @@ const antwort = (request, daten, status = 200, extra = {}) =>
   new Response(JSON.stringify(daten), { status, headers: { ...koepfe(request), ...extra } });
 
 const fehler = (request, text, status = 400) => antwort(request, { fehler: text }, status);
+
+/* Den offenen Seiten sagen, dass sich etwas geaendert hat (siehe src/tafel.js).
+   Steht in JEDER Schreibroute genau vor dem `return`, und zwar von Hand: eine
+   Automatik im Router wuesste nicht, WELCHES Ziel betroffen ist, und
+   'user:5' ist der halbe Nutzen.
+
+   `waitUntil`, weil der Anstoss die Antwort nicht aufhalten darf - wer
+   geschrieben hat, wartet nicht darauf, dass die anderen es erfahren. Und
+   deshalb auch stumm im Fehlerfall: eine gescheiterte Meldung ist kein
+   gescheiterter Schreibvorgang, die Seiten fassen spaetestens per Zeitgeber
+   nach. */
+function anstoss(request, env, ctx, ...marken) {
+  if (!ctx || !env.TAFEL) return;
+  const stub = env.TAFEL.get(env.TAFEL.idFromName('tafel'));
+  const von = request.headers.get('X-Tab') || null;
+  ctx.waitUntil(stub.melden(marken, von)
+    .catch(e => console.error('anstoss:', e && e.stack || e)));
+}
 
 async function hash(text) {
   const roh = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -674,7 +696,29 @@ const ROUTEN = {
       ok: true, dienst: 'beerstock-api', db, bilder,
       mail: env.AGENTMAIL_KEY ? 'Schluessel liegt an' : 'KEIN SCHLUESSEL',
       inbox: env.AGENTMAIL_INBOX || null,
+      tafel: env.TAFEL ? 'ok' : 'nicht eingerichtet',
     });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Die Leitung, ueber die sich die Seite von selbst erfaehrt, dass etwas
+     passiert ist. Kein Token noetig: es reisen nur Marken, keine Daten (siehe
+     src/tafel.js), und der eigentliche Abruf dahinter prueft wie immer.
+
+     Der Origin wird hier von Hand geprueft. Ein WebSocket-Handshake
+     unterliegt KEINEM CORS - der Browser fragt nicht vorher, er verbindet.
+     Der Kopf `koepfe()` traegt hier also nichts bei, die Pruefung schon. */
+  'GET /api/strom': async (request, env) => {
+    if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
+      return fehler(request, 'Diese Route spricht nur WebSocket', 426);
+    }
+    const herkunft = request.headers.get('Origin');
+    if (herkunft && !ERLAUBTE_HERKUNFT.has(herkunft)) {
+      return fehler(request, 'Nicht von hier', 403);
+    }
+    if (!env.TAFEL) return fehler(request, 'Verteiler nicht eingerichtet', 503);
+
+    return env.TAFEL.get(env.TAFEL.idFromName('tafel')).fetch(request);
   },
 
   // -------------------------------------------------------------------------
@@ -768,7 +812,7 @@ const ROUTEN = {
   // -------------------------------------------------------------------------
   /* Den Namen fuer die Liste setzen oder aendern. Getrennt vom Einloesen,
      weil der Nutzer beim Klick auf den Link noch nichts eingetippt hat. */
-  'POST /api/name': async (request, env) => {
+  'POST /api/name': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     const daten = await json(request);
@@ -787,6 +831,9 @@ const ROUTEN = {
       }
       throw e;
     }
+    // Der Name steht in der Liste - ein Namenloser, der sich benennt, ist fuer
+    // die anderen eine neue Zeile.
+    anstoss(request, env, ctx, 'tafel');
     return antwort(request, { ok: true, name });
   },
 
@@ -801,7 +848,7 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
-  'POST /api/report': async (request, env) => {
+  'POST /api/report': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
@@ -840,6 +887,10 @@ const ROUTEN = {
       WHERE r.biere > ? AND j.user_id <> ?
     `).bind(biere, ich.id).first();
 
+    /* Auch die Meldung aus Home Assistant landet hier - die schickt kein
+       X-Tab, ihr Anstoss geht also an wirklich alle. Genau richtig: dort sitzt
+       niemand vor der Seite, der die Antwort schon gesehen haette. */
+    anstoss(request, env, ctx, 'tafel');
     return antwort(request, { ok: true, name: ich.name, biere, rang: rang.rang }, 201);
   },
 
@@ -848,7 +899,7 @@ const ROUTEN = {
      verbrauchen - und "gedreht von Basti" ist die Zeile, die aus der Ziehung
      eine Handlung macht. Ein zweiter Aufruf am selben Tag ist kein Fehler, er
      bekommt schlicht dasselbe Ergebnis mit `schon: true`. */
-  'POST /api/drehen': async (request, env) => {
+  'POST /api/drehen': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
@@ -856,7 +907,7 @@ const ROUTEN = {
     /* Der Verfallslauf laeuft VOR dem Lesen und im selben batch: wer seit drei
        Stunden nicht geantwortet hat, gibt den Tag hier frei - und die beiden
        Abfragen dahinter sehen das bereits. */
-    const [, tagRoh, feld, termine] = await env.DB.batch([
+    const [verfallen, tagRoh, feld, termine] = await env.DB.batch([
       verfallStmt(env, tag), losTagStmt(env, tag), losFeldStmt(env), termineStmt(env),
     ]);
     const lage = tagesLage(tagRoh.results);
@@ -864,6 +915,10 @@ const ROUTEN = {
 
     // Es gilt schon eines? Dann gilt das, egal wer fragt.
     if (lage.gueltig) {
+      /* Hier hat zwar niemand gezogen, aber der Verfallslauf oben kann etwas
+         umgeschrieben haben - dann steht bei den anderen noch ein Los, das es
+         nicht mehr gibt. Ohne diese Aenderung schweigt die Leitung. */
+      if (verfallen.meta.changes) anstoss(request, env, ctx, 'tafel');
       return antwort(request,
         { ...losAntwort(tag, lage, topf, termine.results), schon: true });
     }
@@ -891,6 +946,11 @@ const ROUTEN = {
     ]);
     const lage2 = tagesLage(tagRoh2.results);
     const selbst = gesetzt.meta.changes === 1;
+    /* Der Anstoss geht auch dann raus, wenn ein anderer schneller war: dessen
+       Ziehung kennen die uebrigen Seiten ja auch noch nicht, wenn sein eigener
+       Anstoss unterwegs verlorenging. Zweimal dieselbe Marke kostet die
+       Empfaenger nichts - sie laden und vergleichen. */
+    anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
       ...losAntwort(tag, lage2, losTopf(feld2.results, lage2), termine2.results),
       schon: !selbst,
@@ -903,7 +963,7 @@ const ROUTEN = {
      zweimal ruft. Eine Absage gibt den Tag sofort wieder frei; der Absager
      bleibt danach draussen, sonst zieht ihn dieselbe Flasche gleich noch
      einmal. */
-  'POST /api/los/antwort': async (request, env) => {
+  'POST /api/los/antwort': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
@@ -964,6 +1024,8 @@ const ROUTEN = {
       losTagStmt(env, tag), losFeldStmt(env), termineStmt(env),
     ]);
     const lage2 = tagesLage(tagRoh2.results);
+    // Zusage wie Absage aendern Rad, Liste und Termine auf einen Schlag.
+    anstoss(request, env, ctx, 'tafel');
     /* Die Terminliste faehrt mit: sonst muesste die Seite gleich darauf die
        Bestenliste nachladen, nur damit der eben angelegte Abend dasteht. */
     return antwort(request, {
@@ -976,7 +1038,7 @@ const ROUTEN = {
   /* Einen Abend von Hand eintragen. Jeder Angemeldete darf jeden als Gastgeber
      eintragen - eine Bestaetigung durch den Gastgeber waere mehr Mechanik, als
      eine Runde braucht, die sich kennt. Wer sich vertut, aendert es wieder. */
-  'POST /api/termin': async (request, env) => {
+  'POST /api/termin': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
@@ -1015,6 +1077,7 @@ const ROUTEN = {
     `).bind(gast.id, alsDbZeit(p.d), titel || null, ich.id).first();
 
     const alle = await termineStmt(env).all();
+    anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
       ok: true, id: neu.id, gastgeber: gast.name,
       termine: alle.results.map(t => terminAntwort(t)),
@@ -1026,7 +1089,7 @@ const ROUTEN = {
      BEVOR der Abend angefangen hat - was gelaufen ist, bleibt stehen, sonst
      verschiebt jemand nachtraeglich den Abend, den die anderen schon bewertet
      haben. */
-  'POST /api/termin/aendern': async (request, env) => {
+  'POST /api/termin/aendern': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
@@ -1062,6 +1125,7 @@ const ROUTEN = {
       }
       await env.DB.batch(schritte);
       const alle = await termineStmt(env).all();
+      anstoss(request, env, ctx, 'tafel');
       return antwort(request, {
         ok: true, abgesagt: true,
         // Hing eine Zusage daran, ist der Tag jetzt wieder frei - die Seite
@@ -1089,6 +1153,7 @@ const ROUTEN = {
     await env.DB.prepare(`UPDATE termine SET ${setzt.join(', ')} WHERE id = ?`)
       .bind(...werte, t.id).run();
     const alle = await termineStmt(env).all();
+    anstoss(request, env, ctx, 'tafel');
     return antwort(request, { ok: true, termine: alle.results.map(t => terminAntwort(t)) });
   },
 
@@ -1097,7 +1162,7 @@ const ROUTEN = {
      Bewertung je Autor und Ziel, sonst waere der Schnitt eine Frage des
      Fleisses. Sich selbst bewerten geht nicht - das ist die einzige Regel, die
      hier ueberhaupt noetig ist, der Name steht ja dran. */
-  'POST /api/bewerten': async (request, env) => {
+  'POST /api/bewerten': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
@@ -1167,6 +1232,9 @@ const ROUTEN = {
       `).bind(ziel.art, ziel.id, ich.id, b.id, text, bi.key).run();
     }
 
+    /* Zwei Marken: der Schnitt steht auch in der Liste bzw. am Termin, der
+       Thread selbst ist das Ziel. Wer beides offen hat, laedt beides. */
+    anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
     return antwort(request, { ok: true, sterne: s.sterne });
   },
 
@@ -1234,7 +1302,7 @@ const ROUTEN = {
   /* Schreiben. Auf SICH SELBST ausdruecklich erlaubt - sonst kann der
      Gastgeber im eigenen Thread nicht antworten. Auf einen Termin jederzeit,
      auch vorher ("bring Chips mit"); nur bewertet wird erst hinterher. */
-  'POST /api/kommentar': async (request, env) => {
+  'POST /api/kommentar': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
@@ -1289,6 +1357,8 @@ const ROUTEN = {
       VALUES (?, ?, ?, ?, ?, ?) RETURNING id
     `).bind(ziel.art, ziel.id, ich.id, wurzel, text, b.key).first();
 
+    // 'tafel' wegen des Zaehlers an der Zeile, das Ziel wegen des Threads.
+    anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
     return antwort(request, { ok: true, id: neu.id, antwort_auf: wurzel }, 201);
   },
 
@@ -1296,15 +1366,17 @@ const ROUTEN = {
   /* Aendern oder loeschen, beides nur durch den Autor. Geloescht wird WEICH:
      der Text verschwindet, die Karte bleibt als "gelöscht" stehen - sonst
      haengen die Antworten darunter in der Luft. */
-  'POST /api/kommentar/aendern': async (request, env) => {
+  'POST /api/kommentar/aendern': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
+    // ziel_art/ziel_id stehen hier nur fuer den Anstoss mit dabei - die Seite
+    // bekommt sie nicht, sie kennt ihr Ziel selbst.
     const k = await env.DB.prepare(
-      'SELECT id, autor_id, geloescht_am, bild_key FROM kommentare WHERE id = ?')
+      'SELECT id, autor_id, geloescht_am, bild_key, ziel_art, ziel_id FROM kommentare WHERE id = ?')
       .bind(Number(daten.id)).first();
     if (!k) return fehler(request, 'Den Kommentar gibt es nicht', 404);
     if (k.autor_id !== ich.id) return fehler(request, 'Das ist nicht deiner', 403);
@@ -1323,6 +1395,8 @@ const ROUTEN = {
         SET geloescht_am = datetime('now'), text = '', bild_key = NULL
         WHERE id = ?
       `).bind(k.id).run();
+      // Ein geloeschter Kommentar zaehlt nicht mehr mit - also auch 'tafel'.
+      anstoss(request, env, ctx, 'tafel', `${k.ziel_art}:${k.ziel_id}`);
       return antwort(request, { ok: true, geloescht: true });
     }
 
@@ -1333,6 +1407,8 @@ const ROUTEN = {
 
     await env.DB.prepare("UPDATE kommentare SET text = ?, geaendert = datetime('now') WHERE id = ?")
       .bind(text, k.id).run();
+    // Nur der Thread: an der Zahl der Kommentare aendert ein neuer Text nichts.
+    anstoss(request, env, ctx, `${k.ziel_art}:${k.ziel_id}`);
     return antwort(request, { ok: true });
   },
 
@@ -1340,7 +1416,7 @@ const ROUTEN = {
   /* Reagieren. Ein Schalter: derselbe Druck nimmt zurueck - das traegt der
      Primaerschluessel der Tabelle, hier steht nur, welcher der beiden Faelle
      gerade eingetreten ist. */
-  'POST /api/reaktion': async (request, env) => {
+  'POST /api/reaktion': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
@@ -1352,7 +1428,9 @@ const ROUTEN = {
     if (!REAKTIONEN.has(art)) return fehler(request, 'Diese Reaktion gibt es nicht');
 
     const id = Number(daten.kommentar_id);
-    const k = await env.DB.prepare('SELECT id, geloescht_am FROM kommentare WHERE id = ?')
+    // ziel_art/ziel_id nur fuer den Anstoss, siehe /api/kommentar/aendern.
+    const k = await env.DB.prepare(
+      'SELECT id, geloescht_am, ziel_art, ziel_id FROM kommentare WHERE id = ?')
       .bind(id).first();
     if (!k) return fehler(request, 'Den Kommentar gibt es nicht', 404);
     if (k.geloescht_am) return fehler(request, 'Der ist gelöscht', 409);
@@ -1369,6 +1447,10 @@ const ROUTEN = {
     const n = await env.DB.prepare(
       'SELECT count(*) AS anzahl FROM reaktionen WHERE kommentar_id = ? AND art = ?')
       .bind(id, art).first();
+    /* Nur das Ziel: Reaktionen zaehlen nicht in die Liste. Der Daumen ist die
+       kleinste Handlung auf der ganzen Seite - und die, bei der das
+       Nacheinander am meisten stoert. */
+    anstoss(request, env, ctx, `${k.ziel_art}:${k.ziel_id}`);
     return antwort(request, { art, anzahl: n.anzahl, meins });
   },
 
