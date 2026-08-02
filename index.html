@@ -13,6 +13,12 @@
      Bewusst eine einzige, festgelegte Welt statt hell/dunkel: das Motiv ist ein
      Gegenstand, der auf etwas liegt. Ein "heller Modus" waere hier kein Thema,
      sondern ein anderer Tisch - und der zweite Tisch macht das Bild nicht besser.
+
+     Auf dem Deckel stehen zwei Dinge nebeneinander, und beide sagen dasselbe
+     auf verschiedene Weise: das Glas zeigt den Bestand als Fuellstand und die
+     Temperatur als Verhalten (Perlen, Krone, Schwitzwasser), die Strichliste
+     zeigt die genaue Zahl. Das Glas liest man von weitem, die Striche zaehlt
+     man aus der Naehe.
      ========================================================================== */
   :root {
     --tisch-hell:  #2a211a;
@@ -25,6 +31,20 @@
     --gruen:       #2f5d4a;   /* Brauereigruen */
     --rot:         #a8342a;   /* Registerrot, nur fuer den Querstrich */
     --blass:       #6f6653;
+
+    /* Von der Temperatur gesetzt (siehe STUFEN im Skript) */
+    --ampel:       var(--blass);
+    --schaum:      1;      /* Kronenhoehe, 0..1                       */
+    --sprudel:     4.2s;   /* Steigzeit einer Blase                   */
+    --sprudel-op:  0.6;    /* wie deutlich es perlt                   */
+    --kondens:     0;      /* Schwitzwasser aussen am Glas            */
+    --frost:       0;      /* Reif, nur ganz unten in der Skala       */
+
+    /* Vom Bestand gesetzt. Startwert 0: das Glas ist beim ersten Bild leer und
+       fuellt sich, sobald die Messung da ist - der Ladevorgang wird zum
+       Einschenken statt zu einem Sprung. */
+    --fuell:       0;
+    --schaum-voll: 0;
   }
 
   *, *::before, *::after { box-sizing: border-box; }
@@ -74,7 +94,7 @@
     pointer-events: none;
   }
 
-  .inhalt { position: relative; z-index: 1; width: 76%; text-align: center; }
+  .inhalt { position: relative; z-index: 1; width: 78%; text-align: center; }
 
   .marke {
     font-family: ui-serif, Georgia, "Times New Roman", serif;
@@ -82,9 +102,19 @@
     letter-spacing: 0.28em; text-indent: 0.28em; text-transform: uppercase;
     color: var(--gruen);
   }
-  .regel { height: 1px; background: var(--gruen); opacity: 0.38; margin: 9px auto 16px; width: 60%; }
+  .regel { height: 1px; background: var(--gruen); opacity: 0.38; margin: 9px auto 14px; width: 60%; }
 
-  svg.striche { width: 100%; height: auto; display: block; }
+  /* --- Glas links, Strichliste rechts ------------------------------------ */
+  .buehne { display: flex; align-items: center; justify-content: center; gap: 6%; }
+  .buehne .glas  { width: 26%; flex: none; }
+  .buehne .liste { flex: 1; min-width: 0; }
+  .glas svg, .liste svg { width: 100%; height: auto; display: block; }
+  /* Ohne Messung sagt das Glas nichts - dann tritt es zurueck, statt einen
+     Fuellstand zu behaupten, den niemand kennt. */
+  .glas.ungewiss { opacity: 0.3; }
+  .glas { transition: opacity .5s; }
+
+  /* --- Strichliste -------------------------------------------------------- */
   .strich {
     stroke: var(--tinte); stroke-width: 7; stroke-linecap: round;
     stroke-dasharray: 82; stroke-dashoffset: 82;
@@ -97,22 +127,118 @@
     font-family: ui-serif, Georgia, serif; font-style: italic;
     font-size: clamp(20px, 6vmin, 34px); fill: var(--rot); opacity: 0.85;
   }
+  /* Das Gegenstueck zu "ausgetrunken", und darum bewusst nicht im Registerrot:
+     ein voller Kuehlschrank ist keine Meldung, sondern der Idealzustand -
+     also das Brauereigruen der Ueberschrift. */
+  .voll {
+    font-family: ui-serif, Georgia, serif; font-style: italic;
+    font-size: clamp(24px, 7vmin, 40px); letter-spacing: 0.04em;
+    fill: var(--gruen); opacity: 0.9;
+  }
 
+  /* --- Das Glas ----------------------------------------------------------- */
+  .glas-riss  { fill: none; stroke: var(--tinte); stroke-width: 2.1; stroke-linejoin: round; }
+  .glas-innen { fill: none; stroke: var(--gruen); stroke-width: 0.9; opacity: 0.45; }
+  .glas-korpus{ fill: #ffffff; opacity: 0.26; }
+
+  /* Der Bierspiegel. Voll steht er bei y=46, leer auf dem Boden bei y=150 -
+     also 104 Einheiten Weg. Bier, Raster und Krone haengen in derselben
+     Gruppe und wandern gemeinsam; die Blasen werden am selben Spiegel
+     abgeschnitten, damit sie an der Oberflaeche zerplatzen. */
+  .spiegel {
+    transform-box: view-box;
+    transform: translateY(calc((1 - var(--fuell)) * 104px));
+    transition: transform .8s cubic-bezier(.2,.7,.3,1);
+  }
+
+  /* Die Krone sitzt auf dem Bierspiegel und schrumpft nach unten weg, wenn das
+     Bier warm wird - warmes Bier traegt keinen Schaum. Im fast leeren Glas
+     verschwindet sie ganz, sonst schwebt ein Schaumring ueber dem Boden. */
+  .krone {
+    transform-box: view-box; transform-origin: 50px 46px;
+    transform: scaleY(calc(var(--schaum) * var(--schaum-voll)));
+    transition: transform .6s cubic-bezier(.2,.7,.3,1);
+  }
+
+  .blase {
+    transform-box: view-box;
+    fill: #fffdf4;
+    opacity: 0;
+    animation: steigen var(--sprudel) linear infinite;
+  }
+  /* Die halbe Perlung faellt weg, sobald das Bier lau wird. */
+  .blase.spaerlich { animation-name: steigen-spaerlich; }
+
+  @keyframes steigen {
+    0%   { transform: translate(0, 0);         opacity: 0; }
+    12%  { opacity: var(--sprudel-op); }
+    55%  { transform: translate(2.5px, -54px); }
+    88%  { opacity: calc(var(--sprudel-op) * .55); }
+    100% { transform: translate(-1.5px, -98px); opacity: 0; }
+  }
+  @keyframes steigen-spaerlich {
+    0%   { transform: translate(0, 0);         opacity: 0; }
+    12%  { opacity: calc(var(--sprudel-op) * .5); }
+    55%  { transform: translate(2.5px, -54px); }
+    88%  { opacity: calc(var(--sprudel-op) * .28); }
+    100% { transform: translate(-1.5px, -98px); opacity: 0; }
+  }
+
+  /* Schwitzwasser: zwei Tropfen laufen, der Rest steht. */
+  .kondens { fill: #ffffff; opacity: var(--kondens); transition: opacity .5s; }
+  .kondens.laeuft { transform-box: view-box; animation: rinnen 9s ease-in infinite; }
+  @keyframes rinnen {
+    0%, 55% { transform: translateY(0); }
+    92%     { transform: translateY(17px); opacity: 0; }
+    93%,100%{ transform: translateY(0); opacity: 0; }
+  }
+  .reif { fill: #ffffff; opacity: var(--frost); transition: opacity .5s; }
+
+  /* Ein Lichtstreifen wandert alle paar Sekunden ueber das Glas. */
+  .glanz { transform-box: view-box; animation: wischen 7.5s ease-in-out infinite; }
+  @keyframes wischen {
+    0%, 62%   { transform: translateX(-70px); }
+    88%, 100% { transform: translateX(120px); }
+  }
+
+  /* --- Fusszeile mit Ampel ------------------------------------------------ */
   .meta {
-    margin-top: clamp(12px, 3vmin, 20px);
+    margin-top: clamp(10px, 2.6vmin, 18px);
     font-size: clamp(9px, 2.3vmin, 12px);
     letter-spacing: 0.09em; color: var(--blass);
     white-space: nowrap;              /* der Einzeiler bleibt einzeilig */
   }
-  .kalt {
+  .wort {
     font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--rot);
+    color: var(--ampel);
+    transition: color .45s ease;
   }
   .meta .trenn { opacity: 0.45; margin: 0 0.5em; }
   .zahlen { font-variant-numeric: tabular-nums; }
 
+  /* Die Ampel als gedruckte Skala: sechs Felder von eiskalt bis pisswarm,
+     eine Nadel zeigt, wo der Kuehlschrank gerade steht. Sie macht sichtbar,
+     warum das Wort daneben gerade so heisst. */
+  .skala {
+    position: relative; width: 74%; margin: 9px auto 0; height: 4px;
+    border-radius: 2px; opacity: 0.85;
+    background: linear-gradient(90deg,
+      #2f86c4 0 10%, #2f5d4a 10% 30%, #5f7a33 30% 45%,
+      #b08a1c 45% 60%, #c4661f 60% 80%, #a8342a 80% 100%);
+    box-shadow: 0 0 0 1px #00000018 inset;
+  }
+  .nadel {
+    position: absolute; top: -4px; left: 50%; width: 3px; height: 12px;
+    border-radius: 2px; background: var(--tinte);
+    box-shadow: 0 0 0 1.5px var(--pappe-hell);
+    transform: translateX(-50%); opacity: 0;
+    transition: left .45s cubic-bezier(.2,.7,.3,1), opacity .45s;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .strich { animation: none; stroke-dashoffset: 0; }
+    .blase, .glanz, .kondens.laeuft { animation: none; }
+    .blase { opacity: calc(var(--sprudel-op) * .5); }
   }
 </style>
 </head>
@@ -122,24 +248,187 @@
       <div class="marke">Kühlschrank</div>
       <div class="regel"></div>
 
-      <svg class="striche" viewBox="0 0 300 120" role="img" aria-labelledby="titel">
-        <title id="titel">Strichliste der kalten Biere</title>
-        <g id="striche"></g>
-      </svg>
+      <div class="buehne">
+
+        <!-- ============ Das Glas ============================================
+             Ein Willibecher, gezeichnet wie der Rest des Deckels: Strichriss in
+             Druckerschwarz, das Bier als Rasterflaeche. Es ist kein Foto und
+             soll auch keines sein - es liegt gedruckt auf der Pappe.
+             Es zaehlt nicht, das machen die Striche. Es zeigt den Bestand als
+             Fuellstand und die Temperatur als Verhalten: kaltes Bier perlt
+             schnell, traegt eine hohe Krone und beschlaegt aussen, pisswarmes
+             steht still und flach da.
+             ============================================================== -->
+        <div class="glas" id="glas">
+          <svg viewBox="0 0 100 172" role="img" aria-labelledby="glas-titel">
+            <title id="glas-titel">Bierglas: Fuellstand nach Bestand, Zustand nach Temperatur</title>
+            <defs>
+              <path id="innenform" d="M27.5,20 C23,46 21.2,60 22,74 C23,99 29.5,130 31.5,150 L68.5,150 C70.5,130 77,99 78,74 C78.8,60 77,46 72.5,20 Z"/>
+              <clipPath id="innen"><use href="#innenform"/></clipPath>
+              <!-- alles unterhalb des Bierspiegels; wandert mit dem Bestand -->
+              <clipPath id="unterm-spiegel">
+                <rect class="spiegel" x="10" y="46" width="80" height="170"/>
+              </clipPath>
+
+              <linearGradient id="bier" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0"   stop-color="#e0a327"/>
+                <stop offset=".55" stop-color="#cf8b16"/>
+                <stop offset="1"   stop-color="#a86b0d"/>
+              </linearGradient>
+              <!-- Rasterpunkte: das Bier ist gedruckt, nicht gegossen -->
+              <pattern id="raster" width="4" height="4" patternUnits="userSpaceOnUse">
+                <circle cx="1" cy="1" r="0.75" fill="#00000022"/>
+                <circle cx="3" cy="3" r="0.55" fill="#ffffff22"/>
+              </pattern>
+              <linearGradient id="glanzfarbe" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0"  stop-color="#ffffff" stop-opacity="0"/>
+                <stop offset=".5" stop-color="#ffffff" stop-opacity=".5"/>
+                <stop offset="1"  stop-color="#ffffff" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Schatten auf der Pappe -->
+            <ellipse cx="50" cy="156" rx="27" ry="5" fill="#00000018"/>
+
+            <!-- Glaskoerper -->
+            <path class="glas-korpus" d="M24,17 C19,45 17,60 18,75 C19,101 26,133 28,153 Q28,157 32,157 L68,157 Q72,157 72,153 C74,133 81,101 82,75 C83,60 81,45 76,17 Z"/>
+
+            <g clip-path="url(#innen)">
+              <!-- Bier samt Krone: eine Gruppe, die mit dem Bestand sinkt.
+                   Die Flaeche reicht weit unter den Boden, damit im leeren
+                   Glas nichts nachrutscht, was nicht mehr da ist. -->
+              <g class="spiegel">
+                <rect x="16" y="46" width="68" height="170" fill="url(#bier)"/>
+                <rect x="16" y="46" width="68" height="170" fill="url(#raster)"/>
+
+                <!-- Schaumkrone: Vollflaeche plus ausgefranster Rand -->
+                <g class="krone">
+                  <rect x="16" y="30" width="68" height="16" fill="#f2ead6"/>
+                  <g fill="#f7f1e1">
+                    <circle cx="26" cy="31" r="5.5"/><circle cx="36" cy="28.5" r="6.5"/>
+                    <circle cx="47" cy="30" r="5.8"/><circle cx="58" cy="28" r="6.8"/>
+                    <circle cx="69" cy="31" r="5.6"/><circle cx="78" cy="32.5" r="4.6"/>
+                  </g>
+                  <g fill="#00000012">
+                    <circle cx="33" cy="38" r="1.5"/><circle cx="52" cy="41" r="1.2"/>
+                    <circle cx="64" cy="37" r="1.7"/><circle cx="43" cy="35" r="1.1"/>
+                  </g>
+                </g>
+              </g>
+
+              <!-- Perlen. Sie steigen immer vom Boden auf, werden aber am
+                   Bierspiegel abgeschnitten - im halbvollen Glas ist der Weg
+                   entsprechend kurz. -->
+              <g clip-path="url(#unterm-spiegel)">
+                <circle class="blase"            cx="34" cy="146" r="1.5" style="animation-delay:-0.2s"/>
+                <circle class="blase"            cx="47" cy="150" r="2.1" style="animation-delay:-1.4s"/>
+                <circle class="blase"            cx="61" cy="147" r="1.3" style="animation-delay:-2.6s"/>
+                <circle class="blase"            cx="40" cy="152" r="1.1" style="animation-delay:-0.9s"/>
+                <circle class="blase"            cx="55" cy="149" r="1.8" style="animation-delay:-2.1s"/>
+                <circle class="blase spaerlich"  cx="30" cy="151" r="1.2" style="animation-delay:-1.7s"/>
+                <circle class="blase spaerlich"  cx="66" cy="152" r="1.6" style="animation-delay:-0.5s"/>
+                <circle class="blase spaerlich"  cx="50" cy="148" r="1.0" style="animation-delay:-3.0s"/>
+              </g>
+
+              <!-- Reif, nur bei eiskalt - und nur dort, wo Bier hinter dem
+                   Glas steht; die leere Haelfte beschlaegt nicht. -->
+              <g class="reif" clip-path="url(#unterm-spiegel)">
+                <circle cx="30" cy="62" r="1.1"/><circle cx="41" cy="84" r="0.9"/>
+                <circle cx="66" cy="70" r="1.2"/><circle cx="57" cy="104" r="1"/>
+                <circle cx="36" cy="118" r="1.3"/><circle cx="70" cy="97" r="0.9"/>
+                <circle cx="47" cy="66" r="0.8"/><circle cx="62" cy="127" r="1.1"/>
+              </g>
+
+              <!-- Lichtstreifen -->
+              <g class="glanz">
+                <rect x="24" y="8" width="13" height="160" fill="url(#glanzfarbe)" transform="rotate(8 30 88)"/>
+              </g>
+            </g>
+
+            <!-- Schwitzwasser aussen -->
+            <g class="kondens">
+              <ellipse cx="29" cy="70" rx="1.5" ry="2.1"/>
+              <ellipse cx="73" cy="92" rx="1.3" ry="1.9"/>
+              <ellipse cx="33" cy="112" rx="1.1" ry="1.6"/>
+              <ellipse cx="69" cy="130" rx="1.6" ry="2.3"/>
+            </g>
+            <ellipse class="kondens laeuft" cx="26" cy="52" rx="1.7" ry="2.5" style="animation-delay:-2s"/>
+            <ellipse class="kondens laeuft" cx="76" cy="66" rx="1.4" ry="2.1" style="animation-delay:-6s"/>
+
+            <!-- Riss -->
+            <path class="glas-riss" d="M24,17 C19,45 17,60 18,75 C19,101 26,133 28,153 Q28,157 32,157 L68,157 Q72,157 72,153 C74,133 81,101 82,75 C83,60 81,45 76,17 Z"/>
+            <ellipse class="glas-riss" cx="50" cy="17" rx="26" ry="5"/>
+            <use class="glas-innen" href="#innenform"/>
+          </svg>
+        </div>
+
+        <div class="liste">
+          <svg viewBox="0 0 300 120" role="img" aria-labelledby="titel">
+            <title id="titel">Strichliste der kalten Biere</title>
+            <g id="striche"></g>
+          </svg>
+        </div>
+      </div>
 
       <!-- Einzeiler. Die Menge steht ausschliesslich in den Strichen - eine
            Ziffer daneben waere dieselbe Zahl zweimal und nimmt der Strichliste
-           genau die Aufgabe weg, fuer die sie da ist. -->
+           genau die Aufgabe weg, fuer die sie da ist. Das erste Wort spricht
+           dafuer mit: es faerbt sich und heisst je nach Messung anders. -->
       <div class="meta">
-        <span class="kalt">kalt</span><span class="trenn">·</span><span
+        <span class="wort" id="wort">kalt</span><span class="trenn">·</span><span
           class="zahlen" id="temp">–</span><span class="trenn">·</span><span
           id="stand">wird geladen</span>
       </div>
+      <div class="skala" aria-hidden="true"><span class="nadel" id="nadel"></span></div>
     </div>
   </main>
 
 <script>
   const NS = 'http://www.w3.org/2000/svg';
+
+  // So weit reicht die Strichliste, und ab so vielen Flaschen ist auch das Glas
+  // voll - beide dieselbe Grenze, sonst stuende das Glas die halbe Skala lang
+  // stumm auf Anschlag. Vierundzwanzig, weil fuenf Buendel das letzte sind, was
+  // man auf einen Blick liest; darueber sieht man ohnehin nur noch "viel".
+  const VOLL_AB = 24;
+
+  // --------------------------------------------------------------------------
+  // Die Ampel. Sechs Stufen, und die Farben sind keine Thermometerfarben,
+  // sondern ein Urteil: gruen ist das Brauereigruen des Deckels (so soll es
+  // sein), rot ist das Registerrot des Querstrichs (so soll es nicht sein).
+  // Blau darunter heisst nicht "besser", sondern "kaelter als noetig".
+  // --------------------------------------------------------------------------
+  const STUFEN = [
+    // bis °C, Wort,        Farbe,     Krone, Steigzeit, Perlen, Kondens, Reif
+    [  2, 'eiskalt',   '#2f86c4', 1.00, '2.7s', 0.90, 0.60, 0.55],
+    [  6, 'kalt',      '#2f5d4a', 0.94, '3.2s', 0.85, 0.50, 0.00],
+    [  9, 'kühl',      '#5f7a33', 0.78, '4.2s', 0.70, 0.30, 0.00],
+    [ 12, 'lauwarm',   '#b08a1c', 0.55, '5.6s', 0.50, 0.10, 0.00],
+    [ 16, 'warm',      '#c4661f', 0.34, '7.4s', 0.32, 0.00, 0.00],
+    [ 99, 'pisswarm',  '#a8342a', 0.16, '9.5s', 0.16, 0.00, 0.00],
+  ];
+
+  function stufe(t) {
+    for (const s of STUFEN) if (t < s[0]) return s;
+    return STUFEN[STUFEN.length - 1];
+  }
+
+  // --------------------------------------------------------------------------
+  // Der Bestand steht doppelt da, und das mit Absicht: die Striche sind die
+  // genaue Zahl, der Bierspiegel der Blick von weitem. Ein halb leeres Glas
+  // sieht man auch dann, wenn man die Striche gar nicht liest.
+  // --------------------------------------------------------------------------
+  function fuellstand(anzahl) {
+    const el = document.documentElement.style;
+    const f = Number.isFinite(anzahl)
+      ? Math.max(0, Math.min(1, anzahl / VOLL_AB))
+      : 0.5;                       // ohne Messung: halb, dazu das gedimmte Glas
+    el.setProperty('--fuell', f.toFixed(3));
+    // Die Krone blendet ueber das erste Achtel ein - darunter schwebte sonst
+    // ein Schaumring knapp ueber dem Boden.
+    el.setProperty('--schaum-voll', Math.min(1, f * 8).toFixed(3));
+    document.getElementById('glas').classList.toggle('ungewiss', !Number.isFinite(anzahl));
+  }
 
   // --------------------------------------------------------------------------
   // Strichliste, wie sie der Wirt anschreibt: Vierergruppe plus Querstrich.
@@ -157,6 +446,17 @@
       t.setAttribute('class', 'aus');
       // Kein "0": eine leere Strichliste sagt dasselbe freundlicher.
       t.textContent = anzahl === 0 ? 'ausgetrunken' : '?';
+      g.appendChild(t);
+      return;
+    }
+
+    // Das andere Ende: mehr, als die Liste tragen kann.
+    if (anzahl > VOLL_AB) {
+      const t = document.createElementNS(NS, 'text');
+      t.setAttribute('x', 150); t.setAttribute('y', 74);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('class', 'voll');
+      t.textContent = 'voll';
       g.appendChild(t);
       return;
     }
@@ -213,13 +513,34 @@
     return tage === 1 ? 'vor 1 Tag' : 'vor ' + tage + ' Tagen';
   }
 
-  function zeichne(daten) {
-    striche(Number(daten.biere));
+  function temperatur(t) {
+    const el = document.documentElement.style;
+    const messung = Number.isFinite(t);
+    const s = stufe(messung ? t : 99);
 
-    const t = Number(daten.temperatur);
     document.getElementById('temp').textContent =
-      Number.isFinite(t) ? t.toFixed(1).replace('.', ',') + ' °C' : 'keine Messung';
+      messung ? t.toFixed(1).replace('.', ',') + ' °C' : 'keine Messung';
 
+    // Ohne Messung bleibt das Wort neutral - die Ampel darf nicht behaupten,
+    // etwas zu wissen.
+    document.getElementById('wort').textContent = messung ? s[1] : 'Bier';
+    el.setProperty('--ampel', messung ? s[2] : 'var(--blass)');
+    el.setProperty('--schaum',     messung ? s[3] : 0.8);
+    el.setProperty('--sprudel',    messung ? s[4] : '4.2s');
+    el.setProperty('--sprudel-op', messung ? s[5] : 0.6);
+    el.setProperty('--kondens',    messung ? s[6] : 0);
+    el.setProperty('--frost',      messung ? s[7] : 0);
+
+    const nadel = document.getElementById('nadel');
+    nadel.style.left = (messung ? Math.max(0, Math.min(100, (t / 20) * 100)) : 50) + '%';
+    nadel.style.opacity = messung ? 1 : 0;
+  }
+
+  function zeichne(daten) {
+    const n = Number(daten.biere);
+    striche(n);
+    fuellstand(n);
+    temperatur(Number(daten.temperatur));
     document.getElementById('stand').textContent = standText(daten.stand);
   }
 
@@ -228,6 +549,8 @@
     .then(zeichne)
     .catch(() => {
       striche(NaN);
+      fuellstand(NaN);
+      temperatur(NaN);
       document.getElementById('temp').textContent = 'keine Daten';
       document.getElementById('stand').textContent = 'gerade nicht erreichbar';
     });
