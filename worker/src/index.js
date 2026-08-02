@@ -65,6 +65,12 @@ const TERMIN_RUECK       = 24;   // Stunden, so weit darf er zurueckliegen
 const TERMINE_PRO_TAG    = 3;    // je Nutzer und Tag, gegen das Vollschreiben
 const TERMIN_TITEL_MAX   = 60;   // Zeichen
 const TERMINE_RUECKBLICK = 14;   // Tage, so weit reicht die Liste zurueck
+/* Die Chronik dahinter kennt kein Fenster - sie blaettert, statt abzuschneiden.
+   `SEITE` ist, was ohne Wunsch herauskommt, `MAX` die Obergrenze auf einen
+   Griff: die Seite fordert beim stillen Nachladen so viele an, wie sie gerade
+   zeigt, und das darf nicht ins Unbegrenzte wachsen. */
+const CHRONIK_SEITE = 20;
+const CHRONIK_MAX   = 100;
 /* Wenn ein Client bei der Zusage keine Uhrzeit mitschickt. 17:00 UTC ist 19:00
    deutscher Sommerzeit - eine Annahme, die hier bewusst steht, weil der Worker
    kein ICU hat. Seite und Home Assistant rechnen selbst um und schicken fertig,
@@ -1509,13 +1515,26 @@ const ROUTEN = {
     const ich = await nutzer(request, env);
 
     const ichId = ich ? ich.id : 0;
-    const [alle, meins, roh, reakt, eigene] = await env.DB.batch([
+    const stmts = [
       env.DB.prepare('SELECT ziel_art, ziel_id, sterne FROM bewertungen WHERE ziel_art = ? AND ziel_id = ?')
         .bind(ziel.art, ziel.id),
       env.DB.prepare('SELECT sterne FROM bewertungen WHERE autor_id = ? AND ziel_art = ? AND ziel_id = ?')
         .bind(ichId, ziel.art, ziel.id),
       ...baumStmts(env, ziel, ichId),
-    ]);
+    ];
+    /* Bei einem Abend haengt das Bewerten an seinem Zustand - dieselbe Regel
+       wie in POST /api/bewerten, nur andersherum gelesen: die Seite soll das
+       Formular gar nicht erst anbieten, statt am 409 haengenzubleiben. Wichtig
+       geworden ist das mit der Chronik: dort ist jeder Abend erreichbar, auch
+       der abgesagte, unter dem noch Kommentare stehen. Reitet im selben batch
+       mit - ein eigener Ruf waere eine Runde fuer eine Zeile. */
+    if (ziel.art === 'termin') {
+      stmts.push(env.DB.prepare(`
+        SELECT abgesagt_am, (beginnt_am <= datetime('now')) AS gewesen
+        FROM termine WHERE id = ?
+      `).bind(ziel.id));
+    }
+    const [alle, meins, roh, reakt, eigene, abend] = await env.DB.batch(stmts);
 
     const e = schnitte(alle.results).get(`${ziel.art}:${ziel.id}`);
     const kategorien = KATEGORIEN[ziel.art].map(([feld, name]) => {
@@ -1528,18 +1547,113 @@ const ROUTEN = {
       try { eigeneSterne = JSON.parse(meins.results[0].sterne); } catch { eigeneSterne = null; }
     }
 
+    /* Warum nicht - und zwar als fertiger Satz. Die Regel steht hier, also
+       gehoert ihre Begruendung auch hierher: die Seite fuehrte sonst eine
+       zweite Fassung davon, und zwei Fassungen laufen auseinander. Die
+       Reihenfolge ist die, in der es den Leser angeht. */
+    const a = abend && abend.results[0];
+    const darfNicht =
+        !(ich && ich.name)                        ? 'Zum Bewerten anmelden.'
+      : ziel.art === 'user' && ich.id === ziel.id ? 'Sich selbst bewertet man nicht.'
+      : ziel.art !== 'termin'                     ? null
+      : !a                                        ? 'Den Abend gibt es nicht mehr.'
+      : a.abgesagt_am                             ? 'Abgesagt — bewertet wird ein Abend, den es gab.'
+      : !a.gewesen                                ? 'Bewertet wird, wenn der Abend gewesen ist.'
+      : null;
+
     return antwort(request, {
       ziel: `${ziel.art}:${ziel.id}`,
       ...schnittAntwort(e),
       kategorien,
       meins: eigeneSterne,
-      // Sich selbst bewertet niemand - die Seite soll das Formular gar nicht
-      // erst zeigen, statt am 403 hängenzubleiben.
-      darf: !!(ich && ich.name) && !(ziel.art === 'user' && ich.id === ziel.id),
+      // Sich selbst bewertet niemand, einen Abend erst hinterher - die Seite
+      // soll das Formular gar nicht erst zeigen, statt am 403 bzw. 409
+      // hängenzubleiben.
+      darf: !darfNicht,
+      darf_nicht: darfNicht,
       // Schreiben darf man ueberall, auch bei sich selbst: sonst kann der
       // Gastgeber im eigenen Thread nicht antworten.
       darf_schreiben: !!(ich && ich.name),
       kommentare: baumBauen(roh.results, reakt.results, eigene.results, ichId, env),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Die Chronik: alle Abende, die gewesen sind. Die Liste auf der Seite reicht
+     nur TERMINE_RUECKBLICK Tage zurueck, damit die Bestenliste nicht mit dem
+     Archiv mitwaechst - die Abende dahinter gibt es aber weiter, mit Sternen
+     und Kommentaren daran. Bis hierher fehlte nur der Weg zu ihrer Id.
+
+     Geblaettert wird per KEYSET, nicht per OFFSET: kommt waehrend des
+     Blaetterns ein Abend dazu - oder wird einer abgesagt und faellt heraus -,
+     verschoebe ein OFFSET die ganze Liste um eins, und ein Eintrag erschiene
+     doppelt oder gar nicht. Der Zeiger ist stattdessen das Paar
+     (beginnt_am, id) des letzten gezeigten Eintrags; `id` als Nachschlag, weil
+     zwei Abende auf dieselbe Minute fallen koennen.
+
+     Ohne Token lesbar wie `GET /api/bewertungen`: hier steht nichts, was nicht
+     ohnehin auf der Seite steht. */
+  'GET /api/chronik': async (request, env) => {
+    const url = new URL(request.url);
+    const gewuenscht = Number(url.searchParams.get('anzahl'));
+    const anzahl = Number.isInteger(gewuenscht) && gewuenscht > 0
+      ? Math.min(gewuenscht, CHRONIK_MAX) : CHRONIK_SEITE;
+
+    /* Der Zeiger kommt aus der eigenen Antwort zurueck und wird trotzdem
+       geprueft: er geht in einen Vergleich gegen `beginnt_am`, und das ist
+       eine ZEICHENKETTE. Was hier formlos durchkaeme, entschiede lexikografisch
+       - '9' stuende dann hinter '2026'. */
+    const roh = url.searchParams.get('vor') || '';
+    const zeiger = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(roh)
+      ? roh.replace('T', ' ').replace('Z', '') : '';
+    const zeigerId = Number(url.searchParams.get('vor_id')) || 0;
+
+    /* Eines mehr holen, als herausgeht: daran - und nur daran - ist zu sehen,
+       ob es hinter dieser Seite noch weitergeht. Ein zweites `count(*)` ueber
+       das ganze Archiv waere derselbe Satz zum doppelten Preis. */
+    const zeilen = await env.DB.prepare(`
+      SELECT t.id, t.gastgeber_id, t.beginnt_am, t.titel, t.los_id, t.abgesagt_am,
+             t.erstellt_von, u.name AS gastgeber, e.name AS eingetragen_von
+      FROM termine t
+      JOIN users u ON u.id = t.gastgeber_id
+      LEFT JOIN users e ON e.id = t.erstellt_von
+      WHERE t.beginnt_am <= datetime('now')
+        AND (? = '' OR t.beginnt_am < ? OR (t.beginnt_am = ? AND t.id < ?))
+      ORDER BY t.beginnt_am DESC, t.id DESC
+      LIMIT ?
+    `).bind(zeiger, zeiger, zeiger, zeigerId, anzahl + 1).all();
+
+    const mehr = zeilen.results.length > anzahl;
+    const seite = mehr ? zeilen.results.slice(0, anzahl) : zeilen.results;
+
+    /* Sterne und Zaehler nur fuer DIESE Seite. Die beiden Statements der
+       Bestenliste ziehen ihr Zeitfenster mit; hier waere daraus eine Abfrage
+       ueber das ganze Archiv geworden, die mit jedem je bewerteten Abend
+       waechst - und das ist genau, was die Chronik nicht tun soll. */
+    let noten = new Map(), wieViele = new Map();
+    if (seite.length) {
+      const platz = seite.map(() => '?').join(',');
+      const ids = seite.map(t => t.id);
+      const [bew, kom] = await env.DB.batch([
+        env.DB.prepare(`
+          SELECT ziel_art, ziel_id, sterne FROM bewertungen
+          WHERE ziel_art = 'termin' AND ziel_id IN (${platz})
+        `).bind(...ids),
+        env.DB.prepare(`
+          SELECT ziel_art, ziel_id, count(*) AS anzahl FROM kommentare
+          WHERE geloescht_am IS NULL AND ziel_art = 'termin' AND ziel_id IN (${platz})
+          GROUP BY ziel_art, ziel_id
+        `).bind(...ids),
+      ]);
+      noten = schnitte(bew.results);
+      wieViele = new Map(kom.results.map(z => [z.ziel_art + ':' + z.ziel_id, z.anzahl]));
+    }
+
+    const letzte = seite[seite.length - 1];
+    return antwort(request, {
+      abende: seite.map(t => terminAntwort(t, noten, wieViele)),
+      // Der Zeiger fuer den naechsten Griff - oder null, dann ist das Archiv zu Ende.
+      weiter: mehr && letzte ? { vor: utc(letzte.beginnt_am), vor_id: letzte.id } : null,
     });
   },
 
@@ -1553,7 +1667,7 @@ const ROUTEN = {
        Alles reitet hier mit statt auf eigenen Routen: eine Runde weniger, ein
        Cache-Verhalten weniger, und die Seite fragt ohnehin im Minutentakt nach. */
     const tag = bierTag();
-    const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler] =
+    const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler, chronik] =
       await env.DB.batch([
       env.DB.prepare(`
         SELECT u.id, u.name, u.quelle, r.biere, r.temperatur, r.gemeldet_am
@@ -1584,6 +1698,10 @@ const ROUTEN = {
       termineStmt(env),
       bewertungenStmt(env),
       kommentarZaehlerStmt(env),
+      /* Wie viele Abende die Chronik ueberhaupt herzugeben hat. Nur die Zahl,
+         und nur, damit die Seite weiss, ob der Knopf dahin einen Sinn ergibt -
+         ohne sie stuende er auch an einer Tafel, hinter der nichts liegt. */
+      env.DB.prepare("SELECT count(*) AS n FROM termine WHERE beginnt_am <= datetime('now')"),
     ]);
 
     const bestmarke = new Map(best.results.map(r => [r.user_id, r.best]));
@@ -1624,6 +1742,7 @@ const ROUTEN = {
       feld,
       los: losAntwort(tag, lage, losTopf(losFeld.results, lage), termine.results),
       termine: termine.results.map(t => terminAntwort(t, noten, wieViele)),
+      chronik: chronik.results[0].n,
     }, 200, { 'Cache-Control': 'public, max-age=30' });
   },
 };

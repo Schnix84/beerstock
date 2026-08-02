@@ -46,6 +46,19 @@ die aus keiner Ziehung stammen, trägt man von Hand ein: Gastgeber, Tag, Uhrzeit
 Kommende stehen oben, Gewesenes darunter. Abgesagt wird weich: die Zeile bleibt
 durchgestrichen stehen, damit die Kommentare darunter ihren Zusammenhang behalten.
 
+Die Liste reicht zwei Wochen zurück, sonst wüchse sie mit jedem Abend, den es je
+gab. Alles davor steht in der **Chronik** hinter dem Knopf am Kopf der Sektion:
+nach Monaten geordnet, seitenweise nachgeladen, und ein Tap öffnet dasselbe Blatt
+wie in der Liste — an einem drei Jahre alten Abend sind Sterne, Kommentare,
+Reaktionen und Fotos dieselben. Geblättert wird per Zeiger auf den letzten
+gezeigten Abend, nicht per Seitenzahl: kommt einer dazu, verschiebt sich sonst die
+ganze Liste, und ein Eintrag erschiene doppelt.
+
+Erreichbar ist über die Zeile **jeder** Abend, auch der abgesagte und der, der erst
+kommt — geredet wird über beide ("schade" / "bring Chips mit"), nur bewertet nicht.
+Warum das Sternfeld gerade stumm ist, sagt das Blatt selbst; die Regel dafür steht
+im Worker und nicht zweimal.
+
 **Bewertet** wird mit Sternen in vier Kategorien — einen *Gastgeber* dauerhaft
 (Kaltstellen, Auswahl, Gastfreundschaft, Verlässlichkeit), einen *Abend* einmalig
 (Versorgung, Location, Stimmung, Ausklang). Keine Kategorie ist Pflicht, ein
@@ -96,7 +109,8 @@ der Deckel wieder diesen einen Kühlschrank statt einer leeren Tabelle.
 ### Die Seite bleibt von selbst aktuell
 
 Wer die Seite offen hat, sieht neue Meldungen, Ziehungen, Kommentare, Sterne und
-Reaktionen **ohne Reload** — auch bei geöffnetem Kommentarblatt. Dahinter steht
+Reaktionen **ohne Reload** — auch bei geöffnetem Kommentarblatt und offener
+Chronik. Dahinter steht
 eine WebSocket (`GET /api/strom`) zu einem einzigen Durable Object, an das jede
 Schreibroute meldet, was sie geändert hat.
 
@@ -140,6 +154,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/kommentar` | `{ziel_art, ziel_id, text, antwort_auf?}` |
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück |
+| `GET /api/chronik` | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/health` | Bereitschaft, inklusive Datenbank, Mailversand und Verteiler |

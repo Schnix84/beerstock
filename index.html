@@ -371,6 +371,30 @@
     text-transform: uppercase; color: var(--kreide-weg);
     margin: 14px 0 2px; opacity: .8;
   }
+  /* Zwei Nebenknöpfe am Kopf statt einem: sonst schöbe `space-between` sie an
+     die beiden Enden und die Überschrift stünde dazwischen. */
+  .block-kopf .kopf-neben { display: flex; gap: 14px; }
+
+  /* --- Die Chronik ---------------------------------------------------------
+     Dasselbe Blatt wie das Flyout, nur eine Ebene tiefer (38 gegen 40): sie ist
+     die Liste, aus der man einen Abend aufschlägt, und der aufgeschlagene
+     gehört obenauf.
+     --------------------------------------------------------------------- */
+  .flyout.chronik { z-index: 38; }
+  /* Der Monat trägt das Jahr — die Zeile darunter nennt nur Tag und Monat, und
+     im Archiv ist das die eine Angabe, die fehlt. */
+  .ch-monat {
+    font-family: var(--hand); font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--gelb); opacity: .75;
+    margin: 18px 0 0; padding-bottom: 3px; border-bottom: 1px dashed #ffffff1a;
+  }
+  .ch-monat:first-child { margin-top: 10px; }
+  .ch-mehr {
+    display: block; margin: 16px auto 0; border: none; background: none;
+    padding: 6px 10px; font: inherit; font-size: 12px;
+    color: var(--kreide-weg); text-decoration: underline; cursor: pointer;
+  }
+  .ch-mehr[disabled] { opacity: .5; cursor: default; }
 
   /* --- Sterne und Flyout ---------------------------------------------------
      Ein Bauteil für beide Ziele: einen Nutzer bewertet man dauerhaft, einen
@@ -887,7 +911,10 @@
       <section class="termin-block" id="termin-block" hidden>
         <div class="block-kopf kr">
           <span class="titel">Termine</span>
-          <button class="neben" id="termin-neu" type="button" hidden>eintragen</button>
+          <span class="kopf-neben">
+            <button class="neben" id="chronik-auf" type="button" hidden>Chronik</button>
+            <button class="neben" id="termin-neu" type="button" hidden>eintragen</button>
+          </span>
         </div>
 
         <div id="termin-liste"></div>
@@ -1014,6 +1041,30 @@
       </div>
 
       <p class="sagt" id="fly-sagt" hidden></p>
+    </div>
+  </div>
+
+  <!-- ============ Die Chronik =========================================
+       Jeder Abend, den es gab. Die Terminliste reicht nur zwei Wochen
+       zurück, damit die Bestenliste nicht mit dem Archiv mitwächst — hier
+       steht der Rest, seitenweise nachgeladen. Ein Tap auf einen Abend
+       öffnet dasselbe Blatt wie in der Liste, eine Ebene darüber.
+       ================================================================ -->
+  <div class="flyout chronik" id="chronik" hidden>
+    <div class="fly-schirm" id="ch-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="ch-titel" aria-modal="true">
+      <div class="fly-kopf">
+        <div>
+          <div class="fly-titel" id="ch-titel">Chronik</div>
+          <div class="fly-unter">jeder Abend, den es gab</div>
+        </div>
+        <button class="fly-zu" id="ch-zu" type="button" aria-label="Schließen">×</button>
+      </div>
+
+      <div id="ch-liste"></div>
+      <button class="ch-mehr" id="ch-mehr" type="button" hidden>weiter zurück</button>
+
+      <p class="sagt" id="ch-sagt" hidden></p>
     </div>
   </div>
 
@@ -1280,16 +1331,25 @@
         unter.appendChild(el('span', null, '· eingetragen von ' + t.von));
       }
       if (t.abgesagt) unter.appendChild(el('span', null, '· abgesagt'));
-      /* Bewertet wird ein Abend, der stattgefunden hat — vorher wäre es eine
-         Erwartung. Abgesagte bleiben stumm. */
-      if (vorbei && !t.abgesagt) {
-        const b = el('button', 'z-bewerten');
-        b.type = 'button';
-        b.dataset.ziel = 'termin:' + t.id;
-        b.dataset.name = t.titel || 'Bierabend bei ' + t.gastgeber;
-        b.appendChild(sternKurz(t.bewertung, t.kommentare));
-        unter.appendChild(b);
-      }
+      /* Der Weg ins Blatt. Er hängt NICHT daran, ob der Abend bewertbar ist:
+         reden lässt sich über jeden, auch über einen abgesagten ("schade") und
+         einen kommenden ("bring Chips mit") — die Kommentarroute erlaubt beides
+         von jeher, nur führte hier kein Knopf hin, und die Kommentare unter
+         einer abgesagten Zeile waren damit unerreichbar. Was das Bewerten
+         angeht, sagt das Blatt selbst Bescheid (`darf_nicht`).
+
+         Gezeigt wird trotzdem Verschiedenes: bei einem gewesenen Abend die
+         Note, bei einem kommenden nur die Sprechblase — dort stünde sonst an
+         jeder Zeile ein „noch keine“, das bis zum Abend niemand füllen kann. */
+      const b = el('button', 'z-bewerten');
+      b.type = 'button';
+      b.dataset.ziel = 'termin:' + t.id;
+      b.dataset.name = t.titel || 'Bierabend bei ' + t.gastgeber;
+      b.appendChild(vorbei
+        ? sternKurz(t.bewertung, t.kommentare)
+        : el('span', 'stern-kurz' + (t.kommentare ? ' hat' : ''),
+             t.kommentare ? '💬 ' + t.kommentare : '💬'));
+      unter.appendChild(b);
       mitte.appendChild(unter);
       z.appendChild(mitte);
 
@@ -1641,6 +1701,7 @@
      nachts gehoert die Zusage noch zum Abend davor. */
   let losTag = null;
   let letzteTermine = [];   // fuer das Neuzeichnen nach einer Absage
+  let chronikZahl = 0;      // wie viele Abende im Archiv liegen (aus der Bestenliste)
   let letztesFeld = [];     // die Bestenliste, fuer "wer ist nicht im Topf"
   let selbstGedreht = false;// in DIESER Sitzung gedreht: dann bleibt das Rad stehen
   let dreht = false;        // waehrend der Animation nichts neu zeichnen
@@ -1654,6 +1715,7 @@
   let nachzuholen = null;   // Anstoß, der warten musste: { tafel, ziel }
   let letzterStand = '';    // rohe letzte Antwort der Bestenliste, zum Vergleich
   let letzterThread = '';   // dasselbe fürs Flyout
+  let letzteChronik = '';   // ... und für die Chronik
 
   function sagt(text, schlecht) {
     const p = $('sagt');
@@ -1701,7 +1763,7 @@
     if (feld.length) VARIANTE.kopf(feld[0], 'fuehrend'); else rueckfall();
     // Vor der Liste: dort faerbt der Gewinner schon eine Zeile ein.
     zeichneRad(los);
-    zeichneTermine(termine || []);
+    zeichneTermine(termine || [], chronikZahl);
     liste(feld);
     formular();
   }
@@ -1723,13 +1785,20 @@
     return isNaN(d) ? null : d.toISOString();
   }
 
-  function zeichneTermine(termine) {
+  /* `wieViel` ist die Zahl der Abende in der Chronik. Sie kommt mit der
+     Bestenliste und entscheidet nur, ob der Knopf dahin dasteht - und ob die
+     Sektion ueberhaupt erscheint: nach zwei stillen Wochen ist die Terminliste
+     leer, das Archiv aber nicht, und dann waere der Weg dahin verbaut. */
+  function zeichneTermine(termine, wieViel) {
     letzteTermine = termine;
+    if (Number.isFinite(wieViel)) chronikZahl = wieViel;
     const block = $('termin-block'), ziel = $('termin-liste');
     const darf = !!merke() && !!meinName;
 
-    // Ohne Termine und ohne Anmeldung hat die Sektion nichts zu sagen.
-    block.hidden = !termine.length && !darf;
+    $('chronik-auf').hidden = !chronikZahl;
+
+    // Ohne Termine, ohne Archiv und ohne Anmeldung hat die Sektion nichts zu sagen.
+    block.hidden = !termine.length && !darf && !chronikZahl;
     $('termin-neu').hidden = !darf;
     if (block.hidden) return;
 
@@ -1955,6 +2024,15 @@
     p.hidden = !text;
   }
 
+  /* Der Hintergrund darf nicht mitscrollen, solange ein Blatt offen ist — und
+     das Schließen des OBEREN darf die Sperre nicht aufheben, wenn darunter noch
+     die Chronik liegt. Deshalb wird sie nicht gesetzt und gelöscht, sondern
+     jedes Mal neu aus dem Zustand beider Blätter errechnet. */
+  function koerperSperren() {
+    document.body.style.overflow =
+      (!$('flyout').hidden || !$('chronik').hidden) ? 'hidden' : '';
+  }
+
   async function flyAuf(ziel, titel) {
     flyZiel = ziel;
     flyMeins = {};
@@ -1971,16 +2049,15 @@
     flyModusZurueck();
     flySagt('');
     $('flyout').hidden = false;
-    // Der Hintergrund soll nicht mitscrollen, solange das Blatt offen ist.
-    document.body.style.overflow = 'hidden';
+    koerperSperren();
     await flyLaden();
   }
 
   function flyZu() {
     lupeZu();
     $('flyout').hidden = true;
-    document.body.style.overflow = '';
     flyZiel = null;
+    koerperSperren();
   }
 
   /* --- Das Foto am Schreibfeld --------------------------------------------
@@ -2147,9 +2224,12 @@
       ziel.appendChild(reihe);
     });
 
+    /* Warum nicht, sagt der Worker — dort steht die Regel. Der Rückfall gilt
+       einer älteren Fassung der Route, die `darf_nicht` noch nicht kennt. */
     $('fly-hinweis').textContent = d.darf
       ? 'Ein Tap setzt, derselbe Stern noch einmal nimmt zurück. Keine Kategorie ist Pflicht.'
-      : (merke() && meinName ? 'Sich selbst bewertet man nicht.' : 'Zum Bewerten anmelden.');
+      : (d.darf_nicht
+         || (merke() && meinName ? 'Sich selbst bewertet man nicht.' : 'Zum Bewerten anmelden.'));
 
     flyThread();
   }
@@ -2304,6 +2384,124 @@
     }
   }
 
+  /* --- Die Chronik ---------------------------------------------------------
+     Jeder Abend, den es gab. Die Terminliste reicht nur zwei Wochen zurück,
+     damit die Bestenliste nicht mit dem Archiv mitwächst; alles davor liegt
+     hier. Ein Tap öffnet dasselbe Blatt wie in der Liste — Sterne, Kommentare,
+     Reaktionen und Fotos sind an einem drei Jahre alten Abend dieselben.
+     --------------------------------------------------------------------- */
+  const CH_SEITE = 20;      // wie viele Abende ein Griff holt
+  let chronikAbende = [];   // was gerade dasteht, neueste zuerst
+  let chronikWeiter = null; // Zeiger auf die nächste Seite; null heißt Ende
+  let chronikOffen = false;
+
+  function chSagt(text, schlecht) {
+    const p = $('ch-sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  async function chronikAuf() {
+    chronikAbende = [];
+    chronikWeiter = null;
+    letzteChronik = '';
+    chronikOffen = true;
+    $('ch-liste').textContent = '';
+    $('ch-mehr').hidden = true;
+    chSagt('');
+    $('chronik').hidden = false;
+    koerperSperren();
+    await chronikLaden();
+  }
+
+  function chronikZu() {
+    chronikOffen = false;
+    $('chronik').hidden = true;
+    koerperSperren();
+  }
+
+  /* Ein Griff ins Archiv. Ohne `vor` ist es der Kopf der Liste, mit `vor` die
+     Seite dahinter — der Zeiger kommt unverändert aus der letzten Antwort
+     zurück, die Seite rechnet ihn nicht selbst aus. */
+  async function chronikHolen(vor) {
+    const p = new URLSearchParams();
+    if (vor) { p.set('vor', vor.vor); p.set('vor_id', String(vor.vor_id)); }
+    /* Beim Kopf so viele, wie schon dastehen: wer drei Seiten tief gelesen hat,
+       soll beim stillen Nachfassen nicht auf die erste zurückfallen. Der Worker
+       deckelt das auf 100, mehr fragen wir gar nicht erst. */
+    else p.set('anzahl', String(Math.min(100, Math.max(CH_SEITE, chronikAbende.length))));
+    const r = await fetch(API + '/api/chronik?' + p, { cache: 'no-store' });
+    const roh = await r.text();
+    let d = {};
+    try { d = JSON.parse(roh); } catch {}
+    if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
+    return { d, roh };
+  }
+
+  /* `still` wie überall: nachgefasst statt angefordert. Dann wird nur
+     gezeichnet, wenn sich wirklich etwas geändert hat, ein Fehler bleibt stumm,
+     und der Scrollstand hält — jemand liest hier, während anderswo geschrieben
+     wird. */
+  async function chronikLaden(still) {
+    if (!chronikOffen) return;
+    try {
+      const { d, roh } = await chronikHolen(null);
+      if (!chronikOffen) return;               // inzwischen zugeklappt
+      if (still && roh === letzteChronik) return;
+      letzteChronik = roh;
+      chronikAbende = d.abende || [];
+      chronikWeiter = d.weiter || null;
+      const blatt = $('chronik').querySelector('.fly-blatt');
+      const stand = blatt ? blatt.scrollTop : 0;
+      chronikZeichnen();
+      if (blatt) blatt.scrollTop = stand;
+    } catch (e) {
+      if (still) return;
+      chSagt(e.message, true);
+    }
+  }
+
+  async function chronikMehr() {
+    if (!chronikWeiter) return;
+    const knopf = $('ch-mehr');
+    knopf.disabled = true;
+    chSagt('');
+    try {
+      const { d } = await chronikHolen(chronikWeiter);
+      if (!chronikOffen) return;
+      chronikAbende = chronikAbende.concat(d.abende || []);
+      chronikWeiter = d.weiter || null;
+      /* Der Vergleichsstand des stillen Nachfassens gilt nicht mehr: er
+         beschreibt eine kürzere Liste als die, die jetzt dasteht. */
+      letzteChronik = '';
+      chronikZeichnen();
+    } catch (e) {
+      chSagt(e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  }
+
+  /* Nach Monaten gruppiert, und der Monat trägt das Jahr: die Zeile selbst
+     nennt nur Tag und Monat, und im Archiv ist genau das die fehlende Angabe. */
+  function chronikZeichnen() {
+    const ziel = $('ch-liste');
+    ziel.textContent = '';
+    if (!chronikAbende.length) {
+      ziel.appendChild(el('div', 'leer-hinweis kr', 'Noch ist kein Abend gewesen.'));
+    }
+    let monat = '';
+    chronikAbende.forEach(t => {
+      const m = new Date(t.beginnt_am)
+        .toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+      if (m !== monat) { monat = m; ziel.appendChild(el('div', 'ch-monat', m)); }
+      // Absagen kann man im Archiv nichts mehr — der Abend ist vorbei.
+      ziel.appendChild(VARIANTE.termin(t, false));
+    });
+    $('ch-mehr').hidden = !chronikWeiter;
+  }
+
   /* Rueckfall: der eigene Kuehlschrank aus status.json, wie die Seite es vor der
      Bestenliste gemacht hat. Lieber ein Kuehlschrank als eine leere Tabelle.
      Der Pfad gilt fuer die Datei im Wurzelverzeichnis (also als index.html). */
@@ -2331,6 +2529,8 @@
       if (still && roh === letzterStand) return;   // nichts Neues, nichts zu tun
       letzterStand = roh;
       const d = JSON.parse(roh);
+      // Wie viele Abende im Archiv liegen — daran hängt der Knopf zur Chronik.
+      chronikZahl = Number(d.chronik) || 0;
       zeichneFeld(d.feld || [], d.los || null, d.termine || []);
     } catch (e) {
       if (still) return;
@@ -2359,6 +2559,10 @@
   function angestossen(marken) {
     if (marken.includes('tafel')) hole(true);
     if (flyZiel && marken.includes(flyZiel)) flyLaden(true);
+    /* Die Chronik hört auf 'tafel' mit: ein Kommentar an einem archivierten
+       Abend meldet beide Marken, und der Zähler an seiner Zeile steht hier.
+       Ein eigenes 'chronik' bräuchte eine Marke, die keine Schreibroute kennt. */
+    if (chronikOffen && marken.includes('tafel')) chronikLaden(true);
   }
 
   function nachholen() {
@@ -2452,9 +2656,10 @@
     if (ev.key === 'Enter') { ev.preventDefault(); antwortLos(false); }
   });
 
-  /* Das Flyout hängt an den Listen, nicht an der einzelnen Zeile: beide werden
-     bei jedem Nachfassen neu gebaut, ein Zuhörer je Zeile ginge dabei verloren. */
-  ['rangliste', 'termin-liste'].forEach(id => {
+  /* Das Flyout hängt an den Listen, nicht an der einzelnen Zeile: alle drei
+     werden neu gebaut (die Chronik beim Blättern), ein Zuhörer je Zeile ginge
+     dabei verloren. */
+  ['rangliste', 'termin-liste', 'ch-liste'].forEach(id => {
     $(id).addEventListener('click', ev => {
       const b = ev.target.closest('.z-bewerten');
       if (b) flyAuf(b.dataset.ziel, b.dataset.name);
@@ -2462,6 +2667,11 @@
   });
   $('fly-zu').addEventListener('click', flyZu);
   $('fly-schirm').addEventListener('click', flyZu);
+
+  $('chronik-auf').addEventListener('click', chronikAuf);
+  $('ch-zu').addEventListener('click', chronikZu);
+  $('ch-schirm').addEventListener('click', chronikZu);
+  $('ch-mehr').addEventListener('click', chronikMehr);
 
   /* Alles am Thread hängt an einem Zuhörer: der Baum wird bei jeder Antwort
      neu gebaut, ein Zuhörer je Karte ginge dabei verloren. */
@@ -2518,12 +2728,15 @@
   $('fly-feld').addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); flyAbschicken(); }
   });
-  /* Escape nimmt immer nur die oberste Ebene: erst die Lupe, dann das Blatt.
-     Beides auf einmal wegzuräumen wäre der Griff, den niemand wollte. */
+  /* Escape nimmt immer nur die oberste Ebene: erst die Lupe, dann das Blatt,
+     dann die Chronik darunter. Alles auf einmal wegzuräumen wäre der Griff, den
+     niemand wollte — wer aus einem alten Abend zurückkommt, will in die Liste
+     zurück, nicht auf die Tafel. */
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
     if (!$('lupe').hidden) { lupeZu(); return; }
-    if (!$('flyout').hidden) flyZu();
+    if (!$('flyout').hidden) { flyZu(); return; }
+    if (!$('chronik').hidden) chronikZu();
   });
 
   /* Das Eintrageformular klappt auf, statt dauerhaft dazustehen: die Liste ist
@@ -2726,6 +2939,7 @@
       // Marke mehr kommt: einmal nachziehen.
       hole(true);
       if (flyZiel) flyLaden(true);
+      if (chronikOffen) chronikLaden(true);
     });
     s.addEventListener('message', ev => {
       if (ev.data === 'pong') return;
@@ -2769,6 +2983,7 @@
         strom();
         if (Date.now() - letzte > 60000) frisch();
         if (flyZiel) flyLaden(true);
+        if (chronikOffen) chronikLaden(true);
       }
     }, 20000);
 
@@ -2781,6 +2996,7 @@
       strom();
       if (Date.now() - letzte > 20000) frisch();
       if (flyZiel) flyLaden(true);
+      if (chronikOffen) chronikLaden(true);
     });
 
     strom();
