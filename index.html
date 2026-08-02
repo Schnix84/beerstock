@@ -240,12 +240,139 @@
     .blase, .glanz, .kondens.laeuft { animation: none; }
     .blase { opacity: calc(var(--sprudel-op) * .5); }
   }
+
+  /* ==========================================================================
+     BESTENLISTE
+     Der Rechnungsblock des Wirts unter dem Deckel. Bewusst anderes Papier als
+     die Pappe - heller und glatter -, damit man sieht, dass zwei Dinge
+     uebereinanderliegen, statt dass eines ausfranst.
+
+     Der Deckel oben gehoert dem AKTUELLEN ERSTEN, nicht diesem Kuehlschrank:
+     er ist der Siegerplatz und wechselt den Besitzer. Der eigene Bestand steht
+     in der Liste wie jeder andere, nur mit der Marke "gemessen".
+     ========================================================================== */
+  body { display: block; place-items: unset; padding: 0; }
+  .seite { max-width: 430px; margin: 0 auto; padding: 20px 16px 40px; }
+  main.deckel { margin: 0 auto; }
+
+  .krone-zeile {
+    text-align: center; font-size: 10px; letter-spacing: .24em;
+    text-transform: uppercase; color: #c9a24a; margin: 2px 0 12px; min-height: 13px;
+  }
+
+  .block {
+    position: relative; margin-top: 26px; border-radius: 3px; padding-bottom: 16px;
+    background: linear-gradient(#efe7d3, #e2d8c0);
+    box-shadow: 0 18px 34px -16px #000d, 0 1px 0 #fff6 inset;
+    color: var(--tinte);
+  }
+  /* Abrisskante oben */
+  .block::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 7px;
+    background: radial-gradient(circle at 4px 0, transparent 3.4px, #efe7d3 3.6px) 0 0/9px 7px repeat-x;
+  }
+  .block-kopf {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 18px 16px 8px; border-bottom: 1.5px solid var(--gruen);
+  }
+  .block-kopf .titel {
+    font-family: ui-serif, Georgia, serif; font-size: 12.5px;
+    letter-spacing: .24em; text-transform: uppercase; color: var(--gruen);
+  }
+  .block-kopf .datum { font-size: 9.5px; letter-spacing: .12em; color: var(--blass); }
+
+  .zeile {
+    display: grid; grid-template-columns: 22px 1fr auto;
+    align-items: center; gap: 10px; padding: 11px 16px 10px;
+    border-bottom: 1px solid #2f5d4a1f;
+  }
+  .zeile.ich { background: #2f5d4a0e; }
+  .z-rang {
+    font-family: ui-serif, Georgia, serif; font-size: 15px; color: var(--gruen);
+    text-align: center; font-variant-numeric: tabular-nums;
+  }
+  .zeile.ich .z-rang { color: var(--rot); }
+  .z-name {
+    font-family: ui-serif, Georgia, serif; font-size: 14.5px;
+    letter-spacing: .1em; text-transform: uppercase; line-height: 1;
+    overflow-wrap: anywhere;
+  }
+  .z-striche { margin-top: 6px; height: 17px; }
+  .z-striche svg { height: 17px; width: auto; display: block; }
+  .z-rechts { text-align: right; line-height: 1.35; }
+  .z-zahl {
+    font-family: ui-serif, Georgia, serif; font-size: 21px;
+    font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  /* Das Temperaturwort traegt dieselbe Ampelfarbe wie oben auf dem Deckel -
+     nur wird sie hier je Zeile gesetzt, nicht global ueber :root. */
+  .z-wort { font-weight: 700; letter-spacing: .1em; text-transform: uppercase; font-size: 9.5px; }
+  .z-unten { font-size: 9.5px; letter-spacing: .07em; color: var(--blass); white-space: nowrap; margin-top: 4px; }
+  .z-spark { margin-top: 5px; }
+  .z-spark svg { display: block; margin-left: auto; }
+  .z-marke {
+    display: inline-block; font-size: 8px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--gruen); border: 1px solid #2f5d4a55; border-radius: 2px;
+    padding: 1px 4px; margin-left: 7px; vertical-align: 2px;
+  }
+  .leer-hinweis {
+    padding: 22px 16px; text-align: center; font-size: 11.5px; line-height: 1.6;
+    color: var(--blass);
+  }
+
+  /* --- Formulare ---------------------------------------------------------- */
+  .block-fuss { padding: 16px 16px 0; }
+  .melde { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 10px; }
+  .melde.eins { grid-template-columns: 1fr; }
+  .melde label { display: block; }
+  .feld {
+    display: block; width: 100%;
+    border: none; border-bottom: 1.5px solid #2f5d4a55; background: transparent;
+    padding: 7px 2px 5px; font: inherit; font-size: 13px; color: var(--tinte);
+    font-variant-numeric: tabular-nums; border-radius: 0;
+  }
+  .feld:focus { outline: none; border-bottom-color: var(--gruen); }
+  .feld::placeholder { color: #6f665366; }
+  .feld-label {
+    display: block; font-size: 8.5px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--blass); margin-bottom: 1px;
+  }
+  .knopf {
+    width: 100%; border: none; border-radius: 2px; padding: 11px;
+    background: var(--gruen); color: var(--pappe-hell);
+    font-family: ui-serif, Georgia, serif; font-size: 12px;
+    letter-spacing: .22em; text-transform: uppercase; cursor: pointer;
+  }
+  .knopf[disabled] { opacity: .5; cursor: default; }
+  .knopf.leer {
+    background: transparent; color: var(--gruen);
+    box-shadow: inset 0 0 0 1.5px #2f5d4a66; margin-top: 7px;
+  }
+  .zeile-klein {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 9px; font-size: 9.5px; letter-spacing: .08em; color: var(--blass);
+  }
+  .zeile-klein button {
+    border: none; background: none; padding: 0; font: inherit; color: var(--blass);
+    text-decoration: underline; cursor: pointer;
+  }
+  .sagt {
+    margin: 10px 0 0; padding: 8px 10px; border-radius: 2px; font-size: 11px;
+    line-height: 1.5; background: #2f5d4a14; color: var(--gruen);
+  }
+  .sagt.schlecht { background: #a8342a14; color: var(--rot); }
+  .fuss-hinweis {
+    margin: 12px 2px 0; font-size: 9.5px; line-height: 1.55; color: #8b8069; text-align: center;
+  }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
+  <div class="seite">
+  <div class="krone-zeile" id="krone"></div>
   <main class="deckel">
     <div class="inhalt">
-      <div class="marke">Kühlschrank</div>
+      <div class="marke" id="marke">Kühlschrank</div>
       <div class="regel"></div>
 
       <div class="buehne">
@@ -382,6 +509,60 @@
       <div class="skala" aria-hidden="true"><span class="nadel" id="nadel"></span></div>
     </div>
   </main>
+
+  <section class="block" id="block" hidden>
+    <div class="block-kopf">
+      <div class="titel">Wer hat kalt</div>
+      <div class="datum" id="block-datum"></div>
+    </div>
+
+    <div id="rangliste"></div>
+
+    <div class="block-fuss">
+      <!-- Angemeldet: melden. -->
+      <form id="melde-form" hidden>
+        <div class="melde">
+          <label><span class="feld-label">Biere</span>
+            <input class="feld" id="f-biere" inputmode="numeric" autocomplete="off"
+                   placeholder="9" required></label>
+          <label><span class="feld-label">Grad</span>
+            <input class="feld" id="f-grad" inputmode="decimal" autocomplete="off"
+                   placeholder="4,9" required></label>
+        </div>
+        <button class="knopf" type="submit">Eintragen</button>
+        <div class="zeile-klein">
+          <span id="wer-bin-ich"></span>
+          <button type="button" id="abmelden">abmelden</button>
+        </div>
+      </form>
+
+      <!-- Nicht angemeldet: erst der Knopf, dann das Formular. -->
+      <button class="knopf leer" id="zeig-anmeldung" hidden>Mit Einladungscode anmelden</button>
+      <form id="anmelde-form" hidden>
+        <div class="melde eins">
+          <label><span class="feld-label">Einladungscode</span>
+            <input class="feld" id="f-code" autocomplete="off"
+                   placeholder="BIER-XXXXX-XXXXX" required></label>
+          <label><span class="feld-label">Name für die Liste</span>
+            <input class="feld" id="f-name" autocomplete="nickname" maxlength="20"
+                   placeholder="Basti" required></label>
+        </div>
+        <button class="knopf" type="submit">Anmelden</button>
+        <div class="zeile-klein">
+          <span>Ein Vorname reicht — der Name steht öffentlich.</span>
+        </div>
+      </form>
+
+      <p class="sagt" id="sagt" hidden></p>
+
+      <p class="fuss-hinweis">
+        Gemeldete Werte sind ungeprüft — außer denen mit <em>gemessen</em>,
+        die kommen aus dem Kühlschrank selbst.
+      </p>
+    </div>
+  </section>
+</div>
+
 
 <script>
   const NS = 'http://www.w3.org/2000/svg';
@@ -544,16 +725,306 @@
     document.getElementById('stand').textContent = standText(daten.stand);
   }
 
-  fetch('status.json?t=' + Date.now(), { cache: 'no-store' })
-    .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
-    .then(zeichne)
-    .catch(() => {
-      striche(NaN);
-      fuellstand(NaN);
-      temperatur(NaN);
-      document.getElementById('temp').textContent = 'keine Daten';
-      document.getElementById('stand').textContent = 'gerade nicht erreichbar';
+
+  // ==========================================================================
+  // Die Bestenliste. Sie kommt vom Worker; `status.json` bleibt als Rueckfall
+  // liegen, damit der eigene Bestand auch dann noch dasteht, wenn die API
+  // gerade nicht antwortet. Die Seite selbst bleibt statisch - sie fragt nur.
+  // ==========================================================================
+  const API = 'https://beerstock-api.mc-schneider84.workers.dev';
+  const SPEICHER = 'beerstock-token';
+
+  const merke  = () => localStorage.getItem(SPEICHER);
+  const nimm   = t => localStorage.setItem(SPEICHER, t);
+  const wirf   = () => localStorage.removeItem(SPEICHER);
+
+  const $ = id => document.getElementById(id);
+  const el = (tag, klasse, text) => {
+    const n = document.createElement(tag);
+    if (klasse) n.className = klasse;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  let meinName = null;   // steht nach der ersten Antwort fest
+
+  function sagt(text, schlecht) {
+    const p = $('sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  /* Kleine, einreihige Strichliste fuer eine Listenzeile. Dieselbe Regel wie
+     oben - Vierergruppe plus roter Querstrich -, nur klein und ohne Umbruch.
+     Ueber VOLL_AB steht auch hier nur noch das Wort. */
+  function stricheKlein(anzahl) {
+    const svg = document.createElementNS(NS, 'svg');
+    const wort = t => {
+      svg.setAttribute('viewBox', '0 0 120 30'); svg.setAttribute('height', 17);
+      const n = document.createElementNS(NS, 'text');
+      n.setAttribute('x', 0); n.setAttribute('y', 23); n.setAttribute('font-size', 20);
+      n.setAttribute('font-style', 'italic');
+      n.setAttribute('font-family', 'ui-serif, Georgia, serif');
+      n.setAttribute('fill', t === 'voll' ? 'var(--gruen)' : 'var(--rot)');
+      n.setAttribute('opacity', .85);
+      n.textContent = t;
+      svg.appendChild(n);
+      return svg;
+    };
+    if (!Number.isFinite(anzahl) || anzahl <= 0) return wort('ausgetrunken');
+    if (anzahl > VOLL_AB) return wort('voll');
+
+    const gruppen = Math.ceil(anzahl / 5), gB = 34, gA = 14;
+    const w = gruppen * gB + (gruppen - 1) * gA;
+    svg.setAttribute('viewBox', '0 0 ' + w + ' 30'); svg.setAttribute('height', 17);
+    for (let gi = 0; gi < gruppen; gi++) {
+      const imBund = Math.min(5, anzahl - gi * 5), x0 = gi * (gB + gA);
+      for (let s = 0; s < Math.min(imBund, 4); s++) {
+        const l = document.createElementNS(NS, 'line');
+        l.setAttribute('class', 'strich'); l.setAttribute('stroke-width', 3.4);
+        l.setAttribute('x1', x0 + 4 + s * 7.5); l.setAttribute('y1', 6);
+        l.setAttribute('x2', x0 + 6 + s * 7.5); l.setAttribute('y2', 24);
+        svg.appendChild(l);
+      }
+      if (imBund === 5) {
+        const l = document.createElementNS(NS, 'line');
+        l.setAttribute('class', 'strich quer'); l.setAttribute('stroke-width', 3.4);
+        l.setAttribute('x1', x0 + 1); l.setAttribute('y1', 22);
+        l.setAttribute('x2', x0 + 31); l.setAttribute('y2', 8);
+        svg.appendChild(l);
+      }
+    }
+    return svg;
+  }
+
+  /* Verlauf der letzten Wochen. Klein genug, um Beiwerk zu bleiben. */
+  function sparkline(werte, farbe) {
+    const w = 62, h = 20;
+    if (!werte || werte.length < 2) return document.createComment('kein Verlauf');
+    const max = Math.max(...werte, 1);
+    const px = werte.map((v, i) => [
+      (i / (werte.length - 1)) * (w - 2) + 1,
+      h - 2 - (v / max) * (h - 4),
+    ]);
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    svg.setAttribute('width', w); svg.setAttribute('height', h);
+    svg.setAttribute('aria-hidden', 'true');
+    const f = document.createElementNS(NS, 'path');
+    f.setAttribute('d', 'M' + px[0][0] + ',' + h + ' ' +
+      px.map(p => 'L' + p[0] + ',' + p[1]).join(' ') + ' L' + px[px.length - 1][0] + ',' + h + ' Z');
+    f.setAttribute('fill', farbe); f.setAttribute('opacity', .13);
+    svg.appendChild(f);
+    const l = document.createElementNS(NS, 'polyline');
+    l.setAttribute('points', px.map(p => p.join(',')).join(' '));
+    l.setAttribute('fill', 'none'); l.setAttribute('stroke', farbe);
+    l.setAttribute('stroke-width', 1.4);
+    l.setAttribute('stroke-linejoin', 'round'); l.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(l);
+    const p = document.createElementNS(NS, 'circle');
+    p.setAttribute('cx', px[px.length - 1][0]); p.setAttribute('cy', px[px.length - 1][1]);
+    p.setAttribute('r', 1.9); p.setAttribute('fill', farbe);
+    svg.appendChild(p);
+    return svg;
+  }
+
+  function rangliste(feld) {
+    const ziel = $('rangliste');
+    ziel.textContent = '';
+
+    if (!feld.length) {
+      ziel.appendChild(el('div', 'leer-hinweis',
+        'Noch hat niemand gemeldet. Der erste Eintrag bekommt den Deckel.'));
+      return;
+    }
+
+    feld.forEach((p, i) => {
+      // Dieselbe Ampel wie oben auf dem Deckel - Wort und Farbe kommen aus
+      // STUFEN, nicht aus einer zweiten Tabelle.
+      const s = stufe(p.temperatur);
+      const ich = meinName && p.name === meinName;
+
+      const z = el('div', 'zeile' + (ich ? ' ich' : ''));
+      z.appendChild(el('div', 'z-rang', String(i + 1)));
+
+      const mitte = el('div');
+      const name = el('div', 'z-name');
+      name.textContent = p.name;
+      if (p.gemessen) name.appendChild(el('span', 'z-marke', 'gemessen'));
+      mitte.appendChild(name);
+      const str = el('div', 'z-striche');
+      str.appendChild(stricheKlein(p.biere));
+      mitte.appendChild(str);
+      z.appendChild(mitte);
+
+      const rechts = el('div', 'z-rechts');
+      rechts.appendChild(el('div', 'z-zahl', String(p.biere)));
+      const unten = el('div', 'z-unten');
+      const wort = el('span', 'z-wort', s[1]);
+      wort.style.color = s[2];
+      unten.appendChild(wort);
+      unten.appendChild(document.createTextNode(
+        ' · ' + p.temperatur.toFixed(1).replace('.', ',') + ' °C · ' + standText(p.gemeldet)));
+      rechts.appendChild(unten);
+      const sp = el('div', 'z-spark');
+      sp.appendChild(sparkline(p.verlauf, s[2]));
+      rechts.appendChild(sp);
+      z.appendChild(rechts);
+
+      ziel.appendChild(z);
     });
+  }
+
+  function formular() {
+    const drin = !!merke();
+    $('melde-form').hidden = !drin;
+    $('zeig-anmeldung').hidden = drin;
+    if (drin) {
+      $('anmelde-form').hidden = true;
+      $('wer-bin-ich').textContent = meinName ? 'angemeldet als ' + meinName : 'angemeldet';
+    }
+  }
+
+  function zeichneFeld(feld) {
+    $('block').hidden = false;
+    $('block-datum').textContent =
+      new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+
+    if (feld.length) {
+      // Der Deckel gehoert dem Ersten. `zeichne` rechnet wie immer, nur mit
+      // seinen Werten - Glas, Striche, Ampel und Nadel bleiben unangetastet.
+      const erster = feld[0];
+      $('marke').textContent = erster.name;
+      $('krone').textContent = '① Führt das Feld an';
+      zeichne({ biere: erster.biere, temperatur: erster.temperatur, stand: erster.gemeldet });
+    } else {
+      $('krone').textContent = '';
+      $('marke').textContent = 'Kühlschrank';
+      rueckfall();
+    }
+    rangliste(feld);
+    formular();
+  }
+
+  /* Rueckfall: der eigene Kuehlschrank aus status.json, wie die Seite es vor
+     der Bestenliste gemacht hat. */
+  function rueckfall() {
+    return fetch('status.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
+      .then(zeichne)
+      .catch(() => {
+        striche(NaN); fuellstand(NaN); temperatur(NaN);
+        $('temp').textContent = 'keine Daten';
+        $('stand').textContent = 'gerade nicht erreichbar';
+      });
+  }
+
+  async function hole() {
+    try {
+      const r = await fetch(API + '/api/leaderboard', { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+      const d = await r.json();
+      zeichneFeld(d.feld || []);
+    } catch (e) {
+      // API weg: der Deckel zeigt wieder den eigenen Kuehlschrank, der Block
+      // bleibt draussen. Lieber weniger als eine leere Tabelle.
+      $('block').hidden = true;
+      $('krone').textContent = '';
+      $('marke').textContent = 'Kühlschrank';
+      await rueckfall();
+    }
+  }
+
+  async function ruf(pfad, rumpf) {
+    const kopf = { 'Content-Type': 'application/json' };
+    const token = merke();
+    if (token) kopf['Authorization'] = 'Bearer ' + token;
+    const r = await fetch(API + pfad, {
+      method: 'POST', headers: kopf, body: JSON.stringify(rumpf),
+    });
+    let d = {};
+    try { d = await r.json(); } catch {}
+    if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
+    return d;
+  }
+
+  // --- Bedienung ------------------------------------------------------------
+  $('zeig-anmeldung').addEventListener('click', () => {
+    $('zeig-anmeldung').hidden = true;
+    $('anmelde-form').hidden = false;
+    $('f-code').focus();
+  });
+
+  $('anmelde-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const knopf = ev.target.querySelector('button[type=submit]');
+    knopf.disabled = true; sagt('');
+    try {
+      const d = await ruf('/api/register', {
+        code: $('f-code').value, name: $('f-name').value,
+      });
+      nimm(d.token);
+      meinName = d.name;
+      $('anmelde-form').hidden = true;
+      sagt('Angemeldet als ' + d.name + '. Jetzt eintragen, wie viel kalt steht.');
+      formular();
+      $('f-biere').focus();
+    } catch (e) {
+      sagt(e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  $('melde-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const knopf = ev.target.querySelector('button[type=submit]');
+    knopf.disabled = true; sagt('');
+    try {
+      const d = await ruf('/api/report', {
+        biere: parseInt($('f-biere').value, 10),
+        temperatur: $('f-grad').value,
+      });
+      meinName = d.name;
+      sagt(d.rang === 1
+        ? 'Eingetragen — du führst das Feld an.'
+        : 'Eingetragen. Platz ' + d.rang + '.');
+      await hole();
+    } catch (e) {
+      sagt(e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  $('abmelden').addEventListener('click', () => {
+    // Nur das Token hier im Browser. Der Eintrag in der Liste bleibt - eine
+    // Abmeldung ist kein Austritt aus dem Wettbewerb.
+    wirf();
+    meinName = null;
+    sagt('Abgemeldet. Dein Eintrag bleibt in der Liste stehen.');
+    formular();
+  });
+
+  /* Wer schon angemeldet ist, soll seinen Namen kennen, BEVOR die Liste
+     gezeichnet wird - sonst faerbt sich die eigene Zeile erst nach der ersten
+     Meldung. Ein 401 heisst: das Token gilt nicht mehr (Nutzer geloescht), dann
+     hier gleich wegwerfen, statt den Anmeldeknopf zu verstecken. */
+  async function werBinIch() {
+    const token = merke();
+    if (!token) return;
+    try {
+      const r = await fetch(API + '/api/me', {
+        headers: { Authorization: 'Bearer ' + token }, cache: 'no-store',
+      });
+      if (r.status === 401) { wirf(); return; }
+      if (!r.ok) return;
+      meinName = (await r.json()).name;
+    } catch { /* offline - dann eben ohne Hervorhebung */ }
+  }
+
+  werBinIch().then(hole);
 </script>
 </body>
 </html>

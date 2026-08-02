@@ -1,0 +1,5 @@
+# Lokaler wrangler-Cache (enthaelt u. a. die Account-ID) und Build-Kram.
+worker/.wrangler/
+worker/node_modules/
+node_modules/
+.DS_Store

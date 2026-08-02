@@ -1,0 +1,31 @@
+{
+  // ==========================================================================
+  // beerstock-api — Cloudflare Worker hinter der oeffentlichen Bierseite.
+  //
+  // Die Seite selbst liegt weiter auf GitHub Pages und bleibt statisch. Dieser
+  // Worker ist das Einzige, was schreiben kann: Registrierung, Meldungen,
+  // Bestenliste. Die Home-Assistant-Instanz bleibt dabei von aussen
+  // unerreichbar - sie ruft hier an, nicht umgekehrt.
+  //
+  // Deployen aus diesem Verzeichnis:  npx wrangler deploy
+  // ==========================================================================
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "beerstock-api",
+  "main": "src/index.js",
+
+  // Legt das Verhalten der Workers-Laufzeit auf den Stand dieses Tages fest.
+  // Nicht ohne Grund hochziehen: ein neueres Datum kann Verhalten aendern.
+  "compatibility_date": "2026-08-02",
+
+  "observability": { "enabled": true },
+
+  // Angelegt in WEUR (Westeuropa). Die database_id ist kein Geheimnis - ohne
+  // Konto-Zugang laesst sich damit nichts anfangen.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "beerstock",
+      "database_id": "2e266088-74ed-4d96-ae9d-c9d4703ee708"
+    }
+  ]
+}
