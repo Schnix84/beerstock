@@ -2186,6 +2186,7 @@
   }
 
   async function flyAuf(ziel, titel) {
+    sterneJetzt();            // was am vorigen Ziel noch aussteht, geht raus
     flyZiel = ziel;
     flyMeins = {};
     flyDaten = null;
@@ -2206,6 +2207,7 @@
   }
 
   function flyZu() {
+    sterneJetzt();            // ein Tap kurz vor dem Schließen zählt trotzdem
     lupeZu();
     $('flyout').hidden = true;
     flyZiel = null;
@@ -2309,7 +2311,9 @@
       if (still && roh === letzterThread) return;
       letzterThread = roh;
       flyDaten = d;
-      flyMeins = { ...(d.meins || {}) };
+      // Eine noch wartende oder unterwegs befindliche Abgabe ist jünger als
+      // alles, was von dort kommt — siehe `sterneOffen`.
+      if (!sterneOffen()) flyMeins = { ...(d.meins || {}) };
 
       /* Der Kommentar, an dem das Feld hängt, kann in der Zwischenzeit
          gelöscht worden sein. Dann fällt der Bezug weg, der getippte Satz
@@ -2463,6 +2467,11 @@
       if (flyModus.art === 'aendern') {
         await ruf('/api/kommentar/aendern', { id: flyModus.id, text });
       } else if (mitSternen) {
+        /* Dieser Ruf schreibt dieselben Sterne, die der Debounce noch schuldet —
+           er wird hier nicht abgeschickt, sondern verworfen, sonst ginge die
+           Abgabe zweimal raus. */
+        clearTimeout(sterneTimer);
+        sterneTimer = null;
         await ruf('/api/bewerten', {
           ziel_art: art, ziel_id: Number(id), sterne: flyMeins, text,
           bild: bild ? bild.key : undefined,
@@ -2515,20 +2524,62 @@
     }
   }
 
-  /* Gespeichert wird sofort bei jedem Tap — kein Knopf darunter. Wer eine Note
-     ändert, will sie geändert haben, nicht bestätigen. Die Sperre im Worker
-     fängt das Trommelfeuer ab; deshalb steht die Fehlerzeile bereit. */
-  async function flySpeichern() {
+  /* Gespeichert wird ohne Knopf darunter — wer eine Note ändert, will sie
+     geändert haben, nicht bestätigen. Gezeichnet wird deshalb sofort, gesendet
+     aber erst, wenn eine halbe Sekunde lang kein weiterer Tap kam: vier
+     Kategorien sind vier Taps, und vier Rufe daraus zu machen hieße, dass drei
+     davon eine Bewertung überschreiben, die noch unterwegs ist. Der letzte
+     Stand ist der ganze Stand — `flyMeins` trägt immer alle vier Felder.
+
+     Das ist die Hälfte der Sache. Die andere steht im Worker: die Sperre dort
+     galt je NUTZER und wies genau diese Bedienung ab (siehe BEWERTSPERRE). */
+  const STERNE_WARTEN = 500;   // ms Ruhe, bevor die Abgabe rausgeht
+  let sterneTimer = null;      // der laufende Debounce, oder null
+  let sterneImFlug = false;    // ein Ruf ist unterwegs
+  let sterneLauf = 0;          // gegen zwei Abgaben, die sich überholen
+
+  // Eine Abgabe, die noch nicht bestätigt ist. Solange das gilt, darf ein
+  // stilles Nachfassen `flyMeins` nicht überschreiben — der eben getippte
+  // Stern spränge sonst auf den Stand zurück, den der Server noch kennt.
+  const sterneOffen = () => sterneTimer !== null || sterneImFlug;
+
+  function flySpeichern() {
     if (!flyZiel) return;
-    const [art, id] = flyZiel.split(':');
     flyZeichnen();                       // sofort zeichnen, bevor die Antwort da ist
     flySagt('');
+    clearTimeout(sterneTimer);
+    sterneTimer = setTimeout(sterneSchicken, STERNE_WARTEN);
+  }
+
+  // Beim Schließen und beim Wechsel des Ziels: den Wartenden sofort losschicken.
+  // `sterneSchicken` liest `flyZiel` synchron, der Aufruf darf also vorausgehen.
+  function sterneJetzt() {
+    if (sterneTimer === null) return;
+    clearTimeout(sterneTimer);
+    sterneSchicken();
+  }
+
+  async function sterneSchicken() {
+    const ziel = flyZiel;
+    if (!ziel) return;
+    sterneTimer = null;
+    const lauf = ++sterneLauf;
+    const [art, id] = ziel.split(':');
+    // Alle vier zurückgenommen: der Worker löscht die Zeile und antwortet
+    // `sterne: null`. Hier ist das derselbe Ruf wie jeder andere.
+    const abgabe = { ...flyMeins };
+    sterneImFlug = true;
     try {
-      await ruf('/api/bewerten', { ziel_art: art, ziel_id: Number(id), sterne: flyMeins });
-      await flyLaden();                  // Schnitt und Anzahl kommen vom Server
-      await hole();                      // ... und die Zeile in der Liste dahinter
+      await ruf('/api/bewerten', { ziel_art: art, ziel_id: Number(id), sterne: abgabe });
+      sterneImFlug = false;
+      // Schnitt und Anzahl kommen vom Server — aber nur, wenn das Blatt noch
+      // auf demselben Ziel steht und uns keine jüngere Abgabe überholt hat.
+      if (lauf === sterneLauf && flyZiel === ziel) await flyLaden();
+      await hole();                      // die Zeile in der Liste dahinter immer
     } catch (e) {
+      sterneImFlug = false;
       flySagt(e.message, true);
+      if (lauf !== sterneLauf || flyZiel !== ziel) return;
       // Zurück auf den letzten bestätigten Stand, sonst zeigt das Blatt etwas,
       // was in der Datenbank nicht steht.
       flyMeins = { ...((flyDaten && flyDaten.meins) || {}) };

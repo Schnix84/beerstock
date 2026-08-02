@@ -106,7 +106,19 @@ const KATEGORIEN = {
     ['ausklang',   'Ausklang'],
   ],
 };
-const BEWERTSPERRE = 10;   // Sekunden zwischen zwei Bewertungen desselben Nutzers
+/* Die Sperre gilt nur gegen den, der von Ziel zu Ziel springt - NICHT gegen
+   den, der gerade dieses eine Blatt ausfuellt. Vier Kategorien sind vier Taps
+   und damit vier Rufe, und die Sperre stand vorher auf 10 Sekunden je NUTZER:
+   die erste Reihe ging durch, die zweite bis vierte holten sich "Zu schnell",
+   und die eben getippten Sterne sprangen wieder aus. Genau die Bedienung, fuer
+   die die Seite gebaut ist, war der Fall, den sie abwies.
+
+   Dass Nachbessern am selben Ziel frei ist, kostet nichts: `bewertungen` hat
+   UNIQUE (autor_id, ziel_art, ziel_id), jeder weitere Tap trifft per UPSERT
+   dieselbe eine Zeile. Wachsen kann nur, wer neue ZIELE bewertet - und genau
+   das bremst die Sperre. Drei Sekunden reichen dafuer; ein Mensch, der zwei
+   verschiedene Abende bewertet, braucht laenger, um das Blatt zu wechseln. */
+const BEWERTSPERRE = 3;    // Sekunden, bis das naechste ANDERE Ziel drankommt
 
 /* Kommentare. Eine Antwortebene, mehr nicht - auf dem Handy ist bei Stufe drei
    die Spalte vierzig Pixel breit. Genau wie WhatsApp. */
@@ -466,7 +478,12 @@ function zielAus(roh) {
 
 /* Prueft und normalisiert die Sterne. Nicht bewertete Kategorien stehen
    danach als `null` drin - so ist an der Zeile ablesbar, dass sie bewusst
-   leer sind, und `avg()` uebergeht sie von selbst. */
+   leer sind, und `avg()` uebergeht sie von selbst.
+
+   Sind ALLE leer, ist das kein Fehler, sondern die Ruecknahme: `leer` faellt
+   mit heraus und die Route loescht die Zeile. Vorher stand hier ein Abweisen
+   mit dem Verweis "dafuer gibt es das Loeschen" - das es nie gab. Wer seine
+   einzige Kategorie noch einmal antippte, kam damit nicht mehr heraus. */
 function pruefeSterne(art, roh) {
   if (!roh || typeof roh !== 'object' || Array.isArray(roh)) {
     return { fehler: 'sterne: ein Objekt mit den Kategorien' };
@@ -485,9 +502,7 @@ function pruefeSterne(art, roh) {
     }
     sterne[k] = v; gesetzt++;
   }
-  // Eine Bewertung ganz ohne Stern ist keine - dafuer gibt es das Loeschen.
-  if (!gesetzt) return { fehler: 'Mindestens eine Kategorie bewerten' };
-  return { sterne };
+  return { sterne, leer: !gesetzt };
 }
 
 /* Die Schnitte. Bewusst in JS statt als SQL-Aggregat: der Ausdruck haette die
@@ -1272,6 +1287,48 @@ const ROUTEN = {
     const s = pruefeSterne(ziel.art, daten.sterne);
     if (s.fehler) return fehler(request, s.fehler);
 
+    /* Alle Kategorien leer heisst ZURUECKGENOMMEN: die Zeile faellt weg, statt
+       als sternlose Bewertung stehenzubleiben und die Anzahl unter dem Abend
+       weiter mitzuzaehlen. Steht davor, weil hier nichts von dem gilt, was das
+       Setzen bindet:
+
+       - Kein Bild, kein Text. Wer beides schickt, will keine Ruecknahme; der
+         Satz gehoert dann an /api/kommentar, wo er ohne Sterne hingehoert.
+       - Keine Sperre. Zurueckgenommen wird eine Zeile, die es schon gibt -
+         zweimal loeschen aendert nichts, das ist kein Hebel fuer irgendwen.
+       - Keine Zustandspruefung am Ziel. Wird ein Abend NACH der Bewertung
+         abgesagt, verbaeten die Regeln unten das Loeschen ("Der Abend ist
+         abgesagt worden") - und die Note haenge fuer immer an einem Abend, den
+         es nie gab.
+
+       Erst wird die Verbindung geloest, dann geloescht - `kommentare
+       .bewertung_id` zeigt hierher und haelt die Zeile sonst fest (der
+       Fremdschluessel aus 0007 hat kein ON DELETE). Der Kommentar darf nicht
+       mitfallen: seine Sterne stehen seit 0009 als SCHNAPPSCHUSS in ihm selbst,
+       gelesen wird `bewertung_id` fuer die Anzeige gar nicht mehr. Was die
+       Karte trug, hat sie damals getragen - eine Ruecknahme von heute schreibt
+       die Vergangenheit nicht um. Beides im selben batch, damit nicht der eine
+       Schritt ohne den anderen dasteht.
+
+       `changes` entscheidet ueber den Anstoss: wer nichts gelesen hatte und
+       trotzdem auf null tippt, soll nicht alle offenen Seiten nachladen
+       lassen. */
+    if (s.leer) {
+      if (String(daten.text ?? '').trim() || daten.bild) {
+        return fehler(request, 'Ohne Sterne gehört der Text an die Kommentarroute');
+      }
+      const [, weg] = await env.DB.batch([
+        env.DB.prepare(`
+          UPDATE kommentare SET bewertung_id = NULL WHERE bewertung_id IN (
+            SELECT id FROM bewertungen WHERE autor_id = ? AND ziel_art = ? AND ziel_id = ?)
+        `).bind(ich.id, ziel.art, ziel.id),
+        env.DB.prepare('DELETE FROM bewertungen WHERE autor_id = ? AND ziel_art = ? AND ziel_id = ?')
+          .bind(ich.id, ziel.art, ziel.id),
+      ]);
+      if (weg.meta.changes) anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
+      return antwort(request, { ok: true, sterne: null });
+    }
+
     /* Auch hier, nicht nur an der Kommentarroute: der Fall "5 Sterne, ein Satz
        und ein Foto vom Kühlschrank" kommt als EINE Anfrage genau hier an - die
        Seite schickt einen Wurzelkommentar mit Sternen ueber diese Route. Hinge
@@ -1299,11 +1356,14 @@ const ROUTEN = {
       if (!t.gewesen) return fehler(request, 'Der Abend hat noch nicht angefangen', 409);
     }
 
-    // Wie die Meldesperre: gegen den, der zehnmal drueckt, weil nichts blinkt.
+    /* Wie die Meldesperre, aber ausdruecklich nur gegen ANDERE Ziele - warum,
+       steht bei BEWERTSPERRE. Das eigene Blatt darf man tippen, so schnell man
+       will; es ist immer dieselbe Zeile. */
     const letzte = await env.DB.prepare(`
       SELECT 1 FROM bewertungen
-      WHERE autor_id = ? AND coalesce(geaendert, erstellt) > datetime('now', ?) LIMIT 1
-    `).bind(ich.id, `-${BEWERTSPERRE} seconds`).first();
+      WHERE autor_id = ? AND NOT (ziel_art = ? AND ziel_id = ?)
+        AND coalesce(geaendert, erstellt) > datetime('now', ?) LIMIT 1
+    `).bind(ich.id, ziel.art, ziel.id, `-${BEWERTSPERRE} seconds`).first();
     if (letzte) return fehler(request, 'Zu schnell — kurz durchatmen', 429);
 
     /* Steht ein Text oder ein Foto daneben, entsteht gleich ein Kommentar -
