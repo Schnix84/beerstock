@@ -1989,9 +1989,26 @@
 
     const darfWeg = t => darf && (t.gastgeber === meinName || t.von === meinName);
 
+    /* Der leere Horizont bietet nur an, was von hier aus auch geht. „Das Rad
+       drehen" unter einem Knopf, den es gerade nicht gibt, schickt den Leser
+       nach oben und lässt ihn dort suchen — und während eine Ziehung auf ihre
+       Antwort wartet, ist es schlicht falsch: gedreht IST. Woran das hängt,
+       steht in `letztesLos`; `zeichneRad` schreibt es unmittelbar vor diesem
+       Aufruf (siehe `hole`), und wo die Termine allein neu gezeichnet werden,
+       gilt weiter der zuletzt bestätigte Stand. */
     if (!kommend.length) {
+      const los = letztesLos || {};
+      // Dieselbe Lesart wie am Rad selbst: `offen` ist die ältere Schreibweise.
+      const genug = los.darf_drehen !== undefined ? los.darf_drehen : los.offen;
+      const wartet = !!los.gewinner && los.status === 'offen';
       ziel.appendChild(el('div', 'leer-hinweis kr',
-        'Kein Abend in Sicht. Das Rad drehen oder einen eintragen.'));
+        wartet
+          ? (los.gewinner === meinName
+              ? 'Noch kein Abend — die Flasche zeigt auf dich.'
+              : 'Noch kein Abend — die Flasche wartet auf ' + los.gewinner + '.')
+          : (genug && darf) ? 'Kein Abend in Sicht. Das Rad drehen oder einen eintragen.'
+          : darf            ? 'Kein Abend in Sicht. Trag einen ein.'
+                            : 'Kein Abend in Sicht.'));
     }
     kommend.forEach(t => ziel.appendChild(VARIANTE.termin(t, darfWeg(t))));
 
