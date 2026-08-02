@@ -19,6 +19,14 @@
 
   "observability": { "enabled": true },
 
+  // Kein Geheimnis, deshalb hier und nicht als Secret. Der API-Schluessel
+  // dazu heisst AGENTMAIL_KEY und liegt bei Cloudflare:
+  //     npx wrangler secret put AGENTMAIL_KEY
+  "vars": {
+    "AGENTMAIL_INBOX": "beerstock@agentmail.to",
+    "SEITE": "https://schnix84.github.io/beerstock/"
+  },
+
   // Angelegt in WEUR (Westeuropa). Die database_id ist kein Geheimnis - ohne
   // Konto-Zugang laesst sich damit nichts anfangen.
   "d1_databases": [

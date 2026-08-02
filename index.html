@@ -533,18 +533,26 @@
         </div>
       </form>
 
-      <!-- Nicht angemeldet: erst der Knopf, dann das Formular. -->
-      <button class="knopf leer" id="zeig-anmeldung" hidden>Mit Einladungscode anmelden</button>
-      <form id="anmelde-form" hidden>
+      <!-- Erster Klick nach dem Magic Link: der Nutzer steht in der Datenbank,
+           hat aber noch keinen Namen fuer die Liste. -->
+      <form id="name-form" hidden>
         <div class="melde eins">
-          <label><span class="feld-label">Einladungscode</span>
-            <input class="feld" id="f-code" autocomplete="off"
-                   placeholder="BIER-XXXXX-XXXXX" required></label>
           <label><span class="feld-label">Name für die Liste</span>
             <input class="feld" id="f-name" autocomplete="nickname" maxlength="20"
                    placeholder="Basti" required></label>
         </div>
-        <button class="knopf" type="submit">Anmelden</button>
+        <button class="knopf" type="submit">Merken</button>
+      </form>
+
+      <!-- Nicht angemeldet: erst der Knopf, dann das Adressfeld. -->
+      <button class="knopf leer" id="zeig-anmeldung" hidden>Anmelden</button>
+      <form id="anmelde-form" hidden>
+        <div class="melde eins">
+          <label><span class="feld-label">Deine E-Mail</span>
+            <input class="feld" id="f-mail" type="email" inputmode="email"
+                   autocomplete="email" placeholder="du@beispiel.de" required></label>
+        </div>
+        <button class="knopf" type="submit">Link schicken</button>
       </form>
 
       <p class="sagt" id="sagt" hidden></p>
@@ -735,7 +743,8 @@
     return n;
   };
 
-  let meinName = null;   // steht nach der ersten Antwort fest
+  let meinName = null;      // steht nach der ersten Antwort fest
+  let brauchtNamen = false; // angemeldet, aber noch ohne Namen fuer die Liste
 
   function sagt(text, schlecht) {
     const p = $('sagt');
@@ -865,14 +874,18 @@
     });
   }
 
+  /* Drei Zustaende, und immer ist genau einer sichtbar:
+       draussen        -> Knopf "Anmelden", dahinter das Adressfeld
+       drin, namenlos  -> Namensfeld (direkt nach dem ersten Magic Link)
+       drin, benannt   -> Meldeformular */
   function formular() {
     const drin = !!merke();
-    $('melde-form').hidden = !drin;
+    const namenlos = drin && brauchtNamen;
+    $('melde-form').hidden = !drin || namenlos;
+    $('name-form').hidden = !namenlos;
     $('zeig-anmeldung').hidden = drin;
-    if (drin) {
-      $('anmelde-form').hidden = true;
-      $('wer-bin-ich').textContent = meinName ? 'angemeldet als ' + meinName : 'angemeldet';
-    }
+    if (drin) $('anmelde-form').hidden = true;
+    $('wer-bin-ich').textContent = meinName ? 'angemeldet als ' + meinName : 'angemeldet';
   }
 
   function zeichneFeld(feld) {
@@ -942,23 +955,40 @@
   $('zeig-anmeldung').addEventListener('click', () => {
     $('zeig-anmeldung').hidden = true;
     $('anmelde-form').hidden = false;
-    $('f-code').focus();
+    $('f-mail').focus();
   });
 
+  /* Adresse rein, Link raus. Die Antwort ist bewusst dieselbe, egal ob die
+     Adresse bekannt ist - sonst verriete die Seite, wer mitspielt. */
   $('anmelde-form').addEventListener('submit', async ev => {
     ev.preventDefault();
     const knopf = ev.target.querySelector('button[type=submit]');
     knopf.disabled = true; sagt('');
     try {
-      const d = await ruf('/api/register', {
-        code: $('f-code').value, name: $('f-name').value,
-      });
-      nimm(d.token);
-      meinName = d.name;
+      await ruf('/api/anmelden', { email: $('f-mail').value });
       $('anmelde-form').hidden = true;
-      sagt('Angemeldet als ' + d.name + '. Jetzt eintragen, wie viel kalt steht.');
+      $('zeig-anmeldung').hidden = false;
+      sagt('Link ist unterwegs. Schau ins Postfach — auch im Spam. Er gilt 15 Minuten.');
+    } catch (e) {
+      sagt(e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  /* Der Name fuer die Liste, einmalig nach dem ersten Link. */
+  $('name-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const knopf = ev.target.querySelector('button[type=submit]');
+    knopf.disabled = true; sagt('');
+    try {
+      const d = await ruf('/api/name', { name: $('f-name').value });
+      meinName = d.name;
+      brauchtNamen = false;
+      sagt('Willkommen, ' + d.name + '. Jetzt eintragen, wie viel kalt steht.');
       formular();
       $('f-biere').focus();
+      await hole();
     } catch (e) {
       sagt(e.message, true);
     } finally {
@@ -987,19 +1017,22 @@
     }
   });
 
-  $('abmelden').addEventListener('click', () => {
-    // Nur das Token hier im Browser. Der Eintrag in der Liste bleibt - eine
-    // Abmeldung ist kein Austritt aus dem Wettbewerb.
+  $('abmelden').addEventListener('click', async () => {
+    /* Nur DIESES Geraet. Die anderen bleiben angemeldet, und der Eintrag in der
+       Liste bleibt sowieso - abmelden ist kein Austritt aus dem Wettbewerb.
+       Der Ruf raus darf scheitern, das Token fliegt hier trotzdem weg. */
+    try { await ruf('/api/abmelden', {}); } catch {}
     wirf();
     meinName = null;
+    brauchtNamen = false;
     sagt('Abgemeldet. Dein Eintrag bleibt in der Liste stehen.');
     formular();
   });
 
   /* Wer schon angemeldet ist, soll seinen Namen kennen, BEVOR die Liste
      gezeichnet wird - sonst faerbt sich die eigene Zeile erst nach der ersten
-     Meldung. Ein 401 heisst: das Token gilt nicht mehr (Nutzer geloescht), dann
-     hier gleich wegwerfen, statt den Anmeldeknopf zu verstecken. */
+     Meldung. Ein 401 heisst: das Token gilt nicht mehr, dann hier gleich
+     wegwerfen, statt den Anmeldeknopf zu verstecken. */
   async function werBinIch() {
     const token = merke();
     if (!token) return;
@@ -1009,11 +1042,46 @@
       });
       if (r.status === 401) { wirf(); return; }
       if (!r.ok) return;
-      meinName = (await r.json()).name;
+      const d = await r.json();
+      meinName = d.name;
+      brauchtNamen = !!d.braucht_namen;
     } catch { /* offline - dann eben ohne Hervorhebung */ }
   }
 
-  werBinIch().then(hole);
+  /* Der Magic Link landet als `#anmelden=...` im Adressfragment. Ein Fragment
+     wird nie an einen Server geschickt, steht also in keinem Zugriffsprotokoll -
+     deshalb dort und nicht als Suchparameter. Direkt nach dem Einloesen fliegt
+     es aus der Adresszeile, damit ein Screenshot oder ein zurueckgeblaettertes
+     Fenster ihn nicht weiterreicht (er ist dann ohnehin verbraucht). */
+  async function magicEinloesen() {
+    const treffer = /[#&]anmelden=([a-f0-9]{32,})/i.exec(location.hash || '');
+    if (!treffer) return;
+    const roh = treffer[1];
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      const r = await fetch(API + '/api/magic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: roh }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { sagt(d.fehler || 'Der Link hat nicht funktioniert.', true); return; }
+      nimm(d.token);
+      meinName = d.name;
+      brauchtNamen = !!d.braucht_namen;
+      sagt(brauchtNamen
+        ? 'Drin. Wie sollst du in der Liste heißen?'
+        : 'Willkommen zurück, ' + d.name + '.');
+    } catch {
+      sagt('Der Link ließ sich gerade nicht einlösen. Netz weg?', true);
+    }
+  }
+
+  /* Reihenfolge: erst den Link einloesen (der setzt das Token), dann wissen,
+     wer man ist, dann zeichnen. */
+  magicEinloesen()
+    .then(() => merke() && !meinName && !brauchtNamen ? werBinIch() : null)
+    .then(hole);
 </script>
 </body>
 </html>

@@ -19,10 +19,14 @@ Zahl trotzdem.
 
 ## Wie man mitmacht
 
-Mit einem Einladungscode. Man wählt einen Namen, bekommt ein Token in den Browser
-gelegt und kann von da an melden, wie viele kalte Biere bei wie viel Grad stehen.
-Kein Passwort, keine Mailadresse — es gibt nichts zu speichern, was wehtun würde,
-wenn es abhandenkommt.
+Mailadresse eintippen, Link in der Mail klicken, drin. Beim ersten Mal fragt die
+Seite noch, wie man in der Liste heißen soll — das war's. Kein Passwort, also
+auch keines zu vergessen, und nichts zu speichern, was gestohlen werden könnte.
+
+Derselbe Weg funktioniert auf jedem weiteren Gerät und beliebig oft. Wer sein
+Handy wechselt, den Browserspeicher leert oder von Safari nach sieben Tagen
+Untätigkeit ausgeräumt wird, tippt einfach wieder seine Adresse ein. Handy und
+Laptop können gleichzeitig angemeldet sein.
 
 Gemeldete Werte sind **ungeprüft**. Die einzige Ausnahme trägt die Marke
 *gemessen*: dieser Bestand kommt aus einer Kühlschrank-Inventur in Home Assistant
@@ -48,16 +52,28 @@ der Deckel wieder diesen einen Kühlschrank statt einer leeren Tabelle.
 
 | Route | Was |
 |---|---|
-| `POST /api/register` | `{code, name}` → `{token}` |
+| `POST /api/anmelden` | `{email}` → schickt einen Magic Link |
+| `POST /api/magic` | `{token}` aus dem Link → Geräte-Token |
+| `POST /api/name` | Name für die Liste setzen |
 | `GET /api/me` | wem das Token gehört |
 | `POST /api/report` | `{biere, temperatur}` mit `Bearer`-Token |
+| `POST /api/abmelden` | wirft nur dieses eine Gerät raus |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf |
-| `GET /api/health` | Bereitschaft, inklusive Datenbank |
+| `GET /api/health` | Bereitschaft, inklusive Datenbank und Mailversand |
 
-Grenzen: 0–999 Biere, −30…+30 °C, eine Meldung pro Minute und Nutzer. CORS
-ausschließlich für diese Seite. Token und Einladungscodes liegen in der Datenbank
-nur als SHA-256 — ein Abzug verrät, wer wie viel Bier hat, macht aber niemanden
-handlungsfähig.
+Grenzen: 0–999 Biere, −30…+30 °C, eine Meldung pro Minute und Nutzer. Magic Links
+gelten 15 Minuten und genau einmal, höchstens 3 pro Adresse und Stunde und 30
+insgesamt — sonst wäre der Posteingang ein Versandknopf im Netz. CORS
+ausschließlich für diese Seite. Geräte-Token und Magic Links liegen in der
+Datenbank nur als SHA-256 — ein Abzug verrät, wer wie viel Bier hat, macht aber
+niemanden handlungsfähig.
+
+Der Link reist im Adressfragment (`#anmelden=…`), nicht als Suchparameter: ein
+Fragment wird nie an einen Server geschickt und steht damit in keinem
+Zugriffsprotokoll. Die Seite räumt es sofort nach dem Einlösen aus der Adresszeile.
+
+Mails gehen über [AgentMail](https://agentmail.to) raus — reine HTTP-API, kein
+SMTP. Der Schlüssel liegt als Worker-Secret `AGENTMAIL_KEY`.
 
 Meldungen werden nie überschrieben: der aktuelle Stand ist die jüngste Zeile je
 Nutzer, der Verlauf fällt dabei von selbst an.
