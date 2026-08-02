@@ -707,15 +707,24 @@
      das Adressfeld erst auftat - eine Tuer vor der Tuer, und was dahinter
      kommt, stand nirgends. */
   .tuersteher {
-    margin-bottom: 16px; padding: 13px 15px;
+    margin-bottom: 10px; padding: 9px 15px;
     border: 1px dashed #ffffff2e; border-radius: 4px;
   }
+  /* Titel und Beruhigung teilen sich eine Zeile: der Satz "kein Passwort,
+     keine App" ist der halbe Grund mitzumachen, kostet als eigener Absatz aber
+     27 px - und die fehlten unten am Anmeldeknopf. Baseline statt center,
+     damit die 17-px-Handschrift und die 12-px-Note auf einer Linie sitzen. */
+  .tuer-kopf { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .tuer-titel { font-family: var(--hand); font-size: 17px; color: var(--kreide); }
   .tuer-schritte {
     margin: 8px 0 0; padding-left: 18px;
     font-size: 12.5px; line-height: 1.7; color: var(--kreide-matt);
   }
-  .tuer-note { margin: 9px 0 0; font-size: 12px; line-height: 1.5; color: var(--kreide-weg); }
+  /* 11,5 px und nicht 12: bei 375 px Geraetebreite passen Titel und Satz sonst
+     um zwei Pixel nicht nebeneinander und die Zeile bricht um. Bricht sie
+     trotzdem (groessere Schrift im System), steht die Note als Unterzeile -
+     das sieht ordentlich aus, kostet nur die 27 px wieder. */
+  .tuer-note { font-size: 11.5px; line-height: 1.5; color: var(--kreide-weg); }
 
   /* --- Draussen ------------------------------------------------------------
      Wer nicht mitschreibt, sieht den Siegerplatz, das Glas und die Ampel -
@@ -1085,13 +1094,15 @@
           <!-- Wer noch nicht mitschreibt, liest hier, was ihn erwartet - und
                hat das Feld dafuer gleich darunter, ohne Zwischenschritt. -->
           <div class="tuersteher" id="tuersteher" hidden>
-            <div class="tuer-titel kr">Mitschreiben</div>
+            <div class="tuer-kopf">
+              <span class="tuer-titel kr">Mitschreiben</span>
+              <span class="tuer-note">Kein Passwort, keine App.</span>
+            </div>
             <ol class="tuer-schritte">
               <li>Mailadresse eintippen</li>
               <li>Link in der Mail klicken</li>
               <li>Namen für die Tafel wählen</li>
             </ol>
-            <p class="tuer-note">Kein Passwort, keine App.</p>
           </div>
           <form id="anmelde-form" hidden>
             <div class="melde eins">
@@ -1328,10 +1339,9 @@
 
       // Kurz halten: die Ueberschrift bricht bei Bedarf mitten im Wort um
       // (das braucht sie fuer lange Namen), und „nichts angeschrieben“ tat das.
-      $('marke').textContent = p ? p.name : 'kein Netz';
-      $('krone').textContent =
-        modus === 'fuehrend' ? 'Führt das Feld an' :
-        modus === 'eigen' ? 'Aus dem eigenen Kühlschrank' : '';
+      $('marke').textContent =
+        p ? p.name : modus === 'leer' ? 'noch leer' : 'kein Netz';
+      $('krone').textContent = modus === 'fuehrend' ? 'Führt das Feld an' : '';
       const unter = $('hero-unter');
       unter.textContent = '';
       if (modus === 'fuehrend' && p.gemessen) {
@@ -1341,6 +1351,9 @@
       } else if (modus === 'nichts') {
         unter.textContent = 'Die Tafel ist gerade nicht zu erreichen.';
       }
+      /* 'leer' bleibt ohne Unterzeile: die Liste direkt darunter sagt schon,
+         dass der erste Eintrag den Kopf der Tafel bekommt. Zweimal dieselbe
+         Auskunft untereinander laese sich wie ein Fehler. */
 
       const n = p ? Number(p.biere) : NaN;
       ziel.appendChild(striche(n, true));
@@ -1359,7 +1372,8 @@
       st.setProperty('--kondens',    messung ? s[6] : 0);
       st.setProperty('--frost',      messung ? s[7] : 0);
       $('temp').textContent = messung ? grad(p.temperatur) : 'keine Messung';
-      $('stand').textContent = p ? standText(p.gemeldet) : 'gerade nicht erreichbar';
+      $('stand').textContent = p ? standText(p.gemeldet)
+        : modus === 'leer' ? 'noch nichts gemeldet' : 'gerade nicht erreichbar';
 
       const nadel = $('nadel');
       nadel.style.left = (messung ? Math.max(0, Math.min(100, (p.temperatur / 20) * 100)) : 50) + '%';
@@ -1742,7 +1756,7 @@
   // Link, Geraete-Token) und ruft nach oben nur diese Funktionen, die der
   // Entwurf selbst mitbringt:
   //
-  //     VARIANTE.kopf(p, modus)   der Siegerplatz. modus: 'fuehrend' | 'eigen' | 'nichts'
+  //     VARIANTE.kopf(p, modus)   der Siegerplatz. modus: 'fuehrend' | 'leer' | 'nichts'
   //     VARIANTE.zeile(p, i, s, ich, heute)   eine Zeile der Liste (s = Ampelstufe)
   //     VARIANTE.leer()           was dasteht, wenn noch niemand gemeldet hat
   //     VARIANTE.rad(segmente)    das Gluecksrad zeichnen
@@ -2022,7 +2036,8 @@
     heuteBei = los && los.gewinner || null;
     heuteStatus = los && los.status || null;
     // Der Siegerplatz gehoert dem Ersten, nicht diesem Kuehlschrank.
-    if (feld.length) VARIANTE.kopf(feld[0], 'fuehrend'); else rueckfall();
+    if (feld.length) VARIANTE.kopf(feld[0], 'fuehrend');
+    else VARIANTE.kopf(null, 'leer');
     // Vor der Liste: dort faerbt der Gewinner schon eine Zeile ein.
     zeichneRad(los);
     zeichneTermine(termine || [], chronikZahl);
@@ -2977,18 +2992,14 @@
     $('ch-mehr').hidden = !chronikWeiter;
   }
 
-  /* Rueckfall: der eigene Kuehlschrank aus status.json, wie die Seite es vor der
-     Bestenliste gemacht hat. Lieber ein Kuehlschrank als eine leere Tabelle.
-     Der Pfad gilt fuer die Datei im Wurzelverzeichnis (also als index.html). */
-  function rueckfall() {
-    return fetch('status.json?t=' + Date.now(), { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
-      .then(d => VARIANTE.kopf({
-        name: 'Kühlschrank', biere: Number(d.biere),
-        temperatur: Number(d.temperatur), gemeldet: d.stand,
-      }, 'eigen'))
-      .catch(() => VARIANTE.kopf(null, 'nichts'));
-  }
+  /* Hier stand einmal ein Rueckfall auf status.json - der eigene Kuehlschrank
+     aus einer Datei im Repo, geschrieben von Home Assistant ueber die
+     GitHub-Contents-API. Abgeschafft, und nicht aus Sparsamkeit: jede Meldung
+     war ein Commit, und dessen Zeitstempel ist oeffentlich und minutengenau.
+     Die Anzahl in der Datei war absichtlich auf die volle Stunde gerundet,
+     damit niemand sieht, wann jemand am Kuehlschrank stand - die git-History
+     daneben verriet genau das, dazu den Verlauf. Antwortet der Worker nicht,
+     zeigt der Deckel jetzt nichts. Ohne ihn ist die Seite ohnehin leer. */
 
   /* `still` heisst: nachgefasst, nicht angefordert. Dann wird nur gezeichnet,
      wenn sich wirklich etwas geändert hat, und ein Fehler bleibt stumm —
@@ -3015,13 +3026,13 @@
       zeichneFeld(d.feld || [], d.los || null, d.termine || []);
     } catch (e) {
       if (still) return;
-      // API weg: der Siegerplatz zeigt wieder den eigenen Kuehlschrank, Liste,
-      // Rad und Termine bleiben draussen - ohne Worker gibt es keine Ziehung.
+      // API weg: der Siegerplatz sagt genau das, Liste, Rad und Termine bleiben
+      // draussen - ohne Worker gibt es keine Ziehung.
       letzterStand = '';
       $('block').hidden = true;
       $('rad-block').hidden = true;
       $('termin-block').hidden = true;
-      await rueckfall();
+      VARIANTE.kopf(null, 'nichts');
     }
   }
 
