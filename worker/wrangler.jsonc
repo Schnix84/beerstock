@@ -24,7 +24,21 @@
   //     npx wrangler secret put AGENTMAIL_KEY
   "vars": {
     "AGENTMAIL_INBOX": "beerstock@agentmail.to",
-    "SEITE": "https://schnix84.github.io/beerstock/"
+    "SEITE": "https://schnix84.github.io/beerstock/",
+
+    // Die oeffentliche Adresse des Bilder-Buckets, OHNE Schraegstrich am Ende.
+    // Sie entsteht erst, wenn im Dashboard unter R2 > beerstock-bilder >
+    // Settings die "Public Development URL" (r2.dev) eingeschaltet wird -
+    // vorher ist der Wert leer, und der Worker gibt dann `bild: null` heraus,
+    // statt kaputte Adressen zu verteilen. GET /api/health sagt, ob er steht.
+    //
+    // Warum r2.dev und keine eigene Worker-Route: <img> schickt keinen
+    // Authorization-Kopf, eine geschuetzte Route liefe also auf signierte URLs
+    // mit Ablauf hinaus, plus Neusignieren beim Nachfassen. Der Preis dieser
+    // Entscheidung ist ehrlich zu benennen - wer die URL hat, sieht das Bild,
+    // auch ohne Anmeldung. Die Schluessel sind zufaellige UUIDs, also nicht zu
+    // erraten. Fuer eine Runde, die sich kennt, ist das die richtige Abwaegung.
+    "BILDER_URL": "https://pub-bfc67ecfa1c8457e98f8775506d4ad16.r2.dev"
   },
 
   // Angelegt in WEUR (Westeuropa). Die database_id ist kein Geheimnis - ohne
@@ -34,6 +48,17 @@
       "binding": "DB",
       "database_name": "beerstock",
       "database_id": "2e266088-74ed-4d96-ae9d-c9d4703ee708"
+    }
+  ],
+
+  // Die Fotos an den Kommentaren. Anlegen:
+  //     npx wrangler r2 bucket create beerstock-bilder --location weur
+  // Verkleinert wird im Browser (lange Kante 1600 px, JPEG 0.8), es landen
+  // also ~250 kB je Bild hier - 10 GB Freikontingent sind rund 40.000 Fotos.
+  "r2_buckets": [
+    {
+      "binding": "BILDER",
+      "bucket_name": "beerstock-bilder"
     }
   ]
 }

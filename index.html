@@ -467,6 +467,15 @@
     overflow-wrap: anywhere; white-space: pre-wrap;
   }
   .ko-text.weg { color: var(--kreide-weg); font-style: italic; }
+  /* Feste Höhe und `cover`: sonst springt der Thread beim Nachladen der Bilder,
+     und zwar genau dann, wenn jemand darunter gerade etwas antippen wollte.
+     Der ganze Ausschnitt steht in der Lupe. */
+  .ko-bild {
+    display: block; width: 100%; height: 180px; object-fit: cover; margin-top: 7px;
+    border: 1px solid #ffffff26; border-radius: 3px; background: #00000033;
+    cursor: zoom-in;
+  }
+  .ko-antw .ko-bild { height: 130px; }
   .ko-fuss { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 7px; }
   .ko-re {
     border: 1px solid #ffffff22; border-radius: 999px; background: transparent;
@@ -496,6 +505,50 @@
   .ko-feld:focus { outline: none; border-color: var(--gelb); }
   .ko-feld::placeholder { color: #ffffff30; }
   .ko-ab { margin-top: 8px; }
+
+  /* Die Vorschau steht ÜBER dem Feld, weil hochgeladen wird, sobald man das
+     Foto ausgewählt hat — nicht erst beim Abschicken. So steht der Fortschritt
+     sichtbar da, und das Abschicken bleibt eine schnelle JSON-Anfrage. */
+  .ko-vorschau {
+    position: relative; margin-bottom: 8px; border: 1px solid #ffffff26;
+    border-radius: 3px; overflow: hidden; background: #00000033;
+  }
+  .ko-vorschau img { display: block; width: 100%; height: 150px; object-fit: cover; }
+  .ko-vorschau.laedt img { opacity: .35; }
+  .ko-vorschau-weg {
+    position: absolute; top: 5px; right: 5px; width: 26px; height: 26px;
+    border: 1px solid #ffffff44; border-radius: 999px; background: #05080799;
+    color: var(--kreide); font-size: 15px; line-height: 1; cursor: pointer;
+  }
+  .ko-vorschau-sagt {
+    position: absolute; inset: auto 0 0 0; padding: 4px 8px 5px;
+    background: #05080799; font-size: 10.5px; color: var(--kreide-weg);
+  }
+  /* Abschicken bleibt breit, der Fotoknopf nimmt nur, was er braucht. Beide
+     Regeln mit zwei Klassen, weil `.knopf { width: 100% }` weiter unten steht
+     und bei gleichem Gewicht sonst gewinnt. */
+  .ko-knoepfe { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
+  .ko-knoepfe .ko-ab { flex: 1; margin-top: 0; }
+  .ko-knoepfe .ko-foto { width: auto; flex: 0 0 auto; padding: 11px 16px; }
+
+  /* --- Die Lupe: ein Foto in voller Größe ---------------------------------
+     Eine Ebene ÜBER dem Flyout (z-index 50 gegen 40), sonst läge das Bild
+     unter dem Blatt, aus dem es aufgerufen wurde.
+     --------------------------------------------------------------------- */
+  .lupe {
+    position: fixed; inset: 0; z-index: 50; display: flex;
+    align-items: center; justify-content: center; padding: 16px;
+    /* Fast deckend: bei 93 % schimmerte das Thumbnail darunter am Rand durch. */
+    background: #050807f8; cursor: zoom-out;
+  }
+  .lupe img {
+    max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 3px;
+  }
+  .lupe-zu {
+    position: absolute; top: 10px; right: 12px; width: 38px; height: 38px;
+    border: 1px solid #ffffff33; border-radius: 999px; background: #ffffff0d;
+    color: var(--kreide); font-size: 20px; line-height: 1; cursor: pointer;
+  }
 
   /* --- Die Karte: Rangfolge als Speisekarte ------------------------------- */
   .block { margin-top: clamp(14px, 3.6vw, 20px); }
@@ -941,13 +994,34 @@
           <span id="fly-an-text"></span>
           <button class="ko-tat" id="fly-an-weg" type="button">abbrechen</button>
         </div>
+        <div class="ko-vorschau" id="fly-bild" hidden>
+          <img id="fly-bild-img" alt="Vorschau des ausgewählten Fotos">
+          <button class="ko-vorschau-weg" id="fly-bild-weg" type="button"
+                  aria-label="Foto verwerfen">×</button>
+          <div class="ko-vorschau-sagt" id="fly-bild-sagt" hidden></div>
+        </div>
         <textarea class="ko-feld" id="fly-feld" maxlength="400"
                   placeholder="Etwas dazu sagen …"></textarea>
-        <button class="knopf ko-ab" id="fly-ab" type="button">Abschicken</button>
+        <div class="ko-knoepfe">
+          <button class="knopf ko-ab" id="fly-ab" type="button">Abschicken</button>
+          <!-- Der Dateiwähler bleibt versteckt: sein Aussehen lässt sich nicht
+               gestalten, und auf dem Handy öffnet der Knopf ohnehin direkt die
+               Kamera-Auswahl des Systems. -->
+          <button class="knopf ko-foto" id="fly-foto" type="button"
+                  aria-label="Foto anhängen">Foto</button>
+          <input id="fly-datei" type="file" accept="image/*" hidden>
+        </div>
       </div>
 
       <p class="sagt" id="fly-sagt" hidden></p>
     </div>
+  </div>
+
+  <!-- Ein Foto groß. Eine Ebene über dem Flyout, mit derselben Mechanik:
+       Schirm zum Schließen, Escape schließt erst die Lupe, dann das Blatt. -->
+  <div class="lupe" id="lupe" hidden>
+    <img id="lupe-bild" alt="Foto in voller Größe">
+    <button class="lupe-zu" id="lupe-zu" type="button" aria-label="Schließen">×</button>
   </div>
 
 <script>
@@ -1319,8 +1393,21 @@
         if (n.childNodes.length) z.appendChild(n);
       }
 
-      z.appendChild(el('div', 'ko-text' + (k.geloescht ? ' weg' : ''),
-        k.geloescht ? 'gelöscht' : k.text));
+      /* Ein Foto allein ist ein gültiger Kommentar — dann steht hier keine
+         leere Textzeile, die im Kreidebild wie ein Fehler aussähe. */
+      if (k.geloescht || k.text) {
+        z.appendChild(el('div', 'ko-text' + (k.geloescht ? ' weg' : ''),
+          k.geloescht ? 'gelöscht' : k.text));
+      }
+
+      if (k.bild) {
+        const b = el('img', 'ko-bild');
+        b.src = k.bild;
+        b.loading = 'lazy';
+        b.alt = 'Foto von ' + k.autor;
+        b.dataset.gross = k.bild;
+        z.appendChild(b);
+      }
 
       const fuss = el('div', 'ko-fuss');
       if (!k.geloescht) {
@@ -1830,6 +1917,8 @@
   let flyZiel = null;       // 'user:5' oder 'termin:12', solange es offen ist
   let flyMeins = {};        // die eigene Abgabe, während sie bearbeitet wird
   let flyDaten = null;      // die letzte Antwort des Servers
+  let flyBild = null;       // { key } des schon hochgeladenen Fotos am Schreibfeld
+  let flyBildLauf = 0;      // gegen zwei Uploads, die sich überholen
 
   function flySagt(text, schlecht) {
     const p = $('fly-sagt');
@@ -1859,9 +1948,82 @@
   }
 
   function flyZu() {
+    lupeZu();
     $('flyout').hidden = true;
     document.body.style.overflow = '';
     flyZiel = null;
+  }
+
+  /* --- Das Foto am Schreibfeld --------------------------------------------
+     Hochgeladen wird SOFORT bei der Auswahl, nicht erst beim Abschicken: so
+     steht der Fortschritt sichtbar da, und `flyAbschicken` bleibt eine
+     schnelle JSON-Anfrage, an der nur noch der Schlüssel hängt.
+     --------------------------------------------------------------------- */
+  function flyBildWeg() {
+    flyBildLauf++;                       // ein laufender Upload gilt nicht mehr
+    flyBild = null;
+    const v = $('fly-bild'), img = $('fly-bild-img');
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    img.removeAttribute('src');
+    v.hidden = true;
+    v.classList.remove('laedt');
+    $('fly-bild-sagt').hidden = true;
+    // Ohne das löst dieselbe Datei beim nächsten Mal kein `change` mehr aus.
+    $('fly-datei').value = '';
+  }
+
+  async function flyBildWaehlen(datei) {
+    if (!datei) return;
+    const lauf = ++flyBildLauf;
+    const v = $('fly-bild'), img = $('fly-bild-img'), sagt = $('fly-bild-sagt');
+    flyBild = null;
+    flySagt('');
+
+    let klein;
+    try {
+      klein = await verkleinern(datei);
+    } catch {
+      flySagt('Das ließ sich nicht als Bild lesen.', true);
+      flyBildWeg();
+      return;
+    }
+    if (lauf !== flyBildLauf) return;    // inzwischen verworfen oder ersetzt
+
+    // Die Vorschau kommt aus dem verkleinerten Blob — man sieht genau das,
+    // was gleich hochgeht, nicht das Original.
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    img.src = URL.createObjectURL(klein);
+    v.hidden = false;
+    v.classList.add('laedt');
+    sagt.textContent = 'wird hochgeladen …';
+    sagt.hidden = false;
+    $('fly-ab').disabled = true;
+
+    try {
+      const d = await rufRoh('/api/bild', klein);
+      if (lauf !== flyBildLauf) return;
+      flyBild = { key: d.key };
+      v.classList.remove('laedt');
+      sagt.hidden = true;
+    } catch (e) {
+      if (lauf !== flyBildLauf) return;
+      flySagt(e.message, true);
+      flyBildWeg();
+    } finally {
+      if (lauf === flyBildLauf) $('fly-ab').disabled = false;
+    }
+  }
+
+  /* Die Lupe. Eine Ebene über dem Blatt, mit derselben Mechanik — Schirm zum
+     Schließen, und Escape nimmt erst sie, dann das Blatt darunter. */
+  function lupeAuf(url) {
+    $('lupe-bild').src = url;
+    $('lupe').hidden = false;
+  }
+
+  function lupeZu() {
+    $('lupe').hidden = true;
+    $('lupe-bild').removeAttribute('src');
   }
 
   async function flyLaden() {
@@ -1964,11 +2126,16 @@
     $('fly-ab').textContent = flyModus.art === 'aendern' ? 'Übernehmen' : 'Abschicken';
     $('fly-feld').placeholder = flyModus.art === 'antwort'
       ? 'Antwort an ' + flyModus.wer + ' …' : 'Etwas dazu sagen …';
+    /* Beim Ändern gibt es keinen Fotoknopf: die Änderungsroute fasst das Bild
+       nicht an. Wer ein anderes will, löscht den Kommentar und schreibt neu —
+       ein Foto nachträglich zu tauschen ist ein eigener Bau, kein Nebeneffekt. */
+    $('fly-foto').hidden = flyModus.art === 'aendern';
   }
 
   function flyModusZurueck() {
     flyModus = { art: 'neu', id: null, wer: null };
     $('fly-feld').value = '';
+    flyBildWeg();
     flyAnZeigen();
   }
 
@@ -1984,7 +2151,14 @@
 
   async function flyAbschicken() {
     const text = $('fly-feld').value.trim();
-    if (!text) { flySagt('Ohne Text kein Kommentar.', true); return; }
+    // Ein Foto allein ist ein gültiger Kommentar — "so sah es aus" braucht
+    // keinen Satz dazu. Beim Ändern zählt nur der Text, das Bild bleibt liegen.
+    const bild = flyModus.art === 'aendern' ? null : flyBild;
+    if (!text && !bild) {
+      flySagt(flyModus.art === 'aendern'
+        ? 'Ohne Text kein Kommentar.' : 'Ohne Text oder Foto kein Kommentar.', true);
+      return;
+    }
     const [art, id] = flyZiel.split(':');
     $('fly-ab').disabled = true;
     flySagt('');
@@ -2002,10 +2176,12 @@
       } else if (mitSternen) {
         await ruf('/api/bewerten', {
           ziel_art: art, ziel_id: Number(id), sterne: flyMeins, text,
+          bild: bild ? bild.key : undefined,
         });
       } else {
         await ruf('/api/kommentar', {
           ziel_art: art, ziel_id: Number(id), text,
+          bild: bild ? bild.key : undefined,
           antwort_auf: flyModus.art === 'antwort' ? flyModus.id : undefined,
         });
       }
@@ -2113,6 +2289,50 @@
     return d;
   }
 
+  /* Wie `ruf`, nur mit rohen Bytes statt JSON — für /api/bild. Kein Multipart:
+     es geht genau eine Datei raus, der Rahmen drumherum trüge nichts bei. */
+  async function rufRoh(pfad, blob) {
+    const kopf = { 'Content-Type': blob.type || 'application/octet-stream' };
+    const token = merke();
+    if (token) kopf['Authorization'] = 'Bearer ' + token;
+    const r = await fetch(API + pfad, { method: 'POST', headers: kopf, body: blob });
+    let d = {};
+    try { d = await r.json(); } catch {}
+    if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
+    return d;
+  }
+
+  /* Verkleinert wird HIER, nicht im Worker. Aus 4 MB Handyfoto werden ~250 kB,
+     und damit fällt alles weg, was sonst teuer wäre: keine Bildverarbeitung
+     serverseitig, keine großen Rümpfe, kein Warten auf einen Upload.
+
+     Zwei Dinge kommen dabei geschenkt mit und dürfen nicht wegoptimiert werden:
+
+     - `imageOrientation: 'from-image'` erledigt die EXIF-Drehung. Ohne das
+       liegen Fotos vom iPhone quer, und zwar nur manche — das ist der Fehler,
+       den man erst zwei Wochen später gemeldet bekommt.
+     - Das Neu-Encodieren wirft ALLE EXIF-Daten weg, samt GPS. Ein Foto mit den
+       Koordinaten der eigenen Wohnung hat in dieser Datenbank nichts zu
+       suchen. */
+  const BILD_KANTE = 1600;
+  async function verkleinern(datei) {
+    const bild = await createImageBitmap(datei, { imageOrientation: 'from-image' });
+    const faktor = Math.min(1, BILD_KANTE / Math.max(bild.width, bild.height));
+    const w = Math.max(1, Math.round(bild.width * faktor));
+    const h = Math.max(1, Math.round(bild.height * faktor));
+
+    const tafel = document.createElement('canvas');
+    tafel.width = w; tafel.height = h;
+    tafel.getContext('2d').drawImage(bild, 0, 0, w, h);
+    bild.close();
+
+    return new Promise((fertig, schief) => {
+      tafel.toBlob(
+        b => b ? fertig(b) : schief(new Error('Das Bild ließ sich nicht umwandeln.')),
+        'image/jpeg', 0.8);
+    });
+  }
+
   // --- Bedienung ------------------------------------------------------------
   $('rad-knopf').addEventListener('click', dreh);
   $('los-ja').addEventListener('click', () => antwortLos(true));
@@ -2137,6 +2357,9 @@
   /* Alles am Thread hängt an einem Zuhörer: der Baum wird bei jeder Antwort
      neu gebaut, ein Zuhörer je Karte ginge dabei verloren. */
   $('fly-thread').addEventListener('click', async ev => {
+    const foto = ev.target.closest('.ko-bild');
+    if (foto) { lupeAuf(foto.dataset.gross); return; }
+
     const re = ev.target.closest('.ko-re');
     if (re) { flyReagieren(Number(re.dataset.id), re.dataset.art); return; }
 
@@ -2152,6 +2375,8 @@
       const k = flyFinden(Number(tat.dataset.aendern));
       flyModus = { art: 'aendern', id: Number(tat.dataset.aendern), wer: null };
       $('fly-feld').value = (k && k.text) || '';
+      // Ein angefangenes Foto gehört zum neuen Kommentar, nicht zur Änderung.
+      flyBildWeg();
       flyAnZeigen();
       $('fly-feld').focus();
     } else if (tat.dataset.weg) {
@@ -2171,13 +2396,25 @@
 
   $('fly-ab').addEventListener('click', flyAbschicken);
   $('fly-an-weg').addEventListener('click', flyModusZurueck);
+
+  /* Der Knopf schiebt den versteckten Dateiwähler vor — der lässt sich selbst
+     nicht gestalten, öffnet auf dem Handy aber direkt Kamera und Galerie. */
+  $('fly-foto').addEventListener('click', () => $('fly-datei').click());
+  $('fly-datei').addEventListener('change', ev => flyBildWaehlen(ev.target.files[0]));
+  $('fly-bild-weg').addEventListener('click', flyBildWeg);
+  // Irgendwo in die Lupe tippen schließt sie — der Weg zurück ist der kurze.
+  $('lupe').addEventListener('click', lupeZu);
   /* Strg/Cmd + Enter schickt ab. Enter allein bleibt der Zeilenumbruch — in
      einem mehrzeiligen Feld erwartet das jeder so. */
   $('fly-feld').addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); flyAbschicken(); }
   });
+  /* Escape nimmt immer nur die oberste Ebene: erst die Lupe, dann das Blatt.
+     Beides auf einmal wegzuräumen wäre der Griff, den niemand wollte. */
   document.addEventListener('keydown', ev => {
-    if (ev.key === 'Escape' && !$('flyout').hidden) flyZu();
+    if (ev.key !== 'Escape') return;
+    if (!$('lupe').hidden) { lupeZu(); return; }
+    if (!$('flyout').hidden) flyZu();
   });
 
   /* Das Eintrageformular klappt auf, statt dauerhaft dazustehen: die Liste ist

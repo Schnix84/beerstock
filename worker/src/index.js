@@ -96,6 +96,15 @@ const KOMMENTARSPERRE  = 10;   // Sekunden zwischen zweien desselben Nutzers
 const KOMMENTARE_ZIEL  = 200;  // je Ziel; aeltere fallen weg, sonst waechst es unbegrenzt
 const REAKTIONEN = new Set(['daumen_hoch', 'daumen_runter', 'herz', 'bier']);
 
+/* Fotos an Kommentaren. Verkleinert wird im BROWSER (lange Kante 1600 px,
+   JPEG 0.8) - aus 4 MB Handyfoto werden ~250 kB. Damit faellt alles weg, was
+   sonst teuer waere: keine Bildverarbeitung hier, kein Multipart, keine
+   grossen Ruempfe. Der Deckel steht trotzdem, denn der Worker redet nicht nur
+   mit unserem Browser. */
+const BILD_MAX     = 2 * 1024 * 1024;  // Bytes
+const BILDSPERRE   = 10;               // Sekunden zwischen zwei Uploads desselben Nutzers
+const BILDER_TAG   = 30;               // je Nutzer und Tag, wie KOMMENTARE_TAG
+
 /* Der Bierabend-Tag endet nicht um Mitternacht, sondern sechs Stunden spaeter
    (07:00 bzw. 08:00 Ortszeit) - sonst faellt die Drehung um kurz nach eins auf
    den naechsten Tag, obwohl sie zu demselben Abend gehoert. Bewusst in UTC
@@ -459,6 +468,44 @@ const bewertungenStmt = env => env.DB.prepare(`
 // Kommentare
 // ---------------------------------------------------------------------------
 
+/* Der Typ kommt aus den ERSTEN BYTES, nicht aus dem Content-Type: den setzt
+   der Absender, und wer eine Datei ablegen will, die kein Bild ist, setzt ihn
+   passend. Gibt den Mime-Typ und die Endung zurueck, oder null. */
+function bildTyp(bytes) {
+  const b = new Uint8Array(bytes);
+  if (b.length < 12) return null;
+  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return ['image/jpeg', 'jpg'];
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return ['image/png', 'png'];
+  // RIFF....WEBP - die vier Bytes dazwischen sind die Laenge.
+  const wort = i => String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
+  if (wort(0) === 'RIFF' && wort(8) === 'WEBP') return ['image/webp', 'webp'];
+  return null;
+}
+
+/* Was aus dem Upload zurueckkommt und beim Abschicken wieder hereinkommt.
+   Streng geprueft, weil der Wert ungeprueft in einen R2-Aufruf ginge. */
+const BILD_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/;
+
+/* Aus dem Schluessel wird erst hier eine Adresse. Steht BILDER_URL nicht (der
+   Bucket ist noch nicht oeffentlich geschaltet), gibt es lieber gar kein Bild
+   als eine Adresse, hinter der nichts liegt. */
+const bildUrl = (env, key) =>
+  key && env.BILDER_URL ? `${env.BILDER_URL.replace(/\/+$/, '')}/${key}` : null;
+
+/* Das `bild`-Feld der beiden Schreibrouten. Beide pruefen dasselbe, deshalb
+   steht es einmal hier. Dass der Schluessel wirklich im Bucket liegt, wird
+   nachgesehen - sonst haengt an der Zeile eine Adresse ins Leere, und das
+   faellt erst dem Leser auf. Gibt { key } oder { fehler, status } zurueck. */
+async function pruefeBild(env, roh) {
+  if (roh == null || roh === '') return { key: null };
+  const key = String(roh);
+  if (!BILD_KEY.test(key)) return { fehler: 'Das ist kein Bildschlüssel', status: 400 };
+  if (!env.BILDER) return { fehler: 'Bilder sind nicht eingerichtet', status: 503 };
+  const da = await env.BILDER.head(key);
+  if (!da) return { fehler: 'Das Bild gibt es nicht (mehr)', status: 404 };
+  return { key };
+}
+
 /* Dass das Ziel existiert, prueft der Worker - einen Fremdschluessel kann es
    auf ein polymorphes Paar nicht geben. Gibt den Fehlertext zurueck oder null. */
 async function zielFehlt(env, ziel) {
@@ -477,7 +524,7 @@ async function zielFehlt(env, ziel) {
 const baumStmts = (env, ziel, ichId) => [
   env.DB.prepare(`
     SELECT k.id, k.autor_id, k.antwort_auf, k.text, k.erstellt, k.geaendert,
-           k.geloescht_am, u.name AS autor, b.sterne
+           k.geloescht_am, k.bild_key, u.name AS autor, b.sterne
     FROM kommentare k
     JOIN users u ON u.id = k.autor_id
     LEFT JOIN bewertungen b ON b.id = k.bewertung_id
@@ -500,7 +547,7 @@ const baumStmts = (env, ziel, ichId) => [
   `).bind(ziel.art, ziel.id, ichId),
 ];
 
-function baumBauen(zeilen, reaktionen, eigene, ichId) {
+function baumBauen(zeilen, reaktionen, eigene, ichId, env) {
   const meine = new Set(eigene.map(r => r.kommentar_id + ':' + r.art));
   const proKommentar = new Map();
   for (const r of reaktionen) {
@@ -519,6 +566,9 @@ function baumBauen(zeilen, reaktionen, eigene, ichId) {
       autor: z.autor,
       // Der Text eines geloeschten Kommentars verlaesst den Worker nicht.
       text: weg ? null : z.text,
+      // Dasselbe fuer das Foto - und im Bucket liegt es dann auch nicht mehr,
+      // darum kuemmert sich POST /api/kommentar/aendern.
+      bild: weg ? null : bildUrl(env, z.bild_key),
       geloescht: weg,
       erstellt: utc(z.erstellt),
       geaendert: utc(z.geaendert),
@@ -613,8 +663,15 @@ const ROUTEN = {
       try { await env.DB.prepare('SELECT 1').first(); db = 'ok'; }
       catch (e) { db = 'fehler: ' + e.message; }
     }
+    /* Der Bucket allein reicht nicht: ohne oeffentliche Adresse kaeme jedes
+       hochgeladene Bild als `bild: null` heraus, und das saehe von aussen wie
+       ein Fehler im Browser aus. Hier steht, woran es liegt. */
+    const bilder = !env.BILDER ? 'nicht eingerichtet'
+      : !env.BILDER_URL ? 'Bucket da, aber BILDER_URL fehlt'
+      : 'ok';
+
     return antwort(request, {
-      ok: true, dienst: 'beerstock-api', db,
+      ok: true, dienst: 'beerstock-api', db, bilder,
       mail: env.AGENTMAIL_KEY ? 'Schluessel liegt an' : 'KEIN SCHLUESSEL',
       inbox: env.AGENTMAIL_INBOX || null,
     });
@@ -1054,6 +1111,15 @@ const ROUTEN = {
     const s = pruefeSterne(ziel.art, daten.sterne);
     if (s.fehler) return fehler(request, s.fehler);
 
+    /* Auch hier, nicht nur an der Kommentarroute: der Fall "5 Sterne, ein Satz
+       und ein Foto vom Kühlschrank" kommt als EINE Anfrage genau hier an - die
+       Seite schickt einen Wurzelkommentar mit Sternen ueber diese Route. Hinge
+       das Feld nur am Kommentar, waere ausgerechnet der Fall der eine, der
+       nicht geht. Vor dem UPSERT geprueft, damit ein falscher Schluessel nicht
+       die Sterne schon geschrieben hat. */
+    const bi = await pruefeBild(env, daten.bild);
+    if (bi.fehler) return fehler(request, bi.fehler, bi.status);
+
     if (ziel.art === 'user') {
       if (ziel.id === ich.id) return fehler(request, 'Sich selbst bewerten gilt nicht', 403);
       const wer = await env.DB.prepare('SELECT 1 FROM users WHERE id = ? AND name IS NOT NULL')
@@ -1091,17 +1157,77 @@ const ROUTEN = {
        braucht, sobald Antworten und Reaktionen daran haengen - und weil eine
        geaenderte Note ihn sonst mitreissen wuerde. */
     const text = String(daten.text ?? '').trim();
-    if (text) {
+    if (text || bi.key) {
       if (text.length > KOMMENTAR_MAX) {
         return fehler(request, `Der Kommentar darf höchstens ${KOMMENTAR_MAX} Zeichen haben`);
       }
       await env.DB.prepare(`
-        INSERT INTO kommentare (ziel_art, ziel_id, autor_id, bewertung_id, text)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(ziel.art, ziel.id, ich.id, b.id, text).run();
+        INSERT INTO kommentare (ziel_art, ziel_id, autor_id, bewertung_id, text, bild_key)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(ziel.art, ziel.id, ich.id, b.id, text, bi.key).run();
     }
 
     return antwort(request, { ok: true, sterne: s.sterne });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Ein Foto ablegen. ROHE BYTES im Rumpf, kein JSON und kein Multipart - die
+     Seite verkleinert vorher selbst, es geht also nur ein fertiges Bild ueber
+     die Leitung und `json(request)` wird hier nicht gebraucht.
+
+     Zurueck kommt nur der Schluessel. Erst das Abschicken des Kommentars
+     verbindet ihn mit einer Zeile; wer hochlaedt und es sich dann anders
+     ueberlegt, hinterlaesst ein Objekt ohne Kommentar - siehe die Anmerkung in
+     `0008_bilder.sql`, warum dafuer kein Cron laeuft. */
+  'POST /api/bild': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+    if (!env.BILDER) return fehler(request, 'Bilder sind nicht eingerichtet', 503);
+
+    /* Zweimal messen: der Kopf spart das Lesen bei einem ehrlichen Absender,
+       gelogen ist er aber schnell - der zweite Blick gilt den Bytes selbst. */
+    const angesagt = Number(request.headers.get('Content-Length') || 0);
+    if (angesagt > BILD_MAX) return fehler(request, 'Das Bild ist zu groß', 413);
+
+    /* Die eigene Sperre ist noetig, weil das Hochladen VOR dem Abschicken
+       laeuft: die Kommentarsperre greift erst danach und haelt hier nichts
+       auf. Vor dem Lesen des Rumpfes, sonst ist die Arbeit schon getan. */
+    const [sperre, heute] = await env.DB.batch([
+      env.DB.prepare("SELECT 1 FROM bild_uploads WHERE autor_id = ? AND erstellt > datetime('now', ?) LIMIT 1")
+        .bind(ich.id, `-${BILDSPERRE} seconds`),
+      env.DB.prepare("SELECT count(*) AS n FROM bild_uploads WHERE autor_id = ? AND erstellt > datetime('now','-1 day')")
+        .bind(ich.id),
+    ]);
+    if (sperre.results.length) return fehler(request, 'Zu schnell — kurz durchatmen', 429);
+    if (heute.results[0].n >= BILDER_TAG) {
+      return fehler(request, `Höchstens ${BILDER_TAG} Fotos am Tag`, 429);
+    }
+
+    const bytes = await request.arrayBuffer();
+    if (!bytes.byteLength) return fehler(request, 'Kein Bild im Rumpf');
+    if (bytes.byteLength > BILD_MAX) return fehler(request, 'Das Bild ist zu groß', 413);
+
+    const typ = bildTyp(bytes);
+    if (!typ) return fehler(request, 'Das ist kein JPEG, PNG oder WebP', 415);
+    const [mime, endung] = typ;
+
+    const key = `${crypto.randomUUID()}.${endung}`;
+    await env.BILDER.put(key, bytes, {
+      httpMetadata: {
+        contentType: mime,
+        // Der Schluessel ist eine UUID, das Objekt darunter aendert sich nie -
+        // also darf es liegen bleiben, so lange der Browser will.
+        cacheControl: 'public, max-age=31536000, immutable',
+      },
+    });
+
+    /* Erst nach dem put: eine Zeile ohne Objekt waere eine Sperre gegen den
+       Nutzer fuer ein Bild, das gar nicht angekommen ist. */
+    await env.DB.prepare('INSERT INTO bild_uploads (autor_id, bild_key) VALUES (?, ?)')
+      .bind(ich.id, key).run();
+
+    return antwort(request, { key, bild: bildUrl(env, key) }, 201);
   },
 
   // -------------------------------------------------------------------------
@@ -1119,8 +1245,13 @@ const ROUTEN = {
     const ziel = zielAus(`${daten.ziel_art}:${daten.ziel_id}`);
     if (!ziel) return fehler(request, "ziel_art: 'user' oder 'termin', ziel_id: eine Zahl");
 
+    /* Ein Foto allein ist ein gueltiger Kommentar - "so sah es aus" braucht
+       keinen Satz dazu. Leer bleiben duerfen aber nicht beide. */
+    const b = await pruefeBild(env, daten.bild);
+    if (b.fehler) return fehler(request, b.fehler, b.status);
+
     const text = String(daten.text ?? '').trim();
-    if (!text) return fehler(request, 'Ohne Text kein Kommentar');
+    if (!text && !b.key) return fehler(request, 'Ohne Text kein Kommentar');
     if (text.length > KOMMENTAR_MAX) {
       return fehler(request, `Höchstens ${KOMMENTAR_MAX} Zeichen`);
     }
@@ -1154,9 +1285,9 @@ const ROUTEN = {
     }
 
     const neu = await env.DB.prepare(`
-      INSERT INTO kommentare (ziel_art, ziel_id, autor_id, antwort_auf, text)
-      VALUES (?, ?, ?, ?, ?) RETURNING id
-    `).bind(ziel.art, ziel.id, ich.id, wurzel, text).first();
+      INSERT INTO kommentare (ziel_art, ziel_id, autor_id, antwort_auf, text, bild_key)
+      VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+    `).bind(ziel.art, ziel.id, ich.id, wurzel, text, b.key).first();
 
     return antwort(request, { ok: true, id: neu.id, antwort_auf: wurzel }, 201);
   },
@@ -1172,21 +1303,32 @@ const ROUTEN = {
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
-    const k = await env.DB.prepare('SELECT id, autor_id, geloescht_am FROM kommentare WHERE id = ?')
+    const k = await env.DB.prepare(
+      'SELECT id, autor_id, geloescht_am, bild_key FROM kommentare WHERE id = ?')
       .bind(Number(daten.id)).first();
     if (!k) return fehler(request, 'Den Kommentar gibt es nicht', 404);
     if (k.autor_id !== ich.id) return fehler(request, 'Das ist nicht deiner', 403);
     if (k.geloescht_am) return fehler(request, 'Der ist schon gelöscht', 409);
 
     if (daten.loeschen) {
+      /* Das Objekt zuerst, die Zeile danach. Gelaengen sie in der anderen
+         Reihenfolge und der zweite Schritt scheiterte, bliebe das Foto eines
+         geloeschten Kommentars unter seiner Adresse abrufbar - und genau
+         dieser Fall ist der, fuer den geloescht wird. So bleibt im
+         schlechteren Fall eine Karte mit totem Bildlink stehen: sichtbar,
+         wiederholbar, und nichts liegt mehr offen. */
+      if (k.bild_key && env.BILDER) await env.BILDER.delete(k.bild_key);
       await env.DB.prepare(`
-        UPDATE kommentare SET geloescht_am = datetime('now'), text = '' WHERE id = ?
+        UPDATE kommentare
+        SET geloescht_am = datetime('now'), text = '', bild_key = NULL
+        WHERE id = ?
       `).bind(k.id).run();
       return antwort(request, { ok: true, geloescht: true });
     }
 
+    // Haengt ein Foto daran, darf der Text beim Aendern auch ganz weg.
     const text = String(daten.text ?? '').trim();
-    if (!text) return fehler(request, 'Ohne Text kein Kommentar');
+    if (!text && !k.bild_key) return fehler(request, 'Ohne Text kein Kommentar');
     if (text.length > KOMMENTAR_MAX) return fehler(request, `Höchstens ${KOMMENTAR_MAX} Zeichen`);
 
     await env.DB.prepare("UPDATE kommentare SET text = ?, geaendert = datetime('now') WHERE id = ?")
@@ -1273,7 +1415,7 @@ const ROUTEN = {
       // Schreiben darf man ueberall, auch bei sich selbst: sonst kann der
       // Gastgeber im eigenen Thread nicht antworten.
       darf_schreiben: !!(ich && ich.name),
-      kommentare: baumBauen(roh.results, reakt.results, eigene.results, ichId),
+      kommentare: baumBauen(roh.results, reakt.results, eigene.results, ichId, env),
     });
   },
 
