@@ -77,9 +77,10 @@ Gemeldete Werte sind **ungeprüft**. Die einzige Ausnahme trägt die Marke
 ## Aufbau
 
 ```
-index.html      eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
-status.json     der eigene Bestand — Rückfallebene, wenn die API nicht antwortet
-worker/         Cloudflare Worker + D1: Registrierung, Meldungen, Bestenliste
+index.html          eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
+status.json         der eigene Bestand — Rückfallebene, wenn die API nicht antwortet
+worker/             Cloudflare Worker + D1: Registrierung, Meldungen, Bestenliste
+worker/src/tafel.js Durable Object: verteilt an alle offenen Seiten, was sich geändert hat
 ```
 
 Die Seite ist statisch und fragt nur. Geschrieben wird ausschließlich über den
@@ -89,6 +90,34 @@ angerufen zu werden.
 `status.json` bleibt, was es war — Anzahl, Temperatur und Zeitpunkt des letzten
 Kühlschrankfotos, auf die volle Stunde gerundet. Antwortet die API nicht, zeigt
 der Deckel wieder diesen einen Kühlschrank statt einer leeren Tabelle.
+
+### Die Seite bleibt von selbst aktuell
+
+Wer die Seite offen hat, sieht neue Meldungen, Ziehungen, Kommentare, Sterne und
+Reaktionen **ohne Reload** — auch bei geöffnetem Kommentarblatt. Dahinter steht
+eine WebSocket (`GET /api/strom`) zu einem einzigen Durable Object, an das jede
+Schreibroute meldet, was sie geändert hat.
+
+Über die Leitung reisen dabei **nur Marken, keine Daten**: `tafel` (Liste, Rad,
+Termine) oder ein Ziel wie `user:5`. Was dahintersteckt, holt die Seite über
+dieselben GET-Routen wie beim ersten Aufbau. Damit gibt es keine zweite Fassung
+der Antwortlogik, die auseinanderlaufen könnte, und niemand kann über die Leitung
+etwas mitlesen, was er nicht ohnehin abrufen dürfte — geprüft wird beim Abruf.
+
+Drei Dinge, die dazugehören:
+
+- **Die Leitung ersetzt das Nachfragen, nicht das Laden.** Ein Zeitgeber fasst
+  weiter nach, solange jemand hinsieht: alle drei Minuten mit stehender Leitung,
+  jede Minute ohne sie (dann pollt auch das offene Blatt mit). Eine WebSocket geht
+  verloren, ohne dass es jemand merkt — eine Seite, die dann nichts mehr täte, sähe
+  aus wie eingefroren.
+- **Der Absender lädt nicht doppelt.** Jeder Schreibvorgang trägt eine zufällige
+  Tab-Kennung als `X-Tab` mit, die an der verteilten Meldung hängt; der eigene
+  Tab überspringt sie, seine Antwort war früher da.
+- **Nichts wird unter den Fingern weggezogen.** Gezeichnet wird nur, wenn die
+  Antwort sich wirklich geändert hat; während einer Radanimation oder eines
+  eigenen Schreibvorgangs wird der Anstoß gemerkt und danach nachgeholt. Beim
+  Neuzeichnen des Blattes bleiben Scrollstand und getippter Text stehen.
 
 ### API
 
@@ -110,7 +139,8 @@ der Deckel wieder diesen einen Kühlschrank statt einer leeren Tabelle.
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages |
-| `GET /api/health` | Bereitschaft, inklusive Datenbank und Mailversand |
+| `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
+| `GET /api/health` | Bereitschaft, inklusive Datenbank, Mailversand und Verteiler |
 
 Grenzen: 0–999 Biere, −30…+30 °C, eine Meldung pro Minute und Nutzer, ein
 Absagegrund von höchstens 120 Zeichen. Ausgelost wird ab zwei Meldern mit etwas
@@ -148,8 +178,15 @@ npx wrangler d1 migrations apply beerstock --remote  # Schema
 npx wrangler deploy                                  # Worker
 ```
 
+Der Verteiler braucht kein eigenes Kommando: `Tafel` steht als Durable Object in
+`wrangler.jsonc` und entsteht beim ersten Deploy mit. Er speichert nichts —
+`new_sqlite_classes` steht dort trotzdem, weil nur SQLite-gestützte Klassen im
+kostenlosen Tarif laufen.
+
 Die Seite selbst liegt auf GitHub Pages — ein Push auf `main` genügt. Sie darf
-hinterherkommen: die alten Felder bleiben in den Antworten erhalten.
+hinterherkommen: die alten Felder bleiben in den Antworten erhalten. Umgekehrt
+auch — eine Seite, die `/api/strom` noch nicht findet, fällt auf ihren
+Zeitgeber zurück und arbeitet weiter wie vorher.
 
 Direkt nach `wrangler deploy` antwortet die Edge kurz noch mit der alten Fassung.
 Vor der Fehlersuche also schlicht eine halbe Minute später noch einmal abfragen.

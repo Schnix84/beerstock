@@ -1612,8 +1612,21 @@
   // --------------------------------------------------------------------------
   // Anmeldung und Abruf
   // --------------------------------------------------------------------------
-  const API = 'https://beerstock-api.mc-schneider84.workers.dev';
+  /* Lokal (wrangler dev auf 8787, die Seite ueber localhost:8788) gegen den
+     eigenen Worker, sonst gegen den ausgerollten. Ohne diese Zeile muss man
+     die Adresse zum Ausprobieren von Hand tauschen — und tauscht sie
+     irgendwann versehentlich mit zurück ins Netz. */
+  const API = location.hostname === 'localhost'
+    ? 'http://localhost:8787'
+    : 'https://beerstock-api.mc-schneider84.workers.dev';
   const SPEICHER = 'beerstock-token';
+
+  /* Die Kennung DIESES Tabs. Reist bei jedem Schreibvorgang als `X-Tab` mit,
+     und der Worker hängt sie an die Meldung, die er daraufhin verteilt — so
+     erkennt der Absender seine eigene Meldung und lädt nicht nach, was er
+     eben selbst beantwortet bekommen hat. Zufällig und flüchtig: sie steht in
+     keinem Speicher und bezeichnet keinen Menschen. */
+  const TAB = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
   const merke = () => { try { return localStorage.getItem(SPEICHER); } catch { return null; } };
   const nimm  = t => { try { localStorage.setItem(SPEICHER, t); } catch {} };
@@ -1631,6 +1644,16 @@
   let letztesFeld = [];     // die Bestenliste, fuer "wer ist nicht im Topf"
   let selbstGedreht = false;// in DIESER Sitzung gedreht: dann bleibt das Rad stehen
   let dreht = false;        // waehrend der Animation nichts neu zeichnen
+
+  /* Der Live-Betrieb (siehe `strom()` weiter unten). Was hier steht, entscheidet
+     nur, WANN nachgeladen wird - geladen wird immer über dieselben Routen. */
+  let ws = null;            // die Leitung zur Tafel, solange sie steht
+  let wsVersuch = 0;        // Fehlversuche in Folge, für den Backoff
+  let wsTimer = null;       // der geplante nächste Versuch
+  let laeuft = 0;           // eigene Schreibvorgänge, die gerade unterwegs sind
+  let nachzuholen = null;   // Anstoß, der warten musste: { tafel, ziel }
+  let letzterStand = '';    // rohe letzte Antwort der Bestenliste, zum Vergleich
+  let letzterThread = '';   // dasselbe fürs Flyout
 
   function sagt(text, schlecht) {
     const p = $('sagt');
@@ -1876,6 +1899,11 @@
       dreht = false;
       $('rad-knopf').disabled = false;
       radSagt(e.message, true);
+    } finally {
+      /* Während die Flasche lief, wurde nichts gezeichnet. Was in der Zeit
+         angestoßen wurde, kommt jetzt nach. */
+      dreht = false;
+      nachholen();
     }
   }
 
@@ -1931,6 +1959,7 @@
     flyZiel = ziel;
     flyMeins = {};
     flyDaten = null;
+    letzterThread = '';       // anderes Ziel, anderer Vergleichsstand
     $('fly-titel').textContent = titel;
     $('fly-unter').textContent = ziel.startsWith('user') ? 'als Gastgeber' : 'der Abend';
     $('fly-gesamt').textContent = '';
@@ -2026,22 +2055,50 @@
     $('lupe-bild').removeAttribute('src');
   }
 
-  async function flyLaden() {
+  /* `still` wie bei `hole`: das Blatt liegt offen da und wird unter den Augen
+     des Lesers aktualisiert. Deshalb hier drei Vorsichten, die es beim
+     angeforderten Laden nicht braucht — nichts zeichnen, wenn sich nichts
+     geändert hat; den Scrollstand halten; und den Bezug prüfen, auf den das
+     Schreibfeld gerade zeigt. Das Feld selbst liegt außerhalb von
+     `#fly-thread` und überlebt das Neuzeichnen von allein. */
+  async function flyLaden(still) {
     const ziel = flyZiel;
+    if (!ziel) return;
+    if (still && (dreht || laeuft)) { merkeAnstoss(false, ziel); return; }
     try {
       const kopf = {};
       const token = merke();
       if (token) kopf['Authorization'] = 'Bearer ' + token;
       const r = await fetch(API + '/api/bewertungen?ziel=' + encodeURIComponent(ziel),
         { headers: kopf, cache: 'no-store' });
-      const d = await r.json().catch(() => ({}));
+      const roh = await r.text();
+      let d = {};
+      try { d = JSON.parse(roh); } catch {}
       if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
       // Zwischenzeitlich geschlossen oder umgeschaltet: die Antwort ist alt.
       if (flyZiel !== ziel) return;
+      if (still && roh === letzterThread) return;
+      letzterThread = roh;
       flyDaten = d;
       flyMeins = { ...(d.meins || {}) };
+
+      /* Der Kommentar, an dem das Feld hängt, kann in der Zwischenzeit
+         gelöscht worden sein. Dann fällt der Bezug weg, der getippte Satz
+         aber nicht — und ein hochgeladenes Foto erst recht nicht. */
+      if (flyModus.art !== 'neu' && !flyFinden(flyModus.id)) {
+        flyModus = { art: 'neu', id: null, wer: null };
+        flySagt('Der Kommentar dazu ist verschwunden — das hier wird ein neuer.', true);
+      }
+
+      const blatt = document.querySelector('.fly-blatt');
+      const vorher = blatt ? blatt.scrollTop : 0;
+      // Wer unten steht, will unten bleiben: dort wächst das Gespräch.
+      const amBoden = !!blatt &&
+        blatt.scrollHeight - blatt.scrollTop - blatt.clientHeight < 40;
       flyZeichnen();
+      if (blatt) blatt.scrollTop = amBoden ? blatt.scrollHeight : vorher;
     } catch (e) {
+      if (still) return;              // stilles Nachfassen sagt nichts
       if (flyZiel === ziel) flySagt(e.message, true);
     }
   }
@@ -2260,15 +2317,26 @@
       .catch(() => VARIANTE.kopf(null, 'nichts'));
   }
 
-  async function hole() {
+  /* `still` heisst: nachgefasst, nicht angefordert. Dann wird nur gezeichnet,
+     wenn sich wirklich etwas geändert hat, und ein Fehler bleibt stumm —
+     wer gerade liest, soll von einem Aussetzer nichts merken. */
+  async function hole(still) {
+    // Nicht ins Laufende zeichnen: die Radanimation verträgt kein Neuzeichnen,
+    // und eine eigene Antwort ist jünger als alles, was hier ankäme.
+    if (still && (dreht || laeuft)) { merkeAnstoss(true, null); return; }
     try {
       const r = await fetch(API + '/api/leaderboard', { cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
-      const d = await r.json();
+      const roh = await r.text();
+      if (still && roh === letzterStand) return;   // nichts Neues, nichts zu tun
+      letzterStand = roh;
+      const d = JSON.parse(roh);
       zeichneFeld(d.feld || [], d.los || null, d.termine || []);
     } catch (e) {
+      if (still) return;
       // API weg: der Siegerplatz zeigt wieder den eigenen Kuehlschrank, Liste,
       // Rad und Termine bleiben draussen - ohne Worker gibt es keine Ziehung.
+      letzterStand = '';
       $('block').hidden = true;
       $('rad-block').hidden = true;
       $('termin-block').hidden = true;
@@ -2276,30 +2344,71 @@
     }
   }
 
+  /* --- Anstoss und Nachholen ----------------------------------------------
+     Ein Anstoss ist eine Marke von der Tafel: 'tafel' oder ein Ziel wie
+     'user:5'. Er trägt keine Daten — die Seite lädt selbst nach, über
+     dieselben Routen wie beim ersten Aufbau. Kommt er zur Unzeit (eigener
+     Schreibvorgang unterwegs, Rad dreht), wird er gemerkt statt verworfen.
+     --------------------------------------------------------------------- */
+  function merkeAnstoss(tafel, ziel) {
+    if (!nachzuholen) nachzuholen = { tafel: false, ziel: null };
+    if (tafel) nachzuholen.tafel = true;
+    if (ziel) nachzuholen.ziel = ziel;
+  }
+
+  function angestossen(marken) {
+    if (marken.includes('tafel')) hole(true);
+    if (flyZiel && marken.includes(flyZiel)) flyLaden(true);
+  }
+
+  function nachholen() {
+    const n = nachzuholen;
+    if (!n || dreht || laeuft) return;
+    nachzuholen = null;
+    if (n.tafel) hole(true);
+    if (n.ziel && n.ziel === flyZiel) flyLaden(true);
+  }
+
   async function ruf(pfad, rumpf) {
-    const kopf = { 'Content-Type': 'application/json' };
+    const kopf = { 'Content-Type': 'application/json', 'X-Tab': TAB };
     const token = merke();
     if (token) kopf['Authorization'] = 'Bearer ' + token;
-    const r = await fetch(API + pfad, {
-      method: 'POST', headers: kopf, body: JSON.stringify(rumpf),
-    });
-    let d = {};
-    try { d = await r.json(); } catch {}
-    if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
-    return d;
+    laeuft++;
+    try {
+      const r = await fetch(API + pfad, {
+        method: 'POST', headers: kopf, body: JSON.stringify(rumpf),
+      });
+      let d = {};
+      try { d = await r.json(); } catch {}
+      if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
+      return d;
+    } finally {
+      laeuft--;
+      /* Kurz warten, bevor Gemerktes nachgeholt wird: der Aufrufer lädt
+         gleich selbst nach (`await flyLaden()` steht überall direkt hinter
+         `ruf`), und dann ist der Anstoss schon abgegolten — der Vergleich
+         gegen die letzte Antwort schluckt ihn. */
+      if (!laeuft) setTimeout(nachholen, 300);
+    }
   }
 
   /* Wie `ruf`, nur mit rohen Bytes statt JSON — für /api/bild. Kein Multipart:
      es geht genau eine Datei raus, der Rahmen drumherum trüge nichts bei. */
   async function rufRoh(pfad, blob) {
-    const kopf = { 'Content-Type': blob.type || 'application/octet-stream' };
+    const kopf = { 'Content-Type': blob.type || 'application/octet-stream', 'X-Tab': TAB };
     const token = merke();
     if (token) kopf['Authorization'] = 'Bearer ' + token;
-    const r = await fetch(API + pfad, { method: 'POST', headers: kopf, body: blob });
-    let d = {};
-    try { d = await r.json(); } catch {}
-    if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
-    return d;
+    laeuft++;
+    try {
+      const r = await fetch(API + pfad, { method: 'POST', headers: kopf, body: blob });
+      let d = {};
+      try { d = await r.json(); } catch {}
+      if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
+      return d;
+    } finally {
+      laeuft--;
+      if (!laeuft) setTimeout(nachholen, 300);
+    }
   }
 
   /* Verkleinert wird HIER, nicht im Worker. Aus 4 MB Handyfoto werden ~250 kB,
@@ -2594,25 +2703,96 @@
     }
   }
 
+  /* --- Die Leitung ---------------------------------------------------------
+     Eine WebSocket zum Worker, über die nur Marken kommen ('tafel',
+     'user:5'). Damit erfährt die Seite von selbst, dass jemand gemeldet,
+     gedreht, kommentiert oder reagiert hat — und lädt genau das nach.
+
+     Sie ist ausdrücklich NICHT die einzige Quelle: `nachfassen()` unten fragt
+     weiter nach, nur seltener, solange die Leitung steht. Eine WebSocket geht
+     verloren, ohne dass es jemand merkt (Tunnel, Aufzug, schlafendes Handy) —
+     eine Seite, die dann nichts mehr täte, sähe aus wie eingefroren.
+     --------------------------------------------------------------------- */
+  function strom() {
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+    let s;
+    try { s = new WebSocket(API.replace(/^http/, 'ws') + '/api/strom'); }
+    catch { planeStrom(); return; }
+    ws = s;
+
+    s.addEventListener('open', () => {
+      wsVersuch = 0;
+      // Zwischen Abriss und Rückkehr kann etwas passiert sein, wovon keine
+      // Marke mehr kommt: einmal nachziehen.
+      hole(true);
+      if (flyZiel) flyLaden(true);
+    });
+    s.addEventListener('message', ev => {
+      if (ev.data === 'pong') return;
+      let d = null;
+      try { d = JSON.parse(ev.data); } catch { return; }
+      // Die eigene Meldung nicht: die Antwort auf den eigenen POST war früher da.
+      if (!d || !Array.isArray(d.marken) || d.von === TAB) return;
+      angestossen(d.marken);
+    });
+    s.addEventListener('close', () => { if (ws === s) { ws = null; planeStrom(); } });
+    s.addEventListener('error', () => { try { s.close(); } catch {} });
+  }
+
+  /* Backoff, verdoppelnd bis eine halbe Minute. Im Hintergrund wird gar nicht
+     erst versucht — das Aufwachen übernimmt `visibilitychange`. */
+  function planeStrom() {
+    if (wsTimer || document.visibilityState !== 'visible') return;
+    const wart = Math.min(30000, 1000 * Math.pow(2, wsVersuch++));
+    wsTimer = setTimeout(() => { wsTimer = null; strom(); }, wart);
+  }
+
+  const stehtDieLeitung = () => !!ws && ws.readyState === WebSocket.OPEN;
+
   /* Die Seite steht oft lange offen - auf einem Tisch, auf einem Tablet. Also
      nachfassen, aber nur, solange jemand hinsieht: ein Hintergrundtab fragt
-     nichts. */
+     nichts. Mit stehender Leitung ist das nur noch ein Sicherheitsnetz (alle
+     drei Minuten); ohne sie übernimmt es den ganzen Dienst und zieht auch das
+     offene Flyout mit. */
   function nachfassen() {
     let letzte = Date.now();
-    const frisch = () => { letzte = Date.now(); hole(); };
+    const frisch = () => { letzte = Date.now(); hole(true); };
+
     setInterval(() => {
-      if (document.visibilityState === 'visible' && Date.now() - letzte > 60000) frisch();
+      if (document.visibilityState !== 'visible') return;
+      if (stehtDieLeitung()) {
+        // Hält die Leitung offen; beantwortet wird das von der Laufzeit selbst,
+        // das Durable Object schläft dabei weiter.
+        try { ws.send('ping'); } catch {}
+        if (Date.now() - letzte > 180000) frisch();
+      } else {
+        strom();
+        if (Date.now() - letzte > 60000) frisch();
+        if (flyZiel) flyLaden(true);
+      }
     }, 20000);
+
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && Date.now() - letzte > 60000) frisch();
+      if (document.visibilityState !== 'visible') return;
+      /* Zurück auf dem Tisch: sofort verbinden, nicht erst nach dem Backoff
+         von vorhin — der zählt Fehlversuche, nicht Pausen. */
+      wsVersuch = 0;
+      if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
+      strom();
+      if (Date.now() - letzte > 20000) frisch();
+      if (flyZiel) flyLaden(true);
     });
+
+    strom();
   }
 
   /* Reihenfolge: erst den Link einloesen (der setzt das Token), dann wissen,
      wer man ist, dann zeichnen. */
   magicEinloesen()
     .then(() => merke() && !meinName && !brauchtNamen ? werBinIch() : null)
-    .then(hole)
+    // Ohne den Pfeil bekäme `hole` die Antwort von `werBinIch` als `still` —
+    // und der erste Aufbau dürfte dann bei einem Fehler nicht mehr zurückfallen.
+    .then(() => hole())
     .then(nachfassen);
 
 </script>
