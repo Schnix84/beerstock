@@ -393,11 +393,6 @@
   }
   .sagt.schlecht { border-left-color: var(--rot); color: #f0c6be; }
 
-  .fuss {
-    text-align: center; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase;
-    color: #ffffff2e; margin: 14px 0 0;
-  }
-
   /* --- Kreide zeichnen ----------------------------------------------------- */
   .strich {
     /* Keine stroke-width hier: CSS schlaegt das Praesentationsattribut, und die
@@ -660,7 +655,6 @@
       </section>
     </div>
   </div>
-  <p class="fuss">gemeldet ist nicht gemessen</p>
 
 <script>
   // ==========================================================================
@@ -1140,11 +1134,30 @@
       radSagt('Noch zu wenig gemeldet — ausgelost wird ab ' + los.mindestens +
               ', die heute etwas Kaltes haben.');
     } else {
-      // Wer gemeldet hat, aber nichts Kaltes: das erklärt sich sonst niemand.
+      /* Drehen und Mitspielen sind zwei verschiedene Bedingungen, und das ist
+         der Satz, der es sagen muss: drehen darf jeder Angemeldete, im Topf ist
+         nur, wer heute etwas Kaltes gemeldet hat. Wer das verwechselt, wartet
+         den Abend über auf eine Auslosung, in der er gar nicht steht. */
       const topf = new Set(los.feld.map(s => s.name));
-      const raus = letztesFeld.filter(p => !topf.has(p.name)).map(p => p.name);
-      radSagt((darf ? '' : 'Drehen darf, wer mitschreibt. ') +
-              (raus.length ? 'Nicht im Topf: ' + raus.join(', ') + '.' : ''));
+      let raus = letztesFeld.filter(p => !topf.has(p.name)).map(p => p.name);
+      const teile = [];
+
+      if (!darf) {
+        teile.push('Zum Drehen anmelden.');
+      } else if (meinName && !topf.has(meinName)) {
+        // Wer gleich persönlich angesprochen wird, muss nicht auch noch in der
+        // Aufzählung darunter stehen.
+        raus = raus.filter(n => n !== meinName);
+        const ich = letztesFeld.find(p => p.name === meinName);
+        /* Die Frist steht im Worker und wird hier bewusst nicht wiederholt —
+           handeln muss man ohnehin gleich, nicht in N Stunden. */
+        teile.push(ich && ich.biere < 1
+          ? 'Du bist nicht im Topf — du hast nichts Kaltes stehen.'
+          : 'Du bist nicht im Topf — deine letzte Meldung ist zu alt. Trag neu ein, ' +
+            'dann bist du dabei; drehen darfst du auch so.');
+      }
+      if (raus.length) teile.push('Nicht im Topf: ' + raus.join(', ') + '.');
+      radSagt(teile.join(' '));
     }
   }
 
