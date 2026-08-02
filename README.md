@@ -146,9 +146,9 @@ Drei Dinge, die dazugehören:
 | `POST /api/report` | `{biere, temperatur}` mit `Bearer`-Token |
 | `POST /api/abmelden` | wirft nur dieses eine Gerät raus |
 | `POST /api/drehen` | die Flasche drehen; ein zweiter Ruf liefert dasselbe Los |
-| `POST /api/los/antwort` | `{antwort:'ja'\|'nein', grund?, beginnt_am?}` — nur der Gezogene |
-| `POST /api/termin` | `{gastgeber, beginnt_am, titel?}` → ein Abend von Hand |
-| `POST /api/termin/aendern` | verschieben, umbenennen, absagen |
+| `POST /api/los/antwort` | `{antwort:'ja'\|'nein', grund?, beginnt_am?, endet_am?}` — nur der Gezogene |
+| `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand |
+| `POST /api/termin/aendern` | verschieben, umbenennen, absagen; ohne `endet_am` wandert das Ende beim Verschieben mit |
 | `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?}` — überschreibt |
 | `GET /api/bewertungen` | `?ziel=user:5` — Schnitte, eigene Abgabe, Kommentarbaum |
 | `POST /api/kommentar` | `{ziel_art, ziel_id, text, antwort_auf?}` |

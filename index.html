@@ -294,15 +294,23 @@
   }
   .los-knoepfe { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   /* Die Uhrzeit gehört zur Zusage, nicht in ein zweites Formular danach: wer
-     „Ich richte aus" drückt, sagt damit auch, ab wann. 19 Uhr steht vor. */
+     „Ich richte aus" drückt, sagt damit auch, von wann bis wann. 19 bis 23 Uhr
+     steht vor; das Ende ist eine Ansage, keine Sperre. */
   .los-zeit {
-    display: flex; align-items: baseline; justify-content: center; gap: 8px;
+    display: flex; align-items: baseline; justify-content: center;
+    flex-wrap: wrap; gap: 2px 14px;
     margin-bottom: 12px; font-family: var(--hand); font-size: 14px;
     color: var(--kreide-weg);
   }
+  /* Ein Paar aus Wort und Feld. `flex-shrink: 0` hält es zusammen — schrumpfen
+     dürfen die beiden nicht, umbrechen darf nur die Zeile darüber. */
+  .los-spanne { display: inline-flex; align-items: baseline; gap: 7px; flex: 0 0 auto; }
+  /* Schmaler als mit einem Feld: zwei Zeitfelder plus zwei Wörter sollen auch
+     auf 320 px nebeneinander stehen. Das Uhr-Symbol, das WebKit ins Feld setzt,
+     ist dabei mitgerechnet. */
   .los-zeit input {
-    width: auto; min-width: 92px; text-align: center; padding: 4px 6px 3px;
-    font-size: 16px; color: var(--gelb);
+    width: auto; min-width: 68px; text-align: center; padding: 4px 4px 3px;
+    font-size: 15px; color: var(--gelb);
   }
   /* Das Feld für den Grund steht offen da, statt sich erst nach einem Klick zu
      zeigen: eine Absage soll EIN Tippen kosten, der Grund ist die Zugabe. */
@@ -363,6 +371,12 @@
   /* Gewesen: blasser, aber lesbar — daran hängen später die Bewertungen. */
   .t-zeile.vorbei { opacity: .62; }
   .t-zeile.vorbei .t-tag { color: var(--kreide-weg); }
+  /* Läuft gerade: die eine Zeile, wegen der abends jemand nachsieht. Zwischen
+     Anfang und Ende ist ein Abend weder „kommend" noch „gewesen" — vorher
+     rutschte er in der Minute, in der er anfing, unter den Trenner. */
+  .t-zeile.jetzt .t-titel { color: var(--gelb); }
+  .t-marke.jetzt { animation: t-puls 2.4s ease-in-out infinite; }
+  @keyframes t-puls { 50% { opacity: .4; } }
   /* Abgesagt: durchgestrichen, wie an einer Tafel. Die Zeile bleibt stehen. */
   .t-zeile.ab .t-titel { text-decoration: line-through; text-decoration-color: var(--rot); }
   .t-zeile.ab .t-tag { color: var(--rot); opacity: .8; }
@@ -697,6 +711,8 @@
     /* Das Rad springt auf sein Feld, statt sich zu drehen. Das Ergebnis steht
        ohnehin fest, bevor sich das erste Bild bewegt — es geht nichts verloren. */
     .erg-kringel { animation: none; stroke-dashoffset: 0; }
+    /* Die „läuft"-Marke steht ohnehin da; das Pulsen ist die Zugabe. */
+    .t-marke.jetzt { animation: none; }
   }
   [hidden] { display: none !important; }
 </style>
@@ -886,10 +902,16 @@
              zurück — deshalb steht hier kein "endgültig" irgendwo. -->
         <div class="los-antwort" id="los-antwort" hidden>
           <div class="los-frage kr">Die Flasche zeigt auf dich. Richtest du aus?</div>
+          <!-- Wort und Feld stecken je in einem `.los-spanne`, damit die Zeile
+               ZWISCHEN den beiden Paaren umbricht und nicht mittendrin: sonst
+               steht auf 320 px „bis" noch oben und sein Feld schon darunter. -->
           <div class="los-zeit">
-            <span>ab</span>
-            <input class="feld" id="f-zeit" type="time" value="19:00"
-                   aria-label="Ab wann der Abend losgeht">
+            <span class="los-spanne"><span>von</span>
+              <input class="feld" id="f-zeit" type="time" value="19:00"
+                     aria-label="Ab wann der Abend losgeht"></span>
+            <span class="los-spanne"><span>bis</span>
+              <input class="feld" id="f-ende" type="time" value="23:00"
+                     aria-label="Bis wann der Abend geht"></span>
           </div>
           <div class="los-knoepfe">
             <button class="knopf" id="los-ja">Ich richte aus</button>
@@ -927,8 +949,14 @@
               <input class="feld" id="t-datum" type="date" required></label>
           </div>
           <div class="melde">
-            <label><span class="feld-label">Ab</span>
+            <label><span class="feld-label">Von</span>
               <input class="feld" id="t-zeit" type="time" value="19:00" required></label>
+            <!-- Liegt „bis" vor „von", ist der nächste Morgen gemeint — das
+                 rechnet `endeUTC`, nicht der Nutzer. -->
+            <label><span class="feld-label">Bis</span>
+              <input class="feld" id="t-ende" type="time" value="23:00" required></label>
+          </div>
+          <div class="melde eins">
             <label><span class="feld-label">Anlass — freiwillig</span>
               <input class="feld" id="t-titel" maxlength="60" autocomplete="off"
                      placeholder="Tatort"></label>
@@ -1309,8 +1337,17 @@
        ihn ausrichtet oder eingetragen hat — und nur, solange er nicht läuft. */
     termin(t, darfWeg) {
       const d = new Date(t.beginnt_am);
-      const vorbei = d.getTime() <= Date.now();
-      const z = el('div', 't-zeile' + (vorbei ? ' vorbei' : '') + (t.abgesagt ? ' ab' : ''));
+      const e = t.endet_am ? new Date(t.endet_am) : null;
+      const jetzt = Date.now();
+      /* Drei Zustände statt zwei. `angefangen` ist NICHT dasselbe wie `vorbei`
+         und bleibt bewusst am Anfang hängen: bewertet wird ab dem ersten Bier,
+         daran hat das Ende nichts geändert. Ohne `endet_am` (Zeile von vor
+         Schema 10) fallen die beiden zusammen — das alte Verhalten. */
+      const angefangen = d.getTime() <= jetzt;
+      const vorbei = (e ? e.getTime() : d.getTime()) <= jetzt;
+      const laeuft = angefangen && !vorbei;
+      const z = el('div', 't-zeile' + (vorbei ? ' vorbei' : '') + (laeuft ? ' jetzt' : '')
+        + (t.abgesagt ? ' ab' : ''));
 
       const tag = el('div', 't-tag kr');
       tag.textContent = d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
@@ -1322,8 +1359,11 @@
       mitte.appendChild(el('div', 't-titel kr', t.titel || 'Bierabend bei ' + t.gastgeber));
 
       const unter = el('div', 't-unter');
+      const uhr = x => x.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
       unter.appendChild(el('span', null,
-        d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr'));
+        (e ? uhr(d) + '–' + uhr(e) : uhr(d)) + ' Uhr'));
+      // Nur solange er wirklich läuft — an einem abgesagten Abend läuft nichts.
+      if (laeuft && !t.abgesagt) unter.appendChild(el('span', 't-marke jetzt', 'läuft'));
       if (t.titel) unter.appendChild(el('span', null, '· bei ' + t.gastgeber));
       // Woher der Abend kommt: ausgelost oder von jemandem eingetragen.
       if (t.aus_ziehung) unter.appendChild(el('span', 't-marke', 'ausgelost'));
@@ -1345,7 +1385,7 @@
       b.type = 'button';
       b.dataset.ziel = 'termin:' + t.id;
       b.dataset.name = t.titel || 'Bierabend bei ' + t.gastgeber;
-      b.appendChild(vorbei
+      b.appendChild(angefangen
         ? sternKurz(t.bewertung, t.kommentare)
         : el('span', 'stern-kurz' + (t.kommentare ? ' hat' : ''),
              t.kommentare ? '💬 ' + t.kommentare : '💬'));
@@ -1354,7 +1394,10 @@
       z.appendChild(mitte);
 
       const rechts = el('div', 't-rechts');
-      if (darfWeg && !t.abgesagt && !vorbei) {
+      /* Am ANFANG, nicht am Ende: der Worker sperrt das Ändern ab `beginnt_am`
+         (409 „Der Abend hat schon angefangen"). Stünde der Knopf bis zum Ende
+         da, führte er mitten im Abend in eine Fehlermeldung. */
+      if (darfWeg && !t.abgesagt && !angefangen) {
         const weg = el('button', 't-weg', 'absagen');
         weg.type = 'button';
         weg.dataset.termin = t.id;
@@ -1536,7 +1579,9 @@
         // Mit Uhrzeit, sobald die Zusage einen Termin angelegt hat — das ist
         // die eine Angabe, wegen der man abends noch einmal nachsieht.
         stand.textContent = los.beginnt_am
-          ? 'hat zugesagt — ab ' + uhrzeit(los.beginnt_am) + ' Uhr'
+          ? 'hat zugesagt — ' + (los.endet_am
+              ? uhrzeit(los.beginnt_am) + '–' + uhrzeit(los.endet_am) + ' Uhr'
+              : 'ab ' + uhrzeit(los.beginnt_am) + ' Uhr')
           : 'hat zugesagt';
       } else {
         stand.textContent = los.frist
@@ -1785,6 +1830,18 @@
     return isNaN(d) ? null : d.toISOString();
   }
 
+  /* Das Ende aus derselben Zeile. Der einzige Unterschied zu `alsUTC`: liegt
+     die Bis-Zeit vor der Ab-Zeit, ist der nächste Morgen gemeint — 21:00 bis
+     01:30 ist ein Abend und kein Vertipper. Ohne das schickte die Seite ein
+     Ende VOR dem Anfang, und der Worker wiese es zu Recht ab. */
+  function endeUTC(tag, von, bis) {
+    const a = new Date(tag + 'T' + von + ':00');
+    const b = new Date(tag + 'T' + bis + ':00');
+    if (isNaN(a) || isNaN(b)) return null;
+    if (b <= a) b.setDate(b.getDate() + 1);
+    return b.toISOString();
+  }
+
   /* `wieViel` ist die Zahl der Abende in der Chronik. Sie kommt mit der
      Bestenliste und entscheidet nur, ob der Knopf dahin dasteht - und ob die
      Sektion ueberhaupt erscheint: nach zwei stillen Wochen ist die Terminliste
@@ -1804,9 +1861,13 @@
 
     ziel.textContent = '';
     const jetzt = Date.now();
-    const kommend = termine.filter(t => new Date(t.beginnt_am).getTime() > jetzt);
+    /* Geteilt wird am ENDE, nicht am Anfang: ein laufender Abend bleibt oben
+       stehen, statt um 19:01 unter „gewesen" zu rutschen, während man noch
+       hinfährt. Ohne `endet_am` zählt weiter der Anfang. */
+    const vorbei = t => new Date(t.endet_am || t.beginnt_am).getTime() <= jetzt;
+    const kommend = termine.filter(t => !vorbei(t));
     // Rückwärts: der letzte Abend steht oben, nicht der älteste.
-    const gewesen = termine.filter(t => new Date(t.beginnt_am).getTime() <= jetzt).reverse();
+    const gewesen = termine.filter(vorbei).reverse();
 
     const darfWeg = t => darf && (t.gastgeber === meinName || t.von === meinName);
 
@@ -1984,8 +2045,11 @@
     try {
       /* Das Datum ist der Bierabend-Tag der Ziehung, nicht „heute" im Browser:
          wer um ein Uhr nachts zusagt, meint den Abend, der gerade läuft. */
+      const von = $('f-zeit').value || '19:00', bis = $('f-ende').value || '23:00';
       const d = await ruf('/api/los/antwort', ja
-        ? { antwort: 'ja', beginnt_am: alsUTC(losTag, $('f-zeit').value || '19:00') }
+        ? { antwort: 'ja',
+            beginnt_am: alsUTC(losTag, von),
+            endet_am: endeUTC(losTag, von, bis) }
         : { antwort: 'nein', grund: $('f-grund').value });
 
       /* Nach einer Absage steht die Flasche wieder bereit. `selbstGedreht`
@@ -2752,12 +2816,15 @@
   $('termin-form').addEventListener('submit', async ev => {
     ev.preventDefault();
     const knopf = ev.target.querySelector('button[type=submit]');
-    const wann = alsUTC($('t-datum').value, $('t-zeit').value || '19:00');
+    const von = $('t-zeit').value || '19:00', bis = $('t-ende').value || '23:00';
+    const wann = alsUTC($('t-datum').value, von);
+    const bisWann = endeUTC($('t-datum').value, von, bis);
     if (!wann) { terminSagt('Tag und Uhrzeit fehlen.', true); return; }
     knopf.disabled = true; terminSagt('');
     try {
       const d = await ruf('/api/termin', {
-        gastgeber: $('t-gast').value, beginnt_am: wann, titel: $('t-titel').value,
+        gastgeber: $('t-gast').value, beginnt_am: wann, endet_am: bisWann,
+        titel: $('t-titel').value,
       });
       $('t-titel').value = '';
       $('termin-form').hidden = true;

@@ -65,6 +65,17 @@ const TERMIN_RUECK       = 24;   // Stunden, so weit darf er zurueckliegen
 const TERMINE_PRO_TAG    = 3;    // je Nutzer und Tag, gegen das Vollschreiben
 const TERMIN_TITEL_MAX   = 60;   // Zeichen
 const TERMINE_RUECKBLICK = 14;   // Tage, so weit reicht die Liste zurueck
+/* Wie lange ein Abend dauert, wenn niemand etwas anderes sagt. Beide Wege -
+   Zusage am Rad und Eintrag von Hand - belegen `endet_am` damit vor, und der
+   Wert steht HIER statt als DEFAULT in der Tabelle, damit es nur eine Fassung
+   gibt (siehe 0010_termin_ende.sql).
+
+   Das Ende ist eine Anzeige, keine Prophezeiung: es sagt, bis wann der Abend
+   als "laeuft gerade" gilt. Wer laenger sitzt, sitzt laenger. Sperre und
+   Bewertung haengen unveraendert am ANFANG - sonst koennte einer den Abend
+   noch verschieben, waehrend die anderen schon darunter kommentieren. */
+const TERMIN_DAUER_STD = 4;      // Stunden
+const TERMIN_DAUER_MAX = 24;     // Stunden, gegen den Abend, der eine Woche dauert
 /* Die Chronik dahinter kennt kein Fenster - sie blaettert, statt abzuschneiden.
    `SEITE` ist, was ohne Wunsch herauskommt, `MAX` die Obergrenze auf einen
    Griff: die Seite fordert beim stillen Nachladen so viele an, wie sie gerade
@@ -322,12 +333,33 @@ function pruefeBeginn(roh) {
   return { d };
 }
 
+/* Dasselbe fuers Ende, aber gegen den Anfang statt gegen die Uhr: ein Ende
+   allein sagt nichts, es ist immer das Ende VON etwas. Fehlt es, entsteht die
+   Vorgabe hier - deshalb gibt auch der Fall ohne Angabe ein Datum zurueck und
+   nicht null, und jeder Aufrufer bekommt dieselbe Rechnung.
+
+   Die Obergrenze ist kein Misstrauen gegen lange Abende, sondern gegen den
+   Vertipper: `2026-08-12` statt `2026-08-02` im Bis-Feld haelt einen Abend
+   zehn Tage lang auf "laeuft gerade". */
+function pruefeEnde(roh, beginn) {
+  if (roh == null) return { d: new Date(beginn.getTime() + TERMIN_DAUER_STD * 36e5) };
+  const d = new Date(String(roh));
+  if (isNaN(d)) return { fehler: 'Ende: ISO-8601 in UTC, etwa 2026-08-02T21:00:00Z' };
+  if (d.getTime() <= beginn.getTime()) {
+    return { fehler: 'Der Abend kann nicht enden, bevor er anfängt' };
+  }
+  if (d.getTime() - beginn.getTime() > TERMIN_DAUER_MAX * 36e5) {
+    return { fehler: `Höchstens ${TERMIN_DAUER_MAX} Stunden am Stück` };
+  }
+  return { d };
+}
+
 /* Kommende Termine plus ein Rueckblick: der letzte Abend soll noch dastehen,
    damit man ihn bewerten kann. Abgesagte bleiben in der Liste, sie tragen ihre
    Absage sichtbar - sonst verschwindet ein Abend, unter dem Kommentare stehen. */
 const termineStmt = env => env.DB.prepare(`
-  SELECT t.id, t.gastgeber_id, t.beginnt_am, t.titel, t.los_id, t.abgesagt_am,
-         t.erstellt_von, u.name AS gastgeber, e.name AS eingetragen_von
+  SELECT t.id, t.gastgeber_id, t.beginnt_am, t.endet_am, t.titel, t.los_id,
+         t.abgesagt_am, t.erstellt_von, u.name AS gastgeber, e.name AS eingetragen_von
   FROM termine t
   JOIN users u ON u.id = t.gastgeber_id
   LEFT JOIN users e ON e.id = t.erstellt_von
@@ -343,6 +375,9 @@ const terminAntwort = (t, noten, wieViele) => ({
   gastgeber: t.gastgeber,
   von: t.eingetragen_von || null,
   beginnt_am: utc(t.beginnt_am),
+  /* NULL nur bei einer Zeile, die aelter ist als Schema 10 und die Nachpflege
+     nicht erwischt hat - die Seite faellt dann auf "ab HH:MM" zurueck. */
+  endet_am: utc(t.endet_am),
   titel: t.titel || null,
   aus_ziehung: !!t.los_id,
   abgesagt: !!t.abgesagt_am,
@@ -403,6 +438,7 @@ function losAntwort(tag, lage, topf, termine = []) {
     gedreht: utc(z.gedreht_am),
     termin_id: t ? t.id : null,
     beginnt_am: t ? utc(t.beginnt_am) : null,
+    endet_am: t ? utc(t.endet_am) : null,
     status: z.status,                       // 'offen' oder 'zugesagt'
     grund: z.grund || null,
     entschieden: utc(z.entschieden_am),
@@ -1006,18 +1042,28 @@ const ROUTEN = {
     }
     if (ja) grund = null;            // ein Grund gehoert zur Absage, nicht zur Zusage
 
-    /* Die Uhrzeit des Abends kommt vom Client, fertig in UTC gerechnet - der
-       Browser kennt die Ortszeit, der Worker nicht. Fehlt sie, greift die
-       Vorgabe auf dem Bierabend-Tag selbst; deshalb hier nur die Pruefung und
-       das Einsetzen erst weiter unten, wenn `tag` feststeht. */
-    let beginn = null;
-    if (ja && daten.beginnt_am != null) {
-      const p = pruefeBeginn(daten.beginnt_am);
+    /* Die Zeiten des Abends kommen vom Client, fertig in UTC gerechnet - der
+       Browser kennt die Ortszeit, der Worker nicht. Fehlt der Anfang, greift
+       die Vorgabe auf dem Bierabend-Tag selbst; fehlt das Ende, die Dauer
+       dahinter. `bierTag()` darf dafuer schon hier stehen, es rechnet nur mit
+       der Uhr und nicht mit der Datenbank.
+
+       Auch die Vorgabe laeuft durch `pruefeBeginn`, statt ungeprueft in den
+       INSERT zu gehen: sie ist ein Zeitpunkt wie jeder andere. Sie kann die
+       Grenzen gar nicht reissen - der Bierabend-Tag liegt hoechstens 13 Stunden
+       zurueck -, aber geprueft ist besser als geglaubt, und `pruefeEnde` braucht
+       den Anfang ohnehin als Datum. */
+    const tag = bierTag();
+    let beginn = null, ende = null;
+    if (ja) {
+      const p = pruefeBeginn(daten.beginnt_am ?? `${tag}T${TERMIN_VORGABE_UTC}Z`);
       if (p.fehler) return fehler(request, p.fehler);
+      const e = pruefeEnde(daten.endet_am, p.d);
+      if (e.fehler) return fehler(request, e.fehler);
       beginn = alsDbZeit(p.d);
+      ende   = alsDbZeit(e.d);
     }
 
-    const tag = bierTag();
     const [, tagRoh] = await env.DB.batch([verfallStmt(env, tag), losTagStmt(env, tag)]);
     const lage = tagesLage(tagRoh.results);
     const z = lage.gueltig;
@@ -1042,10 +1088,10 @@ const ROUTEN = {
        einem wiederholten Ruf steht `termine.los_id UNIQUE`. */
     if (ja) {
       await env.DB.prepare(`
-        INSERT INTO termine (gastgeber_id, beginnt_am, los_id, erstellt_von)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO termine (gastgeber_id, beginnt_am, endet_am, los_id, erstellt_von)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(los_id) DO NOTHING
-      `).bind(ich.id, beginn || `${tag} ${TERMIN_VORGABE_UTC}`, z.id, ich.id).run();
+      `).bind(ich.id, beginn, ende, z.id, ich.id).run();
     }
 
     const [tagRoh2, feld, termine] = await env.DB.batch([
@@ -1076,6 +1122,8 @@ const ROUTEN = {
 
     const p = pruefeBeginn(daten.beginnt_am);
     if (p.fehler) return fehler(request, p.fehler);
+    const e = pruefeEnde(daten.endet_am, p.d);
+    if (e.fehler) return fehler(request, e.fehler);
 
     const titel = String(daten.titel ?? '').trim().replace(/\s+/g, ' ');
     if (titel.length > TERMIN_TITEL_MAX) {
@@ -1100,9 +1148,9 @@ const ROUTEN = {
     }
 
     const neu = await env.DB.prepare(`
-      INSERT INTO termine (gastgeber_id, beginnt_am, titel, erstellt_von)
-      VALUES (?, ?, ?, ?) RETURNING id
-    `).bind(gast.id, alsDbZeit(p.d), titel || null, ich.id).first();
+      INSERT INTO termine (gastgeber_id, beginnt_am, endet_am, titel, erstellt_von)
+      VALUES (?, ?, ?, ?, ?) RETURNING id
+    `).bind(gast.id, alsDbZeit(p.d), alsDbZeit(e.d), titel || null, ich.id).first();
 
     const alle = await termineStmt(env).all();
     anstoss(request, env, ctx, 'tafel');
@@ -1125,7 +1173,7 @@ const ROUTEN = {
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
     const t = await env.DB.prepare(`
-      SELECT id, gastgeber_id, erstellt_von, los_id, beginnt_am, abgesagt_am,
+      SELECT id, gastgeber_id, erstellt_von, los_id, beginnt_am, endet_am, abgesagt_am,
              (beginnt_am <= datetime('now')) AS laeuft
       FROM termine WHERE id = ?
     `).bind(Number(daten.id)).first();
@@ -1164,10 +1212,30 @@ const ROUTEN = {
     }
 
     const setzt = [], werte = [];
+
+    /* Anfang und Ende haengen aneinander: wer nur verschiebt, will den Abend
+       verschieben und nicht kuerzen. Das Ende wandert deshalb um dieselbe
+       Spanne mit, wenn keins mitgeschickt wurde - sonst waere ein Abend, den
+       man um zwei Stunden nach hinten legt, zwei Stunden kuerzer. */
+    const altBeginn = new Date(utc(t.beginnt_am));
+    const altEnde   = t.endet_am ? new Date(utc(t.endet_am)) : null;
+    let beginn = altBeginn;
+
     if (daten.beginnt_am != null) {
       const p = pruefeBeginn(daten.beginnt_am);
       if (p.fehler) return fehler(request, p.fehler);
+      beginn = p.d;
       setzt.push('beginnt_am = ?'); werte.push(alsDbZeit(p.d));
+    }
+    if (daten.endet_am != null) {
+      const e = pruefeEnde(daten.endet_am, beginn);
+      if (e.fehler) return fehler(request, e.fehler);
+      setzt.push('endet_am = ?'); werte.push(alsDbZeit(e.d));
+    } else if (daten.beginnt_am != null) {
+      // Ohne altes Ende (Zeile von vor Schema 10) greift wieder die Vorgabe.
+      const spanne = altEnde ? altEnde - altBeginn : TERMIN_DAUER_STD * 36e5;
+      setzt.push('endet_am = ?');
+      werte.push(alsDbZeit(new Date(beginn.getTime() + spanne)));
     }
     if (daten.titel != null) {
       const titel = String(daten.titel).trim().replace(/\s+/g, ' ');
@@ -1612,8 +1680,8 @@ const ROUTEN = {
        ob es hinter dieser Seite noch weitergeht. Ein zweites `count(*)` ueber
        das ganze Archiv waere derselbe Satz zum doppelten Preis. */
     const zeilen = await env.DB.prepare(`
-      SELECT t.id, t.gastgeber_id, t.beginnt_am, t.titel, t.los_id, t.abgesagt_am,
-             t.erstellt_von, u.name AS gastgeber, e.name AS eingetragen_von
+      SELECT t.id, t.gastgeber_id, t.beginnt_am, t.endet_am, t.titel, t.los_id,
+             t.abgesagt_am, t.erstellt_von, u.name AS gastgeber, e.name AS eingetragen_von
       FROM termine t
       JOIN users u ON u.id = t.gastgeber_id
       LEFT JOIN users e ON e.id = t.erstellt_von
