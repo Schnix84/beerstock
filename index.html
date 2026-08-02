@@ -526,8 +526,11 @@
   .ko-re.offen { border-color: #ffffff55; color: var(--kreide); }
   /* Der Knopf, hinter dem die vier liegen. Vier offene Emojis an jeder Karte
      waren vier Angebote, wo eines reicht — und sie standen dem im Weg, was
-     wirklich an der Karte hängt: den Reaktionen, die es schon gibt. */
-  .ko-re-auf .plus { margin-left: 2px; opacity: .65; }
+     wirklich an der Karte hängt: den Reaktionen, die es schon gibt. Er trägt
+     ein Strichgesicht statt eines fünften bunten Emojis: bunt sähe aus wie
+     eine Reaktion, die schon da ist, und darum geht es hier gerade nicht. */
+  .ko-re-auf { display: inline-flex; align-items: center; padding: 3px 9px; }
+  .ko-re-auf svg { display: block; }
   /* Die Auswahl in einer eigenen Zeile, nicht schwebend: über einer
      scrollenden Liste ist ein Menü, das mitfährt, auf dem Handy ein Ärgernis. */
   .ko-repick {
@@ -1566,8 +1569,7 @@
         auf.title = 'Reagieren';
         auf.setAttribute('aria-label', 'Reagieren');
         auf.setAttribute('aria-expanded', rePick === k.id ? 'true' : 'false');
-        auf.appendChild(el('span', null, '🙂'));
-        auf.appendChild(el('span', 'plus', '+'));
+        auf.appendChild(reIkon());
         fuss.appendChild(auf);
 
         if (!tief) {
@@ -1739,6 +1741,27 @@
     ['daumen_hoch', '👍', 'Daumen hoch'], ['daumen_runter', '👎', 'Daumen runter'],
     ['herz', '❤️', 'Herz'], ['bier', '🍺', 'Bier'],
   ];
+
+  /* Der Knopf, hinter dem die vier liegen: ein Gesicht mit Plus, gestrichelt
+     wie alles hier — ein fünftes buntes Emoji sähe aus wie eine fünfte
+     Reaktion, und genau das ist es nicht. Er trägt die Farbe des Fußes
+     (`currentColor`), steht also grau da und wird gelb, wenn er offen ist —
+     dieselbe Zurückhaltung, mit der Facebook sein "Gefällt mir" hinschreibt,
+     bloß als Zeichen statt als Wort. */
+  const reIkon = () => {
+    const s = s_el('svg', {
+      width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none',
+      stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round',
+      'aria-hidden': 'true', focusable: 'false',
+    });
+    // Der Kreis ist oben rechts offen: dort sitzt das Plus.
+    s.appendChild(s_el('path', { d: 'M20.9 13.4A9 9 0 1 1 10.6 3.1' }));
+    s.appendChild(s_el('circle', { cx: 9, cy: 10, r: 1.1, fill: 'currentColor', stroke: 'none' }));
+    s.appendChild(s_el('circle', { cx: 15, cy: 10, r: 1.1, fill: 'currentColor', stroke: 'none' }));
+    s.appendChild(s_el('path', { d: 'M8.2 14.6a4.6 4.6 0 0 0 7.6 0' }));
+    s.appendChild(s_el('path', { d: 'M19 2.6v4.8M16.6 5h4.8' }));
+    return s;
+  };
 
   /* Zwei Klappen am Thread, beide je Karte und höchstens eine offen: `rePick`
      ist die Id der Karte mit aufgeschlagener Emoji-Auswahl, `reWer` die Karte
