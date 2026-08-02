@@ -702,6 +702,41 @@
   .knopf:active { transform: translateY(1px); }
   .knopf[disabled] { opacity: .45; cursor: default; }
   .knopf.leer { background: transparent; }
+  /* Der Fuss fuer den, der noch nicht mitschreibt: erst der Weg, dann das
+     Feld. Vorher stand da ein nackter Knopf "Mitschreiben", hinter dem sich
+     das Adressfeld erst auftat - eine Tuer vor der Tuer, und was dahinter
+     kommt, stand nirgends. */
+  .tuersteher {
+    margin-bottom: 16px; padding: 13px 15px;
+    border: 1px dashed #ffffff2e; border-radius: 4px;
+  }
+  .tuer-titel { font-family: var(--hand); font-size: 17px; color: var(--kreide); }
+  .tuer-schritte {
+    margin: 8px 0 0; padding-left: 18px;
+    font-size: 12.5px; line-height: 1.7; color: var(--kreide-matt);
+  }
+  .tuer-note { margin: 9px 0 0; font-size: 12px; line-height: 1.5; color: var(--kreide-weg); }
+
+  /* --- Draussen ------------------------------------------------------------
+     Wer nicht mitschreibt, sieht den Siegerplatz, das Glas und die Ampel -
+     das ist der Koeder. Das Rad und die Abende bleiben zu, die Liste ist da,
+     aber nicht zu lesen. Ueber `display: none` und nicht ueber `hidden`:
+     `zeichneRad` und `zeichneTermine` setzen ihr `hidden` selbst, und zwar
+     bei jedem Nachfassen - ein hier gesetztes waere binnen einer Minute
+     wieder weg. Die Unschaerfe ist Darstellung, keine Sperre: die Zeilen
+     stehen weiter im Dokument, und die API gibt sie ohnehin jedem heraus. */
+  body.draussen #rad-block,
+  body.draussen #termin-block { display: none; }
+  .listenfeld { position: relative; }
+  body.draussen #rangliste {
+    filter: blur(4.5px); opacity: .5; pointer-events: none; user-select: none;
+  }
+  .verwischt-wort { display: none; }
+  body.draussen .verwischt-wort {
+    display: block; position: absolute; left: 0; right: 0; top: 50%;
+    transform: translateY(-50%); text-align: center;
+    font-family: var(--hand); font-size: 20px; color: var(--kreide);
+  }
   .zeile-klein {
     display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
     margin-top: 11px; font-size: 10px; letter-spacing: .08em; color: var(--kreide-weg);
@@ -747,7 +782,10 @@
   [hidden] { display: none !important; }
 </style>
 </head>
-<body>
+<!-- `draussen` steht von Anfang an da und faellt erst weg, wenn ein Token
+     gefunden ist (`formular()`). Andersherum blitzte die Liste beim Aufbau
+     einmal lesbar auf. -->
+<body class="draussen">
   <div class="brett">
     <div class="tafel">
 
@@ -1006,7 +1044,13 @@
           <span class="datum" id="block-datum"></span>
         </div>
 
-        <div id="rangliste"></div>
+        <!-- Draussen liegt der Satz ueber der verwischten Liste; drin ist er
+             weg und die Liste zu lesen. Beides haengt an `body.draussen`,
+             siehe `formular()`. -->
+        <div class="listenfeld">
+          <div id="rangliste"></div>
+          <div class="verwischt-wort kr">Wer hat kalt, steht hier.</div>
+        </div>
 
         <div class="block-fuss">
           <form id="melde-form" hidden>
@@ -1036,7 +1080,18 @@
             <button class="knopf" type="submit">Merken</button>
           </form>
 
-          <button class="knopf leer" id="zeig-anmeldung" hidden>Mitschreiben</button>
+          <!-- Wer noch nicht mitschreibt, liest hier, was ihn erwartet - und
+               hat das Feld dafuer gleich darunter, ohne Zwischenschritt. -->
+          <div class="tuersteher" id="tuersteher" hidden>
+            <div class="tuer-titel kr">Mitschreiben</div>
+            <ol class="tuer-schritte">
+              <li>Mailadresse eintippen</li>
+              <li>Link in der Mail klicken</li>
+              <li>Namen für die Tafel wählen</li>
+            </ol>
+            <p class="tuer-note">Kein Passwort, keine App. Danach steht deine Zahl in der
+              Liste, du drehst mit und redest mit.</p>
+          </div>
           <form id="anmelde-form" hidden>
             <div class="melde eins">
               <label><span class="feld-label">Deine E-Mail</span>
@@ -1848,6 +1903,7 @@
 
   let meinName = null;      // steht nach der ersten Antwort fest
   let brauchtNamen = false; // angemeldet, aber noch ohne Namen fuer die Liste
+  let linkRaus = false;     // Magic Link ist unterwegs: Feld weg, Meldung steht
 
   let heuteBei = null;      // Gewinner der geltenden Ziehung, faerbt die Liste
   let heuteStatus = null;   // 'offen' (wartet auf Antwort) oder 'zugesagt'
@@ -1884,16 +1940,25 @@
   }
 
   /* Drei Zustaende, und immer ist genau einer sichtbar:
-       draussen        -> Knopf "Anmelden", dahinter das Adressfeld
+       draussen        -> der Tuersteher, das Adressfeld offen darunter
        drin, namenlos  -> Namensfeld (direkt nach dem ersten Magic Link)
-       drin, benannt   -> Meldeformular */
+       drin, benannt   -> Meldeformular
+     `linkRaus` ist der vierte, fluechtige: der Link ist unterwegs, dann steht
+     an der Stelle nur noch die Meldung. Er gilt bis zum naechsten Aufbau der
+     Seite - und die kommt ohnehin, sobald der Link geklickt wird. */
   function formular() {
     const drin = !!merke();
     const namenlos = drin && brauchtNamen;
     $('melde-form').hidden = !drin || namenlos;
     $('name-form').hidden = !namenlos;
-    $('zeig-anmeldung').hidden = drin;
-    if (drin) $('anmelde-form').hidden = true;
+    $('tuersteher').hidden = drin || linkRaus;
+    $('anmelde-form').hidden = drin || linkRaus;
+    /* Rad, Abende und die lesbare Liste haengen an dieser einen Klasse. Dazu
+       `inert`: die Unschaerfe ist nur Farbe, die Sternknoepfe in den Zeilen
+       blieben sonst mit der Tabulatortaste erreichbar und oeffneten das
+       Blatt, das hier gerade nicht offenstehen soll. */
+    document.body.classList.toggle('draussen', !drin);
+    $('rangliste').toggleAttribute('inert', !drin);
     $('wer-bin-ich').textContent = meinName ? 'angemeldet als ' + meinName : 'angemeldet';
   }
 
@@ -3165,12 +3230,6 @@
     }
   });
 
-  $('zeig-anmeldung').addEventListener('click', () => {
-    $('zeig-anmeldung').hidden = true;
-    $('anmelde-form').hidden = false;
-    $('f-mail').focus();
-  });
-
   /* Adresse rein, Link raus. Die Antwort ist bewusst dieselbe, egal ob die
      Adresse bekannt ist - sonst verriete die Seite, wer mitspielt. */
   $('anmelde-form').addEventListener('submit', async ev => {
@@ -3179,8 +3238,12 @@
     knopf.disabled = true; sagt('');
     try {
       await ruf('/api/anmelden', { email: $('f-mail').value });
-      $('anmelde-form').hidden = true;
-      $('zeig-anmeldung').hidden = false;
+      /* Das Feld raeumt sich weg - die Meldung darunter ist jetzt die
+         Nachricht. Ueber `linkRaus`, nicht von Hand: die Tafel zeichnet den
+         Fuss bei jedem Nachfassen neu, und ein hier gesetztes `hidden` waere
+         binnen einer Minute wieder ueberschrieben. */
+      linkRaus = true;
+      formular();
       sagt('Link ist unterwegs. Schau ins Postfach — auch im Spam. Er gilt 15 Minuten.');
     } catch (e) {
       sagt(e.message, true);

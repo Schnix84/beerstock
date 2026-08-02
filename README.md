@@ -78,6 +78,21 @@ heute: hebt jemand später seine Note, bleibt die alte Karte, wie sie war. Gelö
 wird weich, geantwortet nur eine Ebene tief: bei Stufe drei ist die Spalte auf dem
 Handy vierzig Pixel breit.
 
+## Von außen
+
+Wer noch nicht mitschreibt, sieht ein Schaufenster: Siegerplatz, Glas und Ampel
+stehen offen da — wer gerade führt, mit wie viel und wie kalt. Die Liste darunter
+ist angeschrieben, aber nicht zu lesen, und darüber steht, was in ihr steht:
+*Wer hat kalt, steht hier.* Das Rad und die Abende bleiben zu, das Blatt mit
+Sternen und Gesagtem erst recht. Am Fuß steht dafür der ganze Weg hinein, drei
+Zeilen lang, und das Adressfeld gleich darunter — ohne Knopf davor, denn wer erst
+fragen muss, ob er fragen darf, tippt seine Adresse nicht ein.
+
+Das ist **Darstellung, keine Sperre.** Die verwischten Zeilen stehen weiter im
+Dokument, und die Leserouten antworten wie eh und je jedem ohne Token. Wirklich
+zu wäre es erst, wenn `/api/leaderboard`, `/api/bewertungen` und `/api/chronik`
+ohne `Bearer` nur noch den Siegerplatz herausgeben.
+
 ## Wie man mitmacht
 
 Mailadresse eintippen, Link in der Mail klicken, drin. Beim ersten Mal fragt die
