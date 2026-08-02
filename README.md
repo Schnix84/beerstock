@@ -133,7 +133,6 @@ Gemeldete Werte sind **ungeprüft**. Die einzige Ausnahme trägt die Marke
 
 ```
 index.html          eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
-status.json         der eigene Bestand — Rückfallebene, wenn die API nicht antwortet
 worker/             Cloudflare Worker + D1: Registrierung, Meldungen, Bestenliste
 worker/src/tafel.js Durable Object: verteilt an alle offenen Seiten, was sich geändert hat
 ```
@@ -142,9 +141,15 @@ Die Seite ist statisch und fragt nur. Geschrieben wird ausschließlich über den
 Worker; die Wohnung selbst ist von außen nicht erreichbar und ruft dort an, statt
 angerufen zu werden.
 
-`status.json` bleibt, was es war — Anzahl, Temperatur und Zeitpunkt des letzten
-Kühlschrankfotos, auf die volle Stunde gerundet. Antwortet die API nicht, zeigt
-der Deckel wieder diesen einen Kühlschrank statt einer leeren Tabelle.
+Die Wohnung meldet ihren Bestand über dieselbe Route wie jeder andere
+(`POST /api/report`) und steht in derselben Liste. Es gibt keinen zweiten Weg
+mehr: bis August 2026 schrieb Home Assistant zusätzlich ein `status.json` über
+die GitHub-Contents-API in dieses Repo, als Rückfallebene für den Fall, dass der
+Worker nicht antwortet. Das ist abgeschafft. Jede Meldung war ein Commit, und
+dessen Zeitstempel ist öffentlich und minutengenau — die Datei rundete den
+Zeitpunkt des letzten Kühlschrankfotos absichtlich auf die volle Stunde, die
+git-History daneben gab ihn dann doch preis, dazu den Verlauf des Bestands.
+Antwortet der Worker nicht, zeigt der Deckel jetzt nichts.
 
 ### Die Seite bleibt von selbst aktuell
 
