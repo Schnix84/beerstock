@@ -227,20 +227,31 @@
     background: linear-gradient(90deg, transparent, #ffffff40 8%, #ffffff40 92%, transparent);
   }
 
-  /* --- Das Glücksrad ------------------------------------------------------
-     Gezogen wird auf dem Worker, einmal am Tag, für alle dasselbe. Das Rad
-     hier dreht sich also nicht, um zu entscheiden — es fährt an, was schon
-     feststeht. Die Fläche eines Feldes IST die Chance; das muss man nicht
-     dazuschreiben, das sieht man.
+  /* --- Das Glücksrad: Flaschendrehen ---------------------------------------
+     Gezogen wird auf dem Worker, einmal am Tag, für alle dasselbe. Die Flasche
+     dreht sich also nicht, um zu entscheiden — sie fährt an, was schon
+     feststeht. Die Chance sitzt in der Länge des Bogens am Rand; die Namen
+     stehen außen und waagerecht, damit sie auch bei sieben Meldern lesbar
+     bleiben. Das ist der Grund für diese Form und nicht für das Tortenrad.
      --------------------------------------------------------------------- */
   .rad-block { margin-top: clamp(14px, 3.6vw, 20px); }
-  .rad-buehne { position: relative; width: 100%; max-width: 290px; margin: 2px auto 4px; }
-  .rad-buehne svg { display: block; width: 100%; overflow: visible; }
-  .rad-teller { transform-origin: 150px 150px; }
-  .seg-text { font-family: var(--hand); fill: var(--kreide); }
-  .zeiger { fill: var(--gelb); stroke: #00000055; stroke-width: .6; }
-  .nabe { fill: #ffffff14; stroke: #ffffff40; stroke-width: 1.4; }
-  .rad-rand { fill: none; stroke: #ffffff55; stroke-width: 2; }
+  .rad-buehne { position: relative; width: 100%; max-width: 320px; margin: 2px auto 4px; }
+  .rad-buehne svg { display: block; width: 100%; }
+  .rad-flasche { transform-origin: 150px 150px; }
+  .rad-bogen { fill: none; stroke-width: 7; stroke-linecap: butt; opacity: .55; }
+  .rad-name { font-family: var(--hand); fill: var(--kreide); font-size: 12.5px; }
+  .rad-zahl { font-family: var(--hand); fill: var(--kreide-weg); font-size: 10.5px; }
+
+  /* Die Flasche. Braunglas gibt es an der Tafel nicht — es bleibt gelbe
+     Kreide, nur die Deckkraft trennt Glas, Korken und Etikett. Ohne das
+     Etikett liest sich die Silhouette bei dieser Größe wie ein Fläschchen. */
+  .fl-glas    { fill: #e8c76626; stroke: var(--gelb); stroke-width: 2.2; stroke-linejoin: round; }
+  .fl-korken  { fill: var(--gelb); fill-opacity: .82; stroke: var(--gelb); stroke-width: 1.4; }
+  .fl-kniff   { stroke: #2a2f2c; stroke-width: 1.1; opacity: .55; }
+  .fl-band    { fill: var(--gelb); fill-opacity: .38; stroke: var(--gelb); stroke-width: 1.1; }
+  .fl-etikett { fill: var(--kreide); fill-opacity: .17; stroke: var(--kreide); stroke-width: 1.3; }
+  .fl-schrift { stroke: var(--kreide); stroke-width: 1.3; stroke-linecap: round; opacity: .75; }
+  .fl-glanz   { stroke: #ffffff; stroke-width: 2.2; stroke-linecap: round; opacity: .22; }
 
   /* Der Anschrieb: was die Auslosung ergeben hat. */
   .erg { text-align: center; margin: 12px 0 4px; }
@@ -560,16 +571,37 @@
         </div>
 
         <div class="rad-buehne" id="rad-buehne" hidden>
-          <svg viewBox="0 0 300 300" role="img" aria-labelledby="rad-titel">
-            <title id="rad-titel">Glücksrad: ein Feld je Melder, so groß wie sein Bestand</title>
-            <g class="rad-teller" id="rad-teller"></g>
-            <circle class="nabe" cx="150" cy="150" r="16"/>
-            <!-- Der Zeiger steht oben und dreht sich nicht mit. -->
-            <path class="zeiger" d="M150,18 L141,2 L159,2 Z"/>
+          <!-- Links und rechts 45 Einheiten Luft im viewBox: dort stehen die
+               Namen, und sie sollen nicht aus der Tafel laufen. -->
+          <svg viewBox="-45 0 390 300" role="img" aria-labelledby="rad-titel">
+            <title id="rad-titel">Flaschendrehen: ein Bogen je Melder, so lang wie sein Bestand</title>
+            <g id="rad-ring"></g>
+
+            <!-- Eine Longneck, an die Tafel gezeichnet. Der Hals zeigt, wer
+                 dran ist, also muss oben eindeutig oben sein: Kronkorken,
+                 Halsband, Schulter, Etikett. -->
+            <g class="rad-flasche" id="rad-flasche">
+              <path class="fl-glas" d="M144.5,104 L144.5,132 C144.5,142 132,146 132,158
+                                       L132,199 Q132,204 137,204 L163,204 Q168,204 168,199
+                                       L168,158 C168,146 155.5,142 155.5,132 L155.5,104 Z"/>
+              <path class="fl-korken" d="M141.5,104 L141.5,99 Q141.5,95.5 145,95.5 L155,95.5
+                                         Q158.5,95.5 158.5,99 L158.5,104 Z"/>
+              <g class="fl-kniff">
+                <path d="M144,104 L144,100 M147,104 L147,100 M150,104 L150,100
+                         M153,104 L153,100 M156,104 L156,100"/>
+              </g>
+              <rect class="fl-band" x="143.6" y="108" width="12.8" height="10" rx="1"/>
+              <rect class="fl-etikett" x="133.4" y="163" width="33.2" height="32" rx="1.5"/>
+              <circle class="fl-schrift" cx="150" cy="172" r="4.6" fill="none"/>
+              <g class="fl-schrift"><path d="M139.5,182.5 H160.5 M143,187 H157"/></g>
+              <g class="fl-glanz"><path d="M137.5,160 L137.5,200 M148,108 L148,128"/></g>
+            </g>
+
+            <circle cx="150" cy="150" r="3" fill="#ffffff30"/>
           </svg>
         </div>
 
-        <button class="knopf" id="rad-knopf" hidden>Rad drehen</button>
+        <button class="knopf" id="rad-knopf" hidden>Flasche drehen</button>
         <div class="erg" id="rad-erg" aria-live="polite" hidden></div>
         <p class="rad-note" id="rad-note" hidden></p>
 
@@ -715,10 +747,10 @@
     $('glas').classList.toggle('ungewiss', !Number.isFinite(anzahl));
   }
 
-  /* --- Das Rad --------------------------------------------------------------
-     Ein Feld je Melder, der Winkel proportional zum Gewicht. 0° ist oben, dort
-     steht der Zeiger; gerechnet wird im Uhrzeigersinn, in die Richtung, in die
-     man ein Rad schubsen würde. */
+  /* --- Flaschendrehen -------------------------------------------------------
+     Ein Bogen je Melder, die Länge proportional zum Gewicht. 0° ist oben,
+     dorthin zeigt der Flaschenhals im Ruhezustand; gerechnet wird im
+     Uhrzeigersinn, in die Richtung, in die man eine Flasche anstößt. */
   const RAD_KREIDE = ['#e8c766', '#cfd6cd', '#93a09a', '#e8c76699', '#cfd6cd88'];
   let radFelder = [];   // Segmentgrenzen des zuletzt gezeichneten Rades
   let radStand = 0;     // aktueller Drehwinkel, damit die nächste Drehung anschließt
@@ -822,7 +854,7 @@
        eingefrorene. Nur deshalb zeigt das Rad um 23 Uhr dieselben Felder wie
        um 19 Uhr, und die Animation landet auf einem Feld, das es noch gibt. */
     rad(segmente) {
-      const g = $('rad-teller'), R = 132;
+      const g = $('rad-ring'), R = 110;
       g.textContent = '';
       radFelder = [];
       const summe = segmente.reduce((a, s) => a + s.gewicht, 0) || 1;
@@ -831,49 +863,53 @@
       segmente.forEach((seg, i) => {
         const weite = seg.gewicht / summe * 360;
         radFelder.push({ name: seg.name, von, bis: von + weite });
-        const [x0, y0] = radPunkt(von, R), [x1, y1] = radPunkt(von + weite, R);
+
+        /* Der Bogen trägt die Chance. Eine kleine Lücke an beiden Enden, damit
+           man sieht, wo ein Feld aufhört — bei schmalen Bögen anteilig, sonst
+           bliebe vom kürzesten gar nichts übrig. */
+        const luecke = Math.min(1.5, weite * .12);
+        const [x0, y0] = radPunkt(von + luecke, R);
+        const [x1, y1] = radPunkt(von + weite - luecke, R);
         g.appendChild(s_el('path', {
-          d: `M150,150 L${x0.toFixed(1)},${y0.toFixed(1)} A${R},${R} 0 ` +
-             `${weite > 180 ? 1 : 0},1 ${x1.toFixed(1)},${y1.toFixed(1)} Z`,
-          fill: RAD_KREIDE[i % RAD_KREIDE.length], 'fill-opacity': .16,
-          stroke: '#ffffff38', 'stroke-width': 1.4,
+          class: 'rad-bogen', stroke: RAD_KREIDE[i % RAD_KREIDE.length],
+          d: `M${x0.toFixed(1)},${y0.toFixed(1)} A${R},${R} 0 ` +
+             `${weite > 180 ? 1 : 0},1 ${x1.toFixed(1)},${y1.toFixed(1)}`,
         }));
 
-        /* Beschriftung radial. Unter 30° Feldbreite passt kein Name mehr — dann
-           steht dort nur die Zahl, und wer das Feld sucht, findet es über die
-           Liste darunter. Das ist der Preis dieser Form. */
-        const mitte = von + weite / 2, [tx, ty] = radPunkt(mitte, 88);
-        const eng = weite < 30;
-        const t = s_el('text', {
-          x: tx.toFixed(1), y: ty.toFixed(1), class: 'seg-text',
-          'text-anchor': 'middle', 'dominant-baseline': 'middle',
-          'font-size': eng ? 11 : 14,
-          // Auf der linken Hälfte stünde die Schrift sonst auf dem Kopf.
-          transform: `rotate(${(mitte > 180 ? mitte + 90 : mitte - 90).toFixed(1)} ` +
-                     `${tx.toFixed(1)} ${ty.toFixed(1)})`,
+        /* Name außen und waagerecht — das ist der ganze Punkt dieser Form.
+           Auf der linken Hälfte hängt er nach innen, sonst liefe er aus dem
+           Bild. Lange Namen werden gekürzt, die Liste darunter hat den vollen. */
+        const mitte = von + weite / 2, [tx, ty] = radPunkt(mitte, R + 16);
+        const anker = mitte > 180 ? 'end' : 'start';
+        const name = s_el('text', {
+          x: tx.toFixed(1), y: ty.toFixed(1), class: 'rad-name',
+          'text-anchor': anker, 'dominant-baseline': 'middle',
         });
-        t.textContent = eng ? String(seg.gewicht)
-                            : kuerze(seg.name, Math.round(weite / 2.2)) + ' · ' + seg.gewicht;
-        g.appendChild(t);
+        name.textContent = kuerze(seg.name, 12);
+        const zahl = s_el('text', {
+          x: tx.toFixed(1), y: (ty + 13).toFixed(1), class: 'rad-zahl',
+          'text-anchor': anker, 'dominant-baseline': 'middle',
+        });
+        zahl.textContent = seg.gewicht + ' kalt';
+        g.append(name, zahl);
         von += weite;
       });
-
-      g.appendChild(s_el('circle', { class: 'rad-rand', cx: 150, cy: 150, r: R }));
     },
 
-    /* Das Rad auf ein Feld fahren. Der Gewinner steht vor dem ersten Bild fest
-       — er kommt vom Worker —, hier wird er nur angefahren. */
+    /* Die Flasche auf ein Feld fahren. Der Gewinner steht vor dem ersten Bild
+       fest — er kommt vom Worker —, hier wird er nur angefahren. Der Hals zeigt
+       im Ruhezustand nach oben, also ist der Zielwinkel die Feldmitte selbst. */
     radDrehen(name) {
       const i = radFelder.findIndex(f => f.name === name);
       if (i < 0) return Promise.resolve();
       const f = radFelder[i], mitte = (f.von + f.bis) / 2;
       // Nicht immer mittig halten, das sähe nach Raster aus statt nach Zufall.
-      const ziel = -(mitte + (Math.random() - .5) * (f.bis - f.von) * .7);
+      const ziel = mitte + (Math.random() - .5) * (f.bis - f.von) * .7;
       // Vorwärts weiter, mindestens fünf volle Runden ab dem Ist-Stand.
       radStand = ziel + 360 * (Math.ceil((radStand - ziel) / 360) + 5);
 
       const sparsam = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const g = $('rad-teller');
+      const g = $('rad-flasche');
       g.style.transition = sparsam ? 'none' : 'transform 4.2s cubic-bezier(.16,.9,.24,1)';
       g.style.transform = `rotate(${radStand.toFixed(2)}deg)`;
       return new Promise(fertig => setTimeout(fertig, sparsam ? 60 : 4300));
