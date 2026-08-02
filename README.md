@@ -82,11 +82,10 @@ Handy vierzig Pixel breit.
 
 Wer noch nicht mitschreibt, sieht ein Schaufenster: Siegerplatz, Glas und Ampel
 stehen offen da — wer gerade führt, mit wie viel und wie kalt. Die Liste darunter
-ist angeschrieben, aber nicht zu lesen, und darüber steht, was in ihr steht:
-*Wer hat kalt, steht hier.* Das Rad und die Abende bleiben zu, das Blatt mit
-Sternen und Gesagtem erst recht. Am Fuß steht dafür der ganze Weg hinein, drei
-Zeilen lang, und das Adressfeld gleich darunter — ohne Knopf davor, denn wer erst
-fragen muss, ob er fragen darf, tippt seine Adresse nicht ein.
+ist angeschrieben, aber nicht zu lesen. Das Rad und die Abende bleiben zu, das
+Blatt mit Sternen und Gesagtem erst recht. Am Fuß steht dafür der ganze Weg
+hinein, drei Zeilen lang, und das Adressfeld gleich darunter — ohne Knopf davor,
+denn wer erst fragen muss, ob er fragen darf, tippt seine Adresse nicht ein.
 
 **Die Tür ist nicht gemalt.** Ohne `Bearer` gibt `/api/leaderboard` nur den
 Siegerplatz heraus — ohne Id, ohne Verlauf, ohne Sternschnitt, dazu `los: null`,

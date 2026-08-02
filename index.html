@@ -723,11 +723,11 @@
      aber nicht zu lesen. Ueber `display: none` und nicht ueber `hidden`:
      `zeichneRad` und `zeichneTermine` setzen ihr `hidden` selbst, und zwar
      bei jedem Nachfassen - ein hier gesetztes waere binnen einer Minute
-     wieder weg. Die Unschaerfe ist Darstellung, keine Sperre: die Zeilen
-     stehen weiter im Dokument, und die API gibt sie ohnehin jedem heraus. */
+     wieder weg. Verwischt wird dabei nichts Echtes: der Worker gibt draussen
+     nur den Siegerplatz heraus, unter der Unschaerfe liegt der gezeichnete
+     Platzhalter (siehe `platzhalter()`). */
   body.draussen #rad-block,
   body.draussen #termin-block { display: none; }
-  .listenfeld { position: relative; }
   body.draussen #rangliste {
     filter: blur(4.5px); opacity: .5; pointer-events: none; user-select: none;
   }
@@ -743,12 +743,6 @@
   .ph-strich.duenn { height: 8px; margin-top: 9px; background: #ffffff14; }
   .ph-zahl { width: 34px; height: 26px; border-radius: 2px; background: #ffffff20; }
 
-  .verwischt-wort { display: none; }
-  body.draussen .verwischt-wort {
-    display: block; position: absolute; left: 0; right: 0; top: 50%;
-    transform: translateY(-50%); text-align: center;
-    font-family: var(--hand); font-size: 20px; color: var(--kreide);
-  }
   .zeile-klein {
     display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
     margin-top: 11px; font-size: 10px; letter-spacing: .08em; color: var(--kreide-weg);
@@ -1056,13 +1050,7 @@
           <span class="datum" id="block-datum"></span>
         </div>
 
-        <!-- Draussen liegt der Satz ueber der verwischten Liste; drin ist er
-             weg und die Liste zu lesen. Beides haengt an `body.draussen`,
-             siehe `formular()`. -->
-        <div class="listenfeld">
-          <div id="rangliste"></div>
-          <div class="verwischt-wort kr">Wer hat kalt, steht hier.</div>
-        </div>
+        <div id="rangliste"></div>
 
         <div class="block-fuss">
           <form id="melde-form" hidden>
