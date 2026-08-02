@@ -522,6 +522,31 @@
   }
   .ko-re.an { border-color: #e8c76688; color: var(--gelb); background: #e8c7661a; }
   .ko-re .zahl { margin-left: 4px; font-variant-numeric: tabular-nums; }
+  /* Der aufgeschlagene Chip: sein „wer" steht darunter, das soll man sehen. */
+  .ko-re.offen { border-color: #ffffff55; color: var(--kreide); }
+  /* Der Knopf, hinter dem die vier liegen. Vier offene Emojis an jeder Karte
+     waren vier Angebote, wo eines reicht — und sie standen dem im Weg, was
+     wirklich an der Karte hängt: den Reaktionen, die es schon gibt. */
+  .ko-re-auf .plus { margin-left: 2px; opacity: .65; }
+  /* Die Auswahl in einer eigenen Zeile, nicht schwebend: über einer
+     scrollenden Liste ist ein Menü, das mitfährt, auf dem Handy ein Ärgernis. */
+  .ko-repick {
+    flex-basis: 100%; display: flex; gap: 6px; margin-top: 3px;
+    animation: re-auf .14s ease-out;
+  }
+  .ko-pick {
+    border: 1px solid #ffffff22; border-radius: 999px; background: #ffffff0d;
+    padding: 3px 10px 4px; font-size: 15px; line-height: 1.2; cursor: pointer;
+  }
+  .ko-pick.an { border-color: #e8c76688; background: #e8c7661a; }
+  @keyframes re-auf { from { opacity: 0; transform: translateY(-3px); } }
+  /* Wer wie reagiert hat. Eine Zeile, kein Blatt: es sind selten mehr als eine
+     Handvoll Namen, und ein Overlay dafür wäre ein zweiter Weg zurück. */
+  .ko-wer {
+    flex-basis: 100%; display: flex; gap: 6px; margin-top: 3px;
+    font-size: 11px; line-height: 1.45; color: var(--kreide-matt);
+    overflow-wrap: anywhere; animation: re-auf .14s ease-out;
+  }
   .ko-tat {
     border: none; background: none; padding: 2px 4px; font-size: 10.5px;
     color: var(--kreide-weg); text-decoration: underline; cursor: pointer;
@@ -713,6 +738,8 @@
     .erg-kringel { animation: none; stroke-dashoffset: 0; }
     /* Die „läuft"-Marke steht ohnehin da; das Pulsen ist die Zugabe. */
     .t-marke.jetzt { animation: none; }
+    /* Emoji-Auswahl und Namenszeile sind sofort da, statt aufzugehen. */
+    .ko-repick, .ko-wer { animation: none; }
   }
   [hidden] { display: none !important; }
 </style>
@@ -1514,18 +1541,35 @@
 
       const fuss = el('div', 'ko-fuss');
       if (!k.geloescht) {
-        REAKTIONSARTEN.forEach(([art, bild]) => {
+        /* Nur was wirklich drangeklebt wurde, steht auch da. Ein Chip ist
+           kein Schalter mehr, sondern die Frage „wer?" — ein Tap klappt die
+           Namen darunter auf. Gesetzt und zurückgenommen wird hinter dem
+           Knopf daneben, wie überall sonst im Netz. */
+        REAKTIONSARTEN.forEach(([art, bild, wort]) => {
           const vor = k.reaktionen.find(r => r.art === art);
-          // Ungedrückte Reaktionen stehen nur an der eigenen Karte nicht im
-          // Weg — überall sonst braucht man sie zum Draufdrücken.
-          const b = el('button', 'ko-re' + (vor && vor.meins ? ' an' : ''));
+          if (!vor || !vor.anzahl) return;
+          const offen = reWer && reWer.id === k.id && reWer.art === art;
+          const b = el('button', 'ko-re' + (vor.meins ? ' an' : '') + (offen ? ' offen' : ''));
           b.type = 'button';
           b.dataset.art = art;
           b.dataset.id = k.id;
+          b.title = wort + ' — wer?';
+          b.setAttribute('aria-expanded', offen ? 'true' : 'false');
           b.appendChild(el('span', null, bild));
-          if (vor && vor.anzahl) b.appendChild(el('span', 'zahl', String(vor.anzahl)));
+          b.appendChild(el('span', 'zahl', String(vor.anzahl)));
           fuss.appendChild(b);
         });
+
+        const auf = el('button', 'ko-re ko-re-auf' + (rePick === k.id ? ' an' : ''));
+        auf.type = 'button';
+        auf.dataset.auf = k.id;
+        auf.title = 'Reagieren';
+        auf.setAttribute('aria-label', 'Reagieren');
+        auf.setAttribute('aria-expanded', rePick === k.id ? 'true' : 'false');
+        auf.appendChild(el('span', null, '🙂'));
+        auf.appendChild(el('span', 'plus', '+'));
+        fuss.appendChild(auf);
+
         if (!tief) {
           const a = el('button', 'ko-tat', 'Antworten');
           a.type = 'button'; a.dataset.antwort = k.id; a.dataset.wer = k.autor;
@@ -1537,6 +1581,38 @@
           const we = el('button', 'ko-tat', 'löschen');
           we.type = 'button'; we.dataset.weg = k.id;
           fuss.append(ae, we);
+        }
+
+        /* Die vier, aufgeschlagen. Was man selbst schon gedrückt hat, steht
+           hier hervorgehoben — derselbe Druck nimmt es zurück, das ist der
+           einzige Weg dorthin, seit der Chip die Namen zeigt. */
+        if (rePick === k.id) {
+          const w = el('div', 'ko-repick');
+          REAKTIONSARTEN.forEach(([art, bild, wort]) => {
+            const vor = k.reaktionen.find(r => r.art === art);
+            const p = el('button', 'ko-pick' + (vor && vor.meins ? ' an' : ''), bild);
+            p.type = 'button';
+            p.dataset.pick = art;
+            p.dataset.id = k.id;
+            p.title = wort;
+            p.setAttribute('aria-label', wort);
+            p.setAttribute('aria-pressed', vor && vor.meins ? 'true' : 'false');
+            w.appendChild(p);
+          });
+          fuss.appendChild(w);
+        }
+
+        // Wer wie reagiert hat, zum aufgeschlagenen Chip.
+        if (reWer && reWer.id === k.id) {
+          const g = k.reaktionen.find(r => r.art === reWer.art);
+          const bild = (REAKTIONSARTEN.find(a => a[0] === reWer.art) || [])[1];
+          if (g) {
+            const w = el('div', 'ko-wer');
+            w.appendChild(el('span', null, bild));
+            w.appendChild(el('span', null, (g.namen || []).join(', ')
+              || g.anzahl + (g.anzahl === 1 ? ' Reaktion' : ' Reaktionen')));
+            fuss.appendChild(w);
+          }
         }
       }
       z.appendChild(fuss);
@@ -1657,10 +1733,20 @@
   const grad = t => Number.isFinite(t) ? t.toFixed(1).replace('.', ',') + ' °C' : '–';
 
   /* Die vier Reaktionen, wie bei WhatsApp. Mehr wären eine Tastatur, weniger
-     ließen "nein, aber lieb gemeint" nicht ausdrücken. */
+     ließen "nein, aber lieb gemeint" nicht ausdrücken. Das Wort dahinter ist
+     das, was ein Screenreader vorliest — ein Emoji allein sagt ihm nichts. */
   const REAKTIONSARTEN = [
-    ['daumen_hoch', '👍'], ['daumen_runter', '👎'], ['herz', '❤️'], ['bier', '🍺'],
+    ['daumen_hoch', '👍', 'Daumen hoch'], ['daumen_runter', '👎', 'Daumen runter'],
+    ['herz', '❤️', 'Herz'], ['bier', '🍺', 'Bier'],
   ];
+
+  /* Zwei Klappen am Thread, beide je Karte und höchstens eine offen: `rePick`
+     ist die Id der Karte mit aufgeschlagener Emoji-Auswahl, `reWer` die Karte
+     samt Art, deren Namen darunterstehen. Sie liegen HIER und nicht am
+     Knoten, weil der Thread bei jedem Nachfassen neu gebaut wird — am Knoten
+     wäre das Aufgeklappte nach der nächsten Antwort von selbst wieder zu. */
+  let rePick = null;
+  let reWer = null;
 
   /* Alter eines Kommentars. Feiner als `standText`: in einem Thread ist der
      Unterschied zwischen "gerade" und "vor zwei Stunden" die halbe Information. */
@@ -2190,6 +2276,7 @@
     flyZiel = ziel;
     flyMeins = {};
     flyDaten = null;
+    rePick = null; reWer = null;   // aufgeklappt bleibt nichts über ein Ziel hinweg
     letzterThread = '';       // anderes Ziel, anderer Vergleichsstand
     $('fly-titel').textContent = titel;
     $('fly-unter').textContent = ziel.startsWith('user') ? 'als Gastgeber' : 'der Abend';
@@ -2501,12 +2588,18 @@
     if (!k) return;
     const vor = k.reaktionen.find(r => r.art === art);
     const anJetzt = !(vor && vor.meins);
+    // Der eigene Name gehört in die Liste darunter, sonst zeigt ein offener
+    // Chip einen Stand, den der eigene Druck gerade überholt hat.
+    const ich = meinName || 'ich';
     if (vor) {
       vor.meins = anJetzt;
       vor.anzahl += anJetzt ? 1 : -1;
+      vor.namen = anJetzt
+        ? [...(vor.namen || []), ich]
+        : (vor.namen || []).filter(n => n !== ich);
       if (vor.anzahl <= 0) k.reaktionen = k.reaktionen.filter(r => r !== vor);
     } else {
-      k.reaktionen.push({ art, anzahl: 1, meins: true });
+      k.reaktionen.push({ art, anzahl: 1, meins: true, namen: [ich] });
     }
     flyThread();
     flySagt('');
@@ -2516,7 +2609,9 @@
       const jetzt = flyFinden(id);
       if (!jetzt) return;
       jetzt.reaktionen = jetzt.reaktionen.filter(r => r.art !== art);
-      if (d.anzahl > 0) jetzt.reaktionen.push({ art, anzahl: d.anzahl, meins: d.meins });
+      if (d.anzahl > 0) {
+        jetzt.reaktionen.push({ art, anzahl: d.anzahl, meins: d.meins, namen: d.namen || [] });
+      }
       flyThread();
     } catch (e) {
       flySagt(e.message, true);
@@ -2879,11 +2974,44 @@
   /* Alles am Thread hängt an einem Zuhörer: der Baum wird bei jeder Antwort
      neu gebaut, ein Zuhörer je Karte ginge dabei verloren. */
   $('fly-thread').addEventListener('click', async ev => {
+    /* Ein Griff irgendwo anders schließt die Emoji-Auswahl — sie ist ein Menü,
+       und ein Menü bleibt nicht offen stehen. Zugeklappt wird am Knoten selbst
+       statt über `flyThread()`: der Rest dieses Zuhörers arbeitet noch mit dem
+       angeklickten Element weiter, und das läge nach einem Neubau daneben. */
+    if (rePick !== null && !ev.target.closest('.ko-repick, .ko-re-auf')) {
+      rePick = null;
+      const t = $('fly-thread');
+      t.querySelectorAll('.ko-repick').forEach(n => n.remove());
+      t.querySelectorAll('.ko-re-auf.an').forEach(n => {
+        n.classList.remove('an');
+        n.setAttribute('aria-expanded', 'false');
+      });
+    }
+
     const foto = ev.target.closest('.ko-bild');
     if (foto) { lupeAuf(foto.dataset.gross); return; }
 
+    // Ein Emoji aus der Auswahl: setzen oder zurücknehmen, dann zuklappen.
+    const pick = ev.target.closest('.ko-pick');
+    if (pick) {
+      rePick = null;
+      flyReagieren(Number(pick.dataset.id), pick.dataset.pick);
+      return;
+    }
+
     const re = ev.target.closest('.ko-re');
-    if (re) { flyReagieren(Number(re.dataset.id), re.dataset.art); return; }
+    if (re) {
+      // Der Knopf mit dem Gesicht klappt die vier auf, ein Chip die Namen.
+      if (re.dataset.auf) {
+        const id = Number(re.dataset.auf);
+        rePick = rePick === id ? null : id;
+      } else {
+        const id = Number(re.dataset.id), art = re.dataset.art;
+        reWer = (reWer && reWer.id === id && reWer.art === art) ? null : { id, art };
+      }
+      flyThread();
+      return;
+    }
 
     const tat = ev.target.closest('.ko-tat');
     if (!tat) return;

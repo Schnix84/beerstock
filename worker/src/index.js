@@ -597,10 +597,15 @@ async function zielFehlt(env, ziel) {
   return t ? null : 'Den Termin gibt es nicht';
 }
 
-/* Der Baum, fertig zusammengesteckt. Drei Abfragen in einem batch, weil eine
+/* Der Baum, fertig zusammengesteckt. Zwei Abfragen in einem batch, weil eine
    verschachtelte SQL-Fassung dieselbe Arbeit in einer schlechter lesbaren Form
-   taete: Kommentare, die Reaktionen gezaehlt, und die eigenen davon. */
-const baumStmts = (env, ziel, ichId) => [
+   taete: die Kommentare, und die Reaktionen dazu.
+
+   Die Reaktionen kommen ROH, Zeile fuer Zeile mit Namen - nicht gezaehlt. Die
+   Seite zeigt auf Tippen, wer wie reagiert hat, und dafuer ist die Zahl allein
+   zu wenig. Gezaehlt wird jetzt beim Zusammenstecken, und die eigene Reaktion
+   faellt dabei ab: die dritte Abfrage (nur die eigenen) ist damit weg. */
+const baumStmts = (env, ziel) => [
   /* `k.sterne` ist der Schnappschuss aus dem Moment des Absendens, kein Join
      auf `bewertungen` - die Zeile dort wird ueberschrieben, die Karte hier
      soll stehen bleiben (siehe 0009_sterne_am_kommentar.sql). */
@@ -614,28 +619,27 @@ const baumStmts = (env, ziel, ichId) => [
     LIMIT ?
   `).bind(ziel.art, ziel.id, KOMMENTARE_ZIEL),
   env.DB.prepare(`
-    SELECT r.kommentar_id, r.art, count(*) AS anzahl
+    SELECT r.kommentar_id, r.art, r.autor_id, u.name AS autor
     FROM reaktionen r
     JOIN kommentare k ON k.id = r.kommentar_id
+    JOIN users u ON u.id = r.autor_id
     WHERE k.ziel_art = ? AND k.ziel_id = ?
-    GROUP BY r.kommentar_id, r.art
+    ORDER BY r.erstellt
   `).bind(ziel.art, ziel.id),
-  env.DB.prepare(`
-    SELECT r.kommentar_id, r.art
-    FROM reaktionen r
-    JOIN kommentare k ON k.id = r.kommentar_id
-    WHERE k.ziel_art = ? AND k.ziel_id = ? AND r.autor_id = ?
-  `).bind(ziel.art, ziel.id, ichId),
 ];
 
-function baumBauen(zeilen, reaktionen, eigene, ichId, env) {
-  const meine = new Set(eigene.map(r => r.kommentar_id + ':' + r.art));
+function baumBauen(zeilen, reaktionen, ichId, env) {
+  // Je Kommentar eine Map art -> Gruppe, damit die Namen in der Reihenfolge
+  // stehen, in der reagiert wurde - wer zuerst kam, steht vorn.
   const proKommentar = new Map();
   for (const r of reaktionen) {
-    if (!proKommentar.has(r.kommentar_id)) proKommentar.set(r.kommentar_id, []);
-    proKommentar.get(r.kommentar_id).push({
-      art: r.art, anzahl: r.anzahl, meins: meine.has(r.kommentar_id + ':' + r.art),
-    });
+    if (!proKommentar.has(r.kommentar_id)) proKommentar.set(r.kommentar_id, new Map());
+    const je = proKommentar.get(r.kommentar_id);
+    if (!je.has(r.art)) je.set(r.art, { art: r.art, anzahl: 0, meins: false, namen: [] });
+    const g = je.get(r.art);
+    g.anzahl++;
+    g.namen.push(r.autor);
+    if (r.autor_id === ichId) g.meins = true;
   }
 
   const karte = z => {
@@ -655,7 +659,7 @@ function baumBauen(zeilen, reaktionen, eigene, ichId, env) {
       geaendert: utc(z.geaendert),
       meins: z.autor_id === ichId,
       sterne: weg ? null : sterne,
-      reaktionen: proKommentar.get(z.id) || [],
+      reaktionen: [...(proKommentar.get(z.id) || new Map()).values()],
       antworten: [],
     };
   };
@@ -1638,14 +1642,23 @@ const ROUTEN = {
         .bind(id, ich.id, art).run();
     }
 
-    const n = await env.DB.prepare(
-      'SELECT count(*) AS anzahl FROM reaktionen WHERE kommentar_id = ? AND art = ?')
-      .bind(id, art).first();
+    /* Nicht die Zahl, sondern die Namen - die Seite zeigt auf Tippen, wer wie
+       reagiert hat, und muss ihre Liste nach dem eigenen Druck sofort richtig
+       haben. Gezaehlt wird daraus; eine zweite Abfrage dafuer waere eine
+       Runde fuer eine Zahl, die hier schon dasteht. */
+    const n = await env.DB.prepare(`
+      SELECT u.name AS autor
+      FROM reaktionen r
+      JOIN users u ON u.id = r.autor_id
+      WHERE r.kommentar_id = ? AND r.art = ?
+      ORDER BY r.erstellt
+    `).bind(id, art).all();
+    const namen = n.results.map(z => z.autor);
     /* Nur das Ziel: Reaktionen zaehlen nicht in die Liste. Der Daumen ist die
        kleinste Handlung auf der ganzen Seite - und die, bei der das
        Nacheinander am meisten stoert. */
     anstoss(request, env, ctx, `${k.ziel_art}:${k.ziel_id}`);
-    return antwort(request, { art, anzahl: n.anzahl, meins });
+    return antwort(request, { art, anzahl: namen.length, meins, namen });
   },
 
   // -------------------------------------------------------------------------
@@ -1666,7 +1679,7 @@ const ROUTEN = {
         .bind(ziel.art, ziel.id),
       env.DB.prepare('SELECT sterne FROM bewertungen WHERE autor_id = ? AND ziel_art = ? AND ziel_id = ?')
         .bind(ichId, ziel.art, ziel.id),
-      ...baumStmts(env, ziel, ichId),
+      ...baumStmts(env, ziel),
     ];
     /* Bei einem Abend haengt das Bewerten an seinem Zustand - dieselbe Regel
        wie in POST /api/bewerten, nur andersherum gelesen: die Seite soll das
@@ -1680,7 +1693,7 @@ const ROUTEN = {
         FROM termine WHERE id = ?
       `).bind(ziel.id));
     }
-    const [alle, meins, roh, reakt, eigene, abend] = await env.DB.batch(stmts);
+    const [alle, meins, roh, reakt, abend] = await env.DB.batch(stmts);
 
     const e = schnitte(alle.results).get(`${ziel.art}:${ziel.id}`);
     const kategorien = KATEGORIEN[ziel.art].map(([feld, name]) => {
@@ -1726,7 +1739,7 @@ const ROUTEN = {
       // Schreiben darf man ueberall, auch bei sich selbst: sonst kann der
       // Gastgeber im eigenen Thread nicht antworten.
       darf_schreiben: !!(ich && ich.name),
-      kommentare: baumBauen(roh.results, reakt.results, eigene.results, ichId, env),
+      kommentare: baumBauen(roh.results, reakt.results, ichId, env),
     });
   },
 

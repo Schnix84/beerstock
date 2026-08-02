@@ -68,7 +68,11 @@ auf den Gastgeber ein, sonst zählte ein einziger Abend doppelt. Sich selbst bew
 niemand.
 
 Dazu **Kommentare** mit einer Antwortebene und Reaktionen (👍 👎 ❤️ 🍺) wie bei
-WhatsApp. Wer beim Schreiben schon Sterne vergeben hat, trägt sie über seinem Text —
+WhatsApp. Die vier liegen hinter einem Knopf und kommen erst auf Tippen heraus; an
+der Karte steht nur, was wirklich drangeklebt wurde. Ein Tap auf so eine Reaktion
+fragt nicht „auch?", sondern „wer?" — darunter klappen die Namen auf, die sie
+gesetzt haben. Zurückgenommen wird über denselben Knopf, mit dem sie kam.
+Wer beim Schreiben schon Sterne vergeben hat, trägt sie über seinem Text —
 so liest man, worauf sich das Lob bezieht. Es ist der Stand von damals, nicht der von
 heute: hebt jemand später seine Note, bleibt die alte Karte, wie sie war. Gelöscht
 wird weich, geantwortet nur eine Ebene tief: bei Stufe drei ist die Spalte auf dem
@@ -162,7 +166,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/bewertungen` | `?ziel=user:5` — Schnitte, eigene Abgabe, Kommentarbaum |
 | `POST /api/kommentar` | `{ziel_art, ziel_id, text, antwort_auf?}` |
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
-| `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück |
+| `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
 | `GET /api/chronik` | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
