@@ -1346,14 +1346,32 @@ const ROUTEN = {
     } else {
       /* Ein Abend wird bewertet, nachdem er stattgefunden hat. Vorher waere es
          eine Erwartung, keine Bewertung - und ein abgesagter Abend hat gar
-         nicht stattgefunden. */
+         nicht stattgefunden.
+
+         Und nicht vom Gastgeber: dieselbe Regel wie ein paar Zeilen weiter
+         oben bei `user`, denn es ist derselbe Fall. Der Abend heisst nach ihm,
+         und "Versorgung" und "Location" bewerten nichts anderes als das, was
+         er gestellt hat. Dass "Stimmung" und "Ausklang" das nicht sind - er
+         war ja dabei - ist der ehrliche Einwand dagegen; zwei Kategorien zu
+         erlauben und zwei zu sperren waere aber eine Regel, die sich niemand
+         merkt, und eine halb ausgegraute Sternreihe sieht kaputt aus.
+
+         Gehaengt an `gastgeber_id`, NICHT an `erstellt_von`: wer den Abend
+         eines anderen von Hand eintraegt, darf ihn bewerten.
+
+         Warum das hier steht und nicht oben bei der Ruecknahme: zurueckgeben
+         darf man immer. Sonst haenge eine Note, die vor dieser Regel entstand,
+         fuer immer fest. */
       const t = await env.DB.prepare(`
-        SELECT abgesagt_am, (beginnt_am <= datetime('now')) AS gewesen
+        SELECT abgesagt_am, gastgeber_id, (beginnt_am <= datetime('now')) AS gewesen
         FROM termine WHERE id = ?
       `).bind(ziel.id).first();
       if (!t) return fehler(request, 'Den Termin gibt es nicht', 404);
       if (t.abgesagt_am) return fehler(request, 'Der Abend ist abgesagt worden', 409);
       if (!t.gewesen) return fehler(request, 'Der Abend hat noch nicht angefangen', 409);
+      if (t.gastgeber_id === ich.id) {
+        return fehler(request, 'Den eigenen Abend bewertet man nicht', 403);
+      }
     }
 
     /* Wie die Meldesperre, aber ausdruecklich nur gegen ANDERE Ziele - warum,
@@ -1658,7 +1676,7 @@ const ROUTEN = {
        mit - ein eigener Ruf waere eine Runde fuer eine Zeile. */
     if (ziel.art === 'termin') {
       stmts.push(env.DB.prepare(`
-        SELECT abgesagt_am, (beginnt_am <= datetime('now')) AS gewesen
+        SELECT abgesagt_am, gastgeber_id, (beginnt_am <= datetime('now')) AS gewesen
         FROM termine WHERE id = ?
       `).bind(ziel.id));
     }
@@ -1678,13 +1696,19 @@ const ROUTEN = {
     /* Warum nicht - und zwar als fertiger Satz. Die Regel steht hier, also
        gehoert ihre Begruendung auch hierher: die Seite fuehrte sonst eine
        zweite Fassung davon, und zwei Fassungen laufen auseinander. Die
-       Reihenfolge ist die, in der es den Leser angeht. */
+       Reihenfolge ist die, in der es den Leser angeht.
+
+       Der Gastgeber steht bewusst VOR "abgesagt" und "noch nicht gewesen":
+       sein Grund gilt fuer immer, die beiden anderen gehen vorbei. Andersherum
+       gelesen verspraeche das Blatt ihm etwas ("wenn der Abend gewesen ist"),
+       das nie eintritt. */
     const a = abend && abend.results[0];
     const darfNicht =
         !(ich && ich.name)                        ? 'Zum Bewerten anmelden.'
       : ziel.art === 'user' && ich.id === ziel.id ? 'Sich selbst bewertet man nicht.'
       : ziel.art !== 'termin'                     ? null
       : !a                                        ? 'Den Abend gibt es nicht mehr.'
+      : a.gastgeber_id === ich.id                 ? 'Den eigenen Abend bewertet man nicht.'
       : a.abgesagt_am                             ? 'Abgesagt — bewertet wird ein Abend, den es gab.'
       : !a.gewesen                                ? 'Bewertet wird, wenn der Abend gewesen ist.'
       : null;
