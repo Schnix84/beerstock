@@ -170,7 +170,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/chronik` | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
-| `GET /api/health` | Bereitschaft, inklusive Datenbank, Mailversand und Verteiler |
+| `GET /api/health` | Bereitschaft, inklusive Datenbank, Mailversand, Neu-Meldung und Verteiler |
 
 Grenzen: 0–999 Biere, −30…+30 °C, eine Meldung pro Minute und Nutzer, ein
 Absagegrund von höchstens 120 Zeichen. Ausgelost wird ab zwei Meldern mit etwas
@@ -194,6 +194,14 @@ Zugriffsprotokoll. Die Seite räumt es sofort nach dem Einlösen aus der Adressz
 Mails gehen über [AgentMail](https://agentmail.to) raus — reine HTTP-API, kein
 SMTP. Der Schlüssel liegt als Worker-Secret `AGENTMAIL_KEY`.
 
+Über dieselbe Leitung erfährt der Gastgeber von jedem Neuen: eine Mail an
+`MELDE_AN`, sobald sich einer zum ersten Mal einen Namen gibt — mit Name,
+Adresse und dem wievielten Melder. Genau einmal je Nutzer; wer sich später
+umbenennt, löst nichts aus. Auch `MELDE_AN` ist ein Secret, hier aber nur, damit
+die Adresse nicht im offenen Repo steht; fehlt sie, bleibt die Meldung aus. Sie
+geht nach der Antwort raus (`waitUntil`) und ist in jedem Fehlerfall stumm — an
+einer Meldung, die nicht ankommt, soll keine Anmeldung scheitern.
+
 Meldungen werden nie überschrieben: der aktuelle Stand ist die jüngste Zeile je
 Nutzer, der Verlauf fällt dabei von selbst an.
 
@@ -208,6 +216,10 @@ cd worker
 npx wrangler d1 migrations apply beerstock --remote  # Schema
 npx wrangler deploy                                  # Worker
 ```
+
+Einmalig dazu die beiden Secrets, sonst geht keine Mail raus und keine Meldung
+ein: `npx wrangler secret put AGENTMAIL_KEY` und `npx wrangler secret put
+MELDE_AN`.
 
 Der Verteiler braucht kein eigenes Kommando: `Tafel` steht als Durable Object in
 `wrangler.jsonc` und entsteht beim ersten Deploy mit. Er speichert nichts —

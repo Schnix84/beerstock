@@ -22,6 +22,13 @@
   // Kein Geheimnis, deshalb hier und nicht als Secret. Der API-Schluessel
   // dazu heisst AGENTMAIL_KEY und liegt bei Cloudflare:
   //     npx wrangler secret put AGENTMAIL_KEY
+  //
+  // Ebenfalls als Secret, aber aus einem anderen Grund: MELDE_AN, die Adresse
+  // des Betreibers, an die eine Mail geht, sobald ein Neuer sich einen Namen
+  // gibt. Sie ist kein Geheimnis, aber dieses Repo ist oeffentlich, und eine
+  // Mailadresse im Klartext darin wird abgegrast:
+  //     npx wrangler secret put MELDE_AN
+  // Fehlt sie, bleibt die Meldung einfach aus - GET /api/health sagt es.
   "vars": {
     "AGENTMAIL_INBOX": "beerstock@agentmail.to",
     "SEITE": "https://schnix84.github.io/beerstock/",

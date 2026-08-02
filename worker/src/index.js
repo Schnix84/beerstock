@@ -716,6 +716,34 @@ const kommentarZaehlerStmt = env => env.DB.prepare(`
 // ---------------------------------------------------------------------------
 // Mailversand ueber AgentMail. Reine HTTP-API, kein SMTP.
 // ---------------------------------------------------------------------------
+
+/* Der eine Weg nach draussen. Beide Mails - der Magic Link an den Nutzer und
+   die Meldung an den Betreiber - gehen hier durch, damit Absender, Fehlerbild
+   und Protokollzeile nur an einer Stelle stehen. */
+async function schickeMail(env, empfaenger, betreff, text, html) {
+  const r = await fetch(
+    `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(env.AGENTMAIL_INBOX)}/messages/send`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.AGENTMAIL_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ to: empfaenger, subject: betreff, text, html }),
+    });
+
+  if (!r.ok) {
+    const grund = await r.text().catch(() => '');
+    throw new Error(`AgentMail ${r.status}: ${grund.slice(0, 200)}`);
+  }
+}
+
+// Fremder Text im HTML-Teil einer Mail. Namen sind zwar eng geprueft, der
+// lokale Teil einer Mailadresse ist es nicht - `a<b@x.de` kaeme sonst als
+// Markup an.
+const nurText = s => String(s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 async function schickeLink(env, empfaenger, link) {
   const text =
 `Hier entlang, dann bist du drin:
@@ -736,25 +764,43 @@ angefordert, ist nichts passiert - dann wirf die Mail einfach weg.`;
      die Mail einfach weg.</p>
 </div>`;
 
-  const r = await fetch(
-    `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(env.AGENTMAIL_INBOX)}/messages/send`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${env.AGENTMAIL_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: empfaenger,
-        subject: 'Dein Link zum Bierranking',
-        text, html,
-      }),
-    });
+  await schickeMail(env, empfaenger, 'Dein Link zum Bierranking', text, html);
+}
 
-  if (!r.ok) {
-    const grund = await r.text().catch(() => '');
-    throw new Error(`AgentMail ${r.status}: ${grund.slice(0, 200)}`);
-  }
+/* Der Betreiber erfaehrt von jedem Neuen - genau einmal, in dem Moment, in dem
+   der Name steht. Frueher ginge auch (beim Einloesen des Links), die Mail
+   wuesste dann aber nur die Adresse; hier steht beides drin, und wer einen Link
+   einloest und dann abbricht, ist ohnehin in keiner Liste zu sehen.
+
+   Alles daran ist stumm: kein MELDE_AN, kein Schluessel, ein Fehler bei
+   AgentMail - nichts davon darf eine Anmeldung scheitern lassen. Und
+   `waitUntil`, weil der Neue nicht darauf warten soll, dass der Gastgeber es
+   erfaehrt. */
+function meldeNeuenNutzer(env, ctx, neu) {
+  if (!ctx || !env.MELDE_AN || !env.AGENTMAIL_KEY) return;
+
+  ctx.waitUntil((async () => {
+    const zahl = await env.DB
+      .prepare('SELECT count(*) AS n FROM users WHERE name IS NOT NULL').first();
+    const wievielter = zahl ? `${zahl.n}. ` : '';
+    const wann = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
+    const text =
+`${neu.name} ist dabei - der ${wievielter}Melder.
+
+Adresse: ${neu.email}
+Angemeldet: ${wann} UTC`;
+
+    const html =
+`<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#1d2a24">
+  <p><strong>${nurText(neu.name)}</strong> ist dabei &ndash; der ${wievielter}Melder.</p>
+  <p style="font-size:13px;color:#6f6653">
+    Adresse: ${nurText(neu.email)}<br>Angemeldet: ${wann} UTC
+  </p>
+</div>`;
+
+    await schickeMail(env, env.MELDE_AN, `Neu dabei: ${neu.name}`, text, html);
+  })().catch(e => console.error('Neu-Meldung:', e && e.stack || e)));
 }
 
 // ---------------------------------------------------------------------------
@@ -779,6 +825,9 @@ const ROUTEN = {
       ok: true, dienst: 'beerstock-api', db, bilder,
       mail: env.AGENTMAIL_KEY ? 'Schluessel liegt an' : 'KEIN SCHLUESSEL',
       inbox: env.AGENTMAIL_INBOX || null,
+      /* Ob der Betreiber von Neuen erfaehrt. Die Adresse selbst gehoert nicht
+         in eine offene Route - hier steht nur, ob eine da ist. */
+      neu_melden: env.MELDE_AN ? 'ok' : 'aus (MELDE_AN fehlt)',
       tafel: env.TAFEL ? 'ok' : 'nicht eingerichtet',
     });
   },
@@ -917,6 +966,9 @@ const ROUTEN = {
     // Der Name steht in der Liste - ein Namenloser, der sich benennt, ist fuer
     // die anderen eine neue Zeile.
     anstoss(request, env, ctx, 'tafel');
+    // Und fuer den Gastgeber ein Neuer. Nur beim ERSTEN Namen: wer sich
+    // spaeter umbenennt, hatte schon einen.
+    if (!ich.name) meldeNeuenNutzer(env, ctx, { name, email: ich.email });
     return antwort(request, { ok: true, name });
   },
 
