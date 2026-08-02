@@ -6,16 +6,25 @@ Die Seite liegt auf <https://schnix84.github.io/beerstock/>.
 
 ## Was man sieht
 
-Ein Bierdeckel, darunter der Rechnungsblock des Wirts. Der Deckel gehört dem
-**aktuellen Ersten**, nicht einem bestimmten Kühlschrank — er ist der Siegerplatz
-und wechselt den Besitzer. Darunter steht das ganze Feld: Name, Strichliste,
-Anzahl, Temperatur und wann zuletzt gemeldet wurde.
+Eine Kneipentafel, alles mit Kreide angeschrieben. Oben steht der **aktuelle
+Erste** — nicht ein bestimmter Kühlschrank, sondern der Siegerplatz, und der
+wechselt den Besitzer. Darunter das ganze Feld wie eine Speisekarte: Name,
+Strichliste, Anzahl, Temperatur und wann zuletzt gemeldet wurde. Die Seite fasst
+von selbst nach, solange man sie ansieht.
 
-Das Glas zeigt den Bestand als Füllstand und die Temperatur als Verhalten:
-kaltes Bier perlt schnell, trägt eine hohe Krone und beschlägt außen, pisswarmes
-steht still und flach da. Die Strichliste daneben zeigt die genaue Zahl. Ab 24
-Flaschen sind beide am Anschlag und sagen nur noch *voll* — die Liste nennt die
-Zahl trotzdem.
+Der Bestand steht zweimal da, und das mit Absicht. Die Strichliste nennt die
+genaue Zahl — Vierergruppe plus Querstrich, wie der Wirt anschreibt. Das Glas
+daneben zeigt denselben Bestand als Füllstand und dazu die Temperatur als
+Verhalten: kaltes Bier perlt schnell, trägt eine hohe Krone und beschlägt außen,
+pisswarmes steht still und flach da. Die Striche zählt man aus der Nähe, das Glas
+liest man von weitem.
+
+Ab 24 Flaschen sind beide am Anschlag und sagen nur noch *voll* — die Liste nennt
+die Zahl trotzdem. Vierundzwanzig, weil das ein Kasten ist.
+
+Das erste Wort der Fußzeile ist die Ampel: sechs Stufen von *eiskalt* bis
+*pisswarm*, und die Farben sind kein Thermometer, sondern ein Urteil. Die
+Farbleiste darunter zeigt mit einer Nadel, wo der Kühlschrank gerade steht.
 
 ## Wie man mitmacht
 

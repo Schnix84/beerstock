@@ -4,36 +4,36 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kaltes Bier</title>
-<meta name="description" content="Wie viele kalte Biere gerade im Kühlschrank stehen.">
-<meta name="theme-color" content="#1a120c">
+<meta name="description" content="Wer gerade am meisten kaltes Bier hat — angeschrieben an der Kneipentafel.">
+<meta name="theme-color" content="#20262a">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
 <style>
   /* ==========================================================================
-     Ein Bierdeckel auf einem Wirtshaustisch.
-     Bewusst eine einzige, festgelegte Welt statt hell/dunkel: das Motiv ist ein
-     Gegenstand, der auf etwas liegt. Ein "heller Modus" waere hier kein Thema,
-     sondern ein anderer Tisch - und der zweite Tisch macht das Bild nicht besser.
+     ENTWURF „TAFEL“ — die Kneipentafel neben dem Zapfhahn.
 
-     Auf dem Deckel stehen zwei Dinge nebeneinander, und beide sagen dasselbe
-     auf verschiedene Weise: das Glas zeigt den Bestand als Fuellstand und die
-     Temperatur als Verhalten (Perlen, Krone, Schwitzwasser), die Strichliste
-     zeigt die genaue Zahl. Das Glas liest man von weitem, die Striche zaehlt
-     man aus der Naehe.
+     Eine Welt, kein Hell/Dunkel: das Motiv ist ein Gegenstand im Raum, und der
+     Wirt stellt die Tafel nicht tagsüber auf Weiß um. Alles ist angeschrieben,
+     nichts ist gedruckt — Kreide franst, Kreide sitzt schief, Kreide wischt man
+     weg. Deshalb ist auch die Rangfolge eine Speisekarte: Name, Punktreihe,
+     Zahl. Genau so, wie das Tagesgericht dort steht.
+
+     Der Kopf gehört dem AKTUELLEN ERSTEN, nicht diesem Kühlschrank. Er ist der
+     Siegerplatz und wechselt den Besitzer.
      ========================================================================== */
   :root {
-    --tisch-hell:  #2a211a;
-    --tisch-tief:  #150e09;
-    --pappe-hell:  #e3d8c1;
-    --pappe:       #d9cdb4;
-    --pappe-tief:  #c6b898;
-    --pappe-kante: #b3a684;
-    --tinte:       #1d2a24;   /* Druckerschwarz, leicht gruenstichig */
-    --gruen:       #2f5d4a;   /* Brauereigruen */
-    --rot:         #a8342a;   /* Registerrot, nur fuer den Querstrich */
-    --blass:       #6f6653;
+    --schiefer:    #262c2e;
+    --schiefer-t:  #191d1f;
+    --holz:        #6b4a2c;
+    --holz-t:      #3f2a17;
+    --kreide:      #eef1ea;
+    --kreide-matt: #cfd6cd;
+    --kreide-weg:  #93a09a;   /* halb weggewischt: Nebentext            */
+    --gelb:        #e8c766;   /* die gelbe Kreide, nur für den Ersten   */
+    --rot:         #d9705f;   /* rote Kreide: Querstrich, Warnung       */
+    --ampel:       var(--kreide-matt);
+    --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
 
-    /* Von der Temperatur gesetzt (siehe STUFEN im Skript) */
-    --ampel:       var(--blass);
+    /* Von der Temperatur gesetzt (die Spalten 4..8 von STUFEN) */
     --schaum:      1;      /* Kronenhoehe, 0..1                       */
     --sprudel:     4.2s;   /* Steigzeit einer Blase                   */
     --sprudel-op:  0.6;    /* wie deutlich es perlt                   */
@@ -48,109 +48,109 @@
   }
 
   *, *::before, *::after { box-sizing: border-box; }
-  html, body { height: 100%; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
-    margin: 0;
+    margin: 0; min-height: 100%;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background:
-      radial-gradient(120% 90% at 50% 8%, var(--tisch-hell), var(--tisch-tief) 70%);
-    display: grid; place-items: center;
-    padding: 24px;
+    color: var(--kreide);
+    background: #14181a;
+    padding: clamp(10px, 3vw, 28px);
     -webkit-font-smoothing: antialiased;
   }
-  /* Holzmaserung des Tisches - flach, sie soll nicht mit der Pappe konkurrieren */
-  body::before {
-    content: ""; position: fixed; inset: 0; pointer-events: none;
-    background-image: repeating-linear-gradient(
-      93deg, #ffffff06 0 1px, transparent 1px 3px, #00000010 3px 4px, transparent 4px 11px);
-    mix-blend-mode: overlay;
-  }
 
-  .deckel {
-    position: relative;
-    width: min(86vw, 86vh, 430px); aspect-ratio: 1; border-radius: 50%;
-    background: radial-gradient(85% 85% at 30% 22%, var(--pappe-hell), var(--pappe) 55%, var(--pappe-tief));
+  /* --- Der Holzrahmen ----------------------------------------------------- */
+  .brett {
+    max-width: 520px; margin: 0 auto; border-radius: 6px;
+    padding: clamp(9px, 2.4vw, 15px);
+    background:
+      repeating-linear-gradient(97deg, #ffffff0a 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
+      linear-gradient(160deg, var(--holz), var(--holz-t) 60%, #2c1c0f);
     box-shadow:
-      0 26px 48px -20px rgba(0,0,0,0.85),
-      0 3px 0 0 var(--pappe-kante) inset,
-      0 -4px 0 0 #cdc0a2 inset;
-    transform: rotate(-4deg);
-    display: grid; place-items: center;
-    color: var(--tinte);
+      0 30px 60px -24px #000d,
+      0 1px 0 #ffffff22 inset,
+      0 -2px 0 #0008 inset;
   }
-  /* gestanzter Innenring */
-  .deckel::before {
-    content: ""; position: absolute; inset: 5.5%; border-radius: 50%;
-    border: 1.5px solid var(--gruen); opacity: 0.5;
+  .tafel {
+    position: relative; border-radius: 3px; overflow: hidden;
+    padding: clamp(18px, 5vw, 30px) clamp(15px, 4.5vw, 26px) clamp(18px, 4vw, 26px);
+    background:
+      radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
+    box-shadow: 0 0 0 1px #0009 inset, 0 14px 30px -14px #000a inset;
   }
-  /* Papierfaser */
-  .deckel::after {
-    content: ""; position: absolute; inset: 0; border-radius: 50%;
+  /* Schiefer ist nie glatt: feines Korn plus die Schlieren vom letzten Wischen */
+  .tafel::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
     background-image:
-      radial-gradient(#00000012 1px, transparent 1px),
-      radial-gradient(#ffffff1c 1px, transparent 1px);
-    background-size: 5px 5px, 7px 7px;
-    background-position: 0 0, 3px 4px;
-    pointer-events: none;
+      radial-gradient(#ffffff0d 1px, transparent 1.4px),
+      radial-gradient(#00000030 1px, transparent 1.6px);
+    background-size: 4px 4px, 6px 6px;
+    background-position: 0 0, 2px 3px;
+  }
+  .tafel::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .22;
+    background:
+      radial-gradient(60% 30% at 18% 34%, #ffffff28, transparent 70%),
+      radial-gradient(45% 22% at 76% 62%, #ffffff20, transparent 70%),
+      radial-gradient(70% 18% at 50% 88%, #ffffff14, transparent 70%);
+    mix-blend-mode: screen;
+  }
+  .tafel > * { position: relative; z-index: 1; }
+
+  /* Alles Angeschriebene bekommt denselben leichten Kreidesaum. */
+  .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
+
+  /* --- Kopf: der Erste ---------------------------------------------------- */
+  .krone-zeile {
+    font-family: var(--hand); font-size: 12.5px; letter-spacing: .12em;
+    color: var(--gelb); opacity: .92; min-height: 15px; transform: rotate(-.7deg);
+  }
+  .hero-name {
+    font-family: var(--hand); font-weight: 400;
+    font-size: clamp(30px, 10.5vw, 50px); line-height: 1.18;
+    margin: 4px 0 7px; transform: rotate(-1.2deg); transform-origin: left;
+    overflow-wrap: anywhere;
+  }
+  .hero-unter {
+    font-family: var(--hand); font-size: 13px; color: var(--kreide-weg);
+    transform: rotate(-.6deg); transform-origin: left;
+  }
+  .hero-unter .marke-gemessen {
+    color: var(--gelb); border-bottom: 1px solid #e8c76655; padding-bottom: 1px;
   }
 
-  .inhalt { position: relative; z-index: 1; width: 78%; text-align: center; }
-
-  .marke {
-    font-family: ui-serif, Georgia, "Times New Roman", serif;
-    font-size: clamp(11px, 3.1vmin, 16px);
-    letter-spacing: 0.28em; text-indent: 0.28em; text-transform: uppercase;
-    color: var(--gruen);
-  }
-  .regel { height: 1px; background: var(--gruen); opacity: 0.38; margin: 9px auto 14px; width: 60%; }
-
-  /* --- Glas links, Strichliste rechts ------------------------------------ */
-  .buehne { display: flex; align-items: center; justify-content: center; gap: 6%; }
-  .buehne .glas  { width: 26%; flex: none; }
-  .buehne .liste { flex: 1; min-width: 0; }
-  .glas svg, .liste svg { width: 100%; height: auto; display: block; }
+  /* Oben zwei Dinge nebeneinander, und beide sagen dasselbe auf verschiedene
+     Weise: die Striche nennen die genaue Zahl, das Glas zeigt den Bestand als
+     Fuellstand und die Temperatur als Verhalten. Die Striche zaehlt man aus der
+     Naehe, das Glas liest man von weitem. */
+  .hero-oben { display: flex; align-items: center; gap: 5%; }
+  .hero-text { flex: 1; min-width: 0; }
+  .hero-glas { flex: none; width: 26%; max-width: 116px; }
+  .hero-glas svg { width: 100%; height: auto; display: block; }
   /* Ohne Messung sagt das Glas nichts - dann tritt es zurueck, statt einen
      Fuellstand zu behaupten, den niemand kennt. */
-  .glas.ungewiss { opacity: 0.3; }
-  .glas { transition: opacity .5s; }
+  .hero-glas { transition: opacity .5s; }
+  .hero-glas.ungewiss { opacity: .28; }
 
-  /* --- Strichliste -------------------------------------------------------- */
-  .strich {
-    stroke: var(--tinte); stroke-width: 7; stroke-linecap: round;
-    stroke-dasharray: 82; stroke-dashoffset: 82;
-    animation: schreiben .28s ease-out forwards;
-  }
-  .strich.quer { stroke: var(--rot); }
-  @keyframes schreiben { to { stroke-dashoffset: 0; } }
+  .hero-striche { margin: clamp(12px, 3.4vw, 20px) 0 4px; }
+  .hero-striche svg { width: 100%; height: auto; display: block; }
 
-  .aus {
-    font-family: ui-serif, Georgia, serif; font-style: italic;
-    font-size: clamp(20px, 6vmin, 34px); fill: var(--rot); opacity: 0.85;
-  }
-  /* Das Gegenstueck zu "ausgetrunken", und darum bewusst nicht im Registerrot:
-     ein voller Kuehlschrank ist keine Meldung, sondern der Idealzustand -
-     also das Brauereigruen der Ueberschrift. */
-  .voll {
-    font-family: ui-serif, Georgia, serif; font-style: italic;
-    font-size: clamp(24px, 7vmin, 40px); letter-spacing: 0.04em;
-    fill: var(--gruen); opacity: 0.9;
-  }
-
-  /* --- Das Glas ----------------------------------------------------------- */
-  .glas-riss  { fill: none; stroke: var(--tinte); stroke-width: 2.1; stroke-linejoin: round; }
-  .glas-innen { fill: none; stroke: var(--gruen); stroke-width: 0.9; opacity: 0.45; }
-  .glas-korpus{ fill: #ffffff; opacity: 0.26; }
+  /* --- Das Glas, mit Kreide gezeichnet ------------------------------------
+     Uebernommen von der Live-Seite; hier nur andere Farben, weil auf einer
+     Tafel nichts gedruckt ist. Das Bier bleibt bernstein - es ist die einzige
+     bunte Kreide auf dem Brett und darf das auch sein. */
+  .glas-riss  { fill: none; stroke: var(--kreide); stroke-width: 2.1; stroke-linejoin: round; }
+  .glas-innen { fill: none; stroke: var(--kreide-weg); stroke-width: 0.9; opacity: .5; }
+  .glas-korpus{ fill: #ffffff; opacity: .07; }
 
   /* Der Bierspiegel. Voll steht er bei y=46, leer auf dem Boden bei y=150 -
-     also 104 Einheiten Weg. Bier, Raster und Krone haengen in derselben
-     Gruppe und wandern gemeinsam; die Blasen werden am selben Spiegel
-     abgeschnitten, damit sie an der Oberflaeche zerplatzen. */
+     also 104 Einheiten Weg. Bier, Raster und Krone haengen in derselben Gruppe
+     und wandern gemeinsam; die Blasen werden am selben Spiegel abgeschnitten,
+     damit sie an der Oberflaeche zerplatzen. */
   .spiegel {
     transform-box: view-box;
     transform: translateY(calc((1 - var(--fuell)) * 104px));
     transition: transform .8s cubic-bezier(.2,.7,.3,1);
   }
-
   /* Die Krone sitzt auf dem Bierspiegel und schrumpft nach unten weg, wenn das
      Bier warm wird - warmes Bier traegt keinen Schaum. Im fast leeren Glas
      verschwindet sie ganz, sonst schwebt ein Schaumring ueber dem Boden. */
@@ -159,16 +159,12 @@
     transform: scaleY(calc(var(--schaum) * var(--schaum-voll)));
     transition: transform .6s cubic-bezier(.2,.7,.3,1);
   }
-
   .blase {
-    transform-box: view-box;
-    fill: #fffdf4;
-    opacity: 0;
+    transform-box: view-box; fill: #fffdf4; opacity: 0;
     animation: steigen var(--sprudel) linear infinite;
   }
   /* Die halbe Perlung faellt weg, sobald das Bier lau wird. */
   .blase.spaerlich { animation-name: steigen-spaerlich; }
-
   @keyframes steigen {
     0%   { transform: translate(0, 0);         opacity: 0; }
     12%  { opacity: var(--sprudel-op); }
@@ -183,7 +179,6 @@
     88%  { opacity: calc(var(--sprudel-op) * .28); }
     100% { transform: translate(-1.5px, -98px); opacity: 0; }
   }
-
   /* Schwitzwasser: zwei Tropfen laufen, der Rest steht. */
   .kondens { fill: #ffffff; opacity: var(--kondens); transition: opacity .5s; }
   .kondens.laeuft { transform-box: view-box; animation: rinnen 9s ease-in infinite; }
@@ -193,7 +188,6 @@
     93%,100%{ transform: translateY(0); opacity: 0; }
   }
   .reif { fill: #ffffff; opacity: var(--frost); transition: opacity .5s; }
-
   /* Ein Lichtstreifen wandert alle paar Sekunden ueber das Glas. */
   .glanz { transform-box: view-box; animation: wischen 7.5s ease-in-out infinite; }
   @keyframes wischen {
@@ -201,191 +195,193 @@
     88%, 100% { transform: translateX(120px); }
   }
 
-  /* --- Fusszeile mit Ampel ------------------------------------------------ */
-  .meta {
-    margin-top: clamp(10px, 2.6vmin, 18px);
-    font-size: clamp(9px, 2.3vmin, 12px);
-    letter-spacing: 0.09em; color: var(--blass);
-    white-space: nowrap;              /* der Einzeiler bleibt einzeilig */
+  /* Die Fußzeile ist die Ampel in Worten: das erste Wort färbt sich. */
+  .hero-fuss {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .55em;
+    font-family: var(--hand); font-size: clamp(13px, 3.7vw, 16px);
+    color: var(--kreide-weg); margin-top: 2px;
   }
-  .wort {
-    font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--ampel);
-    transition: color .45s ease;
-  }
-  .meta .trenn { opacity: 0.45; margin: 0 0.5em; }
+  .hero-fuss .wort { color: var(--ampel); transition: color .45s ease; }
+  .hero-fuss .pkt { opacity: .45; }
   .zahlen { font-variant-numeric: tabular-nums; }
 
-  /* Die Ampel als gedruckte Skala: sechs Felder von eiskalt bis pisswarm,
-     eine Nadel zeigt, wo der Kuehlschrank gerade steht. Sie macht sichtbar,
-     warum das Wort daneben gerade so heisst. */
+  /* Die gedruckte Skala von eiskalt bis pisswarm, mit Kreide nachgezogen:
+     sie macht sichtbar, warum das Wort daneben gerade so heißt. */
   .skala {
-    position: relative; width: 74%; margin: 9px auto 0; height: 4px;
-    border-radius: 2px; opacity: 0.85;
+    position: relative; height: 5px; border-radius: 3px; margin: 14px 0 0;
+    opacity: .8;
     background: linear-gradient(90deg,
-      #2f86c4 0 10%, #2f5d4a 10% 30%, #5f7a33 30% 45%,
-      #b08a1c 45% 60%, #c4661f 60% 80%, #a8342a 80% 100%);
-    box-shadow: 0 0 0 1px #00000018 inset;
+      #4f9ed6 0 10%, #6fb08a 10% 30%, #93b06a 30% 45%,
+      #d7bb6a 45% 60%, #dd9a63 60% 80%, #d9705f 80% 100%);
+    box-shadow: 0 0 0 1px #ffffff1f inset;
   }
   .nadel {
-    position: absolute; top: -4px; left: 50%; width: 3px; height: 12px;
-    border-radius: 2px; background: var(--tinte);
-    box-shadow: 0 0 0 1.5px var(--pappe-hell);
-    transform: translateX(-50%); opacity: 0;
-    transition: left .45s cubic-bezier(.2,.7,.3,1), opacity .45s;
+    position: absolute; top: -5px; left: 50%; width: 2px; height: 15px;
+    background: var(--kreide); border-radius: 2px; transform: translateX(-50%);
+    box-shadow: 0 0 4px #fff9; opacity: 0;
+    transition: left .5s cubic-bezier(.2,.7,.3,1), opacity .4s;
   }
+
+  .strich-linie {
+    height: 1px; margin: clamp(18px, 4.4vw, 26px) 0 0;
+    background: linear-gradient(90deg, transparent, #ffffff40 8%, #ffffff40 92%, transparent);
+  }
+
+  /* --- Die Karte: Rangfolge als Speisekarte ------------------------------- */
+  .block { margin-top: clamp(14px, 3.6vw, 20px); }
+  .block-kopf {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    font-family: var(--hand); margin-bottom: 6px;
+  }
+  .block-kopf .titel { font-size: 17px; letter-spacing: .04em; }
+  .block-kopf .datum { font-size: 12px; color: var(--kreide-weg); }
+
+  .zeile {
+    display: grid; grid-template-columns: 20px 1fr auto; gap: 0 10px;
+    align-items: baseline; padding: 10px 0 9px;
+    border-bottom: 1px dashed #ffffff1f;
+  }
+  .zeile:last-child { border-bottom: none; }
+  .z-rang {
+    font-family: var(--hand); font-size: 14px; color: var(--kreide-weg);
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .zeile.erster .z-rang, .zeile.erster .z-name { color: var(--gelb); }
+  /* Die eigene Zeile ist nicht farbig markiert, sondern umkringelt - so, wie
+     man an einer Tafel etwas markiert. */
+  .zeile.ich .z-name::after {
+    content: "du"; font-size: 11px; color: var(--rot); margin-left: 8px;
+    border: 1px solid #d9705f80; border-radius: 40% 60% 55% 45% / 60% 40% 60% 40%;
+    padding: 1px 7px 2px; vertical-align: 2px; letter-spacing: .04em;
+  }
+  .z-mitte { min-width: 0; }
+  .z-name {
+    font-family: var(--hand); font-size: clamp(16px, 4.4vw, 19px); line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+  .z-marke {
+    font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--gelb); border: 1px solid #e8c76655;
+    border-radius: 2px; padding: 1px 4px; margin-left: 7px; vertical-align: 3px;
+  }
+  .z-unter {
+    display: flex; align-items: center; gap: .45em; flex-wrap: wrap;
+    margin-top: 5px; font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
+  }
+  .z-unter .wort { font-family: var(--hand); font-size: 12.5px; letter-spacing: 0; }
+  .z-striche { margin-top: 7px; height: 18px; }
+  .z-striche svg { height: 18px; width: auto; display: block; }
+
+  /* Die Punktreihe der Speisekarte: sie führt das Auge vom Namen zur Zahl. */
+  .z-rechts { display: flex; align-items: baseline; gap: 8px; }
+  .z-zahl {
+    font-family: var(--hand); font-size: clamp(21px, 6vw, 26px); line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .zeile.erster .z-zahl { color: var(--gelb); }
+  .z-spark { opacity: .75; }
+  .z-spark svg { display: block; }
+
+  .leer-hinweis {
+    font-family: var(--hand); font-size: 15px; line-height: 1.6;
+    color: var(--kreide-weg); padding: 16px 0 6px;
+  }
+
+  /* --- Formulare ---------------------------------------------------------- */
+  .block-fuss { margin-top: 18px; padding-top: 16px; border-top: 1px dashed #ffffff26; }
+  .melde { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .melde.eins { grid-template-columns: 1fr; }
+  .feld-label {
+    display: block; font-size: 8.5px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--kreide-weg); margin-bottom: 3px;
+  }
+  .feld {
+    display: block; width: 100%; border: none; border-bottom: 1.5px dashed #ffffff44;
+    background: transparent; padding: 6px 2px 5px; border-radius: 0;
+    font-family: var(--hand); font-size: 17px; color: var(--kreide);
+    font-variant-numeric: tabular-nums;
+  }
+  .feld:focus { outline: none; border-bottom-color: var(--gelb); border-bottom-style: solid; }
+  .feld::placeholder { color: #ffffff30; }
+  .knopf {
+    width: 100%; border: 1.5px solid #ffffff55; border-radius: 3px; padding: 11px;
+    background: #ffffff0d; color: var(--kreide); cursor: pointer;
+    font-family: var(--hand); font-size: 16px; letter-spacing: .04em;
+    transition: background .2s, border-color .2s, transform .06s;
+  }
+  .knopf:hover { background: #ffffff1a; border-color: var(--gelb); }
+  .knopf:active { transform: translateY(1px); }
+  .knopf[disabled] { opacity: .45; cursor: default; }
+  .knopf.leer { background: transparent; }
+  .zeile-klein {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+    margin-top: 11px; font-size: 10px; letter-spacing: .08em; color: var(--kreide-weg);
+  }
+  .zeile-klein button {
+    border: none; background: none; padding: 0; font: inherit; color: var(--kreide-weg);
+    text-decoration: underline; cursor: pointer;
+  }
+  .sagt {
+    margin: 13px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 12px;
+    line-height: 1.5; background: #ffffff10; color: var(--kreide-matt);
+    border-left: 2px solid var(--gelb);
+  }
+  .sagt.schlecht { border-left-color: var(--rot); color: #f0c6be; }
+
+  .fuss {
+    text-align: center; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase;
+    color: #ffffff2e; margin: 14px 0 0;
+  }
+
+  /* --- Kreide zeichnen ----------------------------------------------------- */
+  .strich {
+    /* Keine stroke-width hier: CSS schlaegt das Praesentationsattribut, und die
+       Zeilenfassung braucht duennere Striche als der Kopf. */
+    stroke: var(--kreide); stroke-linecap: round;
+    stroke-dasharray: 82; stroke-dashoffset: 82;
+    animation: schreiben .3s ease-out forwards;
+  }
+  .strich.quer { stroke: var(--rot); }
+  @keyframes schreiben { to { stroke-dashoffset: 0; } }
+  .wort-gross {
+    font-family: var(--hand); font-size: 34px; fill: var(--kreide-matt);
+  }
+  .wort-gross.voll { fill: var(--gelb); }
 
   @media (prefers-reduced-motion: reduce) {
     .strich { animation: none; stroke-dashoffset: 0; }
     .blase, .glanz, .kondens.laeuft { animation: none; }
     .blase { opacity: calc(var(--sprudel-op) * .5); }
   }
-
-  /* ==========================================================================
-     BESTENLISTE
-     Der Rechnungsblock des Wirts unter dem Deckel. Bewusst anderes Papier als
-     die Pappe - heller und glatter -, damit man sieht, dass zwei Dinge
-     uebereinanderliegen, statt dass eines ausfranst.
-
-     Der Deckel oben gehoert dem AKTUELLEN ERSTEN, nicht diesem Kuehlschrank:
-     er ist der Siegerplatz und wechselt den Besitzer. Der eigene Bestand steht
-     in der Liste wie jeder andere, nur mit der Marke "gemessen".
-     ========================================================================== */
-  body { display: block; place-items: unset; padding: 0; }
-  .seite { max-width: 430px; margin: 0 auto; padding: 20px 16px 40px; }
-  main.deckel { margin: 0 auto; }
-
-  .krone-zeile {
-    text-align: center; font-size: 10px; letter-spacing: .24em;
-    text-transform: uppercase; color: #c9a24a; margin: 2px 0 12px; min-height: 13px;
-  }
-
-  .block {
-    position: relative; margin-top: 26px; border-radius: 3px; padding-bottom: 16px;
-    background: linear-gradient(#efe7d3, #e2d8c0);
-    box-shadow: 0 18px 34px -16px #000d, 0 1px 0 #fff6 inset;
-    color: var(--tinte);
-  }
-  /* Abrisskante oben */
-  .block::before {
-    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 7px;
-    background: radial-gradient(circle at 4px 0, transparent 3.4px, #efe7d3 3.6px) 0 0/9px 7px repeat-x;
-  }
-  .block-kopf {
-    display: flex; align-items: baseline; justify-content: space-between;
-    padding: 18px 16px 8px; border-bottom: 1.5px solid var(--gruen);
-  }
-  .block-kopf .titel {
-    font-family: ui-serif, Georgia, serif; font-size: 12.5px;
-    letter-spacing: .24em; text-transform: uppercase; color: var(--gruen);
-  }
-  .block-kopf .datum { font-size: 9.5px; letter-spacing: .12em; color: var(--blass); }
-
-  .zeile {
-    display: grid; grid-template-columns: 22px 1fr auto;
-    align-items: center; gap: 10px; padding: 11px 16px 10px;
-    border-bottom: 1px solid #2f5d4a1f;
-  }
-  .zeile.ich { background: #2f5d4a0e; }
-  .z-rang {
-    font-family: ui-serif, Georgia, serif; font-size: 15px; color: var(--gruen);
-    text-align: center; font-variant-numeric: tabular-nums;
-  }
-  .zeile.ich .z-rang { color: var(--rot); }
-  .z-name {
-    font-family: ui-serif, Georgia, serif; font-size: 14.5px;
-    letter-spacing: .1em; text-transform: uppercase; line-height: 1;
-    overflow-wrap: anywhere;
-  }
-  .z-striche { margin-top: 6px; height: 17px; }
-  .z-striche svg { height: 17px; width: auto; display: block; }
-  .z-rechts { text-align: right; line-height: 1.35; }
-  .z-zahl {
-    font-family: ui-serif, Georgia, serif; font-size: 21px;
-    font-variant-numeric: tabular-nums; line-height: 1;
-  }
-  /* Das Temperaturwort traegt dieselbe Ampelfarbe wie oben auf dem Deckel -
-     nur wird sie hier je Zeile gesetzt, nicht global ueber :root. */
-  .z-wort { font-weight: 700; letter-spacing: .1em; text-transform: uppercase; font-size: 9.5px; }
-  .z-unten { font-size: 9.5px; letter-spacing: .07em; color: var(--blass); white-space: nowrap; margin-top: 4px; }
-  .z-spark { margin-top: 5px; }
-  .z-spark svg { display: block; margin-left: auto; }
-  .z-marke {
-    display: inline-block; font-size: 8px; letter-spacing: .14em; text-transform: uppercase;
-    color: var(--gruen); border: 1px solid #2f5d4a55; border-radius: 2px;
-    padding: 1px 4px; margin-left: 7px; vertical-align: 2px;
-  }
-  .leer-hinweis {
-    padding: 22px 16px; text-align: center; font-size: 11.5px; line-height: 1.6;
-    color: var(--blass);
-  }
-
-  /* --- Formulare ---------------------------------------------------------- */
-  .block-fuss { padding: 16px 16px 0; }
-  .melde { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 10px; }
-  .melde.eins { grid-template-columns: 1fr; }
-  .melde label { display: block; }
-  .feld {
-    display: block; width: 100%;
-    border: none; border-bottom: 1.5px solid #2f5d4a55; background: transparent;
-    padding: 7px 2px 5px; font: inherit; font-size: 13px; color: var(--tinte);
-    font-variant-numeric: tabular-nums; border-radius: 0;
-  }
-  .feld:focus { outline: none; border-bottom-color: var(--gruen); }
-  .feld::placeholder { color: #6f665366; }
-  .feld-label {
-    display: block; font-size: 8.5px; letter-spacing: .18em; text-transform: uppercase;
-    color: var(--blass); margin-bottom: 1px;
-  }
-  .knopf {
-    width: 100%; border: none; border-radius: 2px; padding: 11px;
-    background: var(--gruen); color: var(--pappe-hell);
-    font-family: ui-serif, Georgia, serif; font-size: 12px;
-    letter-spacing: .22em; text-transform: uppercase; cursor: pointer;
-  }
-  .knopf[disabled] { opacity: .5; cursor: default; }
-  .knopf.leer {
-    background: transparent; color: var(--gruen);
-    box-shadow: inset 0 0 0 1.5px #2f5d4a66; margin-top: 7px;
-  }
-  .zeile-klein {
-    display: flex; justify-content: space-between; align-items: baseline;
-    margin-top: 9px; font-size: 9.5px; letter-spacing: .08em; color: var(--blass);
-  }
-  .zeile-klein button {
-    border: none; background: none; padding: 0; font: inherit; color: var(--blass);
-    text-decoration: underline; cursor: pointer;
-  }
-  .sagt {
-    margin: 10px 0 0; padding: 8px 10px; border-radius: 2px; font-size: 11px;
-    line-height: 1.5; background: #2f5d4a14; color: var(--gruen);
-  }
-  .sagt.schlecht { background: #a8342a14; color: var(--rot); }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-  <div class="seite">
-  <div class="krone-zeile" id="krone"></div>
-  <main class="deckel">
-    <div class="inhalt">
-      <div class="marke" id="marke">Kühlschrank</div>
-      <div class="regel"></div>
+  <div class="brett">
+    <div class="tafel">
 
-      <div class="buehne">
+      <!-- ============ Der Siegerplatz =================================== -->
+      <div class="hero-oben">
+        <div class="hero-text">
+          <div class="krone-zeile kr" id="krone"></div>
+          <h1 class="hero-name kr" id="marke">Kühlschrank</h1>
+          <div class="hero-unter kr" id="hero-unter"></div>
 
-        <!-- ============ Das Glas ============================================
-             Ein Willibecher, gezeichnet wie der Rest des Deckels: Strichriss in
-             Druckerschwarz, das Bier als Rasterflaeche. Es ist kein Foto und
-             soll auch keines sein - es liegt gedruckt auf der Pappe.
-             Es zaehlt nicht, das machen die Striche. Es zeigt den Bestand als
-             Fuellstand und die Temperatur als Verhalten: kaltes Bier perlt
-             schnell, traegt eine hohe Krone und beschlaegt aussen, pisswarmes
-             steht still und flach da.
-             ============================================================== -->
-        <div class="glas" id="glas">
+          <!-- Die Menge steht in den Strichen, nicht als Ziffer daneben: eine
+               Strichliste, die eine Zahl neben sich hat, ist Zierrat. -->
+          <div class="hero-striche" id="hero-striche" role="img" aria-label="Strichliste"></div>
+        </div>
+
+        <!-- ============ Das Glas ========================================
+             Ein Willibecher, an die Tafel gezeichnet. Es zaehlt nicht, das
+             machen die Striche. Es zeigt den Bestand als Fuellstand und die
+             Temperatur als Verhalten: kaltes Bier perlt schnell, traegt eine
+             hohe Krone und beschlaegt aussen, pisswarmes steht still und
+             flach da.
+             ========================================================== -->
+        <div class="hero-glas" id="glas">
           <svg viewBox="0 0 100 172" role="img" aria-labelledby="glas-titel">
-            <title id="glas-titel">Bierglas: Fuellstand nach Bestand, Zustand nach Temperatur</title>
+            <title id="glas-titel">Bierglas: Füllstand nach Bestand, Zustand nach Temperatur</title>
             <defs>
               <path id="innenform" d="M27.5,20 C23,46 21.2,60 22,74 C23,99 29.5,130 31.5,150 L68.5,150 C70.5,130 77,99 78,74 C78.8,60 77,46 72.5,20 Z"/>
               <clipPath id="innen"><use href="#innenform"/></clipPath>
@@ -399,7 +395,7 @@
                 <stop offset=".55" stop-color="#cf8b16"/>
                 <stop offset="1"   stop-color="#a86b0d"/>
               </linearGradient>
-              <!-- Rasterpunkte: das Bier ist gedruckt, nicht gegossen -->
+              <!-- Rasterpunkte: auch das Bier ist gezeichnet, nicht gegossen -->
               <pattern id="raster" width="4" height="4" patternUnits="userSpaceOnUse">
                 <circle cx="1" cy="1" r="0.75" fill="#00000022"/>
                 <circle cx="3" cy="3" r="0.55" fill="#ffffff22"/>
@@ -411,24 +407,21 @@
               </linearGradient>
             </defs>
 
-            <!-- Schatten auf der Pappe -->
-            <ellipse cx="50" cy="156" rx="27" ry="5" fill="#00000018"/>
-
             <!-- Glaskoerper -->
             <path class="glas-korpus" d="M24,17 C19,45 17,60 18,75 C19,101 26,133 28,153 Q28,157 32,157 L68,157 Q72,157 72,153 C74,133 81,101 82,75 C83,60 81,45 76,17 Z"/>
 
             <g clip-path="url(#innen)">
-              <!-- Bier samt Krone: eine Gruppe, die mit dem Bestand sinkt.
-                   Die Flaeche reicht weit unter den Boden, damit im leeren
-                   Glas nichts nachrutscht, was nicht mehr da ist. -->
+              <!-- Bier samt Krone: eine Gruppe, die mit dem Bestand sinkt. Die
+                   Flaeche reicht weit unter den Boden, damit im leeren Glas
+                   nichts nachrutscht, was nicht mehr da ist. -->
               <g class="spiegel">
                 <rect x="16" y="46" width="68" height="170" fill="url(#bier)"/>
                 <rect x="16" y="46" width="68" height="170" fill="url(#raster)"/>
 
                 <!-- Schaumkrone: Vollflaeche plus ausgefranster Rand -->
                 <g class="krone">
-                  <rect x="16" y="30" width="68" height="16" fill="#f2ead6"/>
-                  <g fill="#f7f1e1">
+                  <rect x="16" y="30" width="68" height="16" fill="#eceadf"/>
+                  <g fill="#f4f2e8">
                     <circle cx="26" cy="31" r="5.5"/><circle cx="36" cy="28.5" r="6.5"/>
                     <circle cx="47" cy="30" r="5.8"/><circle cx="58" cy="28" r="6.8"/>
                     <circle cx="69" cy="31" r="5.6"/><circle cx="78" cy="32.5" r="4.6"/>
@@ -444,18 +437,18 @@
                    Bierspiegel abgeschnitten - im halbvollen Glas ist der Weg
                    entsprechend kurz. -->
               <g clip-path="url(#unterm-spiegel)">
-                <circle class="blase"            cx="34" cy="146" r="1.5" style="animation-delay:-0.2s"/>
-                <circle class="blase"            cx="47" cy="150" r="2.1" style="animation-delay:-1.4s"/>
-                <circle class="blase"            cx="61" cy="147" r="1.3" style="animation-delay:-2.6s"/>
-                <circle class="blase"            cx="40" cy="152" r="1.1" style="animation-delay:-0.9s"/>
-                <circle class="blase"            cx="55" cy="149" r="1.8" style="animation-delay:-2.1s"/>
-                <circle class="blase spaerlich"  cx="30" cy="151" r="1.2" style="animation-delay:-1.7s"/>
-                <circle class="blase spaerlich"  cx="66" cy="152" r="1.6" style="animation-delay:-0.5s"/>
-                <circle class="blase spaerlich"  cx="50" cy="148" r="1.0" style="animation-delay:-3.0s"/>
+                <circle class="blase"           cx="34" cy="146" r="1.5" style="animation-delay:-0.2s"/>
+                <circle class="blase"           cx="47" cy="150" r="2.1" style="animation-delay:-1.4s"/>
+                <circle class="blase"           cx="61" cy="147" r="1.3" style="animation-delay:-2.6s"/>
+                <circle class="blase"           cx="40" cy="152" r="1.1" style="animation-delay:-0.9s"/>
+                <circle class="blase"           cx="55" cy="149" r="1.8" style="animation-delay:-2.1s"/>
+                <circle class="blase spaerlich" cx="30" cy="151" r="1.2" style="animation-delay:-1.7s"/>
+                <circle class="blase spaerlich" cx="66" cy="152" r="1.6" style="animation-delay:-0.5s"/>
+                <circle class="blase spaerlich" cx="50" cy="148" r="1.0" style="animation-delay:-3.0s"/>
               </g>
 
-              <!-- Reif, nur bei eiskalt - und nur dort, wo Bier hinter dem
-                   Glas steht; die leere Haelfte beschlaegt nicht. -->
+              <!-- Reif, nur bei eiskalt - und nur dort, wo Bier hinter dem Glas
+                   steht; die leere Haelfte beschlaegt nicht. -->
               <g class="reif" clip-path="url(#unterm-spiegel)">
                 <circle cx="30" cy="62" r="1.1"/><circle cx="41" cy="84" r="0.9"/>
                 <circle cx="66" cy="70" r="1.2"/><circle cx="57" cy="104" r="1"/>
@@ -485,117 +478,146 @@
             <use class="glas-innen" href="#innenform"/>
           </svg>
         </div>
-
-        <div class="liste">
-          <svg viewBox="0 0 300 120" role="img" aria-labelledby="titel">
-            <title id="titel">Strichliste der kalten Biere</title>
-            <g id="striche"></g>
-          </svg>
-        </div>
       </div>
 
-      <!-- Einzeiler. Die Menge steht ausschliesslich in den Strichen - eine
-           Ziffer daneben waere dieselbe Zahl zweimal und nimmt der Strichliste
-           genau die Aufgabe weg, fuer die sie da ist. Das erste Wort spricht
-           dafuer mit: es faerbt sich und heisst je nach Messung anders. -->
-      <div class="meta">
-        <span class="wort" id="wort">kalt</span><span class="trenn">·</span><span
-          class="zahlen" id="temp">–</span><span class="trenn">·</span><span
-          id="stand">wird geladen</span>
+      <div class="hero-fuss kr">
+        <span class="wort" id="wort">Bier</span>
+        <span class="pkt">·</span>
+        <span class="zahlen" id="temp">–</span>
+        <span class="pkt">·</span>
+        <span id="stand">wird geladen</span>
       </div>
       <div class="skala" aria-hidden="true"><span class="nadel" id="nadel"></span></div>
+
+      <div class="strich-linie"></div>
+
+      <!-- ============ Die Karte ========================================= -->
+      <section class="block" id="block" hidden>
+        <div class="block-kopf kr">
+          <span class="titel">Wer hat kalt</span>
+          <span class="datum" id="block-datum"></span>
+        </div>
+
+        <div id="rangliste"></div>
+
+        <div class="block-fuss">
+          <form id="melde-form" hidden>
+            <div class="melde">
+              <label><span class="feld-label">Biere</span>
+                <input class="feld" id="f-biere" inputmode="numeric" autocomplete="off"
+                       placeholder="9" required></label>
+              <label><span class="feld-label">Grad</span>
+                <input class="feld" id="f-grad" inputmode="decimal" autocomplete="off"
+                       placeholder="4,9" required></label>
+            </div>
+            <button class="knopf" type="submit">Anschreiben</button>
+            <div class="zeile-klein">
+              <span id="wer-bin-ich"></span>
+              <button type="button" id="abmelden">abmelden</button>
+            </div>
+          </form>
+
+          <!-- Erster Klick nach dem Magic Link: der Nutzer steht in der
+               Datenbank, hat aber noch keinen Namen für die Karte. -->
+          <form id="name-form" hidden>
+            <div class="melde eins">
+              <label><span class="feld-label">Name für die Karte</span>
+                <input class="feld" id="f-name" autocomplete="nickname" maxlength="20"
+                       placeholder="Basti" required></label>
+            </div>
+            <button class="knopf" type="submit">Merken</button>
+          </form>
+
+          <button class="knopf leer" id="zeig-anmeldung" hidden>Mitschreiben</button>
+          <form id="anmelde-form" hidden>
+            <div class="melde eins">
+              <label><span class="feld-label">Deine E-Mail</span>
+                <input class="feld" id="f-mail" type="email" inputmode="email"
+                       autocomplete="email" placeholder="du@beispiel.de" required></label>
+            </div>
+            <button class="knopf" type="submit">Link schicken</button>
+          </form>
+
+          <p class="sagt" id="sagt" hidden></p>
+        </div>
+      </section>
     </div>
-  </main>
-
-  <section class="block" id="block" hidden>
-    <div class="block-kopf">
-      <div class="titel">Wer hat kalt</div>
-      <div class="datum" id="block-datum"></div>
-    </div>
-
-    <div id="rangliste"></div>
-
-    <div class="block-fuss">
-      <!-- Angemeldet: melden. -->
-      <form id="melde-form" hidden>
-        <div class="melde">
-          <label><span class="feld-label">Biere</span>
-            <input class="feld" id="f-biere" inputmode="numeric" autocomplete="off"
-                   placeholder="9" required></label>
-          <label><span class="feld-label">Grad</span>
-            <input class="feld" id="f-grad" inputmode="decimal" autocomplete="off"
-                   placeholder="4,9" required></label>
-        </div>
-        <button class="knopf" type="submit">Eintragen</button>
-        <div class="zeile-klein">
-          <span id="wer-bin-ich"></span>
-          <button type="button" id="abmelden">abmelden</button>
-        </div>
-      </form>
-
-      <!-- Erster Klick nach dem Magic Link: der Nutzer steht in der Datenbank,
-           hat aber noch keinen Namen fuer die Liste. -->
-      <form id="name-form" hidden>
-        <div class="melde eins">
-          <label><span class="feld-label">Name für die Liste</span>
-            <input class="feld" id="f-name" autocomplete="nickname" maxlength="20"
-                   placeholder="Basti" required></label>
-        </div>
-        <button class="knopf" type="submit">Merken</button>
-      </form>
-
-      <!-- Nicht angemeldet: erst der Knopf, dann das Adressfeld. -->
-      <button class="knopf leer" id="zeig-anmeldung" hidden>Anmelden</button>
-      <form id="anmelde-form" hidden>
-        <div class="melde eins">
-          <label><span class="feld-label">Deine E-Mail</span>
-            <input class="feld" id="f-mail" type="email" inputmode="email"
-                   autocomplete="email" placeholder="du@beispiel.de" required></label>
-        </div>
-        <button class="knopf" type="submit">Link schicken</button>
-      </form>
-
-      <p class="sagt" id="sagt" hidden></p>
-    </div>
-  </section>
-</div>
-
+  </div>
+  <p class="fuss">gemeldet ist nicht gemessen</p>
 
 <script>
-  const NS = 'http://www.w3.org/2000/svg';
+  // ==========================================================================
+  // ENTWURF „TAFEL“ — was dieser Entwurf selbst zeichnet.
+  // ==========================================================================
 
-  // So weit reicht die Strichliste, und ab so vielen Flaschen ist auch das Glas
-  // voll - beide dieselbe Grenze, sonst stuende das Glas die halbe Skala lang
-  // stumm auf Anschlag. Vierundzwanzig, weil fuenf Buendel das letzte sind, was
-  // man auf einen Blick liest; darueber sieht man ohnehin nur noch "viel".
-  const VOLL_AB = 24;
+  /* Strichliste, wie sie der Wirt anschreibt: Vierergruppe plus Querstrich.
+     `gross` ist der Kopf (mehrzeilig, damit fünf Bündel nicht über den Rand
+     laufen), `klein` die einreihige Fassung in der Karte. */
+  function striche(anzahl, gross) {
+    const svg = document.createElementNS(NS, 'svg');
+    /* Über der Grenze und unter null zählt niemand mehr - dann steht dort ein
+       Wort, in derselben Kreide. */
+    const wort = t => {
+      if (gross) {
+        svg.setAttribute('viewBox', '0 0 300 56');
+        svg.setAttribute('preserveAspectRatio', 'xMinYMid meet');
+      } else {
+        // Breit genug fuer „ausgetrunken“ - das laengste Wort, das hier steht.
+        svg.setAttribute('viewBox', '0 0 300 34');
+        svg.setAttribute('height', 18);
+      }
+      const n = s_el('text', {
+        x: 2, y: gross ? 40 : 26, class: 'wort-gross' + (t === 'voll' ? ' voll' : ''),
+      });
+      if (!gross) n.setAttribute('font-size', 22);
+      n.textContent = t;
+      svg.appendChild(n);
+      return svg;
+    };
+    if (!Number.isFinite(anzahl)) return wort('?');
+    if (anzahl <= 0) return wort('ausgetrunken');
+    if (anzahl > VOLL_AB) return wort('voll');
 
-  // --------------------------------------------------------------------------
-  // Die Ampel. Sechs Stufen, und die Farben sind keine Thermometerfarben,
-  // sondern ein Urteil: gruen ist das Brauereigruen des Deckels (so soll es
-  // sein), rot ist das Registerrot des Querstrichs (so soll es nicht sein).
-  // Blau darunter heisst nicht "besser", sondern "kaelter als noetig".
-  // --------------------------------------------------------------------------
-  const STUFEN = [
-    // bis °C, Wort,        Farbe,     Krone, Steigzeit, Perlen, Kondens, Reif
-    [  2, 'eiskalt',   '#2f86c4', 1.00, '2.7s', 0.90, 0.60, 0.55],
-    [  6, 'kalt',      '#2f5d4a', 0.94, '3.2s', 0.85, 0.50, 0.00],
-    [  9, 'kühl',      '#5f7a33', 0.78, '4.2s', 0.70, 0.30, 0.00],
-    [ 12, 'lauwarm',   '#b08a1c', 0.55, '5.6s', 0.50, 0.10, 0.00],
-    [ 16, 'warm',      '#c4661f', 0.34, '7.4s', 0.32, 0.00, 0.00],
-    [ 99, 'pisswarm',  '#a8342a', 0.16, '9.5s', 0.16, 0.00, 0.00],
-  ];
+    const B = gross ? { g: 74, a: 26, s: 16, h: 15, w: 7, zeile: 46 }
+                    : { g: 34, a: 14, s: 7.5, h: 9, w: 3.4, zeile: 30 };
+    const gruppen = Math.ceil(anzahl / 5);
+    // Im Kopf brechen die Bündel um, in der Karte bleibt alles in einer Reihe.
+    const proReihe = gross ? (gruppen <= 3 ? gruppen : 3) : gruppen;
+    const reihen = Math.ceil(gruppen / proReihe);
+    const breite = proReihe * B.g + (proReihe - 1) * B.a;
+    const hoehe = reihen * B.zeile;
+    svg.setAttribute('viewBox', '0 0 ' + breite + ' ' + hoehe);
+    if (gross) { svg.setAttribute('width', '100%'); svg.setAttribute('preserveAspectRatio', 'xMinYMid meet'); }
+    else svg.setAttribute('height', 18);
 
-  function stufe(t) {
-    for (const s of STUFEN) if (t < s[0]) return s;
-    return STUFEN[STUFEN.length - 1];
+    let stift = 0;
+    for (let gi = 0; gi < gruppen; gi++) {
+      const imBund = Math.min(5, anzahl - gi * 5);
+      const reihe = Math.floor(gi / proReihe), spalte = gi % proReihe;
+      const x0 = spalte * (B.g + B.a), y = reihe * B.zeile + B.zeile / 2;
+      for (let s = 0; s < Math.min(imBund, 4); s++) {
+        const l = s_el('line', {
+          class: 'strich', 'stroke-width': B.w,
+          x1: x0 + B.w + s * B.s, y1: y - B.h, x2: x0 + B.w + 4 + s * B.s, y2: y + B.h,
+        });
+        l.style.animationDelay = (stift++ * 0.07) + 's';
+        svg.appendChild(l);
+      }
+      if (imBund === 5) {
+        const l = s_el('line', {
+          class: 'strich quer', 'stroke-width': B.w,
+          x1: x0 + 1, y1: y + B.h - 2, x2: x0 + B.g - 8, y2: y - B.h + 2,
+        });
+        l.style.animationDelay = (stift++ * 0.07) + 's';
+        svg.appendChild(l);
+      }
+    }
+    return svg;
   }
 
-  // --------------------------------------------------------------------------
-  // Der Bestand steht doppelt da, und das mit Absicht: die Striche sind die
-  // genaue Zahl, der Bierspiegel der Blick von weitem. Ein halb leeres Glas
-  // sieht man auch dann, wenn man die Striche gar nicht liest.
-  // --------------------------------------------------------------------------
+  /* Der Bestand steht doppelt da, und das mit Absicht: die Striche sind die
+     genaue Zahl, der Bierspiegel der Blick von weitem. Ein halb leeres Glas
+     sieht man auch dann, wenn man die Striche gar nicht liest. */
   function fuellstand(anzahl) {
     const el = document.documentElement.style;
     const f = Number.isFinite(anzahl)
@@ -605,82 +627,132 @@
     // Die Krone blendet ueber das erste Achtel ein - darunter schwebte sonst
     // ein Schaumring knapp ueber dem Boden.
     el.setProperty('--schaum-voll', Math.min(1, f * 8).toFixed(3));
-    document.getElementById('glas').classList.toggle('ungewiss', !Number.isFinite(anzahl));
+    $('glas').classList.toggle('ungewiss', !Number.isFinite(anzahl));
   }
 
-  // --------------------------------------------------------------------------
-  // Strichliste, wie sie der Wirt anschreibt: Vierergruppe plus Querstrich.
-  // Die Gruppen brechen ab drei Stueck in mehrere Reihen um, sonst laufen sie
-  // bei zwoelf Flaschen ueber den Rand des Deckels hinaus.
-  // --------------------------------------------------------------------------
-  function striche(anzahl) {
-    const g = document.getElementById('striche');
-    g.textContent = '';
+  const VARIANTE = {
+    kopf(p, modus) {
+      const ziel = $('hero-striche');
+      ziel.textContent = '';
+      const messung = p && Number.isFinite(p.temperatur);
+      const s = stufe(messung ? p.temperatur : 99);
 
-    if (!Number.isFinite(anzahl) || anzahl <= 0) {
-      const t = document.createElementNS(NS, 'text');
-      t.setAttribute('x', 150); t.setAttribute('y', 74);
-      t.setAttribute('text-anchor', 'middle');
-      t.setAttribute('class', 'aus');
-      // Kein "0": eine leere Strichliste sagt dasselbe freundlicher.
-      t.textContent = anzahl === 0 ? 'ausgetrunken' : '?';
-      g.appendChild(t);
-      return;
-    }
-
-    // Das andere Ende: mehr, als die Liste tragen kann.
-    if (anzahl > VOLL_AB) {
-      const t = document.createElementNS(NS, 'text');
-      t.setAttribute('x', 150); t.setAttribute('y', 74);
-      t.setAttribute('text-anchor', 'middle');
-      t.setAttribute('class', 'voll');
-      t.textContent = 'voll';
-      g.appendChild(t);
-      return;
-    }
-
-    const gruppen  = Math.ceil(anzahl / 5);
-    const proReihe = gruppen <= 2 ? gruppen : gruppen <= 4 ? 2 : 3;
-    const reihen   = Math.ceil(gruppen / proReihe);
-
-    const gBreite = 74, gAbstand = 24, zAbstand = 44;
-    const yMitte  = 60;
-    const yStart  = yMitte - ((reihen - 1) * zAbstand) / 2;
-
-    let stift = 0;   // fuer den zeitlichen Versatz beim Anschreiben
-    for (let gi = 0; gi < gruppen; gi++) {
-      const imBund   = Math.min(5, anzahl - gi * 5);
-      const reihe    = Math.floor(gi / proReihe);
-      const spalte   = gi % proReihe;
-      const inReihe  = Math.min(proReihe, gruppen - reihe * proReihe);
-      const gesamt   = inReihe * gBreite + (inReihe - 1) * gAbstand;
-      const x0 = 150 - gesamt / 2 + spalte * (gBreite + gAbstand);
-      const y  = yStart + reihe * zAbstand;
-
-      for (let s = 0; s < Math.min(imBund, 4); s++) {
-        const l = document.createElementNS(NS, 'line');
-        l.setAttribute('class', 'strich');
-        l.setAttribute('x1', x0 + 9 + s * 16); l.setAttribute('y1', y - 15);
-        l.setAttribute('x2', x0 + 13 + s * 16); l.setAttribute('y2', y + 15);
-        l.style.animationDelay = (stift++ * 0.075) + 's';
-        g.appendChild(l);
+      // Kurz halten: die Ueberschrift bricht bei Bedarf mitten im Wort um
+      // (das braucht sie fuer lange Namen), und „nichts angeschrieben“ tat das.
+      $('marke').textContent = p ? p.name : 'kein Netz';
+      $('krone').textContent =
+        modus === 'fuehrend' ? 'Führt das Feld an' :
+        modus === 'eigen' ? 'Aus dem eigenen Kühlschrank' : '';
+      const unter = $('hero-unter');
+      unter.textContent = '';
+      if (modus === 'fuehrend' && p.gemessen) {
+        unter.appendChild(el('span', 'marke-gemessen', 'gemessen, nicht behauptet'));
+      } else if (modus === 'fuehrend' && Number.isFinite(p.best) && p.best > p.biere) {
+        unter.textContent = 'Bestmarke ' + p.best;
+      } else if (modus === 'nichts') {
+        unter.textContent = 'Die Tafel ist gerade nicht zu erreichen.';
       }
-      if (imBund === 5) {
-        const l = document.createElementNS(NS, 'line');
-        l.setAttribute('class', 'strich quer');
-        l.setAttribute('x1', x0 + 2);  l.setAttribute('y1', y + 13);
-        l.setAttribute('x2', x0 + 66); l.setAttribute('y2', y - 13);
-        l.style.animationDelay = (stift++ * 0.075) + 's';
-        g.appendChild(l);
-      }
-    }
+
+      const n = p ? Number(p.biere) : NaN;
+      ziel.appendChild(striche(n, true));
+      ziel.setAttribute('aria-label',
+        Number.isFinite(n) ? n + ' kalte Biere' : 'kein Bestand bekannt');
+      fuellstand(n);
+
+      $('wort').textContent = messung ? s[1] : 'Bier';
+      // Die letzten fuenf Spalten von STUFEN gehoeren dem Glas: Krone,
+      // Steigzeit, Perlung, Schwitzwasser, Reif.
+      const st = document.documentElement.style;
+      st.setProperty('--ampel', messung ? s[2] : 'var(--kreide-matt)');
+      st.setProperty('--schaum',     messung ? s[3] : 0.8);
+      st.setProperty('--sprudel',    messung ? s[4] : '4.2s');
+      st.setProperty('--sprudel-op', messung ? s[5] : 0.6);
+      st.setProperty('--kondens',    messung ? s[6] : 0);
+      st.setProperty('--frost',      messung ? s[7] : 0);
+      $('temp').textContent = messung ? grad(p.temperatur) : 'keine Messung';
+      $('stand').textContent = p ? standText(p.gemeldet) : 'gerade nicht erreichbar';
+
+      const nadel = $('nadel');
+      nadel.style.left = (messung ? Math.max(0, Math.min(100, (p.temperatur / 20) * 100)) : 50) + '%';
+      nadel.style.opacity = messung ? 1 : 0;
+    },
+
+    zeile(p, i, s, ich) {
+      const z = el('div', 'zeile' + (ich ? ' ich' : '') + (i === 0 ? ' erster' : ''));
+      z.appendChild(el('div', 'z-rang kr', String(i + 1)));
+
+      const mitte = el('div', 'z-mitte');
+      const name = el('div', 'z-name kr');
+      name.textContent = p.name;
+      if (p.gemessen) name.appendChild(el('span', 'z-marke', 'gemessen'));
+      mitte.appendChild(name);
+      const str = el('div', 'z-striche');
+      str.appendChild(striche(p.biere, false));
+      mitte.appendChild(str);
+      const unter = el('div', 'z-unter');
+      const wort = el('span', 'wort kr', s[1]);
+      wort.style.color = s[2];
+      unter.appendChild(wort);
+      unter.appendChild(el('span', null, '· ' + grad(p.temperatur) + ' · ' + standText(p.gemeldet)));
+      mitte.appendChild(unter);
+      z.appendChild(mitte);
+
+      const rechts = el('div', 'z-rechts');
+      const sp = el('div', 'z-spark');
+      sp.appendChild(sparkline(p.verlauf, s[2], 46, 18));
+      rechts.appendChild(sp);
+      rechts.appendChild(el('div', 'z-zahl kr', String(p.biere)));
+      z.appendChild(rechts);
+      return z;
+    },
+
+    leer() {
+      return el('div', 'leer-hinweis kr',
+        'Noch hat niemand angeschrieben. Der erste Eintrag bekommt den Kopf der Tafel.');
+    },
+  };
+
+  // ==========================================================================
+  // DATENSCHICHT
+  // In allen Entwuerfen wortgleich. Sie holt die Bestenliste vom Worker, haelt
+  // die Anmeldung (Magic Link, Geraete-Token) und ruft nach oben nur drei
+  // Funktionen, die jeder Entwurf selbst mitbringt:
+  //
+  //     VARIANTE.kopf(p, modus)   der Siegerplatz. modus: 'fuehrend' | 'eigen' | 'nichts'
+  //     VARIANTE.zeile(p, i, s, ich)   eine Zeile der Liste (s = Ampelstufe)
+  //     VARIANTE.leer()           was dasteht, wenn noch niemand gemeldet hat
+  //
+  // Alles, was ueber Daten entscheidet, steht damit genau einmal; alles, was
+  // ueber das Bild entscheidet, steht im Entwurf.
+  // ==========================================================================
+  const NS = 'http://www.w3.org/2000/svg';
+
+  // So weit reicht die Strichliste, und ab so vielen Flaschen ist auch das Glas
+  // voll - beide dieselbe Grenze, sonst stuende das Glas die halbe Skala lang
+  // stumm auf Anschlag. Vierundzwanzig, weil das ein Kasten ist.
+  const VOLL_AB = 24;
+
+  // Die Ampel. Sechs Stufen, und die Farben sind keine Thermometerfarben,
+  // sondern ein Urteil: gruen ist "so soll es sein", rot "so nicht".
+  // Blau darunter heisst nicht "besser", sondern "kaelter als noetig".
+  const STUFEN = [
+    // bis °C, Wort,      Farbe,     Krone, Steigzeit, Perlen, Kondens, Reif
+    [  2, 'eiskalt',  '#2f86c4', 1.00, '2.7s', 0.90, 0.60, 0.55],
+    [  6, 'kalt',     '#2f5d4a', 0.94, '3.2s', 0.85, 0.50, 0.00],
+    [  9, 'kühl',     '#5f7a33', 0.78, '4.2s', 0.70, 0.30, 0.00],
+    [ 12, 'lauwarm',  '#b08a1c', 0.55, '5.6s', 0.50, 0.10, 0.00],
+    [ 16, 'warm',     '#c4661f', 0.34, '7.4s', 0.32, 0.00, 0.00],
+    [ 99, 'pisswarm', '#a8342a', 0.16, '9.5s', 0.16, 0.00, 0.00],
+  ];
+
+  function stufe(t) {
+    for (const s of STUFEN) if (t < s[0]) return s;
+    return STUFEN[STUFEN.length - 1];
   }
 
-  // --------------------------------------------------------------------------
-  // `stand` ist der Zeitpunkt des letzten brauchbaren Kuehlschrankfotos, auf die
-  // volle Stunde gerundet und mit Zeitzonen-Offset: die Minute bleibt damit
-  // privat, waehrend die Rechnung auch in einer anderen Zeitzone stimmt.
-  // --------------------------------------------------------------------------
+  // `gemeldet` ist bei der eigenen Wohnung der Zeitpunkt des letzten brauchbaren
+  // Kuehlschrankfotos, auf die volle Stunde gerundet und mit Zeitzonen-Offset:
+  // die Minute bleibt privat, die Rechnung stimmt trotzdem in jeder Zeitzone.
   function standText(zeit) {
     if (!zeit) return 'Stand unbekannt';
     const d = new Date(zeit);
@@ -691,49 +763,7 @@
     return tage === 1 ? 'vor 1 Tag' : 'vor ' + tage + ' Tagen';
   }
 
-  function temperatur(t) {
-    const el = document.documentElement.style;
-    const messung = Number.isFinite(t);
-    const s = stufe(messung ? t : 99);
-
-    document.getElementById('temp').textContent =
-      messung ? t.toFixed(1).replace('.', ',') + ' °C' : 'keine Messung';
-
-    // Ohne Messung bleibt das Wort neutral - die Ampel darf nicht behaupten,
-    // etwas zu wissen.
-    document.getElementById('wort').textContent = messung ? s[1] : 'Bier';
-    el.setProperty('--ampel', messung ? s[2] : 'var(--blass)');
-    el.setProperty('--schaum',     messung ? s[3] : 0.8);
-    el.setProperty('--sprudel',    messung ? s[4] : '4.2s');
-    el.setProperty('--sprudel-op', messung ? s[5] : 0.6);
-    el.setProperty('--kondens',    messung ? s[6] : 0);
-    el.setProperty('--frost',      messung ? s[7] : 0);
-
-    const nadel = document.getElementById('nadel');
-    nadel.style.left = (messung ? Math.max(0, Math.min(100, (t / 20) * 100)) : 50) + '%';
-    nadel.style.opacity = messung ? 1 : 0;
-  }
-
-  function zeichne(daten) {
-    const n = Number(daten.biere);
-    striche(n);
-    fuellstand(n);
-    temperatur(Number(daten.temperatur));
-    document.getElementById('stand').textContent = standText(daten.stand);
-  }
-
-
-  // ==========================================================================
-  // Die Bestenliste. Sie kommt vom Worker; `status.json` bleibt als Rueckfall
-  // liegen, damit der eigene Bestand auch dann noch dasteht, wenn die API
-  // gerade nicht antwortet. Die Seite selbst bleibt statisch - sie fragt nur.
-  // ==========================================================================
-  const API = 'https://beerstock-api.mc-schneider84.workers.dev';
-  const SPEICHER = 'beerstock-token';
-
-  const merke  = () => localStorage.getItem(SPEICHER);
-  const nimm   = t => localStorage.setItem(SPEICHER, t);
-  const wirf   = () => localStorage.removeItem(SPEICHER);
+  const grad = t => Number.isFinite(t) ? t.toFixed(1).replace('.', ',') + ' °C' : '–';
 
   const $ = id => document.getElementById(id);
   const el = (tag, klasse, text) => {
@@ -742,6 +772,47 @@
     if (text != null) n.textContent = text;
     return n;
   };
+  const s_el = (tag, attrs) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  };
+
+  /* Verlauf der letzten Tage. Klein genug, um Beiwerk zu bleiben. */
+  function sparkline(werte, farbe, w = 62, h = 20) {
+    const svg = s_el('svg', {
+      viewBox: '0 0 ' + w + ' ' + h, width: w, height: h, 'aria-hidden': 'true',
+    });
+    if (!werte || werte.length < 2) return svg;   // leeres Kaestchen haelt die Zeile ruhig
+    const max = Math.max(...werte, 1);
+    const px = werte.map((v, i) => [
+      (i / (werte.length - 1)) * (w - 2) + 1,
+      h - 2 - (v / max) * (h - 4),
+    ]);
+    svg.appendChild(s_el('path', {
+      d: 'M' + px[0][0] + ',' + h + ' ' + px.map(p => 'L' + p[0] + ',' + p[1]).join(' ') +
+         ' L' + px[px.length - 1][0] + ',' + h + ' Z',
+      fill: farbe, opacity: .13,
+    }));
+    svg.appendChild(s_el('polyline', {
+      points: px.map(p => p.join(',')).join(' '), fill: 'none', stroke: farbe,
+      'stroke-width': 1.4, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+    }));
+    svg.appendChild(s_el('circle', {
+      cx: px[px.length - 1][0], cy: px[px.length - 1][1], r: 1.9, fill: farbe,
+    }));
+    return svg;
+  }
+
+  // --------------------------------------------------------------------------
+  // Anmeldung und Abruf
+  // --------------------------------------------------------------------------
+  const API = 'https://beerstock-api.mc-schneider84.workers.dev';
+  const SPEICHER = 'beerstock-token';
+
+  const merke = () => { try { return localStorage.getItem(SPEICHER); } catch { return null; } };
+  const nimm  = t => { try { localStorage.setItem(SPEICHER, t); } catch {} };
+  const wirf  = () => { try { localStorage.removeItem(SPEICHER); } catch {} };
 
   let meinName = null;      // steht nach der ersten Antwort fest
   let brauchtNamen = false; // angemeldet, aber noch ohne Namen fuer die Liste
@@ -751,127 +822,6 @@
     p.textContent = text;
     p.classList.toggle('schlecht', !!schlecht);
     p.hidden = !text;
-  }
-
-  /* Kleine, einreihige Strichliste fuer eine Listenzeile. Dieselbe Regel wie
-     oben - Vierergruppe plus roter Querstrich -, nur klein und ohne Umbruch.
-     Ueber VOLL_AB steht auch hier nur noch das Wort. */
-  function stricheKlein(anzahl) {
-    const svg = document.createElementNS(NS, 'svg');
-    const wort = t => {
-      svg.setAttribute('viewBox', '0 0 120 30'); svg.setAttribute('height', 17);
-      const n = document.createElementNS(NS, 'text');
-      n.setAttribute('x', 0); n.setAttribute('y', 23); n.setAttribute('font-size', 20);
-      n.setAttribute('font-style', 'italic');
-      n.setAttribute('font-family', 'ui-serif, Georgia, serif');
-      n.setAttribute('fill', t === 'voll' ? 'var(--gruen)' : 'var(--rot)');
-      n.setAttribute('opacity', .85);
-      n.textContent = t;
-      svg.appendChild(n);
-      return svg;
-    };
-    if (!Number.isFinite(anzahl) || anzahl <= 0) return wort('ausgetrunken');
-    if (anzahl > VOLL_AB) return wort('voll');
-
-    const gruppen = Math.ceil(anzahl / 5), gB = 34, gA = 14;
-    const w = gruppen * gB + (gruppen - 1) * gA;
-    svg.setAttribute('viewBox', '0 0 ' + w + ' 30'); svg.setAttribute('height', 17);
-    for (let gi = 0; gi < gruppen; gi++) {
-      const imBund = Math.min(5, anzahl - gi * 5), x0 = gi * (gB + gA);
-      for (let s = 0; s < Math.min(imBund, 4); s++) {
-        const l = document.createElementNS(NS, 'line');
-        l.setAttribute('class', 'strich'); l.setAttribute('stroke-width', 3.4);
-        l.setAttribute('x1', x0 + 4 + s * 7.5); l.setAttribute('y1', 6);
-        l.setAttribute('x2', x0 + 6 + s * 7.5); l.setAttribute('y2', 24);
-        svg.appendChild(l);
-      }
-      if (imBund === 5) {
-        const l = document.createElementNS(NS, 'line');
-        l.setAttribute('class', 'strich quer'); l.setAttribute('stroke-width', 3.4);
-        l.setAttribute('x1', x0 + 1); l.setAttribute('y1', 22);
-        l.setAttribute('x2', x0 + 31); l.setAttribute('y2', 8);
-        svg.appendChild(l);
-      }
-    }
-    return svg;
-  }
-
-  /* Verlauf der letzten Wochen. Klein genug, um Beiwerk zu bleiben. */
-  function sparkline(werte, farbe) {
-    const w = 62, h = 20;
-    if (!werte || werte.length < 2) return document.createComment('kein Verlauf');
-    const max = Math.max(...werte, 1);
-    const px = werte.map((v, i) => [
-      (i / (werte.length - 1)) * (w - 2) + 1,
-      h - 2 - (v / max) * (h - 4),
-    ]);
-    const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
-    svg.setAttribute('width', w); svg.setAttribute('height', h);
-    svg.setAttribute('aria-hidden', 'true');
-    const f = document.createElementNS(NS, 'path');
-    f.setAttribute('d', 'M' + px[0][0] + ',' + h + ' ' +
-      px.map(p => 'L' + p[0] + ',' + p[1]).join(' ') + ' L' + px[px.length - 1][0] + ',' + h + ' Z');
-    f.setAttribute('fill', farbe); f.setAttribute('opacity', .13);
-    svg.appendChild(f);
-    const l = document.createElementNS(NS, 'polyline');
-    l.setAttribute('points', px.map(p => p.join(',')).join(' '));
-    l.setAttribute('fill', 'none'); l.setAttribute('stroke', farbe);
-    l.setAttribute('stroke-width', 1.4);
-    l.setAttribute('stroke-linejoin', 'round'); l.setAttribute('stroke-linecap', 'round');
-    svg.appendChild(l);
-    const p = document.createElementNS(NS, 'circle');
-    p.setAttribute('cx', px[px.length - 1][0]); p.setAttribute('cy', px[px.length - 1][1]);
-    p.setAttribute('r', 1.9); p.setAttribute('fill', farbe);
-    svg.appendChild(p);
-    return svg;
-  }
-
-  function rangliste(feld) {
-    const ziel = $('rangliste');
-    ziel.textContent = '';
-
-    if (!feld.length) {
-      ziel.appendChild(el('div', 'leer-hinweis',
-        'Noch hat niemand gemeldet. Der erste Eintrag bekommt den Deckel.'));
-      return;
-    }
-
-    feld.forEach((p, i) => {
-      // Dieselbe Ampel wie oben auf dem Deckel - Wort und Farbe kommen aus
-      // STUFEN, nicht aus einer zweiten Tabelle.
-      const s = stufe(p.temperatur);
-      const ich = meinName && p.name === meinName;
-
-      const z = el('div', 'zeile' + (ich ? ' ich' : ''));
-      z.appendChild(el('div', 'z-rang', String(i + 1)));
-
-      const mitte = el('div');
-      const name = el('div', 'z-name');
-      name.textContent = p.name;
-      if (p.gemessen) name.appendChild(el('span', 'z-marke', 'gemessen'));
-      mitte.appendChild(name);
-      const str = el('div', 'z-striche');
-      str.appendChild(stricheKlein(p.biere));
-      mitte.appendChild(str);
-      z.appendChild(mitte);
-
-      const rechts = el('div', 'z-rechts');
-      rechts.appendChild(el('div', 'z-zahl', String(p.biere)));
-      const unten = el('div', 'z-unten');
-      const wort = el('span', 'z-wort', s[1]);
-      wort.style.color = s[2];
-      unten.appendChild(wort);
-      unten.appendChild(document.createTextNode(
-        ' · ' + p.temperatur.toFixed(1).replace('.', ',') + ' °C · ' + standText(p.gemeldet)));
-      rechts.appendChild(unten);
-      const sp = el('div', 'z-spark');
-      sp.appendChild(sparkline(p.verlauf, s[2]));
-      rechts.appendChild(sp);
-      z.appendChild(rechts);
-
-      ziel.appendChild(z);
-    });
   }
 
   /* Drei Zustaende, und immer ist genau einer sichtbar:
@@ -888,38 +838,38 @@
     $('wer-bin-ich').textContent = meinName ? 'angemeldet als ' + meinName : 'angemeldet';
   }
 
+  function liste(feld) {
+    const ziel = $('rangliste');
+    ziel.textContent = '';
+    if (!feld.length) { ziel.appendChild(VARIANTE.leer()); return; }
+    feld.forEach((p, i) => {
+      // Dieselbe Ampel wie oben auf dem Siegerplatz - Wort und Farbe kommen aus
+      // STUFEN, nicht aus einer zweiten Tabelle.
+      ziel.appendChild(VARIANTE.zeile(p, i, stufe(p.temperatur), !!meinName && p.name === meinName));
+    });
+  }
+
   function zeichneFeld(feld) {
     $('block').hidden = false;
     $('block-datum').textContent =
       new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
-
-    if (feld.length) {
-      // Der Deckel gehoert dem Ersten. `zeichne` rechnet wie immer, nur mit
-      // seinen Werten - Glas, Striche, Ampel und Nadel bleiben unangetastet.
-      const erster = feld[0];
-      $('marke').textContent = erster.name;
-      $('krone').textContent = '① Führt das Feld an';
-      zeichne({ biere: erster.biere, temperatur: erster.temperatur, stand: erster.gemeldet });
-    } else {
-      $('krone').textContent = '';
-      $('marke').textContent = 'Kühlschrank';
-      rueckfall();
-    }
-    rangliste(feld);
+    // Der Siegerplatz gehoert dem Ersten, nicht diesem Kuehlschrank.
+    if (feld.length) VARIANTE.kopf(feld[0], 'fuehrend'); else rueckfall();
+    liste(feld);
     formular();
   }
 
-  /* Rueckfall: der eigene Kuehlschrank aus status.json, wie die Seite es vor
-     der Bestenliste gemacht hat. */
+  /* Rueckfall: der eigene Kuehlschrank aus status.json, wie die Seite es vor der
+     Bestenliste gemacht hat. Lieber ein Kuehlschrank als eine leere Tabelle.
+     Der Pfad gilt fuer die Datei im Wurzelverzeichnis (also als index.html). */
   function rueckfall() {
     return fetch('status.json?t=' + Date.now(), { cache: 'no-store' })
       .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
-      .then(zeichne)
-      .catch(() => {
-        striche(NaN); fuellstand(NaN); temperatur(NaN);
-        $('temp').textContent = 'keine Daten';
-        $('stand').textContent = 'gerade nicht erreichbar';
-      });
+      .then(d => VARIANTE.kopf({
+        name: 'Kühlschrank', biere: Number(d.biere),
+        temperatur: Number(d.temperatur), gemeldet: d.stand,
+      }, 'eigen'))
+      .catch(() => VARIANTE.kopf(null, 'nichts'));
   }
 
   async function hole() {
@@ -929,11 +879,9 @@
       const d = await r.json();
       zeichneFeld(d.feld || []);
     } catch (e) {
-      // API weg: der Deckel zeigt wieder den eigenen Kuehlschrank, der Block
-      // bleibt draussen. Lieber weniger als eine leere Tabelle.
+      // API weg: der Siegerplatz zeigt wieder den eigenen Kuehlschrank, die
+      // Liste bleibt draussen.
       $('block').hidden = true;
-      $('krone').textContent = '';
-      $('marke').textContent = 'Kühlschrank';
       await rueckfall();
     }
   }
@@ -1077,11 +1025,27 @@
     }
   }
 
+  /* Die Seite steht oft lange offen - auf einem Tisch, auf einem Tablet. Also
+     nachfassen, aber nur, solange jemand hinsieht: ein Hintergrundtab fragt
+     nichts. */
+  function nachfassen() {
+    let letzte = Date.now();
+    const frisch = () => { letzte = Date.now(); hole(); };
+    setInterval(() => {
+      if (document.visibilityState === 'visible' && Date.now() - letzte > 60000) frisch();
+    }, 20000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && Date.now() - letzte > 60000) frisch();
+    });
+  }
+
   /* Reihenfolge: erst den Link einloesen (der setzt das Token), dann wissen,
      wer man ist, dann zeichnen. */
   magicEinloesen()
     .then(() => merke() && !meinName && !brauchtNamen ? werBinIch() : null)
-    .then(hole);
+    .then(hole)
+    .then(nachfassen);
+
 </script>
 </body>
 </html>
