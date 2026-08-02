@@ -44,6 +44,58 @@ const LOS_MIN     = 1;    // ohne kaltes Bier kein Gastgeber
 const LOS_DECKEL  = 24;   // Gewicht = min(biere, 24), ein Kasten ist die Obergrenze
 const LOS_MINDEST = 2;    // unter zweien gibt es nichts auszulosen
 
+/* Wer gezogen wurde, sagt zu oder ab - und wer gar nicht antwortet, darf den
+   Tag nicht besitzen. Nach dieser Frist gilt das Los als verfallen und der Tag
+   ist wieder frei. Kein Cron dahinter: der naechste Dreher traegt es nach
+   (siehe verfallStmt). Wichtig fuer den gemessenen Melder aus Home Assistant -
+   der kann von sich aus ueberhaupt nicht antworten. */
+const LOS_FRIST   = 3;    // Stunden
+/* Ab der zweiten Drehung eines Tages genuegt EINER im Topf. Sonst sperrt eine
+   einzige Absage bei genau zwei Meldern den ganzen Abend. */
+const LOS_MINDEST_WEITER = 1;
+const GRUND_MAX   = 120;  // Zeichen fuer "Heute nicht, weil ..."
+
+/* Termine. Der Abend, der aus einer Zusage entsteht - oder von Hand eingetragen
+   wird, denn nicht jeder Bierabend faellt aus einer Ziehung. */
+const TERMIN_VORAUS      = 90;   // Tage, so weit darf einer im Voraus liegen
+const TERMIN_RUECK       = 24;   // Stunden, so weit darf er zurueckliegen
+const TERMINE_PRO_TAG    = 3;    // je Nutzer und Tag, gegen das Vollschreiben
+const TERMIN_TITEL_MAX   = 60;   // Zeichen
+const TERMINE_RUECKBLICK = 14;   // Tage, so weit reicht die Liste zurueck
+/* Wenn ein Client bei der Zusage keine Uhrzeit mitschickt. 17:00 UTC ist 19:00
+   deutscher Sommerzeit - eine Annahme, die hier bewusst steht, weil der Worker
+   kein ICU hat. Seite und Home Assistant rechnen selbst um und schicken fertig,
+   der Wert greift also nur bei einem Client, der es nicht tut. */
+const TERMIN_VORGABE_UTC = '17:00:00';
+
+/* Die Sternkategorien. Sie stehen HIER und nicht in der Datenbank: vier Zeilen
+   Stammdaten waeren ein Join je Abruf, und unbekannte Schluessel weist die
+   Route ohnehin ab. Die Beschriftung reist mit, damit die Seite sie nicht ein
+   zweites Mal fuehren muss - zwei Fassungen laufen auseinander. */
+const KATEGORIEN = {
+  user: [
+    ['kaltstellen',     'Kaltstellen'],
+    ['auswahl',         'Auswahl'],
+    ['gastfreundschaft', 'Gastfreundschaft'],
+    ['verlaesslichkeit', 'Verlässlichkeit'],
+  ],
+  termin: [
+    ['versorgung', 'Versorgung'],
+    ['location',   'Location'],
+    ['stimmung',   'Stimmung'],
+    ['ausklang',   'Ausklang'],
+  ],
+};
+const BEWERTSPERRE = 10;   // Sekunden zwischen zwei Bewertungen desselben Nutzers
+
+/* Kommentare. Eine Antwortebene, mehr nicht - auf dem Handy ist bei Stufe drei
+   die Spalte vierzig Pixel breit. Genau wie WhatsApp. */
+const KOMMENTAR_MAX    = 400;  // Zeichen
+const KOMMENTARE_TAG   = 30;   // je Nutzer und Tag
+const KOMMENTARSPERRE  = 10;   // Sekunden zwischen zweien desselben Nutzers
+const KOMMENTARE_ZIEL  = 200;  // je Ziel; aeltere fallen weg, sonst waechst es unbegrenzt
+const REAKTIONEN = new Set(['daumen_hoch', 'daumen_runter', 'herz', 'bier']);
+
 /* Der Bierabend-Tag endet nicht um Mitternacht, sondern sechs Stunden spaeter
    (07:00 bzw. 08:00 Ortszeit) - sonst faellt die Drehung um kurz nach eins auf
    den naechsten Tag, obwohl sie zu demselben Abend gehoert. Bewusst in UTC
@@ -135,13 +187,50 @@ const losFeldStmt = env => env.DB.prepare(`
   ORDER BY r.biere DESC, u.name ASC
 `).bind(LOS_MIN);
 
-const losStmt = (env, tag) => env.DB.prepare(`
-  SELECT l.tag, l.biere, l.feld, l.gedreht_am, u.name AS gewinner, g.name AS von
+/* ALLE Lose eines Tages, nicht nur das geltende - seit der Zusage kann es je
+   Tag mehrere geben. `abgelaufen` rechnet die Frist gleich mit aus, damit
+   Lesen und Schreiben dieselbe Grenze benutzen: der Verfall wird nur beim
+   Schreiben in die Datenbank eingetragen, gelten muss er sofort. */
+const losTagStmt = (env, tag) => env.DB.prepare(`
+  SELECT l.id, l.tag, l.user_id, l.biere, l.feld, l.gedreht_am,
+         l.status, l.grund, l.entschieden_am,
+         u.name AS gewinner, g.name AS von,
+         (l.status = 'offen' AND l.gedreht_am < datetime('now', ?)) AS abgelaufen
   FROM los l
   JOIN users u ON u.id = l.user_id
   LEFT JOIN users g ON g.id = l.gedreht_von
   WHERE l.tag = ?
-`).bind(tag);
+  ORDER BY l.id
+`).bind(`-${LOS_FRIST} hours`, tag);
+
+/* Der Verfall, festgeschrieben. Gehoert vor jede Schreibhandlung am Los und
+   IN DENSELBEN batch: die Anweisungen laufen der Reihe nach in einer
+   Transaktion, die Abfragen danach sehen das Ergebnis also schon. */
+const verfallStmt = (env, tag) => env.DB.prepare(`
+  UPDATE los SET status = 'verfallen', entschieden_am = datetime('now')
+  WHERE tag = ? AND status = 'offen' AND gedreht_am < datetime('now', ?)
+`).bind(tag, `-${LOS_FRIST} hours`);
+
+/* Die Lage des Tages aus diesen Zeilen: was gilt, wer raus ist, wie gross der
+   Topf mindestens sein muss. EINE Auswertung fuer Bestenliste, Ziehung und
+   Antwort - zwei Fassungen derselben Regel liefen frueher oder spaeter
+   auseinander, und dann zeigt die Seite etwas anderes an, als der Worker
+   entscheidet. */
+function tagesLage(zeilen) {
+  // 'offen' und 'zugesagt' belegen den Tag - solange die Frist laeuft.
+  const gueltig = zeilen.find(z =>
+    z.status === 'zugesagt' || (z.status === 'offen' && !z.abgelaufen)) || null;
+  /* Wer heute abgesagt hat oder nicht reagiert hat, wird nicht wieder gezogen.
+     Ueberschneiden kann sich das nicht: was hier steht, ist nie `gueltig`. */
+  const raus = zeilen.filter(z =>
+    z.status === 'abgelehnt' || z.status === 'verfallen' || z.abgelaufen);
+  return {
+    gueltig, raus,
+    rausIds: new Set(raus.map(z => z.user_id)),
+    // Erstdrehung des Tages: zwei. Jede weitere: einer.
+    mindest: zeilen.length ? LOS_MINDEST_WEITER : LOS_MINDEST,
+  };
+}
 
 const gewicht = biere => Math.min(biere, LOS_DECKEL);
 
@@ -160,27 +249,314 @@ function ziehe(feld) {
 const losSegmente = feld =>
   feld.map(p => ({ name: p.name, gewicht: gewicht(p.biere), gemessen: p.quelle === 'ha' }));
 
-/* Eine Form fuer beide Antworten: die Seite muss nicht zwei Faelle
-   unterscheiden. `gewinner === null` heisst "heute noch nicht gedreht", und
-   `feld` traegt dann das aktuelle Feld statt des eingefrorenen. */
-function losAntwort(tag, zeile, feldJetzt) {
-  if (!zeile) {
+/* Wer heute noch gezogen werden kann. Bewusst hier in JS und nicht als
+   Unterabfrage im SQL: der Verfall wird erst beim naechsten Schreiben
+   eingetragen, steht beim Lesen also noch als 'offen' in der Tabelle. Eine
+   SQL-Fassung wuerde ihn dort uebersehen und in der Bestenliste einen anderen
+   Topf zeigen als bei der Ziehung. */
+const losTopf = (feld, lage) => feld.filter(p => !lage.rausIds.has(p.id));
+
+// Immer mit Z, wie bei den Meldungen: die Seite rechnet daraus eine Uhrzeit.
+const utc = s => s ? s.replace(' ', 'T') + 'Z' : null;
+
+// ---------------------------------------------------------------------------
+// Termine
+// ---------------------------------------------------------------------------
+
+/* Der Client schickt ISO-8601 in UTC, die Datenbank schreibt
+   'YYYY-MM-DD HH:MM:SS' - dieselbe Form wie `datetime('now')`. Nur so
+   vergleicht SQLite Zeichenkette gegen Zeichenkette und bekommt das Richtige
+   heraus. Sekundenbruchteile fliegen dabei raus, die interessiert hier keiner. */
+const alsDbZeit = d => d.toISOString().slice(0, 19).replace('T', ' ');
+
+/* Gibt den Datumswert zurueck oder einen fertigen Fehlertext - nie beides.
+   Ohne Obergrenze traegt der erste Spassvogel den Bierabend ins Jahr 2200 ein,
+   und die Liste der kommenden Termine ist erledigt. */
+function pruefeBeginn(roh) {
+  const d = new Date(String(roh || ''));
+  if (isNaN(d)) return { fehler: 'Zeitpunkt: ISO-8601 in UTC, etwa 2026-08-02T17:00:00Z' };
+  const jetzt = Date.now();
+  if (d.getTime() > jetzt + TERMIN_VORAUS * 864e5) {
+    return { fehler: `Höchstens ${TERMIN_VORAUS} Tage im Voraus` };
+  }
+  if (d.getTime() < jetzt - TERMIN_RUECK * 36e5) {
+    return { fehler: 'Das liegt zu weit zurück — Termine trägt man vorher ein' };
+  }
+  return { d };
+}
+
+/* Kommende Termine plus ein Rueckblick: der letzte Abend soll noch dastehen,
+   damit man ihn bewerten kann. Abgesagte bleiben in der Liste, sie tragen ihre
+   Absage sichtbar - sonst verschwindet ein Abend, unter dem Kommentare stehen. */
+const termineStmt = env => env.DB.prepare(`
+  SELECT t.id, t.gastgeber_id, t.beginnt_am, t.titel, t.los_id, t.abgesagt_am,
+         t.erstellt_von, u.name AS gastgeber, e.name AS eingetragen_von
+  FROM termine t
+  JOIN users u ON u.id = t.gastgeber_id
+  LEFT JOIN users e ON e.id = t.erstellt_von
+  WHERE t.beginnt_am > datetime('now', ?)
+  ORDER BY t.beginnt_am
+`).bind(`-${TERMINE_RUECKBLICK} days`);
+
+/* `von` steht dabei, damit die Seite den Absagen-Knopf ohne Rueckfrage setzen
+   kann: aendern darf Gastgeber ODER Eintragender, und die Seite soll nicht
+   erst am 403 merken, dass sie ihn nicht haette zeigen duerfen. */
+const terminAntwort = (t, noten, wieViele) => ({
+  id: t.id,
+  gastgeber: t.gastgeber,
+  von: t.eingetragen_von || null,
+  beginnt_am: utc(t.beginnt_am),
+  titel: t.titel || null,
+  aus_ziehung: !!t.los_id,
+  abgesagt: !!t.abgesagt_am,
+  /* Nur wo die Schnitte mitgerechnet wurden - die Termin-Routen selbst
+     schicken die Liste ohne, dort interessiert sie niemanden.
+     Auf `instanceof Map` geprueft und nicht bloss auf Wahrheit: ein
+     `results.map(terminAntwort)` reicht den INDEX als zweites Argument
+     durch, und eine Zahl haette hier klaglos `noten.get` gerufen. Genau
+     das ist einmal passiert (500er auf /api/termin, 2026-08-02). */
+  ...(noten instanceof Map ? {
+    bewertung: schnittAntwort(noten.get('termin:' + t.id)),
+    kommentare: (wieViele instanceof Map && wieViele.get('termin:' + t.id)) || 0,
+  } : {}),
+});
+
+/* Eine Form fuer alle Antworten rund um das Los: die Seite muss nicht mehrere
+   Faelle unterscheiden. `gewinner === null` heisst "heute ist gerade nichts
+   gezogen" - entweder noch gar nicht, oder das letzte Los ist abgelehnt bzw.
+   verfallen. In beiden Faellen traegt `feld` den aktuellen Topf statt des
+   eingefrorenen, und `zuletzt` sagt, warum wieder gedreht werden darf. */
+function losAntwort(tag, lage, topf, termine = []) {
+  const z = lage.gueltig;
+  const gemeinsam = {
+    tag,
+    mindestens: lage.mindest,
+    // Wer heute schon raus ist - fuer "Raus fuer heute: ..." unter dem Rad.
+    abgesagt: lage.raus.map(r => r.gewinner),
+    /* Die letzte Absage bzw. der letzte Verfall des Tages - die Seite braucht
+       sie fuer den Satz, warum wieder gedreht werden darf. Steht ein gueltiges
+       Los daneben, ist sie ueberholt; die Seite liest sie dann auch nicht. */
+    zuletzt: lage.raus.length ? (r => ({
+      name: r.gewinner,
+      status: r.abgelaufen && r.status === 'offen' ? 'verfallen' : r.status,
+      grund: r.grund || null,
+    }))(lage.raus[lage.raus.length - 1]) : null,
+  };
+
+  if (!z) {
+    const genug = topf.length >= lage.mindest;
     return {
-      tag, gewinner: null, feld: losSegmente(feldJetzt),
-      offen: feldJetzt.length >= LOS_MINDEST, mindestens: LOS_MINDEST,
+      ...gemeinsam, gewinner: null, status: null, feld: losSegmente(topf),
+      // `offen` heisst seit jeher "es kann gedreht werden"; `darf_drehen` ist
+      // derselbe Wert unter dem Namen, der ihn erklaert.
+      offen: genug, darf_drehen: genug,
     };
   }
+
+  // Der Abend, den die Zusage angelegt hat. Die Seite schreibt daraus die
+  // Uhrzeit hinter den Namen: "Maike hat zugesagt - 19 Uhr".
+  const t = termine.find(x => x.los_id === z.id) || null;
+
   return {
-    tag,
-    gewinner: zeile.gewinner,
-    biere: zeile.biere,
-    feld: JSON.parse(zeile.feld),
-    von: zeile.von,
-    // Immer mit Z, wie bei den Meldungen: die Seite rechnet daraus eine Uhrzeit.
-    gedreht: zeile.gedreht_am.replace(' ', 'T') + 'Z',
-    offen: false, mindestens: LOS_MINDEST,
+    ...gemeinsam,
+    gewinner: z.gewinner,
+    biere: z.biere,
+    feld: JSON.parse(z.feld),
+    von: z.von,
+    gedreht: utc(z.gedreht_am),
+    termin_id: t ? t.id : null,
+    beginnt_am: t ? utc(t.beginnt_am) : null,
+    status: z.status,                       // 'offen' oder 'zugesagt'
+    grund: z.grund || null,
+    entschieden: utc(z.entschieden_am),
+    // Bis wann der Gewinner antworten kann. NULL, sobald er es getan hat.
+    frist: z.status === 'offen'
+      ? new Date(new Date(utc(z.gedreht_am)).getTime() + LOS_FRIST * 3600e3).toISOString()
+      : null,
+    offen: false, darf_drehen: false,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Bewertungen
+// ---------------------------------------------------------------------------
+
+/* Ein Ziel kommt als "art:id" ueber die Leitung - eine Zeichenkette statt
+   zweier Felder, weil sie so auch als Schluessel einer Map taugt und in einem
+   Query-Parameter steht. */
+function zielAus(roh) {
+  const [art, id] = String(roh || '').split(':');
+  if (!KATEGORIEN[art]) return null;
+  const n = Number(id);
+  return Number.isInteger(n) && n > 0 ? { art, id: n } : null;
+}
+
+/* Prueft und normalisiert die Sterne. Nicht bewertete Kategorien stehen
+   danach als `null` drin - so ist an der Zeile ablesbar, dass sie bewusst
+   leer sind, und `avg()` uebergeht sie von selbst. */
+function pruefeSterne(art, roh) {
+  if (!roh || typeof roh !== 'object' || Array.isArray(roh)) {
+    return { fehler: 'sterne: ein Objekt mit den Kategorien' };
+  }
+  const erlaubt = new Set(KATEGORIEN[art].map(k => k[0]));
+  for (const k of Object.keys(roh)) {
+    if (!erlaubt.has(k)) return { fehler: `Unbekannte Kategorie: ${k}` };
+  }
+  const sterne = {};
+  let gesetzt = 0;
+  for (const [k] of KATEGORIEN[art]) {
+    const v = roh[k];
+    if (v === null || v === undefined || v === '') { sterne[k] = null; continue; }
+    if (!Number.isInteger(v) || v < 1 || v > 5) {
+      return { fehler: `${k}: 1 bis 5 Sterne oder nichts` };
+    }
+    sterne[k] = v; gesetzt++;
+  }
+  // Eine Bewertung ganz ohne Stern ist keine - dafuer gibt es das Loeschen.
+  if (!gesetzt) return { fehler: 'Mindestens eine Kategorie bewerten' };
+  return { sterne };
+}
+
+/* Die Schnitte. Bewusst in JS statt als SQL-Aggregat: der Ausdruck haette die
+   Kategorienamen ein zweites Mal enthalten, und dann stehen sie an zwei
+   Stellen. Die Zeilenzahl ist die einer Kneipenrunde, nicht die eines
+   Rechenzentrums - das Sortieren kostet hier nichts. */
+function schnitte(zeilen) {
+  const m = new Map();
+  for (const z of zeilen) {
+    const k = z.ziel_art + ':' + z.ziel_id;
+    let e = m.get(k);
+    if (!e) m.set(k, e = { summe: 0, zahl: 0, anzahl: 0, je: new Map() });
+    e.anzahl++;
+    let s;
+    try { s = JSON.parse(z.sterne); } catch { continue; }
+    for (const [feld, wert] of Object.entries(s)) {
+      if (!Number.isFinite(wert)) continue;
+      e.summe += wert; e.zahl++;
+      const j = e.je.get(feld) || { summe: 0, zahl: 0 };
+      j.summe += wert; j.zahl++;
+      e.je.set(feld, j);
+    }
+  }
+  return m;
+}
+
+// Eine Kommastelle reicht: "4,2" liest sich, "4,1666" nicht.
+const note = (summe, zahl) => zahl ? Math.round(summe / zahl * 10) / 10 : null;
+
+const schnittAntwort = e =>
+  e ? { schnitt: note(e.summe, e.zahl), anzahl: e.anzahl } : { schnitt: null, anzahl: 0 };
+
+/* Nur, was auf der Seite auch gezeigt wird: alle Nutzer und die Termine im
+   Rueckblickfenster. Sonst waechst die Abfrage mit jedem je bewerteten Abend. */
+const bewertungenStmt = env => env.DB.prepare(`
+  SELECT ziel_art, ziel_id, sterne FROM bewertungen
+  WHERE ziel_art = 'user'
+     OR ziel_id IN (SELECT id FROM termine WHERE beginnt_am > datetime('now', ?))
+`).bind(`-${TERMINE_RUECKBLICK} days`);
+
+// ---------------------------------------------------------------------------
+// Kommentare
+// ---------------------------------------------------------------------------
+
+/* Dass das Ziel existiert, prueft der Worker - einen Fremdschluessel kann es
+   auf ein polymorphes Paar nicht geben. Gibt den Fehlertext zurueck oder null. */
+async function zielFehlt(env, ziel) {
+  if (ziel.art === 'user') {
+    const u = await env.DB.prepare('SELECT 1 FROM users WHERE id = ? AND name IS NOT NULL')
+      .bind(ziel.id).first();
+    return u ? null : 'Den gibt es nicht';
+  }
+  const t = await env.DB.prepare('SELECT 1 FROM termine WHERE id = ?').bind(ziel.id).first();
+  return t ? null : 'Den Termin gibt es nicht';
+}
+
+/* Der Baum, fertig zusammengesteckt. Drei Abfragen in einem batch, weil eine
+   verschachtelte SQL-Fassung dieselbe Arbeit in einer schlechter lesbaren Form
+   taete: Kommentare, die Reaktionen gezaehlt, und die eigenen davon. */
+const baumStmts = (env, ziel, ichId) => [
+  env.DB.prepare(`
+    SELECT k.id, k.autor_id, k.antwort_auf, k.text, k.erstellt, k.geaendert,
+           k.geloescht_am, u.name AS autor, b.sterne
+    FROM kommentare k
+    JOIN users u ON u.id = k.autor_id
+    LEFT JOIN bewertungen b ON b.id = k.bewertung_id
+    WHERE k.ziel_art = ? AND k.ziel_id = ?
+    ORDER BY k.id DESC
+    LIMIT ?
+  `).bind(ziel.art, ziel.id, KOMMENTARE_ZIEL),
+  env.DB.prepare(`
+    SELECT r.kommentar_id, r.art, count(*) AS anzahl
+    FROM reaktionen r
+    JOIN kommentare k ON k.id = r.kommentar_id
+    WHERE k.ziel_art = ? AND k.ziel_id = ?
+    GROUP BY r.kommentar_id, r.art
+  `).bind(ziel.art, ziel.id),
+  env.DB.prepare(`
+    SELECT r.kommentar_id, r.art
+    FROM reaktionen r
+    JOIN kommentare k ON k.id = r.kommentar_id
+    WHERE k.ziel_art = ? AND k.ziel_id = ? AND r.autor_id = ?
+  `).bind(ziel.art, ziel.id, ichId),
+];
+
+function baumBauen(zeilen, reaktionen, eigene, ichId) {
+  const meine = new Set(eigene.map(r => r.kommentar_id + ':' + r.art));
+  const proKommentar = new Map();
+  for (const r of reaktionen) {
+    if (!proKommentar.has(r.kommentar_id)) proKommentar.set(r.kommentar_id, []);
+    proKommentar.get(r.kommentar_id).push({
+      art: r.art, anzahl: r.anzahl, meins: meine.has(r.kommentar_id + ':' + r.art),
+    });
+  }
+
+  const karte = z => {
+    const weg = !!z.geloescht_am;
+    let sterne = null;
+    if (z.sterne) { try { sterne = JSON.parse(z.sterne); } catch { sterne = null; } }
+    return {
+      id: z.id,
+      autor: z.autor,
+      // Der Text eines geloeschten Kommentars verlaesst den Worker nicht.
+      text: weg ? null : z.text,
+      geloescht: weg,
+      erstellt: utc(z.erstellt),
+      geaendert: utc(z.geaendert),
+      meins: z.autor_id === ichId,
+      sterne: weg ? null : sterne,
+      reaktionen: proKommentar.get(z.id) || [],
+      antworten: [],
+    };
+  };
+
+  /* Aelteste zuerst: gelesen wird ein Thread von oben nach unten. Abgefragt
+     wurde absteigend, damit bei mehr als 200 die JUENGSTEN uebrig bleiben. */
+  const nachAlter = [...zeilen].reverse();
+  const wurzeln = [], nachId = new Map();
+  for (const z of nachAlter) {
+    if (z.antwort_auf) continue;
+    const k = karte(z);
+    nachId.set(z.id, k);
+    wurzeln.push(k);
+  }
+  for (const z of nachAlter) {
+    if (!z.antwort_auf) continue;
+    const w = nachId.get(z.antwort_auf);
+    // Haengt die Wurzel jenseits der 200er-Grenze, faellt die Antwort mit weg.
+    if (w) w.antworten.push(karte(z));
+  }
+  return wurzeln;
+}
+
+/* Wie viele Kommentare an welchem Ziel haengen - fuer die Zaehler in der
+   Liste, damit ein "4,2 · 3" ohne den Detailabruf gezeichnet werden kann. */
+const kommentarZaehlerStmt = env => env.DB.prepare(`
+  SELECT ziel_art, ziel_id, count(*) AS anzahl FROM kommentare
+  WHERE geloescht_am IS NULL
+    AND (ziel_art = 'user'
+         OR ziel_id IN (SELECT id FROM termine WHERE beginnt_am > datetime('now', ?)))
+  GROUP BY ziel_art, ziel_id
+`).bind(`-${TERMINE_RUECKBLICK} days`);
 
 // ---------------------------------------------------------------------------
 // Mailversand ueber AgentMail. Reine HTTP-API, kein SMTP.
@@ -420,43 +796,499 @@ const ROUTEN = {
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
     const tag = bierTag();
-    const [vorher, feld] = await env.DB.batch([losStmt(env, tag), losFeldStmt(env)]);
+    /* Der Verfallslauf laeuft VOR dem Lesen und im selben batch: wer seit drei
+       Stunden nicht geantwortet hat, gibt den Tag hier frei - und die beiden
+       Abfragen dahinter sehen das bereits. */
+    const [, tagRoh, feld, termine] = await env.DB.batch([
+      verfallStmt(env, tag), losTagStmt(env, tag), losFeldStmt(env), termineStmt(env),
+    ]);
+    const lage = tagesLage(tagRoh.results);
+    const topf = losTopf(feld.results, lage);
 
-    // Schon gezogen? Dann gilt das, egal wer fragt.
-    if (vorher.results.length) {
-      return antwort(request, { ...losAntwort(tag, vorher.results[0]), schon: true });
+    // Es gilt schon eines? Dann gilt das, egal wer fragt.
+    if (lage.gueltig) {
+      return antwort(request,
+        { ...losAntwort(tag, lage, topf, termine.results), schon: true });
     }
-    if (feld.results.length < LOS_MINDEST) {
-      return fehler(request,
-        `Zu wenig gemeldet — das Rad braucht mindestens ${LOS_MINDEST}, die heute etwas Kaltes haben.`, 409);
+    if (topf.length < lage.mindest) {
+      return fehler(request, lage.raus.length
+        ? 'Heute hat abgesagt, wer da war.'
+        : `Zu wenig gemeldet — das Rad braucht mindestens ${lage.mindest}, ` +
+          'die heute etwas Kaltes haben.', 409);
     }
 
-    const gewinner = ziehe(feld.results);
-    /* Das Rennen zweier gleichzeitiger Dreher entscheidet der Primaerschluessel:
-       wer nicht geschrieben hat, liest gleich darauf das fremde Ergebnis und
-       zeigt es an. Kein Sperren, keine Transaktion ueber zwei Anfragen. */
+    const gewinner = ziehe(topf);
+    /* Das Rennen zweier gleichzeitiger Dreher entscheidet der partielle
+       Unique-Index `los_gueltig`: wer nicht geschrieben hat, liest gleich
+       darauf das fremde Ergebnis und zeigt es an. Kein Sperren, keine
+       Transaktion ueber zwei Anfragen. Die WHERE-Klausel muss wortwoertlich
+       der Index-Bedingung entsprechen, sonst findet SQLite den Index nicht. */
     const gesetzt = await env.DB.prepare(`
       INSERT INTO los (tag, user_id, biere, feld, gedreht_von) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(tag) DO NOTHING
+      ON CONFLICT(tag) WHERE status IN ('offen','zugesagt') DO NOTHING
     `).bind(tag, gewinner.id, gewinner.biere,
-            JSON.stringify(losSegmente(feld.results)), ich.id).run();
+            JSON.stringify(losSegmente(topf)), ich.id).run();
 
-    const zeile = await losStmt(env, tag).first();
+    const [tagRoh2, feld2, termine2] = await env.DB.batch([
+      losTagStmt(env, tag), losFeldStmt(env), termineStmt(env),
+    ]);
+    const lage2 = tagesLage(tagRoh2.results);
     const selbst = gesetzt.meta.changes === 1;
-    return antwort(request, { ...losAntwort(tag, zeile), schon: !selbst }, selbst ? 201 : 200);
+    return antwort(request, {
+      ...losAntwort(tag, lage2, losTopf(feld2.results, lage2), termine2.results),
+      schon: !selbst,
+    }, selbst ? 201 : 200);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Zusagen oder absagen. Darf nur der Gezogene selbst, und nur solange sein
+     Los offen ist - eine Zusage nimmt man nicht zurueck, indem man die Route
+     zweimal ruft. Eine Absage gibt den Tag sofort wieder frei; der Absager
+     bleibt danach draussen, sonst zieht ihn dieselbe Flasche gleich noch
+     einmal. */
+  'POST /api/los/antwort': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const ja = daten.antwort === 'ja';
+    if (!ja && daten.antwort !== 'nein') return fehler(request, "antwort: 'ja' oder 'nein'");
+
+    let grund = String(daten.grund ?? '').trim().replace(/\s+/g, ' ');
+    if (grund.length > GRUND_MAX) {
+      return fehler(request, `Der Grund darf höchstens ${GRUND_MAX} Zeichen haben`);
+    }
+    if (ja) grund = null;            // ein Grund gehoert zur Absage, nicht zur Zusage
+
+    /* Die Uhrzeit des Abends kommt vom Client, fertig in UTC gerechnet - der
+       Browser kennt die Ortszeit, der Worker nicht. Fehlt sie, greift die
+       Vorgabe auf dem Bierabend-Tag selbst; deshalb hier nur die Pruefung und
+       das Einsetzen erst weiter unten, wenn `tag` feststeht. */
+    let beginn = null;
+    if (ja && daten.beginnt_am != null) {
+      const p = pruefeBeginn(daten.beginnt_am);
+      if (p.fehler) return fehler(request, p.fehler);
+      beginn = alsDbZeit(p.d);
+    }
+
+    const tag = bierTag();
+    const [, tagRoh] = await env.DB.batch([verfallStmt(env, tag), losTagStmt(env, tag)]);
+    const lage = tagesLage(tagRoh.results);
+    const z = lage.gueltig;
+
+    if (!z) return fehler(request, 'Heute ist gerade nichts zu entscheiden.', 409);
+    if (z.user_id !== ich.id) {
+      return fehler(request, 'Antworten darf nur, wen die Flasche getroffen hat.', 403);
+    }
+    if (z.status !== 'offen') return fehler(request, 'Das steht schon fest.', 409);
+
+    /* `changes === 1` gewinnt, wie beim Einloesen des Magic Links: zwei
+       gleichzeitige Antworten (Handy und Laptop) duerfen nicht beide gelten. */
+    const gesetzt = await env.DB.prepare(`
+      UPDATE los SET status = ?, entschieden_am = datetime('now'), grund = ?
+      WHERE id = ? AND status = 'offen'
+    `).bind(ja ? 'zugesagt' : 'abgelehnt', grund || null, z.id).run();
+    if (gesetzt.meta.changes !== 1) return fehler(request, 'Das steht schon fest.', 409);
+
+    /* Erst die Zusage macht aus der Ziehung einen Abend - deshalb entsteht der
+       Termin hier und nicht schon beim Drehen. Getrennt vom UPDATE, weil dessen
+       `changes === 1` die Entscheidung traegt; gegen einen doppelten Termin aus
+       einem wiederholten Ruf steht `termine.los_id UNIQUE`. */
+    if (ja) {
+      await env.DB.prepare(`
+        INSERT INTO termine (gastgeber_id, beginnt_am, los_id, erstellt_von)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(los_id) DO NOTHING
+      `).bind(ich.id, beginn || `${tag} ${TERMIN_VORGABE_UTC}`, z.id, ich.id).run();
+    }
+
+    const [tagRoh2, feld, termine] = await env.DB.batch([
+      losTagStmt(env, tag), losFeldStmt(env), termineStmt(env),
+    ]);
+    const lage2 = tagesLage(tagRoh2.results);
+    /* Die Terminliste faehrt mit: sonst muesste die Seite gleich darauf die
+       Bestenliste nachladen, nur damit der eben angelegte Abend dasteht. */
+    return antwort(request, {
+      ...losAntwort(tag, lage2, losTopf(feld.results, lage2), termine.results),
+      termine: termine.results.map(t => terminAntwort(t)),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Einen Abend von Hand eintragen. Jeder Angemeldete darf jeden als Gastgeber
+     eintragen - eine Bestaetigung durch den Gastgeber waere mehr Mechanik, als
+     eine Runde braucht, die sich kennt. Wer sich vertut, aendert es wieder. */
+  'POST /api/termin': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const p = pruefeBeginn(daten.beginnt_am);
+    if (p.fehler) return fehler(request, p.fehler);
+
+    const titel = String(daten.titel ?? '').trim().replace(/\s+/g, ' ');
+    if (titel.length > TERMIN_TITEL_MAX) {
+      return fehler(request, `Der Titel darf höchstens ${TERMIN_TITEL_MAX} Zeichen haben`);
+    }
+
+    // Der Gastgeber kommt als Name aus der Liste - Ids stehen nirgends auf der Seite.
+    const wer = String(daten.gastgeber ?? '').trim().toLowerCase();
+    const gast = wer
+      ? await env.DB.prepare('SELECT id, name FROM users WHERE name_klein = ?').bind(wer).first()
+      : null;
+    if (!gast) return fehler(request, 'Den Gastgeber gibt es nicht');
+
+    /* Wie die Meldesperre: gegen den Freund, der zehnmal drueckt. Gezaehlt wird
+       am Eintragenden, nicht am Gastgeber - sonst sperrt einer den anderen. */
+    const schon = await env.DB.prepare(`
+      SELECT count(*) AS n FROM termine
+      WHERE erstellt_von = ? AND erstellt > datetime('now','-1 day')
+    `).bind(ich.id).first();
+    if (schon.n >= TERMINE_PRO_TAG) {
+      return fehler(request, `Höchstens ${TERMINE_PRO_TAG} Termine am Tag`, 429);
+    }
+
+    const neu = await env.DB.prepare(`
+      INSERT INTO termine (gastgeber_id, beginnt_am, titel, erstellt_von)
+      VALUES (?, ?, ?, ?) RETURNING id
+    `).bind(gast.id, alsDbZeit(p.d), titel || null, ich.id).first();
+
+    const alle = await termineStmt(env).all();
+    return antwort(request, {
+      ok: true, id: neu.id, gastgeber: gast.name,
+      termine: alle.results.map(t => terminAntwort(t)),
+    }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Verschieben, umbenennen, absagen. Nur Gastgeber oder Eintragender, und nur
+     BEVOR der Abend angefangen hat - was gelaufen ist, bleibt stehen, sonst
+     verschiebt jemand nachtraeglich den Abend, den die anderen schon bewertet
+     haben. */
+  'POST /api/termin/aendern': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const t = await env.DB.prepare(`
+      SELECT id, gastgeber_id, erstellt_von, los_id, beginnt_am, abgesagt_am,
+             (beginnt_am <= datetime('now')) AS laeuft
+      FROM termine WHERE id = ?
+    `).bind(Number(daten.id)).first();
+    if (!t) return fehler(request, 'Den Termin gibt es nicht', 404);
+    if (t.gastgeber_id !== ich.id && t.erstellt_von !== ich.id) {
+      return fehler(request, 'Ändern darf nur der Gastgeber oder wer ihn eingetragen hat', 403);
+    }
+    if (t.laeuft) return fehler(request, 'Der Abend hat schon angefangen', 409);
+    if (t.abgesagt_am) return fehler(request, 'Der Termin ist schon abgesagt', 409);
+
+    if (daten.absagen) {
+      /* Haengt der Termin an einer Ziehung, faellt mit ihm auch die Zusage -
+         sonst belegt ein abgesagter Abend den Tag weiter, und die Flasche
+         bleibt liegen. Der Absagende ist damit fuer heute raus, genau wie bei
+         einer Absage am Rad. */
+      const schritte = [
+        env.DB.prepare("UPDATE termine SET abgesagt_am = datetime('now') WHERE id = ? AND abgesagt_am IS NULL")
+          .bind(t.id),
+      ];
+      if (t.los_id) {
+        schritte.push(env.DB.prepare(`
+          UPDATE los SET status = 'abgelehnt', entschieden_am = datetime('now')
+          WHERE id = ? AND status = 'zugesagt'
+        `).bind(t.los_id));
+      }
+      await env.DB.batch(schritte);
+      const alle = await termineStmt(env).all();
+      return antwort(request, {
+        ok: true, abgesagt: true,
+        // Hing eine Zusage daran, ist der Tag jetzt wieder frei - die Seite
+        // muss also auch das Rad neu zeichnen und holt sich alles.
+        los_frei: !!t.los_id,
+        termine: alle.results.map(t => terminAntwort(t)),
+      });
+    }
+
+    const setzt = [], werte = [];
+    if (daten.beginnt_am != null) {
+      const p = pruefeBeginn(daten.beginnt_am);
+      if (p.fehler) return fehler(request, p.fehler);
+      setzt.push('beginnt_am = ?'); werte.push(alsDbZeit(p.d));
+    }
+    if (daten.titel != null) {
+      const titel = String(daten.titel).trim().replace(/\s+/g, ' ');
+      if (titel.length > TERMIN_TITEL_MAX) {
+        return fehler(request, `Der Titel darf höchstens ${TERMIN_TITEL_MAX} Zeichen haben`);
+      }
+      setzt.push('titel = ?'); werte.push(titel || null);
+    }
+    if (!setzt.length) return fehler(request, 'Nichts zu ändern');
+
+    await env.DB.prepare(`UPDATE termine SET ${setzt.join(', ')} WHERE id = ?`)
+      .bind(...werte, t.id).run();
+    const alle = await termineStmt(env).all();
+    return antwort(request, { ok: true, termine: alle.results.map(t => terminAntwort(t)) });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Sterne setzen oder ueberschreiben. Ein UPSERT, keine zweite Zeile: eine
+     Bewertung je Autor und Ziel, sonst waere der Schnitt eine Frage des
+     Fleisses. Sich selbst bewerten geht nicht - das ist die einzige Regel, die
+     hier ueberhaupt noetig ist, der Name steht ja dran. */
+  'POST /api/bewerten': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const ziel = zielAus(`${daten.ziel_art}:${daten.ziel_id}`);
+    if (!ziel) return fehler(request, "ziel_art: 'user' oder 'termin', ziel_id: eine Zahl");
+
+    const s = pruefeSterne(ziel.art, daten.sterne);
+    if (s.fehler) return fehler(request, s.fehler);
+
+    if (ziel.art === 'user') {
+      if (ziel.id === ich.id) return fehler(request, 'Sich selbst bewerten gilt nicht', 403);
+      const wer = await env.DB.prepare('SELECT 1 FROM users WHERE id = ? AND name IS NOT NULL')
+        .bind(ziel.id).first();
+      if (!wer) return fehler(request, 'Den gibt es nicht', 404);
+    } else {
+      /* Ein Abend wird bewertet, nachdem er stattgefunden hat. Vorher waere es
+         eine Erwartung, keine Bewertung - und ein abgesagter Abend hat gar
+         nicht stattgefunden. */
+      const t = await env.DB.prepare(`
+        SELECT abgesagt_am, (beginnt_am <= datetime('now')) AS gewesen
+        FROM termine WHERE id = ?
+      `).bind(ziel.id).first();
+      if (!t) return fehler(request, 'Den Termin gibt es nicht', 404);
+      if (t.abgesagt_am) return fehler(request, 'Der Abend ist abgesagt worden', 409);
+      if (!t.gewesen) return fehler(request, 'Der Abend hat noch nicht angefangen', 409);
+    }
+
+    // Wie die Meldesperre: gegen den, der zehnmal drueckt, weil nichts blinkt.
+    const letzte = await env.DB.prepare(`
+      SELECT 1 FROM bewertungen
+      WHERE autor_id = ? AND coalesce(geaendert, erstellt) > datetime('now', ?) LIMIT 1
+    `).bind(ich.id, `-${BEWERTSPERRE} seconds`).first();
+    if (letzte) return fehler(request, 'Zu schnell — kurz durchatmen', 429);
+
+    const b = await env.DB.prepare(`
+      INSERT INTO bewertungen (autor_id, ziel_art, ziel_id, sterne) VALUES (?, ?, ?, ?)
+      ON CONFLICT(autor_id, ziel_art, ziel_id)
+        DO UPDATE SET sterne = excluded.sterne, geaendert = datetime('now')
+      RETURNING id
+    `).bind(ich.id, ziel.art, ziel.id, JSON.stringify(s.sterne)).first();
+
+    /* Ein Text daneben wird ein eigener Wurzelkommentar, verbunden ueber
+       `bewertung_id`. Zwei Zeilen, weil ein Kommentar eine eigene Adresse
+       braucht, sobald Antworten und Reaktionen daran haengen - und weil eine
+       geaenderte Note ihn sonst mitreissen wuerde. */
+    const text = String(daten.text ?? '').trim();
+    if (text) {
+      if (text.length > KOMMENTAR_MAX) {
+        return fehler(request, `Der Kommentar darf höchstens ${KOMMENTAR_MAX} Zeichen haben`);
+      }
+      await env.DB.prepare(`
+        INSERT INTO kommentare (ziel_art, ziel_id, autor_id, bewertung_id, text)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(ziel.art, ziel.id, ich.id, b.id, text).run();
+    }
+
+    return antwort(request, { ok: true, sterne: s.sterne });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Schreiben. Auf SICH SELBST ausdruecklich erlaubt - sonst kann der
+     Gastgeber im eigenen Thread nicht antworten. Auf einen Termin jederzeit,
+     auch vorher ("bring Chips mit"); nur bewertet wird erst hinterher. */
+  'POST /api/kommentar': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const ziel = zielAus(`${daten.ziel_art}:${daten.ziel_id}`);
+    if (!ziel) return fehler(request, "ziel_art: 'user' oder 'termin', ziel_id: eine Zahl");
+
+    const text = String(daten.text ?? '').trim();
+    if (!text) return fehler(request, 'Ohne Text kein Kommentar');
+    if (text.length > KOMMENTAR_MAX) {
+      return fehler(request, `Höchstens ${KOMMENTAR_MAX} Zeichen`);
+    }
+
+    const fehlt = await zielFehlt(env, ziel);
+    if (fehlt) return fehler(request, fehlt, 404);
+
+    /* Genau eine Antwortebene: zeigt `antwort_auf` auf eine Antwort, haengt
+       der Kommentar an DEREN Wurzel. Der Absender muss davon nichts wissen. */
+    let wurzel = null;
+    if (daten.antwort_auf != null) {
+      const auf = await env.DB.prepare(`
+        SELECT id, antwort_auf, ziel_art, ziel_id FROM kommentare WHERE id = ?
+      `).bind(Number(daten.antwort_auf)).first();
+      if (!auf) return fehler(request, 'Den Kommentar gibt es nicht', 404);
+      if (auf.ziel_art !== ziel.art || auf.ziel_id !== ziel.id) {
+        return fehler(request, 'Der Kommentar gehört woandershin');
+      }
+      wurzel = auf.antwort_auf || auf.id;
+    }
+
+    const [sperre, heute] = await env.DB.batch([
+      env.DB.prepare("SELECT 1 FROM kommentare WHERE autor_id = ? AND erstellt > datetime('now', ?) LIMIT 1")
+        .bind(ich.id, `-${KOMMENTARSPERRE} seconds`),
+      env.DB.prepare("SELECT count(*) AS n FROM kommentare WHERE autor_id = ? AND erstellt > datetime('now','-1 day')")
+        .bind(ich.id),
+    ]);
+    if (sperre.results.length) return fehler(request, 'Zu schnell — kurz durchatmen', 429);
+    if (heute.results[0].n >= KOMMENTARE_TAG) {
+      return fehler(request, `Höchstens ${KOMMENTARE_TAG} Kommentare am Tag`, 429);
+    }
+
+    const neu = await env.DB.prepare(`
+      INSERT INTO kommentare (ziel_art, ziel_id, autor_id, antwort_auf, text)
+      VALUES (?, ?, ?, ?, ?) RETURNING id
+    `).bind(ziel.art, ziel.id, ich.id, wurzel, text).first();
+
+    return antwort(request, { ok: true, id: neu.id, antwort_auf: wurzel }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Aendern oder loeschen, beides nur durch den Autor. Geloescht wird WEICH:
+     der Text verschwindet, die Karte bleibt als "gelöscht" stehen - sonst
+     haengen die Antworten darunter in der Luft. */
+  'POST /api/kommentar/aendern': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const k = await env.DB.prepare('SELECT id, autor_id, geloescht_am FROM kommentare WHERE id = ?')
+      .bind(Number(daten.id)).first();
+    if (!k) return fehler(request, 'Den Kommentar gibt es nicht', 404);
+    if (k.autor_id !== ich.id) return fehler(request, 'Das ist nicht deiner', 403);
+    if (k.geloescht_am) return fehler(request, 'Der ist schon gelöscht', 409);
+
+    if (daten.loeschen) {
+      await env.DB.prepare(`
+        UPDATE kommentare SET geloescht_am = datetime('now'), text = '' WHERE id = ?
+      `).bind(k.id).run();
+      return antwort(request, { ok: true, geloescht: true });
+    }
+
+    const text = String(daten.text ?? '').trim();
+    if (!text) return fehler(request, 'Ohne Text kein Kommentar');
+    if (text.length > KOMMENTAR_MAX) return fehler(request, `Höchstens ${KOMMENTAR_MAX} Zeichen`);
+
+    await env.DB.prepare("UPDATE kommentare SET text = ?, geaendert = datetime('now') WHERE id = ?")
+      .bind(text, k.id).run();
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Reagieren. Ein Schalter: derselbe Druck nimmt zurueck - das traegt der
+     Primaerschluessel der Tabelle, hier steht nur, welcher der beiden Faelle
+     gerade eingetreten ist. */
+  'POST /api/reaktion': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const art = String(daten.art || '');
+    if (!REAKTIONEN.has(art)) return fehler(request, 'Diese Reaktion gibt es nicht');
+
+    const id = Number(daten.kommentar_id);
+    const k = await env.DB.prepare('SELECT id, geloescht_am FROM kommentare WHERE id = ?')
+      .bind(id).first();
+    if (!k) return fehler(request, 'Den Kommentar gibt es nicht', 404);
+    if (k.geloescht_am) return fehler(request, 'Der ist gelöscht', 409);
+
+    const weg = await env.DB.prepare(
+      'DELETE FROM reaktionen WHERE kommentar_id = ? AND autor_id = ? AND art = ?')
+      .bind(id, ich.id, art).run();
+    const meins = weg.meta.changes === 0;
+    if (meins) {
+      await env.DB.prepare('INSERT INTO reaktionen (kommentar_id, autor_id, art) VALUES (?, ?, ?)')
+        .bind(id, ich.id, art).run();
+    }
+
+    const n = await env.DB.prepare(
+      'SELECT count(*) AS anzahl FROM reaktionen WHERE kommentar_id = ? AND art = ?')
+      .bind(id, art).first();
+    return antwort(request, { art, anzahl: n.anzahl, meins });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Was zu einem Ziel vorliegt: Schnitt je Kategorie und die eigene Abgabe.
+     Das Token ist OPTIONAL - ohne eines liest man mit, nur `meins` fehlt dann.
+     Die Kategorien reisen mit, damit die Seite sie nicht ein zweites Mal
+     fuehrt. */
+  'GET /api/bewertungen': async (request, env) => {
+    const url = new URL(request.url);
+    const ziel = zielAus(url.searchParams.get('ziel'));
+    if (!ziel) return fehler(request, 'ziel: etwa user:5 oder termin:12');
+
+    const ich = await nutzer(request, env);
+
+    const ichId = ich ? ich.id : 0;
+    const [alle, meins, roh, reakt, eigene] = await env.DB.batch([
+      env.DB.prepare('SELECT ziel_art, ziel_id, sterne FROM bewertungen WHERE ziel_art = ? AND ziel_id = ?')
+        .bind(ziel.art, ziel.id),
+      env.DB.prepare('SELECT sterne FROM bewertungen WHERE autor_id = ? AND ziel_art = ? AND ziel_id = ?')
+        .bind(ichId, ziel.art, ziel.id),
+      ...baumStmts(env, ziel, ichId),
+    ]);
+
+    const e = schnitte(alle.results).get(`${ziel.art}:${ziel.id}`);
+    const kategorien = KATEGORIEN[ziel.art].map(([feld, name]) => {
+      const j = e && e.je.get(feld);
+      return { feld, name, schnitt: j ? note(j.summe, j.zahl) : null, anzahl: j ? j.zahl : 0 };
+    });
+
+    let eigeneSterne = null;
+    if (meins.results.length) {
+      try { eigeneSterne = JSON.parse(meins.results[0].sterne); } catch { eigeneSterne = null; }
+    }
+
+    return antwort(request, {
+      ziel: `${ziel.art}:${ziel.id}`,
+      ...schnittAntwort(e),
+      kategorien,
+      meins: eigeneSterne,
+      // Sich selbst bewertet niemand - die Seite soll das Formular gar nicht
+      // erst zeigen, statt am 403 hängenzubleiben.
+      darf: !!(ich && ich.name) && !(ziel.art === 'user' && ich.id === ziel.id),
+      // Schreiben darf man ueberall, auch bei sich selbst: sonst kann der
+      // Gastgeber im eigenen Thread nicht antworten.
+      darf_schreiben: !!(ich && ich.name),
+      kommentare: baumBauen(roh.results, reakt.results, eigene.results, ichId),
+    });
   },
 
   // -------------------------------------------------------------------------
   'GET /api/leaderboard': async (request, env) => {
-    /* Fuenf Abfragen in einem Rutsch: aktueller Stand, Bestmarke, Verlauf und
-       das Gluecksrad (Ziehung des Tages + wer heute im Topf ist). Der aktuelle
-       Stand ist die juengste Meldung je Nutzer - deshalb wird nie
-       ueberschrieben, der Verlauf faellt dabei von selbst an.
-       Das Rad reitet hier mit statt auf einer eigenen Route: eine Runde
-       weniger, ein Cache-Verhalten weniger, und die Seite fragt ohnehin im
-       Minutentakt nach. */
+    /* Alles fuer eine Seitenansicht in einem Rutsch: aktueller Stand,
+       Bestmarke, Verlauf, das Gluecksrad (Ziehung des Tages + wer heute im
+       Topf ist) und die Termine. Der aktuelle Stand ist die juengste Meldung
+       je Nutzer - deshalb wird nie ueberschrieben, der Verlauf faellt dabei
+       von selbst an.
+       Alles reitet hier mit statt auf eigenen Routen: eine Runde weniger, ein
+       Cache-Verhalten weniger, und die Seite fragt ohnehin im Minutentakt nach. */
     const tag = bierTag();
-    const [stand, best, verlauf, los, losFeld] = await env.DB.batch([
+    const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler] =
+      await env.DB.batch([
       env.DB.prepare(`
         SELECT u.id, u.name, u.quelle, r.biere, r.temperatur, r.gemeldet_am
         FROM users u
@@ -478,8 +1310,14 @@ const ROUTEN = {
         ) j ON j.id = r.id
         ORDER BY r.user_id, tag
       `).bind(`-${VERLAUF_TAGE} days`),
-      losStmt(env, tag),
+      /* Bewusst OHNE Verfallslauf: das hier ist eine gecachte Leseroute, die
+         soll nichts schreiben. `losTagStmt` rechnet die Frist ohnehin mit aus,
+         eingetragen wird sie beim naechsten Dreh. */
+      losTagStmt(env, tag),
       losFeldStmt(env),
+      termineStmt(env),
+      bewertungenStmt(env),
+      kommentarZaehlerStmt(env),
     ]);
 
     const bestmarke = new Map(best.results.map(r => [r.user_id, r.best]));
@@ -489,7 +1327,18 @@ const ROUTEN = {
       kurve.get(z.user_id).push(z.biere);
     }
 
+    /* Die Schnitte einmal rechnen, dann zweimal abgreifen: Nutzer und Termine
+       kommen aus derselben Tabelle. Termin-Bewertungen zaehlen dabei NICHT auf
+       den Nutzer ein - sonst zaehlte ein einziger Abend doppelt. */
+    const noten = schnitte(bewertungen.results);
+    const wieViele = new Map(zaehler.results.map(z => [z.ziel_art + ':' + z.ziel_id, z.anzahl]));
+
     const feld = stand.results.map(r => ({
+      // Die Id, damit die Seite eine Bewertung adressieren kann. Ohne Token
+      // faengt niemand etwas damit an.
+      id: r.id,
+      bewertung: schnittAntwort(noten.get('user:' + r.id)),
+      kommentare: wieViele.get('user:' + r.id) || 0,
       name: r.name,
       biere: r.biere,
       temperatur: r.temperatur,
@@ -504,9 +1353,11 @@ const ROUTEN = {
     /* Eine halbe Minute Cache: die Seite wird oefter geladen als gemeldet. Das
        gilt auch fuer das Rad - wer selbst dreht, sieht es sofort aus der
        Antwort auf POST /api/drehen, alle anderen binnen einer halben Minute. */
+    const lage = tagesLage(los.results);
     return antwort(request, {
       feld,
-      los: losAntwort(tag, los.results[0], losFeld.results),
+      los: losAntwort(tag, lage, losTopf(losFeld.results, lage), termine.results),
+      termine: termine.results.map(t => terminAntwort(t, noten, wieViele)),
     }, 200, { 'Cache-Control': 'public, max-age=30' });
   },
 };
