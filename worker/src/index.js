@@ -130,7 +130,7 @@ angefordert, ist nichts passiert - dann wirf die Mail einfach weg.`;
       },
       body: JSON.stringify({
         to: empfaenger,
-        subject: 'Dein Link zur Bierliste',
+        subject: 'Dein Link zum Bierranking',
         text, html,
       }),
     });
