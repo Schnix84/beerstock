@@ -107,7 +107,7 @@
   .hero-name {
     font-family: var(--hand); font-weight: 400;
     font-size: clamp(30px, 10.5vw, 50px); line-height: 1.18;
-    margin: 4px 0 7px; transform: rotate(-1.2deg); transform-origin: left;
+    margin: 2px 0 5px; transform: rotate(-1.2deg); transform-origin: left;
     overflow-wrap: anywhere;
   }
   .hero-unter {
@@ -131,7 +131,11 @@
   .hero-glas { transition: opacity .5s; }
   .hero-glas.ungewiss { opacity: .28; }
 
-  .hero-striche { margin: clamp(12px, 3.4vw, 20px) 0 4px; }
+  /* Die Abstaende von hier bis zur Tafelmitte sind einmal durchgemessen und
+     zusammengeschoben: es ging um die ~30 px, die dem Anmeldeknopf unten zum
+     bildschirmfuellenden Auftritt fehlten. Wer hier wieder auflockert, schiebt
+     ihn aus dem Bild. */
+  .hero-striche { margin: clamp(8px, 2.4vw, 14px) 0 4px; }
   .hero-striche svg { width: 100%; height: auto; display: block; }
 
   /* --- Das Glas, mit Kreide gezeichnet ------------------------------------
@@ -208,7 +212,7 @@
   /* Die gedruckte Skala von eiskalt bis pisswarm, mit Kreide nachgezogen:
      sie macht sichtbar, warum das Wort daneben gerade so heißt. */
   .skala {
-    position: relative; height: 5px; border-radius: 3px; margin: 14px 0 0;
+    position: relative; height: 5px; border-radius: 3px; margin: 10px 0 0;
     opacity: .8;
     background: linear-gradient(90deg,
       #4f9ed6 0 10%, #6fb08a 10% 30%, #93b06a 30% 45%,
@@ -223,7 +227,7 @@
   }
 
   .strich-linie {
-    height: 1px; margin: clamp(18px, 4.4vw, 26px) 0 0;
+    height: 1px; margin: clamp(12px, 3vw, 18px) 0 0;
     background: linear-gradient(90deg, transparent, #ffffff40 8%, #ffffff40 92%, transparent);
   }
 
@@ -617,7 +621,7 @@
   }
 
   /* --- Die Karte: Rangfolge als Speisekarte ------------------------------- */
-  .block { margin-top: clamp(14px, 3.6vw, 20px); }
+  .block { margin-top: clamp(10px, 2.6vw, 14px); }
   .block-kopf {
     display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
     font-family: var(--hand); margin-bottom: 6px;
@@ -677,7 +681,7 @@
   }
 
   /* --- Formulare ---------------------------------------------------------- */
-  .block-fuss { margin-top: 18px; padding-top: 16px; border-top: 1px dashed #ffffff26; }
+  .block-fuss { margin-top: 13px; padding-top: 13px; border-top: 1px dashed #ffffff26; }
   .melde { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
   .melde.eins { grid-template-columns: 1fr; }
   .feld-label {
