@@ -1134,10 +1134,9 @@
       radSagt('Noch zu wenig gemeldet — ausgelost wird ab ' + los.mindestens +
               ', die heute etwas Kaltes haben.');
     } else {
-      /* Drehen und Mitspielen sind zwei verschiedene Bedingungen, und das ist
-         der Satz, der es sagen muss: drehen darf jeder Angemeldete, im Topf ist
-         nur, wer heute etwas Kaltes gemeldet hat. Wer das verwechselt, wartet
-         den Abend über auf eine Auslosung, in der er gar nicht steht. */
+      /* Wer im Topf ist, entscheidet allein der Bestand — das Alter einer
+         Meldung spielt keine Rolle. Draußen ist also nur, wer null gemeldet
+         hat, und das ist eine Aussage über ihn und keine über die Uhr. */
       const topf = new Set(los.feld.map(s => s.name));
       let raus = letztesFeld.filter(p => !topf.has(p.name)).map(p => p.name);
       const teile = [];
@@ -1148,13 +1147,8 @@
         // Wer gleich persönlich angesprochen wird, muss nicht auch noch in der
         // Aufzählung darunter stehen.
         raus = raus.filter(n => n !== meinName);
-        const ich = letztesFeld.find(p => p.name === meinName);
-        /* Die Frist steht im Worker und wird hier bewusst nicht wiederholt —
-           handeln muss man ohnehin gleich, nicht in N Stunden. */
-        teile.push(ich && ich.biere < 1
-          ? 'Du bist nicht im Topf — du hast nichts Kaltes stehen.'
-          : 'Du bist nicht im Topf — deine letzte Meldung ist zu alt. Trag neu ein, ' +
-            'dann bist du dabei; drehen darfst du auch so.');
+        teile.push('Du bist nicht im Topf — du hast nichts Kaltes stehen. ' +
+                   'Drehen darfst du trotzdem.');
       }
       if (raus.length) teile.push('Nicht im Topf: ' + raus.join(', ') + '.');
       radSagt(teile.join(' '));

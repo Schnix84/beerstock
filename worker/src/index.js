@@ -35,7 +35,11 @@ const VERLAUF_TAGE = 30;
 /* Das Gluecksrad. Gewichtet nach Bestand, weil das die Zahl ist, um die sich
    die ganze Seite dreht: wer mehr kalt hat, wird oefter gezogen. Der Deckel
    verhindert, dass einer mit 200 gemeldeten Bieren das Rad besitzt. */
-const LOS_FRISCH  = 24;   // Stunden - wer seit gestern nichts gemeldet hat, ist nicht da
+/* Kein Verfallsdatum auf einer Meldung: wer Bier eingetragen hat, spielt mit,
+   egal wie alt der Eintrag ist. Hier stand einmal ein 24-Stunden-Fenster - das
+   hat den ausgeschlossen, der oben auf der Tafel steht, weil er seit zwei
+   Tagen nicht nachgetragen hat. Wer nichts mehr hat, meldet null; das ist der
+   ehrliche Weg hier raus, nicht das Schweigen. */
 const LOS_MIN     = 1;    // ohne kaltes Bier kein Gastgeber
 const LOS_DECKEL  = 24;   // Gewicht = min(biere, 24), ein Kasten ist die Obergrenze
 const LOS_MINDEST = 2;    // unter zweien gibt es nichts auszulosen
@@ -128,9 +132,8 @@ const losFeldStmt = env => env.DB.prepare(`
   JOIN reports r ON r.id = j.id
   WHERE u.name IS NOT NULL
     AND r.biere >= ?
-    AND r.gemeldet_am > datetime('now', ?)
   ORDER BY r.biere DESC, u.name ASC
-`).bind(LOS_MIN, `-${LOS_FRISCH} hours`);
+`).bind(LOS_MIN);
 
 const losStmt = (env, tag) => env.DB.prepare(`
   SELECT l.tag, l.biere, l.feld, l.gedreht_am, u.name AS gewinner, g.name AS von
