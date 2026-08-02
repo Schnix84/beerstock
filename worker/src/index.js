@@ -544,12 +544,14 @@ async function zielFehlt(env, ziel) {
    verschachtelte SQL-Fassung dieselbe Arbeit in einer schlechter lesbaren Form
    taete: Kommentare, die Reaktionen gezaehlt, und die eigenen davon. */
 const baumStmts = (env, ziel, ichId) => [
+  /* `k.sterne` ist der Schnappschuss aus dem Moment des Absendens, kein Join
+     auf `bewertungen` - die Zeile dort wird ueberschrieben, die Karte hier
+     soll stehen bleiben (siehe 0009_sterne_am_kommentar.sql). */
   env.DB.prepare(`
     SELECT k.id, k.autor_id, k.antwort_auf, k.text, k.erstellt, k.geaendert,
-           k.geloescht_am, k.bild_key, u.name AS autor, b.sterne
+           k.geloescht_am, k.bild_key, k.sterne, u.name AS autor
     FROM kommentare k
     JOIN users u ON u.id = k.autor_id
-    LEFT JOIN bewertungen b ON b.id = k.bewertung_id
     WHERE k.ziel_art = ? AND k.ziel_id = ?
     ORDER BY k.id DESC
     LIMIT ?
@@ -618,6 +620,26 @@ function baumBauen(zeilen, reaktionen, eigene, ichId, env) {
     if (w) w.antworten.push(karte(z));
   }
   return wurzeln;
+}
+
+/* Die Grenzen fuer eine NEUE Kommentarzeile. Sie stehen hier und nicht in der
+   Route, weil es zwei Wege zu einer solchen Zeile gibt: /api/kommentar und der
+   Text neben den Sternen an /api/bewerten. Haengen die Grenzen nur am ersten,
+   ist der zweite der Weg an ihnen vorbei - und der ist nicht theoretisch, das
+   UPSERT dort darf beliebig oft laufen und legt jedes Mal einen neuen
+   Kommentar an. Gibt { fehler, status } zurueck oder null. */
+async function kommentarGrenze(env, ichId) {
+  const [sperre, heute] = await env.DB.batch([
+    env.DB.prepare("SELECT 1 FROM kommentare WHERE autor_id = ? AND erstellt > datetime('now', ?) LIMIT 1")
+      .bind(ichId, `-${KOMMENTARSPERRE} seconds`),
+    env.DB.prepare("SELECT count(*) AS n FROM kommentare WHERE autor_id = ? AND erstellt > datetime('now','-1 day')")
+      .bind(ichId),
+  ]);
+  if (sperre.results.length) return { fehler: 'Zu schnell — kurz durchatmen', status: 429 };
+  if (heute.results[0].n >= KOMMENTARE_TAG) {
+    return { fehler: `Höchstens ${KOMMENTARE_TAG} Kommentare am Tag`, status: 429 };
+  }
+  return null;
 }
 
 /* Wie viele Kommentare an welchem Ziel haengen - fuer die Zaehler in der
@@ -1210,6 +1232,20 @@ const ROUTEN = {
     `).bind(ich.id, `-${BEWERTSPERRE} seconds`).first();
     if (letzte) return fehler(request, 'Zu schnell — kurz durchatmen', 429);
 
+    /* Steht ein Text oder ein Foto daneben, entsteht gleich ein Kommentar -
+       und dann gelten dessen Grenzen, dieselben wie an /api/kommentar. Alles
+       davon VOR dem UPSERT: ein abgewiesener Kommentar darf die Sterne nicht
+       schon geschrieben haben. Genau das war hier der Fall, die Laengenpruefung
+       stand hinter dem Schreiben. */
+    const text = String(daten.text ?? '').trim();
+    if (text || bi.key) {
+      if (text.length > KOMMENTAR_MAX) {
+        return fehler(request, `Der Kommentar darf höchstens ${KOMMENTAR_MAX} Zeichen haben`);
+      }
+      const grenze = await kommentarGrenze(env, ich.id);
+      if (grenze) return fehler(request, grenze.fehler, grenze.status);
+    }
+
     const b = await env.DB.prepare(`
       INSERT INTO bewertungen (autor_id, ziel_art, ziel_id, sterne) VALUES (?, ?, ?, ?)
       ON CONFLICT(autor_id, ziel_art, ziel_id)
@@ -1220,16 +1256,17 @@ const ROUTEN = {
     /* Ein Text daneben wird ein eigener Wurzelkommentar, verbunden ueber
        `bewertung_id`. Zwei Zeilen, weil ein Kommentar eine eigene Adresse
        braucht, sobald Antworten und Reaktionen daran haengen - und weil eine
-       geaenderte Note ihn sonst mitreissen wuerde. */
-    const text = String(daten.text ?? '').trim();
+       geaenderte Note ihn sonst mitreissen wuerde.
+
+       Die Sterne reisen als SCHNAPPSCHUSS mit in die Zeile. Ueber
+       `bewertung_id` nachzusehen waere bequemer und falsch: dort steht dann
+       laengst die naechste Note, und die Karte truege eine, die zu ihrem Text
+       nie gehoert hat. */
     if (text || bi.key) {
-      if (text.length > KOMMENTAR_MAX) {
-        return fehler(request, `Der Kommentar darf höchstens ${KOMMENTAR_MAX} Zeichen haben`);
-      }
       await env.DB.prepare(`
-        INSERT INTO kommentare (ziel_art, ziel_id, autor_id, bewertung_id, text, bild_key)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).bind(ziel.art, ziel.id, ich.id, b.id, text, bi.key).run();
+        INSERT INTO kommentare (ziel_art, ziel_id, autor_id, bewertung_id, text, bild_key, sterne)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind(ziel.art, ziel.id, ich.id, b.id, text, bi.key, JSON.stringify(s.sterne)).run();
     }
 
     /* Zwei Marken: der Schnitt steht auch in der Liste bzw. am Termin, der
@@ -1341,16 +1378,8 @@ const ROUTEN = {
       wurzel = auf.antwort_auf || auf.id;
     }
 
-    const [sperre, heute] = await env.DB.batch([
-      env.DB.prepare("SELECT 1 FROM kommentare WHERE autor_id = ? AND erstellt > datetime('now', ?) LIMIT 1")
-        .bind(ich.id, `-${KOMMENTARSPERRE} seconds`),
-      env.DB.prepare("SELECT count(*) AS n FROM kommentare WHERE autor_id = ? AND erstellt > datetime('now','-1 day')")
-        .bind(ich.id),
-    ]);
-    if (sperre.results.length) return fehler(request, 'Zu schnell — kurz durchatmen', 429);
-    if (heute.results[0].n >= KOMMENTARE_TAG) {
-      return fehler(request, `Höchstens ${KOMMENTARE_TAG} Kommentare am Tag`, 429);
-    }
+    const grenze = await kommentarGrenze(env, ich.id);
+    if (grenze) return fehler(request, grenze.fehler, grenze.status);
 
     const neu = await env.DB.prepare(`
       INSERT INTO kommentare (ziel_art, ziel_id, autor_id, antwort_auf, text, bild_key)
@@ -1390,9 +1419,13 @@ const ROUTEN = {
          schlechteren Fall eine Karte mit totem Bildlink stehen: sichtbar,
          wiederholbar, und nichts liegt mehr offen. */
       if (k.bild_key && env.BILDER) await env.BILDER.delete(k.bild_key);
+      /* Auch die Sterne der Karte gehen weg: die Antwort zeigt sie ohnehin
+         nicht mehr, und was nicht mehr gezeigt wird, soll auch nicht mehr
+         herumliegen. Die BEWERTUNG selbst bleibt - sie zaehlt weiter auf den
+         Schnitt, geloescht wurde ein Kommentar, keine Note. */
       await env.DB.prepare(`
         UPDATE kommentare
-        SET geloescht_am = datetime('now'), text = '', bild_key = NULL
+        SET geloescht_am = datetime('now'), text = '', bild_key = NULL, sterne = NULL
         WHERE id = ?
       `).bind(k.id).run();
       // Ein geloeschter Kommentar zaehlt nicht mehr mit - also auch 'tafel'.
@@ -1435,12 +1468,21 @@ const ROUTEN = {
     if (!k) return fehler(request, 'Den Kommentar gibt es nicht', 404);
     if (k.geloescht_am) return fehler(request, 'Der ist gelöscht', 409);
 
-    const weg = await env.DB.prepare(
-      'DELETE FROM reaktionen WHERE kommentar_id = ? AND autor_id = ? AND art = ?')
-      .bind(id, ich.id, art).run();
-    const meins = weg.meta.changes === 0;
-    if (meins) {
-      await env.DB.prepare('INSERT INTO reaktionen (kommentar_id, autor_id, art) VALUES (?, ?, ?)')
+    /* Erst einfuegen, dann - wenn es die Zeile schon gab - loeschen. Die
+       Reihenfolge ist der ganze Punkt: andersherum loeschen zwei gleichzeitige
+       Taps desselben Nutzers (zwei Geraete, oder ein zweiter Druck bei lahmer
+       Leitung) beide nichts und fuegen beide ein, und der zweite laeuft in den
+       Primaerschluessel und damit in einen 500er. So ist jeder der beiden
+       Schritte fuer sich idempotent: die Taps ueberholen sich hoechstens
+       gegenseitig, und das Ergebnis ist immer ein gueltiger Zustand. */
+    const rein = await env.DB.prepare(`
+      INSERT INTO reaktionen (kommentar_id, autor_id, art) VALUES (?, ?, ?)
+      ON CONFLICT DO NOTHING
+    `).bind(id, ich.id, art).run();
+    const meins = rein.meta.changes === 1;
+    if (!meins) {
+      await env.DB.prepare(
+        'DELETE FROM reaktionen WHERE kommentar_id = ? AND autor_id = ? AND art = ?')
         .bind(id, ich.id, art).run();
     }
 

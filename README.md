@@ -56,8 +56,10 @@ niemand.
 
 Dazu **Kommentare** mit einer Antwortebene und Reaktionen (👍 👎 ❤️ 🍺) wie bei
 WhatsApp. Wer beim Schreiben schon Sterne vergeben hat, trägt sie über seinem Text —
-so liest man, worauf sich das Lob bezieht. Gelöscht wird weich, geantwortet nur eine
-Ebene tief: bei Stufe drei ist die Spalte auf dem Handy vierzig Pixel breit.
+so liest man, worauf sich das Lob bezieht. Es ist der Stand von damals, nicht der von
+heute: hebt jemand später seine Note, bleibt die alte Karte, wie sie war. Gelöscht
+wird weich, geantwortet nur eine Ebene tief: bei Stufe drei ist die Spalte auf dem
+Handy vierzig Pixel breit.
 
 ## Wie man mitmacht
 
@@ -147,7 +149,8 @@ Absagegrund von höchstens 120 Zeichen. Ausgelost wird ab zwei Meldern mit etwas
 Kaltem; nach einer Absage genügt einer, sonst sperrte ein einziges Nein den Abend.
 Termine: höchstens 3 je Nutzer und Tag, 90 Tage im Voraus. Kommentare: 400 Zeichen,
 30 am Tag, 200 je Ziel, 10 Sekunden Abstand — dieselbe Bremse wie bei den Meldungen,
-gegen den Freund, der zehnmal drückt. Zeiten reisen als ISO-8601 mit Zone; der Worker
+gegen den Freund, der zehnmal drückt. Sie gelten auch für den Text neben den Sternen,
+der ja derselbe Kommentar wird. Zeiten reisen als ISO-8601 mit Zone; der Worker
 hat kein ICU und rechnet nie um.
 
 Magic Links gelten 15 Minuten und genau einmal, höchstens 3 pro Adresse und Stunde und 30
