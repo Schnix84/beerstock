@@ -32,6 +32,22 @@ const MAX_GRAD     = 30;
 const MELDESPERRE  = 60;    // Sekunden zwischen zwei Meldungen desselben Nutzers
 const VERLAUF_TAGE = 30;
 
+/* Das Gluecksrad. Gewichtet nach Bestand, weil das die Zahl ist, um die sich
+   die ganze Seite dreht: wer mehr kalt hat, wird oefter gezogen. Der Deckel
+   verhindert, dass einer mit 200 gemeldeten Bieren das Rad besitzt. */
+const LOS_FRISCH  = 24;   // Stunden - wer seit gestern nichts gemeldet hat, ist nicht da
+const LOS_MIN     = 1;    // ohne kaltes Bier kein Gastgeber
+const LOS_DECKEL  = 24;   // Gewicht = min(biere, 24), ein Kasten ist die Obergrenze
+const LOS_MINDEST = 2;    // unter zweien gibt es nichts auszulosen
+
+/* Der Bierabend-Tag endet nicht um Mitternacht, sondern sechs Stunden spaeter
+   (07:00 bzw. 08:00 Ortszeit) - sonst faellt die Drehung um kurz nach eins auf
+   den naechsten Tag, obwohl sie zu demselben Abend gehoert. Bewusst in UTC
+   gerechnet statt ueber eine Zeitzone: die Stunde Sommerzeit-Drift ist an
+   dieser Grenze egal, eine ICU-Abhaengigkeit waere es nicht. */
+const LOS_GRENZE = 6;
+const bierTag = () => new Date(Date.now() - LOS_GRENZE * 3600e3).toISOString().slice(0, 10);
+
 // Magic Links. Kurz gueltig, weil eine Mail im Posteingang liegen bleibt.
 const LINK_MINUTEN = 15;
 /* Die Missbrauchsbremse. Offener Zugang plus Mailversand heisst: ohne diese
@@ -95,6 +111,72 @@ async function nutzer(request, env) {
     u._token_hash = h;
   }
   return u;
+}
+
+// ---------------------------------------------------------------------------
+// Gluecksrad
+// ---------------------------------------------------------------------------
+
+/* Wer heute im Topf ist. Beide Aufrufer benutzen DIESE Abfrage - die
+   Bestenliste zum Zeichnen des Rades, die Ziehung zum Ziehen. Zwei Fassungen
+   derselben Regel liefen frueher oder spaeter auseinander, und dann zeigt das
+   Rad ein Feld, aus dem gar nicht gezogen wurde. */
+const losFeldStmt = env => env.DB.prepare(`
+  SELECT u.id, u.name, u.quelle, r.biere
+  FROM users u
+  JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j ON j.user_id = u.id
+  JOIN reports r ON r.id = j.id
+  WHERE u.name IS NOT NULL
+    AND r.biere >= ?
+    AND r.gemeldet_am > datetime('now', ?)
+  ORDER BY r.biere DESC, u.name ASC
+`).bind(LOS_MIN, `-${LOS_FRISCH} hours`);
+
+const losStmt = (env, tag) => env.DB.prepare(`
+  SELECT l.tag, l.biere, l.feld, l.gedreht_am, u.name AS gewinner, g.name AS von
+  FROM los l
+  JOIN users u ON u.id = l.user_id
+  LEFT JOIN users g ON g.id = l.gedreht_von
+  WHERE l.tag = ?
+`).bind(tag);
+
+const gewicht = biere => Math.min(biere, LOS_DECKEL);
+
+/* Gewichtet gezogen, aus echtem Zufall statt aus Math.random - es geht um die
+   Frage, wer heute den Abend ausrichtet, da ist ein vorhersagbarer Generator
+   die falsche Zutat. */
+function ziehe(feld) {
+  const summe = feld.reduce((a, p) => a + gewicht(p.biere), 0);
+  const wurf = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * summe;
+  let r = wurf;
+  for (const p of feld) { r -= gewicht(p.biere); if (r < 0) return p; }
+  return feld[feld.length - 1];
+}
+
+// Was die Seite braucht, um das Rad zu zeichnen - egal ob schon gedreht wurde.
+const losSegmente = feld =>
+  feld.map(p => ({ name: p.name, gewicht: gewicht(p.biere), gemessen: p.quelle === 'ha' }));
+
+/* Eine Form fuer beide Antworten: die Seite muss nicht zwei Faelle
+   unterscheiden. `gewinner === null` heisst "heute noch nicht gedreht", und
+   `feld` traegt dann das aktuelle Feld statt des eingefrorenen. */
+function losAntwort(tag, zeile, feldJetzt) {
+  if (!zeile) {
+    return {
+      tag, gewinner: null, feld: losSegmente(feldJetzt),
+      offen: feldJetzt.length >= LOS_MINDEST, mindestens: LOS_MINDEST,
+    };
+  }
+  return {
+    tag,
+    gewinner: zeile.gewinner,
+    biere: zeile.biere,
+    feld: JSON.parse(zeile.feld),
+    von: zeile.von,
+    // Immer mit Z, wie bei den Meldungen: die Seite rechnet daraus eine Uhrzeit.
+    gedreht: zeile.gedreht_am.replace(' ', 'T') + 'Z',
+    offen: false, mindestens: LOS_MINDEST,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -326,11 +408,52 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
+  /* Das Rad drehen. Braucht ein Token: wer nicht mitspielt, soll den Tag nicht
+     verbrauchen - und "gedreht von Basti" ist die Zeile, die aus der Ziehung
+     eine Handlung macht. Ein zweiter Aufruf am selben Tag ist kein Fehler, er
+     bekommt schlicht dasselbe Ergebnis mit `schon: true`. */
+  'POST /api/drehen': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const tag = bierTag();
+    const [vorher, feld] = await env.DB.batch([losStmt(env, tag), losFeldStmt(env)]);
+
+    // Schon gezogen? Dann gilt das, egal wer fragt.
+    if (vorher.results.length) {
+      return antwort(request, { ...losAntwort(tag, vorher.results[0]), schon: true });
+    }
+    if (feld.results.length < LOS_MINDEST) {
+      return fehler(request,
+        `Zu wenig gemeldet — das Rad braucht mindestens ${LOS_MINDEST}, die heute etwas Kaltes haben.`, 409);
+    }
+
+    const gewinner = ziehe(feld.results);
+    /* Das Rennen zweier gleichzeitiger Dreher entscheidet der Primaerschluessel:
+       wer nicht geschrieben hat, liest gleich darauf das fremde Ergebnis und
+       zeigt es an. Kein Sperren, keine Transaktion ueber zwei Anfragen. */
+    const gesetzt = await env.DB.prepare(`
+      INSERT INTO los (tag, user_id, biere, feld, gedreht_von) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(tag) DO NOTHING
+    `).bind(tag, gewinner.id, gewinner.biere,
+            JSON.stringify(losSegmente(feld.results)), ich.id).run();
+
+    const zeile = await losStmt(env, tag).first();
+    const selbst = gesetzt.meta.changes === 1;
+    return antwort(request, { ...losAntwort(tag, zeile), schon: !selbst }, selbst ? 201 : 200);
+  },
+
+  // -------------------------------------------------------------------------
   'GET /api/leaderboard': async (request, env) => {
-    /* Drei Abfragen in einem Rutsch: aktueller Stand, Bestmarke, Verlauf.
-       Der aktuelle Stand ist die juengste Meldung je Nutzer - deshalb wird
-       nie ueberschrieben, der Verlauf faellt dabei von selbst an. */
-    const [stand, best, verlauf] = await env.DB.batch([
+    /* Fuenf Abfragen in einem Rutsch: aktueller Stand, Bestmarke, Verlauf und
+       das Gluecksrad (Ziehung des Tages + wer heute im Topf ist). Der aktuelle
+       Stand ist die juengste Meldung je Nutzer - deshalb wird nie
+       ueberschrieben, der Verlauf faellt dabei von selbst an.
+       Das Rad reitet hier mit statt auf einer eigenen Route: eine Runde
+       weniger, ein Cache-Verhalten weniger, und die Seite fragt ohnehin im
+       Minutentakt nach. */
+    const tag = bierTag();
+    const [stand, best, verlauf, los, losFeld] = await env.DB.batch([
       env.DB.prepare(`
         SELECT u.id, u.name, u.quelle, r.biere, r.temperatur, r.gemeldet_am
         FROM users u
@@ -352,6 +475,8 @@ const ROUTEN = {
         ) j ON j.id = r.id
         ORDER BY r.user_id, tag
       `).bind(`-${VERLAUF_TAGE} days`),
+      losStmt(env, tag),
+      losFeldStmt(env),
     ]);
 
     const bestmarke = new Map(best.results.map(r => [r.user_id, r.best]));
@@ -373,8 +498,13 @@ const ROUTEN = {
       verlauf: kurve.get(r.id) || [r.biere],
     }));
 
-    // Eine halbe Minute Cache: die Seite wird oefter geladen als gemeldet.
-    return antwort(request, { feld }, 200, { 'Cache-Control': 'public, max-age=30' });
+    /* Eine halbe Minute Cache: die Seite wird oefter geladen als gemeldet. Das
+       gilt auch fuer das Rad - wer selbst dreht, sieht es sofort aus der
+       Antwort auf POST /api/drehen, alle anderen binnen einer halben Minute. */
+    return antwort(request, {
+      feld,
+      los: losAntwort(tag, los.results[0], losFeld.results),
+    }, 200, { 'Cache-Control': 'public, max-age=30' });
   },
 };
 

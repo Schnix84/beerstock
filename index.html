@@ -227,6 +227,60 @@
     background: linear-gradient(90deg, transparent, #ffffff40 8%, #ffffff40 92%, transparent);
   }
 
+  /* --- Das Glücksrad ------------------------------------------------------
+     Gezogen wird auf dem Worker, einmal am Tag, für alle dasselbe. Das Rad
+     hier dreht sich also nicht, um zu entscheiden — es fährt an, was schon
+     feststeht. Die Fläche eines Feldes IST die Chance; das muss man nicht
+     dazuschreiben, das sieht man.
+     --------------------------------------------------------------------- */
+  .rad-block { margin-top: clamp(14px, 3.6vw, 20px); }
+  .rad-buehne { position: relative; width: 100%; max-width: 290px; margin: 2px auto 4px; }
+  .rad-buehne svg { display: block; width: 100%; overflow: visible; }
+  .rad-teller { transform-origin: 150px 150px; }
+  .seg-text { font-family: var(--hand); fill: var(--kreide); }
+  .zeiger { fill: var(--gelb); stroke: #00000055; stroke-width: .6; }
+  .nabe { fill: #ffffff14; stroke: #ffffff40; stroke-width: 1.4; }
+  .rad-rand { fill: none; stroke: #ffffff55; stroke-width: 2; }
+
+  /* Der Anschrieb: was die Auslosung ergeben hat. */
+  .erg { text-align: center; margin: 12px 0 4px; }
+  .erg-oben {
+    font-family: var(--hand); font-size: 12.5px; letter-spacing: .13em;
+    color: var(--gelb); opacity: .9; transform: rotate(-.7deg);
+  }
+  .erg-name {
+    position: relative; display: inline-block; margin: 6px 0 4px;
+    font-family: var(--hand); font-size: clamp(28px, 8.6vw, 38px); line-height: 1.15;
+    color: var(--gelb); transform: rotate(-1.1deg);
+    /* Ein langer Name darf umbrechen, aber nicht aus der Tafel laufen. */
+    max-width: 100%; overflow-wrap: anywhere;
+  }
+  /* Der Kringel, den der Wirt um das Tagesgericht zieht. */
+  .erg-name svg {
+    position: absolute; inset: -13px -20px; width: calc(100% + 40px);
+    height: calc(100% + 26px); overflow: visible; pointer-events: none;
+  }
+  .erg-kringel {
+    fill: none; stroke: var(--gelb); stroke-width: 2.1; stroke-linecap: round;
+    opacity: .8; stroke-dasharray: 620; stroke-dashoffset: 620;
+    animation: kringeln .8s .25s ease-out forwards;
+  }
+  @keyframes kringeln { to { stroke-dashoffset: 0; } }
+  .erg-unter { font-size: 12px; color: var(--kreide-weg); margin-top: 9px; }
+  .rad-note {
+    margin: 10px 0 0; font-size: 12px; color: var(--kreide-weg);
+    text-align: center; line-height: 1.5;
+  }
+  .rad-note.schlecht { color: #f0c6be; }
+
+  /* Der Gewinner in der Liste: der Wirt hat einen Haken danebengesetzt. */
+  .z-heute {
+    font-family: var(--hand); font-size: 10.5px; letter-spacing: .1em;
+    color: var(--gelb); border: 1px solid #e8c76688; border-radius: 999px;
+    padding: 1px 7px; margin-left: 7px; white-space: nowrap; vertical-align: 1px;
+  }
+  .zeile.heute .z-rang, .zeile.heute .z-name { color: var(--gelb); }
+
   /* --- Die Karte: Rangfolge als Speisekarte ------------------------------- */
   .block { margin-top: clamp(14px, 3.6vw, 20px); }
   .block-kopf {
@@ -352,6 +406,9 @@
     .strich { animation: none; stroke-dashoffset: 0; }
     .blase, .glanz, .kondens.laeuft { animation: none; }
     .blase { opacity: calc(var(--sprudel-op) * .5); }
+    /* Das Rad springt auf sein Feld, statt sich zu drehen. Das Ergebnis steht
+       ohnehin fest, bevor sich das erste Bild bewegt — es geht nichts verloren. */
+    .erg-kringel { animation: none; stroke-dashoffset: 0; }
   }
   [hidden] { display: none !important; }
 </style>
@@ -490,6 +547,34 @@
       <div class="skala" aria-hidden="true"><span class="nadel" id="nadel"></span></div>
 
       <div class="strich-linie"></div>
+
+      <!-- ============ Das Glücksrad =====================================
+           Steht zwischen dem Ersten und der Karte, weil es die Frage des
+           Abends beantwortet — der Kopf gehört weiter dem, der am meisten
+           kalt hat, der wechselt nach Bestand und nicht nach Losglück.
+           ============================================================= -->
+      <section class="rad-block" id="rad-block" hidden>
+        <div class="block-kopf kr">
+          <span class="titel">Wo wird heute getrunken</span>
+          <span class="datum" id="rad-datum"></span>
+        </div>
+
+        <div class="rad-buehne" id="rad-buehne" hidden>
+          <svg viewBox="0 0 300 300" role="img" aria-labelledby="rad-titel">
+            <title id="rad-titel">Glücksrad: ein Feld je Melder, so groß wie sein Bestand</title>
+            <g class="rad-teller" id="rad-teller"></g>
+            <circle class="nabe" cx="150" cy="150" r="16"/>
+            <!-- Der Zeiger steht oben und dreht sich nicht mit. -->
+            <path class="zeiger" d="M150,18 L141,2 L159,2 Z"/>
+          </svg>
+        </div>
+
+        <button class="knopf" id="rad-knopf" hidden>Rad drehen</button>
+        <div class="erg" id="rad-erg" aria-live="polite" hidden></div>
+        <p class="rad-note" id="rad-note" hidden></p>
+
+        <div class="strich-linie"></div>
+      </section>
 
       <!-- ============ Die Karte ========================================= -->
       <section class="block" id="block" hidden>
@@ -630,6 +715,23 @@
     $('glas').classList.toggle('ungewiss', !Number.isFinite(anzahl));
   }
 
+  /* --- Das Rad --------------------------------------------------------------
+     Ein Feld je Melder, der Winkel proportional zum Gewicht. 0° ist oben, dort
+     steht der Zeiger; gerechnet wird im Uhrzeigersinn, in die Richtung, in die
+     man ein Rad schubsen würde. */
+  const RAD_KREIDE = ['#e8c766', '#cfd6cd', '#93a09a', '#e8c76699', '#cfd6cd88'];
+  let radFelder = [];   // Segmentgrenzen des zuletzt gezeichneten Rades
+  let radStand = 0;     // aktueller Drehwinkel, damit die nächste Drehung anschließt
+
+  const radPunkt = (winkel, r) => {
+    const b = (winkel - 90) * Math.PI / 180;
+    return [150 + r * Math.cos(b), 150 + r * Math.sin(b)];
+  };
+  const kuerze = (s, n) => s.length <= n ? s : s.slice(0, n - 1) + '…';
+
+  const KRINGEL = 'M28,16 C8,26 6,50 40,58 C86,68 172,60 186,42 C196,28 168,10 116,8 ' +
+                  'C74,6 40,10 26,20';
+
   const VARIANTE = {
     kopf(p, modus) {
       const ziel = $('hero-striche');
@@ -677,14 +779,18 @@
       nadel.style.opacity = messung ? 1 : 0;
     },
 
-    zeile(p, i, s, ich) {
-      const z = el('div', 'zeile' + (ich ? ' ich' : '') + (i === 0 ? ' erster' : ''));
+    zeile(p, i, s, ich, heute) {
+      const z = el('div', 'zeile' + (ich ? ' ich' : '') + (i === 0 ? ' erster' : '') +
+                          (heute ? ' heute' : ''));
       z.appendChild(el('div', 'z-rang kr', String(i + 1)));
 
       const mitte = el('div', 'z-mitte');
       const name = el('div', 'z-name kr');
       name.textContent = p.name;
       if (p.gemessen) name.appendChild(el('span', 'z-marke', 'gemessen'));
+      // Wer ausgelost wurde, steht auch hier — sonst müsste man scrollen, um
+      // von der Zeile zurück zum Anschrieb zu finden.
+      if (heute) name.appendChild(el('span', 'z-heute', 'heute hier'));
       mitte.appendChild(name);
       const str = el('div', 'z-striche');
       str.appendChild(striche(p.biere, false));
@@ -710,17 +816,106 @@
       return el('div', 'leer-hinweis kr',
         'Noch hat niemand angeschrieben. Der erste Eintrag bekommt den Kopf der Tafel.');
     },
+
+    /* Das Rad zeichnen. `segmente` kommt so vom Worker: [{name, gewicht}, …] in
+       Segmentreihenfolge — vor der Ziehung das aktuelle Feld, danach das
+       eingefrorene. Nur deshalb zeigt das Rad um 23 Uhr dieselben Felder wie
+       um 19 Uhr, und die Animation landet auf einem Feld, das es noch gibt. */
+    rad(segmente) {
+      const g = $('rad-teller'), R = 132;
+      g.textContent = '';
+      radFelder = [];
+      const summe = segmente.reduce((a, s) => a + s.gewicht, 0) || 1;
+      let von = 0;
+
+      segmente.forEach((seg, i) => {
+        const weite = seg.gewicht / summe * 360;
+        radFelder.push({ name: seg.name, von, bis: von + weite });
+        const [x0, y0] = radPunkt(von, R), [x1, y1] = radPunkt(von + weite, R);
+        g.appendChild(s_el('path', {
+          d: `M150,150 L${x0.toFixed(1)},${y0.toFixed(1)} A${R},${R} 0 ` +
+             `${weite > 180 ? 1 : 0},1 ${x1.toFixed(1)},${y1.toFixed(1)} Z`,
+          fill: RAD_KREIDE[i % RAD_KREIDE.length], 'fill-opacity': .16,
+          stroke: '#ffffff38', 'stroke-width': 1.4,
+        }));
+
+        /* Beschriftung radial. Unter 30° Feldbreite passt kein Name mehr — dann
+           steht dort nur die Zahl, und wer das Feld sucht, findet es über die
+           Liste darunter. Das ist der Preis dieser Form. */
+        const mitte = von + weite / 2, [tx, ty] = radPunkt(mitte, 88);
+        const eng = weite < 30;
+        const t = s_el('text', {
+          x: tx.toFixed(1), y: ty.toFixed(1), class: 'seg-text',
+          'text-anchor': 'middle', 'dominant-baseline': 'middle',
+          'font-size': eng ? 11 : 14,
+          // Auf der linken Hälfte stünde die Schrift sonst auf dem Kopf.
+          transform: `rotate(${(mitte > 180 ? mitte + 90 : mitte - 90).toFixed(1)} ` +
+                     `${tx.toFixed(1)} ${ty.toFixed(1)})`,
+        });
+        t.textContent = eng ? String(seg.gewicht)
+                            : kuerze(seg.name, Math.round(weite / 2.2)) + ' · ' + seg.gewicht;
+        g.appendChild(t);
+        von += weite;
+      });
+
+      g.appendChild(s_el('circle', { class: 'rad-rand', cx: 150, cy: 150, r: R }));
+    },
+
+    /* Das Rad auf ein Feld fahren. Der Gewinner steht vor dem ersten Bild fest
+       — er kommt vom Worker —, hier wird er nur angefahren. */
+    radDrehen(name) {
+      const i = radFelder.findIndex(f => f.name === name);
+      if (i < 0) return Promise.resolve();
+      const f = radFelder[i], mitte = (f.von + f.bis) / 2;
+      // Nicht immer mittig halten, das sähe nach Raster aus statt nach Zufall.
+      const ziel = -(mitte + (Math.random() - .5) * (f.bis - f.von) * .7);
+      // Vorwärts weiter, mindestens fünf volle Runden ab dem Ist-Stand.
+      radStand = ziel + 360 * (Math.ceil((radStand - ziel) / 360) + 5);
+
+      const sparsam = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const g = $('rad-teller');
+      g.style.transition = sparsam ? 'none' : 'transform 4.2s cubic-bezier(.16,.9,.24,1)';
+      g.style.transform = `rotate(${radStand.toFixed(2)}deg)`;
+      return new Promise(fertig => setTimeout(fertig, sparsam ? 60 : 4300));
+    },
+
+    /* Der Anschrieb: das Tagesgericht, umkringelt. */
+    losErgebnis(los) {
+      const ziel = $('rad-erg');
+      ziel.textContent = '';
+      ziel.appendChild(el('div', 'erg-oben kr', 'Heute wird getrunken bei'));
+
+      const name = el('div', 'erg-name kr');
+      name.textContent = los.gewinner;
+      const svg = s_el('svg', { viewBox: '0 0 200 70', preserveAspectRatio: 'none' });
+      svg.appendChild(s_el('path', { class: 'erg-kringel', d: KRINGEL }));
+      name.appendChild(svg);
+      ziel.appendChild(name);
+
+      const summe = los.feld.reduce((a, s) => a + s.gewicht, 0);
+      const meins = (los.feld.find(s => s.name === los.gewinner) || {}).gewicht;
+      const uhr = new Date(los.gedreht)
+        .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      ziel.appendChild(el('div', 'erg-unter',
+        (los.von ? 'gedreht von ' + los.von + ' um ' : 'gedreht um ') + uhr +
+        (meins ? ' · ' + meins + ' von ' + summe + ' Losen' : '')));
+
+      ziel.hidden = false;
+    },
   };
 
   // ==========================================================================
   // DATENSCHICHT
-  // In allen Entwuerfen wortgleich. Sie holt die Bestenliste vom Worker, haelt
-  // die Anmeldung (Magic Link, Geraete-Token) und ruft nach oben nur drei
-  // Funktionen, die jeder Entwurf selbst mitbringt:
+  // Sie holt Bestenliste und Ziehung vom Worker, haelt die Anmeldung (Magic
+  // Link, Geraete-Token) und ruft nach oben nur diese Funktionen, die der
+  // Entwurf selbst mitbringt:
   //
   //     VARIANTE.kopf(p, modus)   der Siegerplatz. modus: 'fuehrend' | 'eigen' | 'nichts'
-  //     VARIANTE.zeile(p, i, s, ich)   eine Zeile der Liste (s = Ampelstufe)
+  //     VARIANTE.zeile(p, i, s, ich, heute)   eine Zeile der Liste (s = Ampelstufe)
   //     VARIANTE.leer()           was dasteht, wenn noch niemand gemeldet hat
+  //     VARIANTE.rad(segmente)    das Gluecksrad zeichnen
+  //     VARIANTE.radDrehen(name)  es auf ein Feld fahren; Promise, wenn es steht
+  //     VARIANTE.losErgebnis(los) der Anschrieb der Ziehung
   //
   // Alles, was ueber Daten entscheidet, steht damit genau einmal; alles, was
   // ueber das Bild entscheidet, steht im Entwurf.
@@ -817,6 +1012,11 @@
   let meinName = null;      // steht nach der ersten Antwort fest
   let brauchtNamen = false; // angemeldet, aber noch ohne Namen fuer die Liste
 
+  let heuteBei = null;      // Gewinner der heutigen Ziehung, faerbt die Liste
+  let letztesFeld = [];     // die Bestenliste, fuer "wer ist nicht im Topf"
+  let selbstGedreht = false;// in DIESER Sitzung gedreht: dann bleibt das Rad stehen
+  let dreht = false;        // waehrend der Animation nichts neu zeichnen
+
   function sagt(text, schlecht) {
     const p = $('sagt');
     p.textContent = text;
@@ -845,18 +1045,98 @@
     feld.forEach((p, i) => {
       // Dieselbe Ampel wie oben auf dem Siegerplatz - Wort und Farbe kommen aus
       // STUFEN, nicht aus einer zweiten Tabelle.
-      ziel.appendChild(VARIANTE.zeile(p, i, stufe(p.temperatur), !!meinName && p.name === meinName));
+      ziel.appendChild(VARIANTE.zeile(p, i, stufe(p.temperatur),
+        !!meinName && p.name === meinName, p.name === heuteBei));
     });
   }
 
-  function zeichneFeld(feld) {
+  function zeichneFeld(feld, los) {
     $('block').hidden = false;
     $('block-datum').textContent =
       new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+    letztesFeld = feld;
+    heuteBei = los && los.gewinner || null;
     // Der Siegerplatz gehoert dem Ersten, nicht diesem Kuehlschrank.
     if (feld.length) VARIANTE.kopf(feld[0], 'fuehrend'); else rueckfall();
+    // Vor der Liste: dort faerbt der Gewinner schon eine Zeile ein.
+    zeichneRad(los);
     liste(feld);
     formular();
+  }
+
+  // --- Das Glücksrad --------------------------------------------------------
+  function radSagt(text, schlecht) {
+    const p = $('rad-note');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  function zeichneRad(los) {
+    const block = $('rad-block');
+    if (!los) { block.hidden = true; return; }
+    block.hidden = false;
+    $('rad-datum').textContent =
+      new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+
+    const gezogen = !!los.gewinner;
+    const genug = los.feld.length >= los.mindestens;
+    const darf = !!merke() && !!meinName;
+
+    /* Das Rad steht, solange nichts gezogen ist — und danach nur noch für den,
+       der eben selbst gedreht hat. Wer später dazukommt, liest das Ergebnis;
+       ein Rad, das schon steht, will niemand noch einmal anschauen. */
+    const zeigeRad = gezogen ? selbstGedreht : genug;
+    $('rad-buehne').hidden = !zeigeRad;
+    // Waehrend der Animation nicht neu zeichnen: eine Meldung, die dazwischen
+    // eintrudelt, wuerde die Felder verschieben und den Zeiger danebenstellen.
+    if (zeigeRad && !dreht) VARIANTE.rad(los.feld);
+
+    if (gezogen) VARIANTE.losErgebnis(los); else $('rad-erg').hidden = true;
+
+    const knopf = $('rad-knopf');
+    knopf.hidden = gezogen || !genug || !darf;
+    knopf.disabled = false;
+
+    if (gezogen) {
+      radSagt('');
+    } else if (!genug) {
+      radSagt('Noch zu wenig gemeldet — ausgelost wird ab ' + los.mindestens +
+              ', die heute etwas Kaltes haben.');
+    } else {
+      // Wer gemeldet hat, aber nichts Kaltes: das erklärt sich sonst niemand.
+      const topf = new Set(los.feld.map(s => s.name));
+      const raus = letztesFeld.filter(p => !topf.has(p.name)).map(p => p.name);
+      radSagt((darf ? '' : 'Drehen darf, wer mitschreibt. ') +
+              (raus.length ? 'Nicht im Topf: ' + raus.join(', ') + '.' : ''));
+    }
+  }
+
+  async function dreh() {
+    $('rad-knopf').disabled = true;
+    radSagt('');
+    dreht = true;
+    try {
+      const d = await ruf('/api/drehen', {});
+      if (d.schon) {
+        /* Jemand war in derselben Minute schneller. Dann gibt es nichts
+           anzufahren — das Ergebnis steht schon fest und wird nur gelesen. */
+        dreht = false;
+        zeichneRad(d);
+        radSagt('Das Rad hatte sich heute schon gedreht.');
+        return;
+      }
+      selbstGedreht = true;
+      await VARIANTE.radDrehen(d.gewinner);
+      dreht = false;
+      heuteBei = d.gewinner;
+      zeichneRad(d);
+      liste(letztesFeld);          // die Zeile des Gewinners einfärben
+    } catch (e) {
+      dreht = false;
+      $('rad-knopf').disabled = false;
+      radSagt(e.message, true);
+    }
   }
 
   /* Rueckfall: der eigene Kuehlschrank aus status.json, wie die Seite es vor der
@@ -877,11 +1157,12 @@
       const r = await fetch(API + '/api/leaderboard', { cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      zeichneFeld(d.feld || []);
+      zeichneFeld(d.feld || [], d.los || null);
     } catch (e) {
-      // API weg: der Siegerplatz zeigt wieder den eigenen Kuehlschrank, die
-      // Liste bleibt draussen.
+      // API weg: der Siegerplatz zeigt wieder den eigenen Kuehlschrank, Liste
+      // und Rad bleiben draussen - ohne Worker gibt es keine Ziehung.
       $('block').hidden = true;
+      $('rad-block').hidden = true;
       await rueckfall();
     }
   }
@@ -900,6 +1181,8 @@
   }
 
   // --- Bedienung ------------------------------------------------------------
+  $('rad-knopf').addEventListener('click', dreh);
+
   $('zeig-anmeldung').addEventListener('click', () => {
     $('zeig-anmeldung').hidden = true;
     $('anmelde-form').hidden = false;
