@@ -35,6 +35,18 @@ const MAX_GRAD     = 30;
 const MELDESPERRE  = 60;    // Sekunden zwischen zwei Meldungen desselben Nutzers
 const VERLAUF_TAGE = 30;
 
+/* Die Bestenliste faellt seit der Tuer je nach `Authorization` anders aus, und
+   damit darf sie kein gemeinsamer Speicher mehr weiterreichen: `public` haette
+   die Antwort eines Angemeldeten an den naechsten Fremden ausliefern koennen,
+   und andersherum den beschnittenen Stand an einen Angemeldeten. `private`
+   laesst nur den Browser des Aufrufers behalten; `Vary` sagt es jedem
+   Zwischenspeicher noch einmal ausdruecklich. `Origin` steht mit drin, weil
+   `koepfe()` es setzt - dieser Kopf ersetzt ihn, statt sich dazuzustellen. */
+const KEIN_FREMDER_CACHE = {
+  'Cache-Control': 'private, max-age=30',
+  'Vary': 'Origin, Authorization',
+};
+
 /* Das Gluecksrad. Gewichtet nach Bestand, weil das die Zahl ist, um die sich
    die ganze Seite dreht: wer mehr kalt hat, wird oefter gezogen. Der Deckel
    verhindert, dass einer mit 200 gemeldeten Bieren das Rad besitzt. */
@@ -1724,8 +1736,12 @@ const ROUTEN = {
     if (!ziel) return fehler(request, 'ziel: etwa user:5 oder termin:12');
 
     const ich = await nutzer(request, env);
+    /* Sterne, Kommentare und Fotos sind das Persoenlichste, was hier liegt -
+       seit der Tuer geht das keinen Vorbeikommenden mehr an. 401 und nicht
+       403: es fehlt der Ausweis, nicht das Recht. */
+    if (!ich) return fehler(request, 'Dafür muss man mitschreiben', 401);
 
-    const ichId = ich ? ich.id : 0;
+    const ichId = ich.id;
     const stmts = [
       env.DB.prepare('SELECT ziel_art, ziel_id, sterne FROM bewertungen WHERE ziel_art = ? AND ziel_id = ?')
         .bind(ziel.art, ziel.id),
@@ -1769,7 +1785,10 @@ const ROUTEN = {
        das nie eintritt. */
     const a = abend && abend.results[0];
     const darfNicht =
-        !(ich && ich.name)                        ? 'Zum Bewerten anmelden.'
+      /* "Zum Bewerten anmelden" stand hier, solange die Route auch ohne Token
+         antwortete. Jetzt kommt bis hierher nur, wer angemeldet ist - offen
+         bleibt allein der, der noch keinen Namen gewaehlt hat. */
+        !ich.name                                 ? 'Erst einen Namen für die Tafel wählen.'
       : ziel.art === 'user' && ich.id === ziel.id ? 'Sich selbst bewertet man nicht.'
       : ziel.art !== 'termin'                     ? null
       : !a                                        ? 'Den Abend gibt es nicht mehr.'
@@ -1790,7 +1809,7 @@ const ROUTEN = {
       darf_nicht: darfNicht,
       // Schreiben darf man ueberall, auch bei sich selbst: sonst kann der
       // Gastgeber im eigenen Thread nicht antworten.
-      darf_schreiben: !!(ich && ich.name),
+      darf_schreiben: !!ich.name,
       kommentare: baumBauen(roh.results, reakt.results, ichId, env),
     });
   },
@@ -1808,9 +1827,14 @@ const ROUTEN = {
      (beginnt_am, id) des letzten gezeigten Eintrags; `id` als Nachschlag, weil
      zwei Abende auf dieselbe Minute fallen koennen.
 
-     Ohne Token lesbar wie `GET /api/bewertungen`: hier steht nichts, was nicht
-     ohnehin auf der Seite steht. */
+     Token noetig wie bei `GET /api/bewertungen` - und aus demselben Grund:
+     hier steht, wer wann bei wem war, ueber Jahre. */
   'GET /api/chronik': async (request, env) => {
+    // Wie bei den Bewertungen: das Archiv ist nichts fuer Vorbeikommende.
+    if (!await nutzer(request, env)) {
+      return fehler(request, 'Dafür muss man mitschreiben', 401);
+    }
+
     const url = new URL(request.url);
     const gewuenscht = Number(url.searchParams.get('anzahl'));
     const anzahl = Number.isInteger(gewuenscht) && gewuenscht > 0
@@ -1882,7 +1906,48 @@ const ROUTEN = {
        je Nutzer - deshalb wird nie ueberschrieben, der Verlauf faellt dabei
        von selbst an.
        Alles reitet hier mit statt auf eigenen Routen: eine Runde weniger, ein
-       Cache-Verhalten weniger, und die Seite fragt ohnehin im Minutentakt nach. */
+       Cache-Verhalten weniger, und die Seite fragt ohnehin im Minutentakt nach.
+
+       Ohne Token gibt es davon nur den Siegerplatz - wer fuehrt, mit wie viel
+       und wie kalt. Das ist der Koeder, den die Seite draussen zeigt; das Feld
+       dahinter, das Rad, die Abende und das Archiv gehen Vorbeikommende nichts
+       an. Die eine kleine Abfrage steht bewusst VOR dem grossen `batch`:
+       anonym kostet die Route dann eine Zeile statt neun Abfragen, und die
+       Seite, die im Minutentakt nachfasst, ist die haeufigste Aufruferin. */
+    const ich = await nutzer(request, env);
+    if (!ich) {
+      const spitze = await env.DB.prepare(`
+        SELECT u.name, u.quelle, r.biere, r.temperatur, r.gemeldet_am,
+               (SELECT max(biere) FROM reports WHERE user_id = u.id) AS best
+        FROM users u
+        JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j
+          ON j.user_id = u.id
+        JOIN reports r ON r.id = j.id
+        WHERE u.name IS NOT NULL
+        ORDER BY r.biere DESC, r.gemeldet_am ASC
+        LIMIT 1
+      `).first();
+
+      /* Ohne `id`: eine Id waere die Adresse einer Bewertung, und die Routen
+         dahinter sind jetzt zu. Ohne Verlauf und ohne Sternschnitt aus
+         demselben Grund - der Kopf der Seite zeichnet sie nicht. */
+      return antwort(request, {
+        feld: spitze ? [{
+          name: spitze.name,
+          biere: spitze.biere,
+          temperatur: spitze.temperatur,
+          gemeldet: spitze.gemeldet_am.replace(' ', 'T') + 'Z',
+          gemessen: spitze.quelle === 'ha',
+          best: spitze.best ?? spitze.biere,
+        }] : [],
+        los: null, termine: [], chronik: 0,
+        /* `draussen` sagt der Seite, dass diese Antwort beschnitten ist -
+           sonst saehe eine Liste mit einem Eintrag aus wie eine Tafel, an der
+           nur einer angeschrieben hat. */
+        draussen: true,
+      }, 200, KEIN_FREMDER_CACHE);
+    }
+
     const tag = bierTag();
     const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler, chronik] =
       await env.DB.batch([
@@ -1960,7 +2025,7 @@ const ROUTEN = {
       los: losAntwort(tag, lage, losTopf(losFeld.results, lage), termine.results),
       termine: termine.results.map(t => terminAntwort(t, noten, wieViele)),
       chronik: chronik.results[0].n,
-    }, 200, { 'Cache-Control': 'public, max-age=30' });
+    }, 200, KEIN_FREMDER_CACHE);
   },
 };
 

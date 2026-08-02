@@ -88,10 +88,31 @@ Sternen und Gesagtem erst recht. Am Fuß steht dafür der ganze Weg hinein, drei
 Zeilen lang, und das Adressfeld gleich darunter — ohne Knopf davor, denn wer erst
 fragen muss, ob er fragen darf, tippt seine Adresse nicht ein.
 
-Das ist **Darstellung, keine Sperre.** Die verwischten Zeilen stehen weiter im
-Dokument, und die Leserouten antworten wie eh und je jedem ohne Token. Wirklich
-zu wäre es erst, wenn `/api/leaderboard`, `/api/bewertungen` und `/api/chronik`
-ohne `Bearer` nur noch den Siegerplatz herausgeben.
+**Die Tür ist nicht gemalt.** Ohne `Bearer` gibt `/api/leaderboard` nur den
+Siegerplatz heraus — ohne Id, ohne Verlauf, ohne Sternschnitt, dazu `los: null`,
+`termine: []`, `chronik: 0` und ein `draussen: true`, an dem die Seite erkennt,
+dass die Antwort beschnitten ist. `/api/bewertungen` und `/api/chronik` antworten
+dann 401. Verwischt wird deshalb ein *gezeichneter Platzhalter* und keine echte
+Zeile: was nicht da ist, kann auch niemand scharfstellen.
+
+Die Seite glaubt dabei dem Worker und nicht ihrem eigenen Speicher. Ein Token,
+das der Worker nicht mehr kennt, liegt im Browser noch — ohne `draussen` zeichnete
+sie das Bild eines Angemeldeten um eine Antwort herum, die keine ist.
+
+Weil die Bestenliste jetzt je nach `Authorization` anders ausfällt, trägt sie
+`Cache-Control: private` und `Vary: Origin, Authorization`. Mit dem alten
+`public` hätte ein gemeinsamer Speicher die Antwort eines Angemeldeten an den
+nächsten Fremden weiterreichen können.
+
+Drei Nähte bleiben offen, mit Absicht:
+
+- Der **Siegerplatz** nennt Namen, Bestand und Temperatur des Führenden. Das ist
+  der Köder, ohne den niemand mitmacht.
+- Die **Fotos** liegen weiter unter der öffentlichen R2-Adresse (siehe
+  `BILDER_URL` in der `wrangler.jsonc`) — wer eine kennt, sieht sie ohne
+  Anmeldung. Die Schlüssel sind zufällige UUIDs, also nicht zu erraten.
+- `/api/strom` steht jedem offen. Über die Leitung reisen nur Marken, also
+  bestenfalls die Beobachtung, *dass* gerade etwas passiert ist.
 
 ## Wie man mitmacht
 
@@ -170,7 +191,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/anmelden` | `{email}` → schickt einen Magic Link |
 | `POST /api/magic` | `{token}` aus dem Link → Geräte-Token |
 | `POST /api/name` | Name für die Liste setzen |
-| `GET /api/me` | wem das Token gehört |
+| `GET /api/me` 🔒 | wem das Token gehört |
 | `POST /api/report` | `{biere, temperatur}` mit `Bearer`-Token |
 | `POST /api/abmelden` | wirft nur dieses eine Gerät raus |
 | `POST /api/drehen` | die Flasche drehen; ein zweiter Ruf liefert dasselbe Los |
@@ -178,14 +199,18 @@ Drei Dinge, die dazugehören:
 | `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand |
 | `POST /api/termin/aendern` | verschieben, umbenennen, absagen; ohne `endet_am` wandert das Ende beim Verschieben mit |
 | `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?}` — überschreibt |
-| `GET /api/bewertungen` | `?ziel=user:5` — Schnitte, eigene Abgabe, Kommentarbaum |
+| `GET /api/bewertungen` 🔒 | `?ziel=user:5` — Schnitte, eigene Abgabe, Kommentarbaum |
 | `POST /api/kommentar` | `{ziel_art, ziel_id, text, antwort_auf?}` |
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
-| `GET /api/chronik` | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
-| `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages |
+| `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
+| `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages — ohne Token nur der Siegerplatz |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/health` | Bereitschaft, inklusive Datenbank, Mailversand, Neu-Meldung und Verteiler |
+
+🔒 heißt: braucht den `Bearer`-Token, sonst 401. Für die `POST`-Routen gilt das
+ohnehin — sie schreiben. `GET /api/leaderboard` antwortet auch ohne, dann aber
+nur mit dem Siegerplatz (siehe *Von außen*).
 
 Grenzen: 0–999 Biere, −30…+30 °C, eine Meldung pro Minute und Nutzer, ein
 Absagegrund von höchstens 120 Zeichen. Ausgelost wird ab zwei Meldern mit etwas

@@ -731,6 +731,18 @@
   body.draussen #rangliste {
     filter: blur(4.5px); opacity: .5; pointer-events: none; user-select: none;
   }
+  /* Fuenf Zeilen Kreide statt der Liste - von weitem die Tafel, aus der Naehe
+     nichts. Die Masse sind die einer echten Zeile, damit der Block nicht
+     kuerzer wird, sobald die Tuer zugeht. */
+  .ph-zeile {
+    display: flex; align-items: center; gap: 14px;
+    padding: 13px 0; border-bottom: 1px dashed #ffffff14;
+  }
+  .ph-links { flex: 1; }
+  .ph-strich { height: 13px; border-radius: 2px; background: #ffffff26; }
+  .ph-strich.duenn { height: 8px; margin-top: 9px; background: #ffffff14; }
+  .ph-zahl { width: 34px; height: 26px; border-radius: 2px; background: #ffffff20; }
+
   .verwischt-wort { display: none; }
   body.draussen .verwischt-wort {
     display: block; position: absolute; left: 0; right: 0; top: 50%;
@@ -1089,8 +1101,7 @@
               <li>Link in der Mail klicken</li>
               <li>Namen für die Tafel wählen</li>
             </ol>
-            <p class="tuer-note">Kein Passwort, keine App. Danach steht deine Zahl in der
-              Liste, du drehst mit und redest mit.</p>
+            <p class="tuer-note">Kein Passwort, keine App.</p>
           </div>
           <form id="anmelde-form" hidden>
             <div class="melde eins">
@@ -1904,6 +1915,12 @@
   let meinName = null;      // steht nach der ersten Antwort fest
   let brauchtNamen = false; // angemeldet, aber noch ohne Namen fuer die Liste
   let linkRaus = false;     // Magic Link ist unterwegs: Feld weg, Meldung steht
+  let vonDraussen = false;  // die letzte Antwort war die beschnittene (siehe `hole`)
+
+  /* Drinnen ist, wer ein Token hat UND vom Worker mehr als den Siegerplatz
+     bekommt. Beides zusammen, nie nur das eine: das Token allein ist eine
+     Behauptung dieses Geraets. */
+  const drinnen = () => !!merke() && !vonDraussen;
 
   let heuteBei = null;      // Gewinner der geltenden Ziehung, faerbt die Liste
   let heuteStatus = null;   // 'offen' (wartet auf Antwort) oder 'zugesagt'
@@ -1947,7 +1964,7 @@
      an der Stelle nur noch die Meldung. Er gilt bis zum naechsten Aufbau der
      Seite - und die kommt ohnehin, sobald der Link geklickt wird. */
   function formular() {
-    const drin = !!merke();
+    const drin = drinnen();
     const namenlos = drin && brauchtNamen;
     $('melde-form').hidden = !drin || namenlos;
     $('name-form').hidden = !namenlos;
@@ -1962,9 +1979,34 @@
     $('wer-bin-ich').textContent = meinName ? 'angemeldet als ' + meinName : 'angemeldet';
   }
 
+  /* Der Platzhalter unter dem verwischten Satz. Draussen kommt gar kein Feld
+     mehr an - der Worker gibt nur noch den Siegerplatz heraus -, verwischt
+     wird also nichts Echtes: was nicht da ist, kann auch niemand
+     scharfstellen. Feste Breiten und kein Zufall, sonst saehe die Tafel bei
+     jedem Aufbau anders aus und faellt als Attrappe auf. */
+  const PLATZHALTER = [[74, 46], [58, 34], [66, 40], [50, 28], [62, 36]];
+  function platzhalter() {
+    const box = el('div', 'ph');
+    PLATZHALTER.forEach(([oben, unten]) => {
+      const zeile = el('div', 'ph-zeile');
+      const links = el('div', 'ph-links');
+      const a = el('div', 'ph-strich');
+      const b = el('div', 'ph-strich duenn');
+      a.style.width = oben + '%';
+      b.style.width = unten + '%';
+      links.appendChild(a);
+      links.appendChild(b);
+      zeile.appendChild(links);
+      zeile.appendChild(el('div', 'ph-zahl'));
+      box.appendChild(zeile);
+    });
+    return box;
+  }
+
   function liste(feld) {
     const ziel = $('rangliste');
     ziel.textContent = '';
+    if (!drinnen()) { ziel.appendChild(platzhalter()); return; }
     if (!feld.length) { ziel.appendChild(VARIANTE.leer()); return; }
     feld.forEach((p, i) => {
       // Dieselbe Ampel wie oben auf dem Siegerplatz - Wort und Farbe kommen aus
@@ -2932,6 +2974,12 @@
       if (still && roh === letzterStand) return;   // nichts Neues, nichts zu tun
       letzterStand = roh;
       const d = JSON.parse(roh);
+      /* Der Worker sagt selbst, ob er die Antwort beschnitten hat. Die Seite
+         glaubt ihm das und nicht ihrem eigenen Speicher: ein Token, das der
+         Worker nicht mehr kennt (anderes Gerät abgemeldet, Datenbank neu),
+         liegt hier noch, und ohne diese Zeile zeichnete die Seite dann das
+         Bild eines Angemeldeten um eine Antwort herum, die keine ist. */
+      vonDraussen = !!d.draussen;
       // Wie viele Abende im Archiv liegen — daran hängt der Knopf zur Chronik.
       chronikZahl = Number(d.chronik) || 0;
       zeichneFeld(d.feld || [], d.los || null, d.termine || []);
