@@ -494,6 +494,10 @@
     align-items: baseline; gap: 8px; margin-top: 18px;
     font-size: 11px; color: var(--kreide-weg);
   }
+  /* Die zweite Fußzeile hängt an der ersten, statt neben ihr in derselben
+     Reihe zu stehen: „alle abmelden" und „Melder verwalten" sind zwei sehr
+     verschiedene Knöpfe, und nebeneinander vertippt man sich. */
+  .dk-kontor { margin-top: 6px; }
 
   /* --- Sterne und Flyout ---------------------------------------------------
      Ein Bauteil für beide Ziele: einen Nutzer bewertet man dauerhaft, einen
@@ -1344,6 +1348,16 @@
       <div class="dk-fuss">
         <span id="dk-geraete"></span>
         <button class="ko-tat" id="dk-alle" type="button">alle abmelden</button>
+      </div>
+
+      <!-- Der einzige Wegweiser ins Kontor. Bisher kannte man die Adresse oder
+           man kam nicht hin — verlinkt war sie nirgends. Sichtbar nur mit der
+           Rolle `admin`, weil die Zeile für alle anderen ein Link auf lauter
+           403er wäre. Ein Türsteher ist das nicht: der sitzt im Worker, und
+           `admin.html` bleibt für jeden abrufbar, der sie tippt. -->
+      <div class="dk-fuss dk-kontor" id="dk-kontor" hidden>
+        <span>Du führst das Kontor</span>
+        <a class="ko-tat" href="admin.html">Melder verwalten</a>
       </div>
 
       <p class="sagt" id="dk-sagt" hidden></p>
@@ -3317,6 +3331,10 @@
     $('dk-geraete').textContent = n === 1
       ? 'Angemeldet auf einem Gerät'
       : 'Angemeldet auf ' + n + ' Geräten';
+
+    // `/api/me` trug die Rolle schon immer mit, nur hat sie hier nie jemand
+    // gelesen. Verlässt sich nichts drauf: das Kontor prüft selbst.
+    $('dk-kontor').hidden = d.rolle !== 'admin';
   }
 
   /* Einzeln und sofort, ohne Speichern-Knopf: sechs Schalter mit
