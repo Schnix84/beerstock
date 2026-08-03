@@ -197,6 +197,12 @@ const MAIL_ARTEN = {
 // Zwei Rollen, mehr nicht. Alles darueber waere Verwaltung von Verwaltung.
 const ROLLEN = new Set(['user', 'admin']);
 
+/* Die Zeitraeume, die das Kontor zeigen darf. Der erste ist die Vorgabe.
+   Eine LISTE, kein Bereich mit Ober- und Untergrenze: der Wert geht in ein
+   `datetime('now', ?)`, und drei erlaubte Zahlen kann man ansehen und
+   verstehen - eine Spanne muss man nachrechnen. */
+const STATISTIK_TAGE = [30, 60, 90];
+
 /* Was ein Gesperrter trotzdem noch darf. Abmelden gehoert dazu: es loescht
    nur sein eigenes Geraete-Token, und wer draussen bleiben soll, soll auch
    herauskommen duerfen. Lesen ist ohnehin frei - die Sperre trifft nur
@@ -3098,21 +3104,37 @@ const ROUTEN = {
 
   // -------------------------------------------------------------------------
   /* Nur Zahlenreihen, keine Texte: was hier herauskommt, wird gezeichnet.
-     Die Grafiken malt die Seite selbst, ohne Fremdbibliothek. */
+     Die Grafiken malt die Seite selbst, ohne Fremdbibliothek.
+
+     `?tage=` waehlt das Fenster. Es gilt fuer die ZEITREIHEN - Meldungen,
+     Bestand, Betrieb, Mails -, nicht fuer die beiden Ranglisten: "wer war wie
+     oft Gastgeber" und der Ausgang der Ziehungen sind Fragen an die ganze
+     Geschichte dieser Runde, und bei fuenf Leuten mit einem Abend die Woche
+     waere eine 30-Tage-Rangliste eine Liste mit drei Zeilen. Welches Bild
+     welchen Zeitraum zeigt, steht in seiner Ueberschrift - so hiessen die
+     Bilder schon vorher ("Meldungen je Tag, 60 Tage").
+
+     Der Wert kommt aus einer Liste erlaubter Zahlen und wird zusaetzlich
+     gebunden statt eingesetzt: er landet in `datetime('now', ?)`. */
   'GET /api/admin/statistik': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
-    const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb, mails, anmeldungen, postwillig] =
+    const gewuenscht = Number(new URL(request.url).searchParams.get('tage'));
+    const tage = STATISTIK_TAGE.includes(gewuenscht) ? gewuenscht : STATISTIK_TAGE[0];
+    const fenster = `-${tage} days`;
+
+    const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb, mails, mailsJeTag,
+           anmeldungen, postwillig] =
       await env.DB.batch([
-        // 1 — Meldungen je Tag, 60 Tage. Flaechenkurve.
+        // 1 — Meldungen je Tag. Flaechenkurve.
         env.DB.prepare(`
           SELECT date(gemeldet_am) AS tag, count(*) AS n FROM reports
-          WHERE gemeldet_am > datetime('now','-60 days')
+          WHERE gemeldet_am > datetime('now', ?1)
           GROUP BY tag ORDER BY tag
-        `),
-        // 2 — Bestand je Melder, 30 Tage: der letzte Wert des Tages, wie im Verlauf.
+        `).bind(fenster),
+        // 2 — Bestand je Melder: der letzte Wert des Tages, wie im Verlauf.
         env.DB.prepare(`
           SELECT r.user_id, coalesce(u.name,'Ehemaliger') AS name,
                  date(r.gemeldet_am) AS tag, r.biere
@@ -3120,11 +3142,11 @@ const ROUTEN = {
           JOIN users u ON u.id = r.user_id
           JOIN (
             SELECT user_id, date(gemeldet_am) AS tag, max(id) AS id
-            FROM reports WHERE gemeldet_am > datetime('now','-30 days')
+            FROM reports WHERE gemeldet_am > datetime('now', ?1)
             GROUP BY user_id, date(gemeldet_am)
           ) j ON j.id = r.id
           ORDER BY r.user_id, tag
-        `),
+        `).bind(fenster),
         // 3 — Wer war wie oft Gastgeber. Liegende Balken.
         env.DB.prepare(`
           SELECT coalesce(u.name,'Ehemaliger') AS name, count(*) AS n
@@ -3143,22 +3165,35 @@ const ROUTEN = {
           FROM los l JOIN users u ON u.id = l.user_id
           GROUP BY l.user_id, l.status
         `),
-        // 5 — Betrieb je Woche: Kommentare, Reaktionen, Sterne.
+        /* 5 — Betrieb je Woche: Kommentare, Reaktionen, Sterne. Das Fenster
+           steht in jedem der drei Zweige: eines aussen um die Vereinigung
+           herum liesse SQLite erst alle drei Tabellen vollstaendig lesen. */
         env.DB.prepare(`
           SELECT woche, sum(k) AS kommentare, sum(r) AS reaktionen, sum(b) AS sterne FROM (
-            SELECT strftime('%Y-%W', erstellt) AS woche, 1 AS k, 0 AS r, 0 AS b FROM kommentare
+            SELECT strftime('%Y-%W', erstellt) AS woche, 1 AS k, 0 AS r, 0 AS b
+            FROM kommentare WHERE erstellt > datetime('now', ?1)
             UNION ALL
-            SELECT strftime('%Y-%W', erstellt), 0, 1, 0 FROM reaktionen
+            SELECT strftime('%Y-%W', erstellt), 0, 1, 0
+            FROM reaktionen WHERE erstellt > datetime('now', ?1)
             UNION ALL
-            SELECT strftime('%Y-%W', erstellt), 0, 0, 1 FROM bewertungen
+            SELECT strftime('%Y-%W', erstellt), 0, 0, 1
+            FROM bewertungen WHERE erstellt > datetime('now', ?1)
           ) GROUP BY woche ORDER BY woche
-        `),
-        // 6 — Mails je Art, 30 Tage, Fehler daneben.
+        `).bind(fenster),
+        // 6 — Mails je Art, Fehler daneben.
         env.DB.prepare(`
           SELECT art, count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
-          FROM mail_ausgang WHERE gesendet_am > datetime('now','-30 days')
+          FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
           GROUP BY art ORDER BY n DESC
-        `),
+        `).bind(fenster),
+        /* 6b — dieselben Mails, aber je Tag: die Kachel "Mails, 24 h" im Kopf
+           nennt eine einzelne Zahl, und eine einzelne Zahl sagt nicht, ob das
+           viel ist. Die Linie darunter schon. */
+        env.DB.prepare(`
+          SELECT date(gesendet_am) AS tag, count(*) AS n
+          FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
+          GROUP BY tag ORDER BY tag
+        `).bind(fenster),
         // Und zwei Zahlen ohne Bild.
         env.DB.prepare(`
           SELECT date(erstellt) AS tag, count(*) AS n FROM users
@@ -3203,6 +3238,9 @@ const ROUTEN = {
 
     const p = postwillig.results[0];
     return antwort(request, {
+      // Der Zeitraum geht mit zurueck: die Seite beschriftet die Bilder
+      // damit, und sie soll dafuer nicht raten muessen, was sie gefragt hat.
+      tage,
       meldungen: meldungen.results,
       bestand: [...kurven.values()],
       gastgeber: gastgeber.results,
@@ -3210,6 +3248,7 @@ const ROUTEN = {
       lose_je_melder: losJeMelder,
       betrieb: betrieb.results,
       mails: mails.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
+      mails_je_tag: mailsJeTag.results,
       wachstum,
       postwillig: { alle: p.alle, willig: p.willig || 0 },
     }, 200, KEIN_FREMDER_CACHE);

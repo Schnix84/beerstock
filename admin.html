@@ -49,15 +49,34 @@
   .buch { max-width: 940px; margin: 0 auto; }
 
   /* Ein Block ist ein Blatt. Die Linien darin sind echt gezeichnet, nicht
-     angedeutet: ein Kontorbuch ohne Linien ist ein Notizzettel. */
+     angedeutet: ein Kontorbuch ohne Linien ist ein Notizzettel.
+
+     Zwei davon liegen im Hintergrund und nicht als Element: das Linienraster
+     im Abstand von 26 px und der rote Randstrich links, den jedes Kontorbuch
+     hat. Beide sind so blass, dass sie unter dem Text verschwinden — sie
+     sollen das Blatt zu Papier machen, nicht zum Formular. Deshalb liegt
+     links auch mehr Luft: der Text beginnt RECHTS vom Randstrich, sonst ist
+     es kein Rand, sondern ein Strich mitten durch. */
   .blatt {
-    background: var(--papier);
+    background:
+      linear-gradient(#b04a3830, #b04a3830) 13px 0 / 1px 100% no-repeat,
+      repeating-linear-gradient(#0000 0 26px, #d9cfb85e 26px 27px),
+      var(--papier);
     border: 1px solid var(--linie);
     border-radius: 3px;
     box-shadow: 0 1px 0 #00000008, 0 6px 18px #0000000d;
-    padding: 16px 16px 18px;
+    padding: 16px 16px 18px 24px;
     margin-bottom: 16px;
+    /* Die Blätter kommen nacheinander herein, nicht alle auf einmal: sie
+       werden ja auch nacheinander aufgeschlagen. Vier Stufen reichen — was
+       danach kommt, sieht ohnehin niemand mehr beim Erscheinen zu. */
+    animation: aufschlagen .34s ease-out both;
   }
+  .blatt:nth-of-type(2) { animation-delay: .05s; }
+  .blatt:nth-of-type(3) { animation-delay: .10s; }
+  .blatt:nth-of-type(n+4) { animation-delay: .15s; }
+  @keyframes aufschlagen { from { opacity: 0; transform: translateY(5px); } }
+  @media (prefers-reduced-motion: reduce) { .blatt { animation: none; } }
   h1 {
     font-family: var(--hand); font-size: 27px; font-weight: normal;
     margin: 0 0 2px; letter-spacing: .01em;
@@ -82,6 +101,12 @@
   .zahl b { display: block; font-family: var(--hand); font-size: 26px; line-height: 1.1; }
   .zahl span { font-size: 11px; color: var(--tinte-weg); }
   .zahl.warn b { color: var(--rot); }
+  /* Der Verlauf unter der Zahl. Eine einzelne Zahl sagt nicht, ob sie viel
+     ist — „12 Mails" ist ein ruhiger Tag oder ein Ausbruch, je nachdem, was
+     davor war. Die Linie steht nur an den Kacheln, für die es wirklich eine
+     Reihe gibt; die übrigen bleiben nackt, statt eine zu erfinden. */
+  .zahl svg { display: block; width: 100%; height: 22px; margin-top: 7px; }
+  .zahl em { display: block; font-size: 10.5px; font-style: normal; color: var(--tinte-weg); }
 
   /* Die Ampel ist die wichtigste Auskunft des Kopfes und sah als Fließtext mit
      Punkten davor aus wie eine Aufzählung. Als Pillen ist sie eine Reihe von
@@ -109,6 +134,28 @@
   .runde { display: grid; gap: 12px; grid-template-columns: 1fr; }
   @media (min-width: 680px) { .runde { grid-template-columns: 1fr 1fr; } }
 
+  /* --- Reiter --------------------------------------------------------------
+     Zweimal dieselbe Form: der Filter über der Runde und der Zeitraum über
+     den Bildern. Beides ist dieselbe Handlung — „zeig mir einen Ausschnitt" —
+     und soll deshalb auch gleich aussehen. Sie stehen ÜBER dem, was sie
+     filtern, weil man sonst erst liest und dann erfährt, dass man das Falsche
+     gelesen hat.
+     --------------------------------------------------------------------- */
+  .reiter { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px; }
+  .reiter button {
+    border-radius: 999px; padding: 4px 12px; background: #ffffff66;
+    font-size: 12px; color: var(--tinte-weg);
+  }
+  .reiter button.an {
+    background: var(--gruen); border-color: var(--gruen); color: var(--papier);
+  }
+  .reiter button.an:hover { background: #24493a; color: #fff; }
+  .reiter button i { font-style: normal; opacity: .65; margin-left: 5px; }
+  .reiter .wozu {
+    align-self: center; font-size: 11px; color: var(--tinte-weg);
+    letter-spacing: .08em; text-transform: uppercase; margin-right: 2px;
+  }
+
   .karte {
     border: 1px solid var(--linie); border-radius: 3px; background: #ffffff66;
     padding: 12px 13px 11px;
@@ -117,6 +164,19 @@
   .karte.weg { opacity: .55; }
   .k-kopf { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .k-name { font-family: var(--hand); font-size: 20px; }
+  /* Das Monogramm. Nicht Zierde: die Karten unterscheiden sich sonst erst
+     beim Lesen des Namens, und im Kontor sucht man eine bestimmte. Ein
+     Buchstabe in Tinte ist das, was ein Wirt auch ins Buch schreiben würde —
+     ein Foto hat hier niemand hinterlegt. */
+  .k-mono {
+    flex: 0 0 auto; align-self: center;
+    width: 27px; height: 27px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--hand); font-size: 14px; line-height: 1;
+    background: var(--gruen); color: var(--papier);
+  }
+  .karte.gesperrt .k-mono { background: var(--rot); }
+  .karte.weg .k-mono { background: var(--tinte-weg); }
   .marke {
     font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
     border: 1px solid currentColor; border-radius: 999px; padding: 1px 7px;
@@ -138,6 +198,12 @@
     gap: 8px 10px; margin: 11px 0 0;
     padding-top: 10px; border-top: 1px solid var(--linie);
   }
+  /* Auf einem schmalen Handy zwei statt drei. Nicht, weil es sonst überliefe
+     — es läuft nicht über —, sondern weil „BEWERTET VON" bei drei Spalten
+     umbricht und dann eine Zeile höher steht als seine Nachbarn. Zwei Spalten
+     ergeben drei saubere Reihen; die Begründung für DREI oben gilt weiter,
+     sie gilt nur nicht bei 390 px. */
+  @media (max-width: 430px) { .k-zahlen { grid-template-columns: 1fr 1fr; } }
   .k-zahlen div { font-size: 15px; font-family: var(--hand); }
   .k-zahlen div span {
     display: block; font: 10px/1.3 system-ui, sans-serif;
@@ -272,15 +338,25 @@
   }
   .zwei-zahlen b { font-family: var(--hand); font-size: 18px; font-weight: normal; }
 
-  /* --- Das Protokoll ------------------------------------------------------- */
+  /* --- Das Protokoll -------------------------------------------------------
+     Ein Verlauf, keine Tabelle. Deshalb steht vorn die Zeichnung der Handlung
+     und dann „vor drei Stunden" — so liest ein Mensch eine Vorgeschichte. Das
+     genaue Datum ist damit nicht weg, es steht im Tooltip: man braucht es
+     selten, aber wenn, dann auf die Minute.
+     --------------------------------------------------------------------- */
   .log { list-style: none; margin: 0; padding: 0; font-size: 13px; }
   .log li {
-    display: flex; flex-wrap: wrap; gap: 3px 8px;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px;
     padding: 7px 0; border-bottom: 1px solid var(--linie);
   }
   .log li:last-child { border-bottom: none; }
-  .log time { font-size: 11px; color: var(--tinte-weg); flex: 0 0 128px; }
+  .log time { font-size: 11px; color: var(--tinte-weg); flex: 0 0 92px; }
   .log .was { font-weight: 600; }
+  .log .zeichen {
+    flex: 0 0 17px; text-align: center; color: var(--tinte-weg); font-size: 13px;
+  }
+  .log .zeichen.rot { color: var(--rot); }
+  .log .zeichen.gruen { color: var(--gruen); }
 
   .sagt {
     margin: 13px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 13px;
@@ -326,14 +402,17 @@
 
   <div class="blatt" id="runde-blatt" hidden>
     <h2>Die Runde</h2>
+    <div class="reiter" id="filter"></div>
     <div class="runde" id="runde"></div>
     <p class="sagt" id="runde-sagt" hidden></p>
   </div>
 
   <div class="blatt" id="stat-blatt" hidden>
     <h2>Wie es läuft</h2>
+    <div class="reiter" id="zeitraum"></div>
     <div class="bilder" id="bilder"></div>
     <div class="zwei-zahlen" id="zwei-zahlen"></div>
+    <p class="sagt" id="stat-sagt" hidden></p>
   </div>
 
   <div class="blatt" id="rund-blatt" hidden>
@@ -428,6 +507,23 @@
   const nurTag = iso => iso
     ? new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
     : '—';
+
+  /* „vor drei Stunden" statt „03.08.26, 16:14". Im Protokoll ist die Frage
+     nicht, wann etwas war, sondern wie lange es her ist — das genaue Datum
+     steht daneben im Tooltip. Ab einer Woche kippt es zurück aufs Datum:
+     „vor 23 Tagen" muss man umrechnen, um es einzuordnen. */
+  function vorhin(iso) {
+    if (!iso) return '—';
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (s < 90) return 'gerade eben';
+    if (s < 3600) return 'vor ' + Math.round(s / 60) + ' min';
+    if (s < 86400) return 'vor ' + Math.round(s / 3600) + ' h';
+    if (s < 7 * 86400) {
+      const t = Math.round(s / 86400);
+      return t === 1 ? 'gestern' : 'vor ' + t + ' Tagen';
+    }
+    return nurTag(iso);
+  }
 
   // ==========================================================================
   // Der Tooltip
@@ -639,6 +735,36 @@
     svg.appendChild(g);
     return g;
   };
+
+  /* Die Funke: die kleine Linie unter einer Kopfzahl. Keine Achse, keine
+     Beschriftung, kein Tooltip — sie beantwortet nur „steigt oder fällt das",
+     und alles weitere steht in den Bildern darunter. Eigene Maße, weil sie
+     22 px hoch ist und die Ränder der großen Bilder darin lächerlich wären. */
+  function funke(werte, farbe) {
+    const w = 100, h = 22, luft = 2.5;
+    const svg = s_el('svg',
+      { viewBox: `0 0 ${w} ${h}`, preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+    if (werte.length < 2) return svg;
+    const tief = Math.min(...werte), hoch = Math.max(...werte);
+    const spanne = hoch - tief || 1;
+    const px = werte.map((v, i) => [
+      (i / (werte.length - 1)) * w,
+      h - luft - ((v - tief) / spanne) * (h - luft * 2),
+    ]);
+    svg.appendChild(s_el('path', {
+      d: `M0,${h} ` + px.map(p => `L${p[0]},${p[1]}`).join(' ') + ` L${w},${h} Z`,
+      fill: verlauf(svg, farbe),
+    }));
+    svg.appendChild(s_el('polyline', {
+      points: px.map(p => p.join(',')).join(' '), fill: 'none',
+      stroke: farbe, 'stroke-width': 1.2,
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+      // Ohne das würde der Strich mit der Fläche in die Breite gezogen und
+      // wäre am Ende an einer Stelle dick und an der anderen dünn.
+      'vector-effect': 'non-scaling-stroke',
+    }));
+    return svg;
+  }
 
   /* Verläufe brauchen eine ID, und IDs sind auf der ganzen Seite eindeutig —
      zwei Bilder mit demselben `id` teilen sich sonst still den Verlauf des
@@ -1119,22 +1245,48 @@
   // ==========================================================================
   // Zeichnen
   // ==========================================================================
-  let stand = null;    // die letzte Antwort von /api/admin/nutzer
+  let stand = null;        // die letzte Antwort von /api/admin/nutzer
+  let mich = null;         // /api/me — für das Neuzeichnen des Kopfes
+  let letzteAmpel = null;  // die letzte Antwort von /api/health, dito
 
-  function kopfZeichnen(kopf, ich, health) {
+  function kopfZeichnen(kopf, ich, health, s) {
     $('wer').textContent = 'Angemeldet als ' + (ich.name || 'namenlos') + ' · ' + ich.email;
     const z = $('zahlen');
     z.textContent = '';
-    const kachel = (wert, was, warn) => {
+    /* `reihe` ist freiwillig: nur zwei der fünf Kacheln haben wirklich eine
+       Zeitreihe hinter sich. „Davon aktiv" und „gesperrt" sind Zustände, kein
+       Verlauf — dort eine Linie hinzumalen hieße, eine zu erfinden. */
+    const kachel = (wert, was, warn, reihe, dazu) => {
       const d = el('div', 'zahl' + (warn ? ' warn' : ''));
       d.appendChild(el('b', null, zahl(wert)));
       d.appendChild(el('span', null, was));
+      if (reihe && reihe.length > 1) {
+        d.appendChild(funke(reihe, warn ? '#b04a38' : REIHE[0]));
+        if (dazu) d.appendChild(el('em', null, dazu));
+      }
       z.appendChild(d);
     };
-    kachel(kopf.melder, 'Melder');
+
+    const tage = (s && s.tage) || zeitraum;
+    const seit = `in ${tage} Tagen`;
+
+    /* Wieviele davon in diesem Zeitraum dazugekommen sind: `wachstum` ist
+       kumuliert, also ist es die Differenz zum letzten Stand VOR der Grenze —
+       nicht die Summe der Tage im Fenster, denn die Reihe hat nur Einträge an
+       Tagen, an denen sich überhaupt jemand angemeldet hat. */
+    const w = (s && s.wachstum) || [];
+    const grenze = new Date(Date.now() - tage * 864e5).toISOString().slice(0, 10);
+    const davor = w.filter(x => x.tag <= grenze).pop();
+    const neu = w.length ? w[w.length - 1].n - (davor ? davor.n : 0) : 0;
+
+    const mails = ((s && s.mails_je_tag) || []).map(x => x.n);
+    const mailSumme = mails.reduce((a, n) => a + n, 0);
+
+    kachel(kopf.melder, 'Melder', false, w.map(x => x.n),
+      (neu > 0 ? '+' + zahl(neu) : 'keiner dazu') + ' ' + seit);
     kachel(kopf.aktiv, 'davon aktiv');
     kachel(kopf.gesperrt, 'gesperrt', kopf.gesperrt > 0);
-    kachel(kopf.mails_24h, 'Mails, 24 h');
+    kachel(kopf.mails_24h, 'Mails, 24 h', false, mails, zahl(mailSumme) + ' ' + seit);
     if (kopf.mails_kaputt_24h) kachel(kopf.mails_kaputt_24h, 'davon kaputt', true);
 
     /* Die Ampel: was der Worker über sich selbst sagt. `admin` und
@@ -1168,14 +1320,53 @@
       });
   }
 
+  /* Der Filter über der Runde. Er steht erst da, seit die Runde wächst: bei
+     drei Karten ist er Verwaltung von Verwaltung, ab einem Dutzend sucht man
+     den einen Gesperrten sonst mit den Augen. Die Zahl in der Pille sagt, was
+     einen erwartet — ein Reiter, der auf eine leere Liste führt, ist eine
+     Falle. Leere Reiter stehen deshalb gar nicht erst da. */
+  const SIEBE = {
+    alle:     { titel: 'alle',     passt: () => true },
+    aktiv:    { titel: 'aktiv',    passt: u => !u.gesperrt && !u.entfernt },
+    gesperrt: { titel: 'gesperrt', passt: u => !!u.gesperrt },
+    entfernt: { titel: 'entfernt', passt: u => !!u.entfernt },
+  };
+  let sieb = 'alle';
+
+  function filterZeichnen(nutzer) {
+    const ziel = $('filter');
+    ziel.textContent = '';
+    const sichtbar = Object.entries(SIEBE)
+      .map(([k, v]) => [k, v, nutzer.filter(v.passt).length])
+      .filter(([k, , n]) => n > 0 || k === 'alle');
+    // Ein einziger Reiter ist kein Filter, sondern eine Beschriftung.
+    if (sichtbar.length < 2) return;
+    ziel.appendChild(el('span', 'wozu', 'zeige'));
+    sichtbar.forEach(([k, v, n]) => {
+      const b = el('button', k === sieb ? 'an' : null, v.titel);
+      b.type = 'button';
+      b.appendChild(el('i', null, String(n)));
+      b.addEventListener('click', () => {
+        sieb = k;
+        runde(stand.nutzer);
+      });
+      ziel.appendChild(b);
+    });
+  }
+
   function runde(nutzer) {
     const ziel = $('runde');
     ziel.textContent = '';
-    nutzer.forEach(u => {
+    filterZeichnen(nutzer);
+    nutzer.filter(SIEBE[sieb].passt).forEach(u => {
       const k = el('div', 'karte'
         + (u.gesperrt ? ' gesperrt' : '') + (u.entfernt ? ' weg' : ''));
 
       const kopf = el('div', 'k-kopf');
+      // Der erste Buchstabe des Namens. `Array.from`, nicht `[0]`: ein Name
+      // darf mit einem Zeichen anfangen, das aus zwei Codeeinheiten besteht.
+      kopf.appendChild(el('span', 'k-mono',
+        (Array.from(u.name || '?')[0] || '?').toUpperCase()));
       kopf.appendChild(el('span', 'k-name', u.name || 'Ehemaliger'));
       if (u.rolle === 'admin') kopf.appendChild(el('span', 'marke admin', 'Admin'));
       if (u.gemessen) kopf.appendChild(el('span', 'marke', 'gemessen'));
@@ -1303,23 +1494,85 @@
     entfernen: `${u.name} ist entfernt. Die Beiträge stehen als „Ehemaliger" da.`,
   }[aktion] || 'Erledigt.');
 
+  /* Der Zeitraum. Dieselbe Liste wie im Worker — sie steht an zwei Stellen,
+     weil die Seite die Reiter zeichnen muss, bevor sie eine Antwort hat. Der
+     Worker prüft trotzdem selbst: was von hier kommt, ist ein Wunsch, keine
+     Erlaubnis. Was er tatsächlich genommen hat, sagt er in `tage` zurück, und
+     danach richten sich die Überschriften.
+
+     Die Wahl überlebt das Neuladen — wer sich für 90 Tage entschieden hat,
+     will nicht bei jedem Aufschlagen wieder klicken. */
+  const STAT_TAGE = [30, 60, 90];
+  const ZEITRAUM_SPEICHER = 'beerstock-kontor-tage';
+  let zeitraum = (() => {
+    try {
+      const g = Number(localStorage.getItem(ZEITRAUM_SPEICHER));
+      return STAT_TAGE.includes(g) ? g : STAT_TAGE[0];
+    } catch { return STAT_TAGE[0]; }
+  })();
+
+  function zeitraumZeichnen() {
+    const ziel = $('zeitraum');
+    ziel.textContent = '';
+    ziel.appendChild(el('span', 'wozu', 'Zeitraum'));
+    STAT_TAGE.forEach(t => {
+      const b = el('button', t === zeitraum ? 'an' : null, t + ' Tage');
+      b.type = 'button';
+      b.addEventListener('click', () => zeitraumWechseln(t));
+      ziel.appendChild(b);
+    });
+  }
+
+  async function zeitraumWechseln(t) {
+    if (t === zeitraum) return;
+    zeitraum = t;
+    try { localStorage.setItem(ZEITRAUM_SPEICHER, String(t)); } catch {}
+    zeitraumZeichnen();
+    /* Die alten Bilder bleiben blass stehen, statt zu verschwinden: ein
+       Abschnitt, der beim Umschalten leer wird und dann wieder aufpoppt,
+       springt — und die neuen Bilder stehen ohnehin an derselben Stelle. */
+    const ziel = $('bilder');
+    ziel.style.opacity = '.35';
+    try {
+      const s = await ruf('/api/admin/statistik?tage=' + t);
+      statistik(s);
+      // Der Kopf hängt mit dran: „+2 in 30 Tagen" unter der Melderzahl wäre
+      // sonst der Satz zum vorigen Zeitraum.
+      if (stand && mich) kopfZeichnen(stand.kopf, mich, letzteAmpel, s);
+    } catch (e) {
+      sagt('stat-sagt', 'Der Zeitraum ließ sich nicht wechseln: ' + e.message, true);
+    } finally {
+      ziel.style.opacity = '';
+    }
+  }
+
   function statistik(s) {
+    zeitraumZeichnen();
     const ziel = $('bilder');
     ziel.textContent = '';
-    ziel.appendChild(bildFlaeche('Meldungen je Tag, 60 Tage',
+    /* Der Zeitraum steht in jeder einzelnen Überschrift, nicht nur oben am
+       Schalter — und bei den beiden Ranglisten steht „insgesamt". Sie folgen
+       dem Schalter absichtlich nicht (der Worker begründet es an der Route):
+       wer der Gastgeber dieser Runde ist, beantworten 30 Tage nicht. Ohne das
+       Wort in der Überschrift müsste man das raten. */
+    // `s.tage` kommt vom Worker, `zeitraum` ist der Wunsch von hier. Der
+    // Rückfall ist nicht theoretisch: zwischen Seiten-Push und Worker-Deploy
+    // liegen Minuten, in denen die neue Seite die alte Antwort bekommt.
+    const fenster = ', ' + (s.tage || zeitraum) + ' Tage';
+    ziel.appendChild(bildFlaeche('Meldungen je Tag' + fenster,
       s.meldungen, z => z.n, z => nurTag(z.tag), 'Meldungen'));
-    ziel.appendChild(bildSchar('Bestand je Melder, 30 Tage', s.bestand));
-    ziel.appendChild(bildLiegend('Wer war wie oft Gastgeber',
+    ziel.appendChild(bildSchar('Bestand je Melder' + fenster, s.bestand));
+    ziel.appendChild(bildLiegend('Wer war wie oft Gastgeber, insgesamt',
       s.gastgeber, z => z.name, z => z.n, 'Abende'));
-    ziel.appendChild(bildBand('Ausgang der Ziehungen', s.lose));
-    ziel.appendChild(bildLosJeMelder('Ausgang der Ziehungen je Melder',
+    ziel.appendChild(bildBand('Ausgang der Ziehungen, insgesamt', s.lose));
+    ziel.appendChild(bildLosJeMelder('Ausgang der Ziehungen je Melder, insgesamt',
       s.lose_je_melder || []));
-    ziel.appendChild(bildSaeulen('Betrieb je Woche', s.betrieb, [
+    ziel.appendChild(bildSaeulen('Betrieb je Woche' + fenster, s.betrieb, [
       { feld: 'kommentare', titel: 'Kommentare', farbe: REIHE[0] },
       { feld: 'reaktionen', titel: 'Reaktionen', farbe: REIHE[1] },
       { feld: 'sterne',     titel: 'Sterne',     farbe: REIHE[3] },
     ], g => 'KW ' + String(g.woche).slice(-2)));
-    ziel.appendChild(bildSaeulen('Mails je Art, 30 Tage', s.mails, [
+    ziel.appendChild(bildSaeulen('Mails je Art' + fenster, s.mails, [
       { feld: 'n',      titel: 'verschickt', farbe: REIHE[0] },
       { feld: 'kaputt', titel: 'ging nicht raus', farbe: REIHE[2] },
     ], g => g.art.replace(/_/g, ' ')));
@@ -1351,6 +1604,17 @@
       zahl(s.postwillig.willig));
   }
 
+  /* Ein Zeichen je Handlung. Keine Emoji: die kämen aus einer fremden
+     Schrift, wären bunt und säßen auf einem Blatt Papier wie ein Aufkleber.
+     Diese hier sind Zeichen, die auch ein Setzer gehabt hätte. */
+  const LOG_ZEICHEN = {
+    sperren:    ['⊘', 'rot'],
+    entsperren: ['⊙', 'gruen'],
+    rolle:      ['⇅', ''],
+    entfernen:  ['✕', 'rot'],
+    rundmail:   ['✉', ''],
+  };
+
   function protokoll(zeilen) {
     const ziel = $('log');
     ziel.textContent = '';
@@ -1360,8 +1624,13 @@
     }
     zeilen.forEach(z => {
       const li = el('li');
-      const t = el('time', null, datum(z.wann));
+      const [glyph, ton] = LOG_ZEICHEN[z.aktion] || ['·', ''];
+      li.appendChild(el('span', 'zeichen ' + ton, glyph));
+      const t = el('time', null, vorhin(z.wann));
       t.dateTime = z.wann;
+      // Das genaue Datum bleibt erreichbar — im selben Kasten wie überall
+      // sonst auf dieser Seite, nicht als grauer Systemtooltip.
+      tippAm(t, { titel: datum(z.wann), zeilen: [] });
       li.appendChild(t);
       li.appendChild(el('span', 'was', z.wer + ' → ' + z.aktion));
       li.appendChild(el('span', null, z.aktion === 'rundmail'
@@ -1464,7 +1733,6 @@
               + 'das Kontor benutzt dasselbe Token.');
       return;
     }
-    let mich;
     try {
       mich = await ruf('/api/me');
     } catch {
@@ -1482,7 +1750,7 @@
        Inhalt. */
     const [leute, stat, log, health] = await Promise.all([
       ruf('/api/admin/nutzer'),
-      ruf('/api/admin/statistik'),
+      ruf('/api/admin/statistik?tage=' + zeitraum),
       ruf('/api/admin/protokoll'),
       fetch(API + '/api/health', { cache: 'no-store' }).then(r => r.json()).catch(() => null),
     ]);
@@ -1501,7 +1769,8 @@
     tipAus();
 
     stand = leute;
-    kopfZeichnen(leute.kopf, mich, health);
+    letzteAmpel = health;
+    kopfZeichnen(leute.kopf, mich, health, stat);
     runde(leute.nutzer);
     statistik(stat);
     protokoll(log.zeilen);
