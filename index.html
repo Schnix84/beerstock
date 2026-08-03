@@ -414,6 +414,87 @@
   }
   .ch-mehr[disabled] { opacity: .5; cursor: default; }
 
+  /* --- Mein Deckel ---------------------------------------------------------
+     Die Selbstverwaltung: Name, Adresse, sechs Schalter, Geräte. Dasselbe
+     Blatt wie Flyout und Chronik, auf derselben Ebene wie die Chronik — von
+     hier aus schlägt man nichts weiter auf.
+
+     Zeilenbau: links, was es ist, rechts, was man damit tut. Auf schmalen
+     Geräten fällt die rechte Hälfte darunter, statt die Adresse zu quetschen.
+     --------------------------------------------------------------------- */
+  .flyout.deckel { z-index: 38; }
+  .dk-zeile {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
+    padding: 10px 0; border-bottom: 1px dashed #ffffff16;
+  }
+  /* Beide Hälften dürfen schrumpfen, und die rechte zieht an den Rand. Stünde
+     links `flex: 1 0 40%`, schöbe die rechte Hälfte den Haken aus dem Blatt
+     hinaus, sobald die Adresse etwas länger ist — gemessen, nicht vermutet. */
+  .dk-was { flex: 1 1 8em; font-size: 12.5px; color: var(--kreide-matt); }
+  .dk-tat {
+    flex: 1 1 12em; display: flex; align-items: center; justify-content: flex-end;
+    gap: 8px; min-width: 0;
+  }
+  .dk-tat .feld { flex: 1 1 auto; width: auto; min-width: 0; }
+  .dk-wert {
+    font-family: var(--hand); font-size: 14px; overflow-wrap: anywhere;
+  }
+  /* Der Haken neben dem Namensfeld ist ein Knopf in Feldhöhe, kein Schriftzug:
+     daneben steht ein Eingabefeld, und ein unterstrichenes Wort daran sähe aus
+     wie ein Hinweis, nicht wie das, was den Namen wegschreibt. */
+  /* `.knopf` steht auf `width: 100%` — hier stehen zwei Dinge nebeneinander,
+     also beide auf ihre eigene Breite zurück. Ohne das nimmt der Knopf die
+     ganze Zeile und vom Namensfeld bleibt ein Strich.
+
+     Zwei Klassen tief, und das mit Absicht: `.dk-ok` allein ist genauso
+     spezifisch wie `.knopf`, und `.knopf` steht weiter unten in der Datei —
+     bei Gleichstand gewinnt die spätere Regel. Gemessen, nicht vermutet. */
+  .dk-tat .knopf, .dk-wechsel .knopf { width: auto; flex: none; }
+  .dk-ok { padding: 6px 13px; font-size: 14px; }
+  .dk-wechsel { gap: 8px; }
+  .dk-wechsel .feld { flex: 1 1 11em; width: auto; }
+
+  /* Die Schalter. Kreide: leer ist der Umriss, gesetzt das gefüllte Feld —
+     dieselbe Regel wie bei den Sternen. Das Kästchen selbst ist gezeichnet,
+     weil ein System-Checkbox in jedem Browser anders aussieht und in keinem
+     nach Tafel. */
+  .dk-schalter {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 9px 0; cursor: pointer;
+  }
+  .dk-schalter input { position: absolute; opacity: 0; pointer-events: none; }
+  .dk-kasten {
+    flex: none; width: 15px; height: 15px; margin-top: 1px; border-radius: 2px;
+    border: 1.4px solid #ffffff55; background: transparent;
+    transition: background .12s, border-color .12s;
+  }
+  .dk-schalter input:checked + .dk-kasten {
+    background: var(--gelb); border-color: var(--gelb);
+  }
+  /* Sichtbar für die Tastatur — ohne sie wäre die ganze Liste unbedienbar,
+     weil das echte Kästchen unsichtbar ist. */
+  .dk-schalter input:focus-visible + .dk-kasten { outline: 2px solid var(--kreide); outline-offset: 2px; }
+  .dk-schalter[aria-disabled="true"] { opacity: .45; cursor: default; }
+  .dk-text { font-size: 13px; line-height: 1.45; color: var(--kreide-matt); }
+  /* Die Folge einer Abwahl, im Klartext und nur dann. Sie steht unter dem
+     Schalter, zu dem sie gehört, nicht als Fußnote am Ende der Liste. */
+  .dk-folge {
+    margin: -4px 0 6px 25px; font-size: 11px; line-height: 1.5;
+    color: var(--kreide-weg); font-style: italic;
+  }
+  /* Die beiden Knöpfe der Antwort aus dem Postfach. Nebeneinander und gleich
+     groß: es ist eine Frage mit zwei gleichwertigen Antworten, und ein
+     hervorgehobenes „Bei mir" wäre eine Empfehlung des Wirts. */
+  .lm-knoepfe { display: flex; gap: 10px; margin-top: 16px; }
+  .lm-knoepfe .knopf { flex: 1; }
+  .lm-grund { margin-top: 12px; }
+
+  .dk-fuss {
+    display: flex; flex-wrap: wrap; justify-content: space-between;
+    align-items: baseline; gap: 8px; margin-top: 18px;
+    font-size: 11px; color: var(--kreide-weg);
+  }
+
   /* --- Sterne und Flyout ---------------------------------------------------
      Ein Bauteil für beide Ziele: einen Nutzer bewertet man dauerhaft, einen
      Abend einmalig. Es fährt von unten ein, weil es auf dem Handy gelesen und
@@ -1080,7 +1161,11 @@
             <button class="knopf" type="submit">Anschreiben</button>
             <div class="zeile-klein">
               <span id="wer-bin-ich"></span>
-              <button type="button" id="abmelden">abmelden</button>
+              <span>
+                <button type="button" id="deckel-auf">mein Deckel</button>
+                ·
+                <button type="button" id="abmelden">abmelden</button>
+              </span>
             </div>
           </form>
 
@@ -1194,6 +1279,103 @@
       <button class="ch-mehr" id="ch-mehr" type="button" hidden>weiter zurück</button>
 
       <p class="sagt" id="ch-sagt" hidden></p>
+    </div>
+  </div>
+
+  <!-- ============ Mein Deckel ==========================================
+       Alles, was von einem selbst bei uns steht: der Name in der Liste, die
+       Adresse, an die geschrieben wird, was geschrieben werden darf, und auf
+       wie vielen Geräten man angemeldet ist.
+
+       Ein Flyout statt einer eigenen Seite: vier Felder und sechs Schalter,
+       dafür die Tafel zu verlassen wäre unverhältnismäßig.
+       ================================================================ -->
+  <div class="flyout deckel" id="deckel" hidden>
+    <div class="fly-schirm" id="dk-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="dk-titel" aria-modal="true">
+      <div class="fly-kopf">
+        <div>
+          <div class="fly-titel" id="dk-titel">Mein Deckel</div>
+          <div class="fly-unter">was von dir bei uns steht</div>
+        </div>
+        <button class="fly-zu" id="dk-zu" type="button" aria-label="Schließen">×</button>
+      </div>
+
+      <!-- Wer gesperrt ist, sieht die Tafel weiter und soll hier lesen können,
+           warum nichts mehr geht. Ohne diese Zeile wäre jeder Schreibversuch
+           ein Rätsel. -->
+      <p class="sagt schlecht" id="dk-gesperrt" hidden></p>
+
+      <form class="dk-zeile" id="dk-name-form">
+        <label class="dk-was" for="dk-name">Name in der Liste</label>
+        <div class="dk-tat">
+          <input class="feld" id="dk-name" maxlength="20" autocomplete="nickname" required>
+          <button class="knopf dk-ok" type="submit" aria-label="Namen merken">✓</button>
+        </div>
+      </form>
+
+      <div class="dk-zeile">
+        <span class="dk-was">Mailadresse</span>
+        <div class="dk-tat">
+          <span class="dk-wert" id="dk-mail"></span>
+          <button class="ko-tat" id="dk-mail-auf" type="button">ändern</button>
+        </div>
+      </div>
+      <!-- Zweistufig: eintippen, dann im NEUEN Postfach klicken. Bis dahin
+           gilt die alte Adresse weiter — steht auch so im Hinweis darunter. -->
+      <form class="dk-zeile dk-wechsel" id="dk-mail-form" hidden>
+        <input class="feld" id="dk-mail-neu" type="email" inputmode="email"
+               autocomplete="email" placeholder="neue@adresse.de" required>
+        <button class="knopf" type="submit">Link schicken</button>
+      </form>
+
+      <div class="ko-titel">Post vom Wirt</div>
+      <p class="sagt" id="dk-stumm" hidden>
+        Du bekommst gerade gar nichts — du hast dich einmal ganz abgemeldet.
+        <button class="ko-tat" id="dk-laut" type="button">wieder anschalten</button>
+      </p>
+      <div id="dk-schalter"></div>
+
+      <div class="dk-fuss">
+        <span id="dk-geraete"></span>
+        <button class="ko-tat" id="dk-alle" type="button">alle abmelden</button>
+      </div>
+
+      <p class="sagt" id="dk-sagt" hidden></p>
+    </div>
+  </div>
+
+  <!-- ============ Die Antwort aus dem Postfach =========================
+       Der Gewinner bekommt eine Mail mit einem Link. Der Link TUT nichts —
+       er führt hierher, und erst einer dieser beiden Knöpfe schickt die
+       Antwort ab. Mailscanner und Vorschaudienste laden Links vor; ein GET,
+       das zusagt, wäre binnen einer Woche einmal von einem Virenscanner
+       beantwortet worden.
+
+       Es ist ein Blatt und keine Zeile in der Seite, weil es die Frage auch
+       dem stellen muss, der auf diesem Gerät gar nicht angemeldet ist — hinter
+       dem Türsteher wäre sonst nichts davon zu sehen.
+       ================================================================ -->
+  <div class="flyout" id="losmail" hidden>
+    <div class="fly-schirm" id="lm-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="lm-titel" aria-modal="true">
+      <div class="fly-kopf">
+        <div>
+          <div class="fly-titel kr" id="lm-titel">Die Flasche zeigt auf dich</div>
+          <div class="fly-unter">heute Abend bei dir?</div>
+        </div>
+        <button class="fly-zu" id="lm-zu" type="button" aria-label="Schließen">×</button>
+      </div>
+
+      <div class="lm-knoepfe">
+        <button class="knopf" id="lm-ja" type="button">Bei mir</button>
+        <button class="knopf" id="lm-nein" type="button">Heute nicht</button>
+      </div>
+      <!-- Der Grund gehört zur Absage, nicht zur Zusage — genauso wie am Rad. -->
+      <input class="feld lm-grund" id="lm-grund" maxlength="120" hidden
+             placeholder="Warum nicht? (freiwillig)">
+
+      <p class="sagt" id="lm-sagt" hidden></p>
     </div>
   </div>
 
@@ -1393,6 +1575,12 @@
       const name = el('div', 'z-name kr');
       name.textContent = p.name;
       if (p.gemessen) name.appendChild(el('span', 'z-marke', 'gemessen'));
+      /* Wer gesperrt ist, bleibt stehen — das ist Historie, und ein Name, der
+         über Nacht verschwindet, sieht nach Datenverlust aus. Eine stille
+         Marke, kein Ausrufezeichen: warum jemand gesperrt wurde, geht die
+         Runde nichts an, dass er nicht mitspielt, schon. Er fällt aus dem Rad
+         (das entscheidet der Worker in `losFeldStmt`). */
+      if (p.gesperrt) name.appendChild(el('span', 'z-marke', 'ruht'));
       /* Wer ausgelost wurde, steht auch hier — sonst müsste man scrollen, um
          von der Zeile zurück zum Anschrieb zu finden. `heute` ist die Aufschrift
          selbst: „gezogen" solange die Antwort aussteht, „heute hier" erst nach
@@ -3006,6 +3194,142 @@
     $('ch-mehr').hidden = !chronikWeiter;
   }
 
+  /* --- Mein Deckel ---------------------------------------------------------
+     Die Selbstverwaltung. Sie holt sich ihren Stand jedes Mal frisch aus
+     /api/me statt aus dem, was die Tafel gerade weiß: Adresse, Schalter und
+     Gerätezahl stehen nirgendwo sonst auf der Seite, und ein Stand von vorhin
+     wäre hier genau der, an dem man dann etwas ändert.
+     --------------------------------------------------------------------- */
+
+  /* Die Beschriftung steht HIER, nicht im Worker. Der führt seine eigene
+     (MAIL_ARTEN.titel) — die ist die Überschrift einer Mail, diese hier ist
+     die Bedingung, unter der sie kommt. Zwei Texte, zwei Aufgaben.
+
+     Iteriert wird trotzdem über das, was der Worker schickt: käme eine
+     siebte Art dazu, stünde sie hier sofort als Schalter, notfalls unter
+     ihrem Schlüssel. Eine Seite, die eine Art verschweigt, wäre schlimmer
+     als eine mit einer unschönen Zeile. */
+  const DECKEL_TEXTE = {
+    gewonnen:       'wenn die Flasche auf mich zeigt',
+    termin_neu:     'wenn ein Abend feststeht',
+    termin_aendert: 'wenn ein Abend sich ändert',
+    erinnerung:     'am Tag des Abends',
+    echo:           'wenn jemand mir antwortet',
+    rundmail:       'gelegentliche Nachricht vom Wirt',
+  };
+  /* Die einzige Abwahl mit einer Folge, und die gehört im Klartext darunter —
+     wer sie nicht kennt, wundert sich drei Stunden später über einen Abend,
+     der ihm gehört hätte. */
+  const DECKEL_FOLGEN = {
+    gewonnen: 'Dann verfällt dein Los nach drei Stunden, wenn du nicht von selbst vorbeischaust.',
+  };
+
+  let deckelOffen = false;
+  let deckelStand = null;   // die letzte Antwort von /api/me
+
+  function dkSagt(text, schlecht) {
+    const p = $('dk-sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  async function deckelAuf() {
+    if (!drinnen()) return;
+    deckelOffen = true;
+    $('deckel').hidden = false;
+    dkSagt('');
+    $('dk-mail-form').hidden = true;
+    await deckelLaden();
+  }
+
+  function deckelZu() {
+    deckelOffen = false;
+    $('deckel').hidden = true;
+  }
+
+  async function deckelLaden() {
+    try {
+      const r = await fetch(API + '/api/me', { headers: mitToken(), cache: 'no-store' });
+      if (r.status === 401) { wirf(); deckelZu(); formular(); return; }
+      if (!r.ok) throw new Error('Der Deckel ließ sich nicht aufschlagen.');
+      deckelStand = await r.json();
+    } catch (e) {
+      dkSagt(e.message || 'Netz weg?', true);
+      return;
+    }
+    if (!deckelOffen) return;
+    deckelZeichnen();
+  }
+
+  function deckelZeichnen() {
+    const d = deckelStand;
+    if (!d) return;
+
+    $('dk-name').value = d.name || '';
+    $('dk-mail').textContent = d.email || '— keine hinterlegt —';
+
+    const g = $('dk-gesperrt');
+    g.hidden = !d.gesperrt;
+    if (d.gesperrt) {
+      g.textContent = d.gesperrt.grund
+        ? 'Dein Zugang ist gesperrt: ' + d.gesperrt.grund
+        : 'Dein Zugang ist gesperrt. Lesen geht weiter, schreiben nicht.';
+    }
+
+    /* Der Hauptschalter schlägt jede Einzelwahl — also stehen die sechs zwar
+       weiter da (man soll sehen, was man gewählt hatte), aber ausgegraut und
+       nicht bedienbar. Sie erst einzuschalten, während gar nichts rausgeht,
+       wäre eine Handlung ohne Wirkung. */
+    const stumm = !!d.mail_stumm;
+    $('dk-stumm').hidden = !stumm;
+
+    const ziel = $('dk-schalter');
+    ziel.textContent = '';
+    Object.keys(d.mail || {}).forEach(art => {
+      const zeile = el('label', 'dk-schalter');
+      if (stumm) zeile.setAttribute('aria-disabled', 'true');
+      const box = el('input');
+      box.type = 'checkbox';
+      box.checked = !!d.mail[art];
+      box.disabled = stumm;
+      box.dataset.art = art;
+      zeile.appendChild(box);
+      zeile.appendChild(el('span', 'dk-kasten'));
+      zeile.appendChild(el('span', 'dk-text', DECKEL_TEXTE[art] || art));
+      ziel.appendChild(zeile);
+
+      if (DECKEL_FOLGEN[art] && !d.mail[art] && !stumm) {
+        ziel.appendChild(el('p', 'dk-folge', DECKEL_FOLGEN[art]));
+      }
+    });
+
+    const n = d.geraete || 1;
+    $('dk-geraete').textContent = n === 1
+      ? 'Angemeldet auf einem Gerät'
+      : 'Angemeldet auf ' + n + ' Geräten';
+  }
+
+  /* Einzeln und sofort, ohne Speichern-Knopf: sechs Schalter mit
+     Bestätigung wären ein Formular zu viel. Fällt der Ruf durch, springt der
+     Schalter zurück — sonst zeigt die Seite einen Stand, den der Worker nicht
+     kennt, und das merkt niemand bis zur nächsten ausbleibenden Mail. */
+  async function deckelSchalten(box) {
+    const art = box.dataset.art, an = box.checked;
+    box.disabled = true;
+    dkSagt('');
+    try {
+      const d = await ruf('/api/einstellungen', { mail: { [art]: an } });
+      deckelStand = { ...deckelStand, mail: d.mail, mail_stumm: d.mail_stumm };
+      deckelZeichnen();
+    } catch (e) {
+      box.checked = !an;
+      dkSagt(e.message, true);
+    } finally {
+      box.disabled = false;
+    }
+  }
+
   /* Hier stand einmal ein Rueckfall auf status.json - der eigene Kuehlschrank
      aus einer Datei im Repo, geschrieben von Home Assistant ueber die
      GitHub-Contents-API. Abgeschafft, und nicht aus Sparsamkeit: jede Meldung
@@ -3176,6 +3500,116 @@
   $('ch-schirm').addEventListener('click', chronikZu);
   $('ch-mehr').addEventListener('click', chronikMehr);
 
+  /* --- Mein Deckel --------------------------------------------------------- */
+  $('deckel-auf').addEventListener('click', deckelAuf);
+  $('dk-zu').addEventListener('click', deckelZu);
+  $('dk-schirm').addEventListener('click', deckelZu);
+
+  // Die Schalterliste wird bei jeder Änderung neu gebaut — ein Zuhörer je
+  // Kästchen ginge dabei verloren.
+  $('dk-schalter').addEventListener('change', ev => {
+    if (ev.target.dataset.art) deckelSchalten(ev.target);
+  });
+
+  $('dk-name-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const knopf = ev.target.querySelector('button');
+    knopf.disabled = true;
+    dkSagt('');
+    try {
+      const d = await ruf('/api/name', { name: $('dk-name').value });
+      meinName = d.name;
+      brauchtNamen = false;
+      deckelStand = { ...deckelStand, name: d.name };
+      formular();
+      dkSagt('Steht so in der Liste.');
+      await hole();
+    } catch (e) {
+      dkSagt(e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  $('dk-mail-auf').addEventListener('click', () => {
+    const f = $('dk-mail-form');
+    f.hidden = !f.hidden;
+    $('dk-mail-auf').textContent = f.hidden ? 'ändern' : 'abbrechen';
+    dkSagt('');
+    if (!f.hidden) { $('dk-mail-neu').value = ''; $('dk-mail-neu').focus(); }
+  });
+
+  $('dk-mail-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const knopf = ev.target.querySelector('button');
+    knopf.disabled = true;
+    dkSagt('');
+    try {
+      const d = await ruf('/api/mail/aendern', { email: $('dk-mail-neu').value });
+      $('dk-mail-form').hidden = true;
+      $('dk-mail-auf').textContent = 'ändern';
+      /* Der Satz nennt beide Hälften: wo der Link liegt, und dass bis zum
+         Klick nichts passiert ist. Ohne den zweiten Teil glaubt man, die
+         Adresse sei schon gewechselt, und wundert sich über die nächste Mail
+         an die alte. */
+      dkSagt('Ein Link liegt in ' + d.wartet_auf + '. Bis du dort klickst, '
+           + 'gilt deine alte Adresse weiter.');
+    } catch (e) {
+      dkSagt(e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  $('dk-laut').addEventListener('click', async () => {
+    dkSagt('');
+    try {
+      const d = await ruf('/api/einstellungen', { stumm: false });
+      deckelStand = { ...deckelStand, mail: d.mail, mail_stumm: d.mail_stumm };
+      deckelZeichnen();
+      dkSagt('Du bekommst wieder Post — nach deiner Auswahl unten.');
+    } catch (e) {
+      dkSagt(e.message, true);
+    }
+  });
+
+  /* Das verlorene Handy. Wirft auch DIESES Gerät raus — deshalb steht danach
+     der Türsteher da, und deshalb fragt der Knopf einmal zurück (zweiter
+     Klick in derselben Zeile, wie am Rad; kein confirm()). */
+  let dkAlleSicher = false;
+  $('dk-alle').addEventListener('click', async () => {
+    const knopf = $('dk-alle');
+    if (!dkAlleSicher) {
+      dkAlleSicher = true;
+      knopf.textContent = 'wirklich alle?';
+      dkSagt('Das meldet auch dieses Gerät ab. Du kommst mit einem neuen Link zurück.');
+      setTimeout(() => {
+        if (!dkAlleSicher) return;
+        dkAlleSicher = false;
+        knopf.textContent = 'alle abmelden';
+      }, 6000);
+      return;
+    }
+    dkAlleSicher = false;
+    knopf.textContent = 'alle abmelden';
+    knopf.disabled = true;
+    try {
+      await ruf('/api/geraete/alle-abmelden', {});
+    } catch (e) {
+      dkSagt(e.message, true);
+      knopf.disabled = false;
+      return;
+    }
+    // Der Ruf ging durch: das eigene Token gilt nicht mehr, also weg damit.
+    wirf();
+    meinName = null;
+    brauchtNamen = false;
+    knopf.disabled = false;
+    deckelZu();
+    sagt('Alle Geräte abgemeldet. Dein Eintrag bleibt in der Liste stehen.');
+    formular();
+  });
+
   /* Alles am Thread hängt an einem Zuhörer: der Baum wird bei jeder Antwort
      neu gebaut, ein Zuhörer je Karte ginge dabei verloren. */
   $('fly-thread').addEventListener('click', async ev => {
@@ -3271,7 +3705,9 @@
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
     if (!$('lupe').hidden) { lupeZu(); return; }
+    if (!$('losmail').hidden) { losMailZu(); return; }
     if (!$('flyout').hidden) { flyZu(); return; }
+    if (!$('deckel').hidden) { deckelZu(); return; }
     if (!$('chronik').hidden) chronikZu();
   });
 
@@ -3442,11 +3878,107 @@
       nimm(d.token);
       meinName = d.name;
       brauchtNamen = !!d.braucht_namen;
-      sagt(brauchtNamen
+      /* Derselbe Link, zwei Zwecke: der Wechsel der Adresse kommt hier
+         genauso an. Er bringt ebenfalls ein Token mit — geklickt wird im
+         NEUEN Postfach, und das steht oft auf einem anderen Gerät als dem,
+         an dem der Wechsel angestoßen wurde. */
+      sagt(d.zweck === 'mailwechsel'
+        ? 'Deine Adresse ist jetzt ' + d.email + '. Dorthin geht künftig die Post.'
+        : brauchtNamen
         ? 'Drin. Wie sollst du in der Liste heißen?'
         : 'Willkommen zurück, ' + d.name + '.');
     } catch {
       sagt('Der Link ließ sich gerade nicht einlösen. Netz weg?', true);
+    }
+  }
+
+  /* --- Die beiden Wege aus dem Postfach -------------------------------------
+     Beide kommen als Adressfragment an, wie der Magic Link und aus demselben
+     Grund: ein Fragment geht nie an einen Server, steht also in keinem
+     Zugriffsprotokoll. Und beide fliegen sofort aus der Adresszeile, damit ein
+     Screenshot oder ein zurückgeblättertes Fenster sie nicht weiterreicht.
+     --------------------------------------------------------------------- */
+
+  // Der Ein-Klick-Abmelder aus der Fußzeile jeder Mail.
+  async function stummEinloesen() {
+    const treffer = /[#&]stumm=(\d+)\.([A-Za-z0-9_-]{10,})/.exec(location.hash || '');
+    if (!treffer) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      const r = await fetch(API + '/api/mail/stumm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: Number(treffer[1]), sig: treffer[2] }),
+      });
+      const d = await r.json().catch(() => ({}));
+      sagt(r.ok
+        ? 'Erledigt — du bekommst keine Mails mehr vom Wirt. '
+          + 'Unter „mein Deckel" kannst du es zurücknehmen.'
+        : (d.fehler || 'Der Link hat nicht funktioniert.'), !r.ok);
+    } catch {
+      sagt('Das ließ sich gerade nicht abschicken. Netz weg?', true);
+    }
+  }
+
+  // Die Antwort des Gewinners. Der Link zeigt nur — geschickt wird per Knopf.
+  let losMail = null;   // { los, t }, solange das Blatt offensteht
+
+  function losAusMail() {
+    const treffer = /[#&]los=(\d+)&t=(\d+\.[A-Za-z0-9_-]{10,})/.exec(location.hash || '');
+    if (!treffer) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    losMail = { los: Number(treffer[1]), t: treffer[2] };
+    $('losmail').hidden = false;
+  }
+
+  function losMailZu() {
+    losMail = null;
+    $('losmail').hidden = true;
+    $('lm-grund').hidden = true;
+    $('lm-sagt').hidden = true;
+  }
+
+  function lmSagt(text, schlecht) {
+    const p = $('lm-sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  /* Die Absage fragt einmal nach dem Grund, die Zusage nicht — dieselbe Regel
+     wie am Rad. Der zweite Klick auf „Heute nicht" schickt dann ab, auch mit
+     leerem Feld: freiwillig heißt freiwillig. */
+  async function losMailAntwort(ja) {
+    if (!losMail) return;
+    if (!ja && $('lm-grund').hidden) {
+      $('lm-grund').hidden = false;
+      $('lm-grund').focus();
+      lmSagt('Noch einmal auf „Heute nicht", dann ist es raus.');
+      return;
+    }
+    $('lm-ja').disabled = $('lm-nein').disabled = true;
+    lmSagt('');
+    try {
+      const r = await fetch(API + '/api/los/antwort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Tab': TAB },
+        body: JSON.stringify({
+          antwort: ja ? 'ja' : 'nein',
+          grund: ja ? '' : $('lm-grund').value,
+          los: losMail.los, t: losMail.t,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.fehler || 'Das ging nicht.');
+      losMailZu();
+      sagt(ja
+        ? 'Zugesagt — der Abend steht bei dir.'
+        : 'Abgesagt. Die Flasche darf gleich noch einmal.');
+      await hole(true);
+    } catch (e) {
+      lmSagt(e.message, true);
+    } finally {
+      $('lm-ja').disabled = $('lm-nein').disabled = false;
     }
   }
 
@@ -3544,8 +4076,16 @@
     strom();
   }
 
+  $('lm-zu').addEventListener('click', losMailZu);
+  $('lm-schirm').addEventListener('click', losMailZu);
+  $('lm-ja').addEventListener('click', () => losMailAntwort(true));
+  $('lm-nein').addEventListener('click', () => losMailAntwort(false));
+
   /* Reihenfolge: erst den Link einloesen (der setzt das Token), dann wissen,
-     wer man ist, dann zeichnen. */
+     wer man ist, dann zeichnen. Die beiden Wege aus dem Postfach hängen sich
+     davor: sie lesen dasselbe Fragment, und `magicEinloesen` räumt es weg. */
+  stummEinloesen();
+  losAusMail();
   magicEinloesen()
     .then(() => merke() && !meinName && !brauchtNamen ? werBinIch() : null)
     // Ohne den Pfeil bekäme `hole` die Antwort von `werBinIch` als `still` —
