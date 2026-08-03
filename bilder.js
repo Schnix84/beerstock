@@ -322,7 +322,14 @@ window.Bilder = (function () {
      „das waren etwa neun": man braucht eine Marke auf halber Höhe, um zu
      schätzen. Gestrichelt und in der Farbe der Kontorlinien, damit sie hinter
      den Daten bleiben. */
-  function achse(svg, max, beschriften = true) {
+  /* `tief` ist der Fuß der Skala und fast immer 0 — bei Anzahlen ist alles
+     andere eine Lüge, weil ein abgeschnittener Balken doppelt so hoch aussieht
+     wie er ist. Bei GRAD ist 0 dagegen willkürlich: zwischen 4 °C und 7 °C
+     liegt der ganze Unterschied zwischen kalt und lauwarm, und über einer
+     Nulllinie wären beide derselbe Strich ganz oben. Nur dafür gibt es das
+     zweite Argument, und nur die Gradkurve setzt es. */
+  function achse(svg, max, beschriften = true, tief = 0) {
+    const spanne = max - tief;
     [.5, 1].forEach(anteil => {
       svg.appendChild(s_el('line', {
         x1: PAD.l, y1: PAD.o + IY - anteil * IY, x2: PAD.l + IX, y2: PAD.o + IY - anteil * IY,
@@ -334,8 +341,8 @@ window.Bilder = (function () {
       stroke: P.linie, 'stroke-width': 1,
     }));
     if (!beschriften) return;
-    [0, max].forEach(v => {
-      const y = PAD.o + IY - (max ? v / max : 0) * IY;
+    [tief, max].forEach(v => {
+      const y = PAD.o + IY - (spanne ? (v - tief) / spanne : 0) * IY;
       const t = s_el('text', {
         x: PAD.l - 5, y: y + 3.5, 'text-anchor': 'end',
         'font-size': 8, fill: P.textWeg,
@@ -485,18 +492,29 @@ window.Bilder = (function () {
      Zeitachse: nur so sieht man, wer wann nachgelegt hat. Die Achse kommt aus
      der Vereinigung aller Tage, nicht aus der längsten Reihe — sonst säßen
      zwei Kurven mit verschiedenen Startpunkten übereinander und logen. */
-  function bildSchar(titel, kurven) {
+  function bildSchar(titel, kurven, o = {}) {
     const box = rahmen(titel);
     const mitWerten = kurven.filter(k => k.werte.length);
     if (!mitWerten.length) return leer(box, 'Noch nichts eingetragen.');
 
     const tage = [...new Set(mitWerten.flatMap(k => k.tage))].sort();
-    const max = Math.max(...mitWerten.flatMap(k => k.werte), 1);
+    const alle = mitWerten.flatMap(k => k.werte);
+    /* `abNull` ist die Vorgabe. Wo sie fällt, wird die Skala um die Werte
+       herum gelegt und auf ganze Schritte gerundet — sonst klebt eine Reihe,
+       die den ganzen Zeitraum über bei 5,0 stand, als Strich auf der
+       Grundlinie und sähe aus wie „nichts". */
+    const tief = o.abNull === false ? Math.floor(Math.min(...alle) - .5) : 0;
+    const max = o.abNull === false
+      ? Math.max(Math.ceil(Math.max(...alle) + .5), tief + 1)
+      : Math.max(...alle, 1);
+    const spanne = max - tief || 1;
+    // Wie ein Wert im Kasten steht. Nur die Grad brauchen mehr als die Zahl.
+    const text = o.text || ((k, j) => zahl(k.werte[j]));
     const x = tag => PAD.l + (tage.length > 1 ? tage.indexOf(tag) / (tage.length - 1) : .5) * IX;
-    const y = v => PAD.o + IY - (v / max) * IY;
+    const y = v => PAD.o + IY - ((v - tief) / spanne) * IY;
 
     const svg = svgNeu();
-    achse(svg, max);
+    achse(svg, max, true, tief);
     const striche = [];      // je Kurve ihr gezeichnetes Element, für das Hervorheben
     mitWerten.forEach((k, i) => {
       const px = k.tage.map((t, j) => [x(t), y(k.werte[j])]);
@@ -527,7 +545,9 @@ window.Bilder = (function () {
       const da = mitWerten
         .map((k, i) => {
           const j = k.tage.indexOf(tag);
-          return j < 0 ? null : { farbe: REIHE[i % REIHE.length], was: k.name, wert: k.werte[j] };
+          return j < 0
+            ? null
+            : { farbe: REIHE[i % REIHE.length], was: k.name, wert: k.werte[j], zeigt: text(k, j) };
         })
         .filter(Boolean)
         .sort((a, b) => b.wert - a.wert);
@@ -550,8 +570,8 @@ window.Bilder = (function () {
         },
         inhalt: () => ({
           titel: nurTag(tag),
-          zeilen: da.map(z => ({ farbe: z.farbe, was: z.was, wert: zahl(z.wert) })),
-          fuss: da.length ? null : 'Niemand hat gemeldet.',
+          zeilen: da.map(z => ({ farbe: z.farbe, was: z.was, wert: z.zeigt })),
+          fuss: da.length ? null : o.fussLeer || 'Niemand hat gemeldet.',
         }),
       };
     }));
@@ -578,6 +598,38 @@ window.Bilder = (function () {
     });
     box.appendChild(leg);
     return box;
+  }
+
+  /* 2b — Temperatur je Tag und Melder. Dieselbe Kurvenschar wie beim Bestand,
+     nur mit drei Unterschieden, und alle drei folgen daraus, dass Grad keine
+     Anzahl sind:
+
+       - Die Skala fängt nicht bei 0 an (siehe `achse`).
+       - Im Kasten steht eine Kommazahl mit Einheit, nicht `2`, sondern `5,2 °C`.
+       - Wurde an einem Tag mehrfach gemeldet, steht die SPANNE dahinter. Die
+         Kurve kann nur einen Wert zeigen und zeigt den letzten; dass es an dem
+         Tag auch mal 9 °C waren, stünde sonst nirgends.
+
+     Die Reihenfolge der Farben ist dieselbe wie beim Bestand, weil dieselben
+     Melder in derselben Reihenfolge kommen — wer im einen Bild grün ist, ist
+     es im anderen auch. */
+  const GRAD = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
+  const gradText = v => GRAD.format(v) + ' °C';
+
+  function bildGrad(titel, kurven) {
+    return bildSchar(titel, kurven, {
+      abNull: false,
+      fussLeer: 'Niemand hat gemeldet.',
+      text: (k, j) => {
+        const wert = gradText(k.werte[j]);
+        const tief = k.tief?.[j], hoch = k.hoch?.[j];
+        // Nur wenn sich der Tag wirklich bewegt hat. Bei einer einzigen
+        // Meldung waere "(5,2–5,2)" nur Rauschen hinter derselben Zahl.
+        return (k.n?.[j] > 1 && tief !== hoch)
+          ? `${wert} (${GRAD.format(tief)}–${GRAD.format(hoch)})`
+          : wert;
+      },
+    });
   }
 
   /* 3 — Liegende Balken. Für Ranglisten mit Namen: senkrecht müsste man den
@@ -875,6 +927,7 @@ window.Bilder = (function () {
     aufsetzen,
     flaeche:     bildFlaeche,
     schar:       bildSchar,
+    grad:        bildGrad,
     liegend:     bildLiegend,
     band:        bildBand,
     losJeMelder: bildLosJeMelder,

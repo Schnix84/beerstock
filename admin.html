@@ -815,6 +815,10 @@
     ziel.appendChild(Bilder.flaeche('Meldungen je Tag' + fenster,
       s.meldungen, z => z.n, z => nurTag(z.tag), 'Meldungen'));
     ziel.appendChild(Bilder.schar('Bestand je Melder' + fenster, s.bestand));
+    // Direkt hinter dem Bestand: beide Kurven kommen aus derselben Meldung,
+    // und nebeneinander sieht man, ob der Kühlschrank mit dem Nachlegen
+    // hochgeht. `|| []` — die alte Antwort kennt das Feld noch nicht.
+    ziel.appendChild(Bilder.grad('Temperatur je Melder' + fenster, s.grad || []));
     ziel.appendChild(Bilder.liegend('Wer war wie oft Gastgeber, insgesamt',
       s.gastgeber, z => z.name, z => z.n, 'Abende'));
     ziel.appendChild(Bilder.band('Ausgang der Ziehungen, insgesamt', s.lose));

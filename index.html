@@ -523,10 +523,11 @@
     align-items: baseline; gap: 8px; margin-top: 18px;
     font-size: 11px; color: var(--kreide-weg);
   }
-  /* Die zweite Fußzeile hängt an der ersten, statt neben ihr in derselben
-     Reihe zu stehen: „alle abmelden" und „Melder verwalten" sind zwei sehr
-     verschiedene Knöpfe, und nebeneinander vertippt man sich. */
-  .dk-kontor { margin-top: 6px; }
+  /* Der Weg ins Kontor steht UNTER der Gerätezeile und mit Abstand: „alle
+     abmelden" und „Mitgliederverwaltung" sind zwei sehr verschiedene Knöpfe,
+     und nebeneinander vertippt man sich. Der Abstand ist größer als der der
+     Fußzeile darüber, weil der Knopf hier das Blatt beendet. */
+  .dk-kontor { margin-top: 16px; }
 
   /* --- Sterne und Flyout ---------------------------------------------------
      Ein Bauteil für beide Ziele: einen Nutzer bewertet man dauerhaft, einen
@@ -1399,13 +1400,18 @@
 
       <!-- Der einzige Wegweiser ins Kontor. Bisher kannte man die Adresse oder
            man kam nicht hin — verlinkt war sie nirgends. Sichtbar nur mit der
-           Rolle `admin`, weil die Zeile für alle anderen ein Link auf lauter
-           403er wäre. Ein Türsteher ist das nicht: der sitzt im Worker, und
-           `admin.html` bleibt für jeden abrufbar, der sie tippt. -->
-      <div class="dk-fuss dk-kontor" id="dk-kontor" hidden>
-        <span>Du führst das Kontor</span>
-        <a class="ko-tat" href="admin.html">Melder verwalten</a>
-      </div>
+           Rolle `admin`, weil er für alle anderen ein Weg auf lauter 403er
+           wäre. Ein Türsteher ist das nicht: der sitzt im Worker, und
+           `admin.html` bleibt für jeden abrufbar, der sie tippt.
+
+           Ein voller Knopf wie „Anschreiben", kein unterstrichenes Wort in
+           einer Fußzeile: Vorher stand hier „Du führst das Kontor" und daneben
+           klein „Melder verwalten" — der Satz war eine Auszeichnung und keine
+           Auskunft, und das Ziel sah aus wie eine Fußnote. Wer das Kontor
+           führt, weiß es; er sucht den Weg hinein. -->
+      <button class="knopf dk-kontor" id="dk-kontor" type="button" hidden>
+        Mitgliederverwaltung
+      </button>
 
       <p class="sagt" id="dk-sagt" hidden></p>
     </div>
@@ -3589,11 +3595,12 @@
   $('fly-schirm').addEventListener('click', flyZu);
 
   $('chronik-auf').addEventListener('click', chronikAuf);
-  /* Eine eigene Seite, kein Flyout: sechs Grafiken passen nicht auf ein Blatt,
+  /* Eine eigene Seite, kein Flyout: die Grafiken passen nicht auf ein Blatt,
      das von der Seite hereinfährt, und die Tafel bleibt dadurch, was sie ist —
      eine geschlossene Datei, die von den Bildern nichts weiß außer diesem
-     einen Knopf. */
-  $('verlauf-auf').addEventListener('click', () => { location.href = 'verlauf.html'; });
+     einen Knopf. Dasselbe gilt für das Kontor. */
+  $('verlauf-auf').addEventListener('click', () => { location.href = 'statistik.html'; });
+  $('dk-kontor').addEventListener('click', () => { location.href = 'admin.html'; });
   $('ch-zu').addEventListener('click', chronikZu);
   $('ch-schirm').addEventListener('click', chronikZu);
   $('ch-mehr').addEventListener('click', chronikMehr);

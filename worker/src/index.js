@@ -901,18 +901,29 @@ const statistikAbfragen = (env, fenster) => [
     WHERE gemeldet_am > datetime('now', ?1)
     GROUP BY tag ORDER BY tag
   `).bind(fenster),
-  // 2 — Bestand je Melder: der letzte Wert des Tages, wie im Verlauf.
+  /* 2 — Bestand UND Temperatur je Melder, beide aus derselben Zeile: der
+     LETZTE Wert des Tages, nicht der Schnitt. Wer nachmittags nachlegt, soll
+     abends seinen Bestand sehen und nicht die Mitte zwischen vorher und
+     nachher; eine gemittelte Bestandskurve waere eine Kurve, die es nie gab.
+     Fuer die Temperatur gilt dieselbe Regel, damit es nur EINE zu erklaeren
+     gibt - aber ein Kuehlschrank schwankt ueber den Tag, und genau das
+     verschweigt ein letzter Wert. Deshalb fahren `tief`, `hoch` und die Zahl
+     der Meldungen mit: die Kurve zeigt den Stand, der Kasten die Spanne.
+
+     Zwei Bilder aus einer Abfrage - getrennt waeren es zwei Durchlaeufe ueber
+     dieselben Zeilen mit demselben `max(id)` darin. */
   env.DB.prepare(`
     SELECT r.user_id, coalesce(u.name,'Ehemaliger') AS name,
-           date(r.gemeldet_am) AS tag, r.biere
+           j.tag, r.biere, r.temperatur, j.tief, j.hoch, j.n
     FROM reports r
     JOIN users u ON u.id = r.user_id
     JOIN (
-      SELECT user_id, date(gemeldet_am) AS tag, max(id) AS id
+      SELECT user_id, date(gemeldet_am) AS tag, max(id) AS id,
+             min(temperatur) AS tief, max(temperatur) AS hoch, count(*) AS n
       FROM reports WHERE gemeldet_am > datetime('now', ?1)
       GROUP BY user_id, date(gemeldet_am)
     ) j ON j.id = r.id
-    ORDER BY r.user_id, tag
+    ORDER BY r.user_id, j.tag
   `).bind(fenster),
   // 3 — Wer war wie oft Gastgeber. Liegende Balken.
   env.DB.prepare(`
@@ -954,13 +965,27 @@ const statistikAbfragen = (env, fenster) => [
 const statistikRunde = (ergebnis) => {
   const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb] = ergebnis;
 
-  // Die Kurvenschar je Nutzer buendeln - eine Linie je Melder.
+  /* Die Kurvenschar je Nutzer buendeln - eine Linie je Melder, zweimal:
+     einmal die Flaschen, einmal die Grad. Dieselbe Zeile fuellt beide, denn
+     beide Zahlen stehen in derselben Meldung. */
   const kurven = new Map();
+  const gradKurven = new Map();
   for (const z of bestand.results) {
-    if (!kurven.has(z.user_id)) kurven.set(z.user_id, { name: z.name, tage: [], werte: [] });
+    if (!kurven.has(z.user_id)) {
+      kurven.set(z.user_id, { name: z.name, tage: [], werte: [] });
+      gradKurven.set(z.user_id,
+        { name: z.name, tage: [], werte: [], tief: [], hoch: [], n: [] });
+    }
     const k = kurven.get(z.user_id);
     k.tage.push(z.tag);
     k.werte.push(z.biere);
+
+    const g = gradKurven.get(z.user_id);
+    g.tage.push(z.tag);
+    g.werte.push(z.temperatur);
+    g.tief.push(z.tief);
+    g.hoch.push(z.hoch);
+    g.n.push(z.n);
   }
 
   /* Eine Zeile je Melder statt einer je Melder UND Status - die Seite malt
@@ -983,6 +1008,7 @@ const statistikRunde = (ergebnis) => {
   return {
     meldungen: meldungen.results,
     bestand: [...kurven.values()],
+    grad: [...gradKurven.values()],
     gastgeber: gastgeber.results,
     lose: lose.results,
     lose_je_melder: [...jeMelderZeilen.values()].sort((a, b) => b.gezogen - a.gezogen),

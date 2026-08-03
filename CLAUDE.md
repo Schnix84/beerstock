@@ -11,9 +11,9 @@ das Datenmodell. Diese Datei hier sagt nur, was ein Agent beim *Arbeiten* am Rep
 | Was | Wo |
 |---|---|
 | Die Seite | `index.html` — **eine** geschlossene Datei, kein Build, keine externen Ressourcen |
-| Die Bilder | `verlauf.html` („Statistiken", für jeden Angemeldeten) |
+| Die Bilder | `statistik.html` („Statistiken", für jeden Angemeldeten) |
 | Nutzerverwaltung | `admin.html` (das „Kontor") |
-| Grafiken + Tooltip | `bilder.js` — **geteilt** von `verlauf.html` und `admin.html`, nie von der Tafel |
+| Grafiken + Tooltip | `bilder.js` — **geteilt** von `statistik.html` und `admin.html`, nie von der Tafel |
 | Worker | `worker/src/index.js` |
 | Verteiler | `worker/src/tafel.js` — Durable Object `Tafel`, hält die WebSockets |
 | Schema | `worker/migrations/` — **eine Datei je Schritt, die Reihenfolge ist die Geschichte** |
@@ -29,7 +29,7 @@ Routen.
 *beide* Seiten — Kontor und Verlauf. Farben stehen dort nirgends fest: jede Seite reicht
 beim Start eine Palette in `Bilder.aufsetzen({…})`, die eine in Tinte, die andere in Kreide.
 Die Tafel lädt die Datei **nicht** und darf es auch nicht, sonst ist sie keine geschlossene
-Datei mehr; sie zeigt nur einen Knopf nach `verlauf.html`.
+Datei mehr; sie zeigt nur einen Knopf nach `statistik.html`.
 
 ## Ausrollen
 

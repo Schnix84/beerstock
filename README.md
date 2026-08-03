@@ -189,10 +189,11 @@ Woche einmal von einem Virenscanner beantwortet worden.
 **Mein Deckel** (Flyout auf der Tafel) ist die Selbstverwaltung: Name ändern,
 Adresse wechseln, die sechs Schalter, alle Geräte abmelden. Der Adresswechsel ist
 zweistufig — der Link geht an die neue Adresse, die alte bekommt eine Warnung und
-gilt weiter, bis dort geklickt wurde.
+gilt weiter, bis dort geklickt wurde. Wer die Rolle `admin` hat, findet ganz
+unten den Knopf **Mitgliederverwaltung** — der einzige Wegweiser ins Kontor.
 
 **Das Kontor** (`admin.html`) gehört der Rolle `admin`: sperren, entsperren,
-Rolle tauschen, entfernen, sieben Grafiken, Rundmail, Protokoll. Gleiche Herkunft
+Rolle tauschen, entfernen, acht Grafiken, Rundmail, Protokoll. Gleiche Herkunft
 wie die Tafel, also dasselbe Token — kein zweiter Login und damit auch kein
 zweiter Angriffsweg. Wer der erste Admin ist, sagt das Secret `ADMIN_MAIL`: wer
 sich mit dieser Adresse anmeldet, wird beim Einlösen des Links zum Admin. Das ist
@@ -211,9 +212,9 @@ Anbindung der Wohnung ab.
 
 ```
 index.html           eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
-verlauf.html         die Statistiken: die Bilder zur Runde — für jeden Angemeldeten
+statistik.html       die Statistiken: die Bilder zur Runde — für jeden Angemeldeten
 admin.html           das Kontor: Nutzerverwaltung, Statistik, Rundmail — nur fuer Admins
-bilder.js            die sechs Grafiken samt Tooltip; verlauf.html und admin.html teilen sie
+bilder.js            die Grafiken samt Tooltip; statistik.html und admin.html teilen sie
 worker/              Cloudflare Worker + D1 + R2: Registrierung, Meldungen, Bestenliste
 worker/src/tafel.js  Durable Object: verteilt an alle offenen Seiten, was sich geändert hat
 worker/migrations/   das Schema, eine Datei je Schritt — die Reihenfolge ist die Geschichte
@@ -304,7 +305,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages — ohne Token nur der Siegerplatz |
-| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt |
+| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
 | `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen', grund?}` — nur Admin |
