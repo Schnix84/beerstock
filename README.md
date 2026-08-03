@@ -211,11 +211,20 @@ Anbindung der Wohnung ab.
 
 ```
 index.html           eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
+verlauf.html         „Wie es läuft": die Bilder zur Runde — für jeden Angemeldeten
 admin.html           das Kontor: Nutzerverwaltung, Statistik, Rundmail — nur fuer Admins
+bilder.js            die sechs Grafiken samt Tooltip; verlauf.html und admin.html teilen sie
 worker/              Cloudflare Worker + D1 + R2: Registrierung, Meldungen, Bestenliste
 worker/src/tafel.js  Durable Object: verteilt an alle offenen Seiten, was sich geändert hat
 worker/migrations/   das Schema, eine Datei je Schritt — die Reihenfolge ist die Geschichte
 ```
+
+`bilder.js` ist die einzige geteilte Datei, und sie ist es aus einem Grund: an
+einem Tooltip, der zweimal dasteht, ändert man beim zweiten Mal nichts mehr. Sie
+bekommt beim Start eine Palette und zeichnet damit dieselben Formen einmal in
+Kreide (Verlauf) und einmal in Tinte (Kontor). **Die Tafel lädt sie nicht** — für
+`index.html` gilt weiter: eine Datei, keine externen Ressourcen. Sie zeigt nur
+einen Knopf, der hinüberführt.
 
 Die Seite ist statisch und fragt nur. Geschrieben wird ausschließlich über den
 Worker; die Wohnung selbst ist von außen nicht erreichbar und ruft dort an, statt
@@ -295,10 +304,11 @@ Drei Dinge, die dazugehören:
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages — ohne Token nur der Siegerplatz |
+| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für „Wie es läuft“; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
 | `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen', grund?}` — nur Admin |
-| `GET /api/admin/statistik` 🔒 | die Zahlenreihen hinter den sieben Grafiken — nur Admin |
+| `GET /api/admin/statistik` 🔒 | dasselbe **plus Betrieb**: Mails je Art und je Tag, Anmeldungen, wer noch Post will — nur Admin |
 | `POST /api/admin/rundmail` 🔒 | `{betreff, text}` an alle, die sie wollen — nur Admin |
 | `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
 | `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM` |

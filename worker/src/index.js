@@ -867,6 +867,130 @@ const kommentarZaehlerStmt = env => env.DB.prepare(`
 `).bind(`-${TERMINE_RUECKBLICK} days`);
 
 // ---------------------------------------------------------------------------
+// Die Statistik der Runde
+//
+// Sechs Abfragen, die zwei Routen gemeinsam haben: `/api/statistik` fuer jeden
+// Angemeldeten und `/api/admin/statistik`, das nur noch den Betrieb anhaengt.
+// Sie stehen hier und nicht in den Routen, damit es sie EINMAL gibt - zweimal
+// dasselbe SQL laeuft auseinander, sobald eine der beiden Seiten etwas
+// dazubekommt.
+//
+// Zurueckgegeben werden vorbereitete Statements, keine Ergebnisse: so bleibt
+// die Wahl, was noch mit in denselben `batch` geht, bei der Route. Ein Aufruf
+// pro Seitenansicht, nicht zwei.
+// ---------------------------------------------------------------------------
+
+/* Der Wunsch der Seite gegen die Liste erlaubter Zahlen. Was durchfaellt,
+   wird zur Vorgabe - eine 400er-Antwort waere hier Ballast: der Nutzer hat
+   sich nicht vertippt, das kann nur eine Seite gewesen sein, die etwas
+   anderes will, als es gibt. */
+const statistikFenster = (request) => {
+  const gewuenscht = Number(new URL(request.url).searchParams.get('tage'));
+  const tage = STATISTIK_TAGE.includes(gewuenscht) ? gewuenscht : STATISTIK_TAGE[0];
+  return { tage, fenster: `-${tage} days` };
+};
+
+// Wie viele es sind. Die Admin-Route schneidet ihren eigenen Teil hinter
+// dieser Marke ab - eine Zahl von Hand waere beim naechsten Bild falsch.
+const STATISTIK_ABFRAGEN = 6;
+
+const statistikAbfragen = (env, fenster) => [
+  // 1 — Meldungen je Tag. Flaechenkurve.
+  env.DB.prepare(`
+    SELECT date(gemeldet_am) AS tag, count(*) AS n FROM reports
+    WHERE gemeldet_am > datetime('now', ?1)
+    GROUP BY tag ORDER BY tag
+  `).bind(fenster),
+  // 2 — Bestand je Melder: der letzte Wert des Tages, wie im Verlauf.
+  env.DB.prepare(`
+    SELECT r.user_id, coalesce(u.name,'Ehemaliger') AS name,
+           date(r.gemeldet_am) AS tag, r.biere
+    FROM reports r
+    JOIN users u ON u.id = r.user_id
+    JOIN (
+      SELECT user_id, date(gemeldet_am) AS tag, max(id) AS id
+      FROM reports WHERE gemeldet_am > datetime('now', ?1)
+      GROUP BY user_id, date(gemeldet_am)
+    ) j ON j.id = r.id
+    ORDER BY r.user_id, tag
+  `).bind(fenster),
+  // 3 — Wer war wie oft Gastgeber. Liegende Balken.
+  env.DB.prepare(`
+    SELECT coalesce(u.name,'Ehemaliger') AS name, count(*) AS n
+    FROM termine t JOIN users u ON u.id = t.gastgeber_id
+    WHERE t.abgesagt_am IS NULL
+    GROUP BY t.gastgeber_id ORDER BY n DESC
+  `),
+  // 4 — Ausgang der Ziehungen. Gestapelter Balken.
+  env.DB.prepare('SELECT status, count(*) AS n FROM los GROUP BY status'),
+  // 4b — dasselbe je Melder: wer wurde wie oft gezogen, und was hat er daraus
+  // gemacht. Der Balken daneben beantwortet nur den Anteil ueber alle; wer
+  // dauernd zieht und dauernd absagt, faellt darin nicht auf.
+  env.DB.prepare(`
+    SELECT l.user_id, coalesce(u.name,'Ehemaliger') AS name,
+           l.status, count(*) AS n
+    FROM los l JOIN users u ON u.id = l.user_id
+    GROUP BY l.user_id, l.status
+  `),
+  /* 5 — Betrieb je Woche: Kommentare, Reaktionen, Sterne. Das Fenster steht
+     in jedem der drei Zweige: eines aussen um die Vereinigung herum liesse
+     SQLite erst alle drei Tabellen vollstaendig lesen. */
+  env.DB.prepare(`
+    SELECT woche, sum(k) AS kommentare, sum(r) AS reaktionen, sum(b) AS sterne FROM (
+      SELECT strftime('%Y-%W', erstellt) AS woche, 1 AS k, 0 AS r, 0 AS b
+      FROM kommentare WHERE erstellt > datetime('now', ?1)
+      UNION ALL
+      SELECT strftime('%Y-%W', erstellt), 0, 1, 0
+      FROM reaktionen WHERE erstellt > datetime('now', ?1)
+      UNION ALL
+      SELECT strftime('%Y-%W', erstellt), 0, 0, 1
+      FROM bewertungen WHERE erstellt > datetime('now', ?1)
+    ) GROUP BY woche ORDER BY woche
+  `).bind(fenster),
+];
+
+/* Aus den sechs Ergebnissen die Form, die gezeichnet wird. Zwei davon werden
+   umgebaut, der Rest geht durch. */
+const statistikRunde = (ergebnis) => {
+  const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb] = ergebnis;
+
+  // Die Kurvenschar je Nutzer buendeln - eine Linie je Melder.
+  const kurven = new Map();
+  for (const z of bestand.results) {
+    if (!kurven.has(z.user_id)) kurven.set(z.user_id, { name: z.name, tage: [], werte: [] });
+    const k = kurven.get(z.user_id);
+    k.tage.push(z.tag);
+    k.werte.push(z.biere);
+  }
+
+  /* Eine Zeile je Melder statt einer je Melder UND Status - die Seite malt
+     daraus einen liegenden Balken, und der braucht alle vier Ausgaenge
+     nebeneinander. Fehlende Status stehen als 0 drin, sonst muesste die Seite
+     raten, ob "kein Wert" nie oder null heisst. */
+  const jeMelderZeilen = new Map();
+  for (const z of jeMelder.results) {
+    if (!jeMelderZeilen.has(z.user_id)) {
+      jeMelderZeilen.set(z.user_id, {
+        name: z.name, gezogen: 0,
+        zugesagt: 0, abgelehnt: 0, verfallen: 0, offen: 0,
+      });
+    }
+    const m = jeMelderZeilen.get(z.user_id);
+    m.gezogen += z.n;
+    if (z.status in m) m[z.status] = z.n;
+  }
+
+  return {
+    meldungen: meldungen.results,
+    bestand: [...kurven.values()],
+    gastgeber: gastgeber.results,
+    lose: lose.results,
+    lose_je_melder: [...jeMelderZeilen.values()].sort((a, b) => b.gezogen - a.gezogen),
+    betrieb: betrieb.results,
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Mailversand ueber AgentMail. Reine HTTP-API, kein SMTP.
 // ---------------------------------------------------------------------------
 
@@ -3106,6 +3230,17 @@ const ROUTEN = {
   /* Nur Zahlenreihen, keine Texte: was hier herauskommt, wird gezeichnet.
      Die Grafiken malt die Seite selbst, ohne Fremdbibliothek.
 
+     ZWEI Routen, EIN SQL. `/api/statistik` sieht jeder Angemeldete, es ist die
+     Runde: wer wann gemeldet hat, wer Gastgeber war, was aus den Ziehungen
+     wurde. `/api/admin/statistik` haengt an dieselben Abfragen den BETRIEB an
+     - Mails, Anmeldungen, wer noch Post will. Das ist die Trennlinie: die
+     Runde geht alle an, der Betrieb nur den Wirt.
+
+     Die Abfragen stehen deshalb einmal da und nicht zweimal. Zweimal
+     dasselbe SQL heisst: die eine Seite bekommt irgendwann einen Filter, die
+     andere nicht, und niemand merkt es, weil beide Seiten fuer sich stimmig
+     aussehen.
+
      `?tage=` waehlt das Fenster. Es gilt fuer die ZEITREIHEN - Meldungen,
      Bestand, Betrieb, Mails -, nicht fuer die beiden Ranglisten: "wer war wie
      oft Gastgeber" und der Ausgang der Ziehungen sind Fragen an die ganze
@@ -3116,121 +3251,53 @@ const ROUTEN = {
 
      Der Wert kommt aus einer Liste erlaubter Zahlen und wird zusaetzlich
      gebunden statt eingesetzt: er landet in `datetime('now', ?)`. */
+  'GET /api/statistik': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const { tage, fenster } = statistikFenster(request);
+    const ergebnis = await env.DB.batch(statistikAbfragen(env, fenster));
+    return antwort(request, { tage, ...statistikRunde(ergebnis) }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
   'GET /api/admin/statistik': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
-    const gewuenscht = Number(new URL(request.url).searchParams.get('tage'));
-    const tage = STATISTIK_TAGE.includes(gewuenscht) ? gewuenscht : STATISTIK_TAGE[0];
-    const fenster = `-${tage} days`;
+    const { tage, fenster } = statistikFenster(request);
 
-    const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb, mails, mailsJeTag,
-           anmeldungen, postwillig] =
-      await env.DB.batch([
-        // 1 — Meldungen je Tag. Flaechenkurve.
-        env.DB.prepare(`
-          SELECT date(gemeldet_am) AS tag, count(*) AS n FROM reports
-          WHERE gemeldet_am > datetime('now', ?1)
-          GROUP BY tag ORDER BY tag
-        `).bind(fenster),
-        // 2 — Bestand je Melder: der letzte Wert des Tages, wie im Verlauf.
-        env.DB.prepare(`
-          SELECT r.user_id, coalesce(u.name,'Ehemaliger') AS name,
-                 date(r.gemeldet_am) AS tag, r.biere
-          FROM reports r
-          JOIN users u ON u.id = r.user_id
-          JOIN (
-            SELECT user_id, date(gemeldet_am) AS tag, max(id) AS id
-            FROM reports WHERE gemeldet_am > datetime('now', ?1)
-            GROUP BY user_id, date(gemeldet_am)
-          ) j ON j.id = r.id
-          ORDER BY r.user_id, tag
-        `).bind(fenster),
-        // 3 — Wer war wie oft Gastgeber. Liegende Balken.
-        env.DB.prepare(`
-          SELECT coalesce(u.name,'Ehemaliger') AS name, count(*) AS n
-          FROM termine t JOIN users u ON u.id = t.gastgeber_id
-          WHERE t.abgesagt_am IS NULL
-          GROUP BY t.gastgeber_id ORDER BY n DESC
-        `),
-        // 4 — Ausgang der Ziehungen. Gestapelter Balken.
-        env.DB.prepare('SELECT status, count(*) AS n FROM los GROUP BY status'),
-        // 4b — dasselbe je Melder: wer wurde wie oft gezogen, und was hat er
-        // daraus gemacht. Der Balken daneben beantwortet nur den Anteil ueber
-        // alle; wer dauernd zieht und dauernd absagt, faellt darin nicht auf.
-        env.DB.prepare(`
-          SELECT l.user_id, coalesce(u.name,'Ehemaliger') AS name,
-                 l.status, count(*) AS n
-          FROM los l JOIN users u ON u.id = l.user_id
-          GROUP BY l.user_id, l.status
-        `),
-        /* 5 — Betrieb je Woche: Kommentare, Reaktionen, Sterne. Das Fenster
-           steht in jedem der drei Zweige: eines aussen um die Vereinigung
-           herum liesse SQLite erst alle drei Tabellen vollstaendig lesen. */
-        env.DB.prepare(`
-          SELECT woche, sum(k) AS kommentare, sum(r) AS reaktionen, sum(b) AS sterne FROM (
-            SELECT strftime('%Y-%W', erstellt) AS woche, 1 AS k, 0 AS r, 0 AS b
-            FROM kommentare WHERE erstellt > datetime('now', ?1)
-            UNION ALL
-            SELECT strftime('%Y-%W', erstellt), 0, 1, 0
-            FROM reaktionen WHERE erstellt > datetime('now', ?1)
-            UNION ALL
-            SELECT strftime('%Y-%W', erstellt), 0, 0, 1
-            FROM bewertungen WHERE erstellt > datetime('now', ?1)
-          ) GROUP BY woche ORDER BY woche
-        `).bind(fenster),
-        // 6 — Mails je Art, Fehler daneben.
-        env.DB.prepare(`
-          SELECT art, count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
-          FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
-          GROUP BY art ORDER BY n DESC
-        `).bind(fenster),
-        /* 6b — dieselben Mails, aber je Tag: die Kachel "Mails, 24 h" im Kopf
-           nennt eine einzelne Zahl, und eine einzelne Zahl sagt nicht, ob das
-           viel ist. Die Linie darunter schon. */
-        env.DB.prepare(`
-          SELECT date(gesendet_am) AS tag, count(*) AS n
-          FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
-          GROUP BY tag ORDER BY tag
-        `).bind(fenster),
-        // Und zwei Zahlen ohne Bild.
-        env.DB.prepare(`
-          SELECT date(erstellt) AS tag, count(*) AS n FROM users
-          WHERE entfernt_am IS NULL GROUP BY tag ORDER BY tag
-        `),
-        env.DB.prepare(`
-          SELECT count(*) AS alle, sum(mail_stumm_am IS NULL) AS willig
-          FROM users WHERE email IS NOT NULL AND entfernt_am IS NULL
-        `),
-      ]);
+    /* Alles in EINEM batch, die Runde und der Betrieb zusammen: zwei Batches
+       waeren zwei Rundfluege zur Datenbank fuer eine einzige Seitenansicht. */
+    const ergebnis = await env.DB.batch([
+      ...statistikAbfragen(env, fenster),
+      // 6 — Mails je Art, Fehler daneben.
+      env.DB.prepare(`
+        SELECT art, count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
+        FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
+        GROUP BY art ORDER BY n DESC
+      `).bind(fenster),
+      /* 6b — dieselben Mails, aber je Tag: die Kachel "Mails, 24 h" im Kopf
+         nennt eine einzelne Zahl, und eine einzelne Zahl sagt nicht, ob das
+         viel ist. Die Linie darunter schon. */
+      env.DB.prepare(`
+        SELECT date(gesendet_am) AS tag, count(*) AS n
+        FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
+        GROUP BY tag ORDER BY tag
+      `).bind(fenster),
+      // Und zwei Zahlen ohne Bild.
+      env.DB.prepare(`
+        SELECT date(erstellt) AS tag, count(*) AS n FROM users
+        WHERE entfernt_am IS NULL GROUP BY tag ORDER BY tag
+      `),
+      env.DB.prepare(`
+        SELECT count(*) AS alle, sum(mail_stumm_am IS NULL) AS willig
+        FROM users WHERE email IS NOT NULL AND entfernt_am IS NULL
+      `),
+    ]);
 
-    // Die Kurvenschar je Nutzer buendeln - eine Linie je Melder.
-    const kurven = new Map();
-    for (const z of bestand.results) {
-      if (!kurven.has(z.user_id)) kurven.set(z.user_id, { name: z.name, tage: [], werte: [] });
-      const k = kurven.get(z.user_id);
-      k.tage.push(z.tag);
-      k.werte.push(z.biere);
-    }
-
-    /* Eine Zeile je Melder statt einer je Melder UND Status - die Seite malt
-       daraus einen liegenden Balken, und der braucht alle vier Ausgaenge
-       nebeneinander. Fehlende Status stehen als 0 drin, sonst muesste die
-       Seite raten, ob "kein Wert" nie oder null heisst. */
-    const jeMelderZeilen = new Map();
-    for (const z of jeMelder.results) {
-      if (!jeMelderZeilen.has(z.user_id)) {
-        jeMelderZeilen.set(z.user_id, {
-          name: z.name, gezogen: 0,
-          zugesagt: 0, abgelehnt: 0, verfallen: 0, offen: 0,
-        });
-      }
-      const m = jeMelderZeilen.get(z.user_id);
-      m.gezogen += z.n;
-      if (z.status in m) m[z.status] = z.n;
-    }
-    const losJeMelder = [...jeMelderZeilen.values()].sort((a, b) => b.gezogen - a.gezogen);
+    const [mails, mailsJeTag, anmeldungen, postwillig] = ergebnis.slice(STATISTIK_ABFRAGEN);
 
     // Kumuliert, nicht je Tag: die Frage ist "wie viele sind wir inzwischen".
     let summe = 0;
@@ -3241,12 +3308,7 @@ const ROUTEN = {
       // Der Zeitraum geht mit zurueck: die Seite beschriftet die Bilder
       // damit, und sie soll dafuer nicht raten muessen, was sie gefragt hat.
       tage,
-      meldungen: meldungen.results,
-      bestand: [...kurven.values()],
-      gastgeber: gastgeber.results,
-      lose: lose.results,
-      lose_je_melder: losJeMelder,
-      betrieb: betrieb.results,
+      ...statistikRunde(ergebnis),
       mails: mails.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
       mails_je_tag: mailsJeTag.results,
       wachstum,

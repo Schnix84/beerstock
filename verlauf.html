@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Wie es läuft — beerstock</title>
+<style>
+  /* ==========================================================================
+     WIE ES LÄUFT
+
+     Dieselben sechs Bilder, die im Kontor hängen — nur für die Runde statt
+     für den Wirt. Deshalb sieht die Seite aus wie die Tafel und nicht wie das
+     Kontorbuch: der Nutzer kommt aus der Gaststube und geht nicht ins
+     Hinterzimmer. Kreide auf Schiefer, Holzrahmen, dieselbe Hand.
+
+     Nicht drauf steht der BETRIEB: Mails, Anmeldungen, wer noch Post will.
+     Das ist die Trennlinie, die auch der Worker zieht — `/api/statistik` gibt
+     die Runde, `/api/admin/statistik` hängt den Betrieb an.
+
+     Das Brett ist hier breiter als drüben (520 px). Die Tafel ist ein
+     GEGENSTAND und hat die Form eines Gegenstands; das hier ist eine Wand mit
+     Bildern, und zwei Bilder nebeneinander brauchen Platz. Auf dem Handy
+     stehen sie ohnehin untereinander.
+     ========================================================================== */
+  :root {
+    --schiefer:    #262c2e;
+    --schiefer-t:  #191d1f;
+    --holz:        #6b4a2c;
+    --holz-t:      #3f2a17;
+    --kreide:      #eef1ea;
+    --kreide-matt: #cfd6cd;
+    --kreide-weg:  #93a09a;
+    --gelb:        #e8c766;
+    --rot:         #d9705f;
+    --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  }
+
+  * { box-sizing: border-box; }
+  /* `hidden` ist nur `display:none` mit schwachem Gewicht — jedes `display`
+     einer eigenen Regel schlägt es. Das Skelett ist ein Raster und blieb
+     deshalb neben den fertigen Bildern stehen. Einmal hier, statt an jeder
+     Stelle daran zu denken. */
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; min-height: 100%;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--kreide);
+    background: #14181a;
+    padding: clamp(10px, 3vw, 28px);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- Rahmen und Tafel: wortgleich von drüben ---------------------------- */
+  .brett {
+    max-width: 760px; margin: 0 auto; border-radius: 6px;
+    padding: clamp(9px, 2.4vw, 15px);
+    background:
+      repeating-linear-gradient(97deg, #ffffff0a 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
+      linear-gradient(160deg, var(--holz), var(--holz-t) 60%, #2c1c0f);
+    box-shadow: 0 30px 60px -24px #000d, 0 1px 0 #ffffff22 inset, 0 -2px 0 #0008 inset;
+  }
+  .tafel {
+    position: relative; border-radius: 3px; overflow: hidden;
+    padding: clamp(18px, 5vw, 30px) clamp(15px, 4.5vw, 26px) clamp(20px, 4vw, 28px);
+    background:
+      radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
+    box-shadow: 0 0 0 1px #0009 inset, 0 14px 30px -14px #000a inset;
+  }
+  .tafel::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+    background-image:
+      radial-gradient(#ffffff0d 1px, transparent 1.4px),
+      radial-gradient(#00000030 1px, transparent 1.6px);
+    background-size: 4px 4px, 6px 6px;
+    background-position: 0 0, 2px 3px;
+  }
+  .tafel > * { position: relative; z-index: 1; }
+  .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
+
+  /* --- Der Kopf ----------------------------------------------------------- */
+  .zurueck {
+    display: inline-block; color: var(--kreide-weg); font-size: 13px;
+    text-decoration: none; border-bottom: 1px dashed #ffffff2e; padding-bottom: 1px;
+  }
+  .zurueck:hover { color: var(--kreide); }
+  h1 {
+    font-family: var(--hand); font-weight: 400;
+    font-size: clamp(26px, 7vw, 36px); line-height: 1.15;
+    margin: 12px 0 4px; transform: rotate(-.8deg); transform-origin: left;
+  }
+  .unter { font-size: 12.5px; color: var(--kreide-weg); margin: 0 0 18px; }
+
+  /* --- Der Zeitraum ------------------------------------------------------- */
+  .reiter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 16px; }
+  .reiter .wozu {
+    font-size: 11px; color: var(--kreide-weg);
+    letter-spacing: .12em; text-transform: uppercase; margin-right: 4px;
+  }
+  .reiter button {
+    font: inherit; font-size: 12px; cursor: pointer;
+    border: 1px dashed #ffffff2e; border-radius: 999px; padding: 4px 12px;
+    background: none; color: var(--kreide-weg);
+    transition: color .15s, border-color .15s;
+  }
+  .reiter button:hover { color: var(--kreide); border-color: #ffffff5c; }
+  .reiter button.an {
+    color: var(--schiefer-t); background: var(--gelb); border-color: var(--gelb);
+    border-style: solid;
+  }
+
+  /* Das Raster gehört der Seite, alles im Bild bringt `bilder.js` mit. */
+  .bilder { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 680px) { .bilder { grid-template-columns: 1fr 1fr; } }
+
+  .sagt {
+    margin: 16px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 13px;
+    line-height: 1.5; background: #ffffff0d; border-left: 2px solid var(--kreide-weg);
+  }
+  .sagt.schlecht { border-left-color: var(--rot); color: #f0c7bf; }
+
+  /* Wer nicht angemeldet ist, sieht hier nichts — und soll auch das erklärt
+     bekommen. Draußen zeigt die Tafel nur den Ersten; ein Verlauf über Wochen
+     ist Innenraum, und das ist keine Willkür, sondern dieselbe Linie, die der
+     Worker bei `/api/leaderboard` zieht. */
+  .tuer { text-align: center; padding: 40px 10px 30px; }
+  .tuer h2 { font-family: var(--hand); font-weight: 400; font-size: 24px; margin: 0 0 8px; }
+  .tuer p { color: var(--kreide-weg); font-size: 14px; margin: 0 0 16px; line-height: 1.5; }
+
+  /* Bis die Zahlen da sind. Kein Schimmern wie im Kontor: auf Schiefer sieht
+     ein wanderndes Glanzlicht aus wie ein Fehler in der Tafel. */
+  .skelett { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 680px) { .skelett { grid-template-columns: 1fr 1fr; } }
+  .skelett div {
+    height: 150px; border-radius: 3px;
+    border: 1px dashed #ffffff1f; background: #ffffff08;
+    animation: atmen 1.8s ease-in-out infinite;
+  }
+  .skelett div:nth-child(2) { animation-delay: .2s; }
+  .skelett div:nth-child(3) { animation-delay: .4s; }
+  .skelett div:nth-child(4) { animation-delay: .6s; }
+  @keyframes atmen { 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) { .skelett div { animation: none; } }
+</style>
+</head>
+<body>
+<div class="brett">
+  <div class="tafel">
+    <a class="zurueck" href="./">← zurück zur Tafel</a>
+    <h1 class="kr">Wie es läuft</h1>
+    <p class="unter" id="unter">Was diese Runde bisher angestellt hat.</p>
+
+    <div class="reiter" id="zeitraum" hidden></div>
+
+    <div class="skelett" id="skelett"><div></div><div></div><div></div><div></div></div>
+    <div class="bilder" id="bilder"></div>
+
+    <div class="tuer" id="tuer" hidden>
+      <h2 class="kr">Nur für die Runde</h2>
+      <p id="tuer-text">
+        Draußen zeigt die Tafel nur den Ersten. Wer den Verlauf sehen will,
+        meldet sich an — auf der Tafel, mit derselben Adresse wie immer.
+      </p>
+      <a class="zurueck" href="./">zur Tafel und anmelden</a>
+    </div>
+
+    <p class="sagt" id="sagt" hidden></p>
+  </div>
+</div>
+
+<script src="bilder.js"></script>
+<script>
+  // ==========================================================================
+  // Dieselbe Herkunft, dasselbe Token wie die Tafel — wer dort angemeldet ist,
+  // ist es hier auch. Kein zweiter Anmeldeweg, kein zweiter Angriffsweg.
+  // ==========================================================================
+  const API = location.hostname === 'localhost'
+    ? 'http://localhost:8787'
+    : 'https://beerstock-api.mc-schneider84.workers.dev';
+  const SPEICHER = 'beerstock-token';
+
+  const $ = id => document.getElementById(id);
+  const el = (tag, klasse, text) => {
+    const n = document.createElement(tag);
+    if (klasse) n.className = klasse;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const merke = () => { try { return localStorage.getItem(SPEICHER); } catch { return null; } };
+  const nurTag = iso => iso
+    ? new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+    : '—';
+
+  async function ruf(pfad) {
+    const t = merke();
+    const r = await fetch(API + pfad, {
+      headers: t ? { Authorization: 'Bearer ' + t } : {},
+      cache: 'no-store',
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(d.fehler || 'Das ging nicht'), { status: r.status });
+    return d;
+  }
+
+  function sagt(text, schlecht) {
+    const p = $('sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  /* Die Farben der Tafel für die Bilder aus `bilder.js`. Dieselben Formen wie
+     im Kontor, aber Kreide statt Tinte — und `stark` ist hier HELL: der Wisch,
+     der eine Säule hinterlegt, muss auf Schiefer aufhellen, nicht abdunkeln.
+     Der Tooltip dreht sich wie drüben um: dort Papier auf Tinte, hier Kreide
+     auf Schiefer, also ein helles Kärtchen. */
+  Bilder.aufsetzen({
+    reihe:      ['#8fc9a6', '#e8c766', '#d9705f', '#8fb8d6', '#c2a4d8', '#cfd6cd'],
+    linie:      '#ffffff33',
+    text:       '#cfd6cd',
+    textWeg:    '#93a09a',
+    grund:      '#262c2e',
+    stark:      '#eef1ea',
+    karteGrund: '#ffffff08',
+    karteRand:  '#ffffff1f',
+    titel:      '#cfd6cd',
+    tippGrund:  '#eef1ea',
+    tippText:   '#4a5450',
+    tippKopf:   '#1b2220',
+    tippStrich: '#00000022',
+    ring:       '#e8c766',
+    hand:       "'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive",
+  });
+
+  // ==========================================================================
+  // Der Zeitraum. Dieselben drei Zahlen wie im Kontor und derselbe Speicher-
+  // schlüssel: wer dort 90 Tage gewählt hat, meint hier nichts anderes.
+  // Der Worker prüft trotzdem selbst — was von hier kommt, ist ein Wunsch.
+  // ==========================================================================
+  const STAT_TAGE = [30, 60, 90];
+  const ZEITRAUM_SPEICHER = 'beerstock-kontor-tage';
+  let zeitraum = (() => {
+    try {
+      const g = Number(localStorage.getItem(ZEITRAUM_SPEICHER));
+      return STAT_TAGE.includes(g) ? g : STAT_TAGE[0];
+    } catch { return STAT_TAGE[0]; }
+  })();
+
+  function zeitraumZeichnen() {
+    const ziel = $('zeitraum');
+    ziel.hidden = false;
+    ziel.textContent = '';
+    ziel.appendChild(el('span', 'wozu', 'Zeitraum'));
+    STAT_TAGE.forEach(t => {
+      const b = el('button', t === zeitraum ? 'an' : null, t + ' Tage');
+      b.type = 'button';
+      b.addEventListener('click', () => wechseln(t));
+      ziel.appendChild(b);
+    });
+  }
+
+  async function wechseln(t) {
+    if (t === zeitraum) return;
+    zeitraum = t;
+    try { localStorage.setItem(ZEITRAUM_SPEICHER, String(t)); } catch {}
+    zeitraumZeichnen();
+    // Die alten Bilder bleiben blass stehen, statt zu verschwinden: ein
+    // Abschnitt, der beim Umschalten leer wird, springt.
+    $('bilder').style.opacity = '.35';
+    try {
+      zeichnen(await ruf('/api/statistik?tage=' + t));
+      sagt('');
+    } catch (e) {
+      sagt('Der Zeitraum ließ sich nicht wechseln: ' + e.message, true);
+    } finally {
+      $('bilder').style.opacity = '';
+    }
+  }
+
+  // ==========================================================================
+  // Zeichnen
+  // ==========================================================================
+  function zeichnen(s) {
+    Bilder.tippZu();
+    zeitraumZeichnen();
+    const ziel = $('bilder');
+    ziel.textContent = '';
+
+    /* Der Zeitraum steht in jeder Überschrift, und bei den Ranglisten steht
+       „insgesamt": die folgen dem Schalter nicht. Wer der Gastgeber dieser
+       Runde ist, beantworten 30 Tage nicht. */
+    const fenster = ', ' + (s.tage || zeitraum) + ' Tage';
+    ziel.appendChild(Bilder.flaeche('Meldungen je Tag' + fenster,
+      s.meldungen, z => z.n, z => nurTag(z.tag), 'Meldungen'));
+    ziel.appendChild(Bilder.schar('Bestand je Melder' + fenster, s.bestand));
+    ziel.appendChild(Bilder.liegend('Wer war wie oft Gastgeber, insgesamt',
+      s.gastgeber, z => z.name, z => z.n, 'Abende'));
+    ziel.appendChild(Bilder.band('Ausgang der Ziehungen, insgesamt', s.lose));
+    ziel.appendChild(Bilder.losJeMelder('Ausgang der Ziehungen je Melder, insgesamt',
+      s.lose_je_melder || []));
+    ziel.appendChild(Bilder.saeulen('Betrieb je Woche' + fenster, s.betrieb, [
+      { feld: 'kommentare', titel: 'Kommentare', farbe: Bilder.reihe[0] },
+      { feld: 'reaktionen', titel: 'Reaktionen', farbe: Bilder.reihe[1] },
+      { feld: 'sterne',     titel: 'Sterne',     farbe: Bilder.reihe[3] },
+    ], g => 'KW ' + String(g.woche).slice(-2)));
+
+    // Der Name des Bildes für den Screenreader — und der Hinweis auf die
+    // Pfeiltasten nur dort, wo es wirklich etwas zu blättern gibt.
+    [...ziel.querySelectorAll('.bild')].forEach(b => {
+      const svg = b.querySelector('svg'), h3 = b.querySelector('h3');
+      if (svg && h3) {
+        svg.setAttribute('aria-label',
+          h3.textContent + (svg.hasAttribute('tabindex')
+            ? ' — mit den Pfeiltasten durch die Werte' : ''));
+      }
+    });
+  }
+
+  function zeigeTuer(text) {
+    $('skelett').hidden = true;
+    $('zeitraum').hidden = true;
+    $('bilder').textContent = '';
+    $('unter').hidden = true;
+    $('tuer').hidden = false;
+    if (text) $('tuer-text').textContent = text;
+  }
+
+  async function laden() {
+    if (!merke()) { zeigeTuer(); return; }
+    let s;
+    try {
+      s = await ruf('/api/statistik?tage=' + zeitraum);
+    } catch (e) {
+      if (e.status === 401) {
+        zeigeTuer('Die Anmeldung gilt hier nicht mehr. Melde dich auf der Tafel neu an, '
+                + 'dann steht der Verlauf wieder da.');
+      } else {
+        $('skelett').hidden = true;
+        sagt('Die Zahlen ließen sich nicht holen: ' + e.message, true);
+      }
+      return;
+    }
+    // Erst jetzt weg: fünf leere Kästen mit Überschriften sind keine Auskunft.
+    $('skelett').hidden = true;
+    zeichnen(s);
+  }
+
+  laden();
+</script>
+</body>
+</html>

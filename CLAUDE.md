@@ -11,7 +11,9 @@ das Datenmodell. Diese Datei hier sagt nur, was ein Agent beim *Arbeiten* am Rep
 | Was | Wo |
 |---|---|
 | Die Seite | `index.html` — **eine** geschlossene Datei, kein Build, keine externen Ressourcen |
+| Die Bilder | `verlauf.html` („Wie es läuft", für jeden Angemeldeten) |
 | Nutzerverwaltung | `admin.html` (das „Kontor") |
+| Grafiken + Tooltip | `bilder.js` — **geteilt** von `verlauf.html` und `admin.html`, nie von der Tafel |
 | Worker | `worker/src/index.js` |
 | Verteiler | `worker/src/tafel.js` — Durable Object `Tafel`, hält die WebSockets |
 | Schema | `worker/migrations/` — **eine Datei je Schritt, die Reihenfolge ist die Geschichte** |
@@ -21,7 +23,13 @@ Der Abschnitt *Aufbau* im `README.md` beschreibt dasselbe ausführlicher, samt T
 Routen.
 
 **Große Dateien nie ganz lesen.** `index.html` ≈ 4.100 Zeilen, `worker/src/index.js`
-≈ 3.400. Erst `grep -n` für den Umriss, dann `Read` mit `offset`/`limit`.
+≈ 3.500. Erst `grep -n` für den Umriss, dann `Read` mit `offset`/`limit`.
+
+**`bilder.js` ist die einzige geteilte Datei.** Wer eine Grafik ändert, ändert sie für
+*beide* Seiten — Kontor und Verlauf. Farben stehen dort nirgends fest: jede Seite reicht
+beim Start eine Palette in `Bilder.aufsetzen({…})`, die eine in Tinte, die andere in Kreide.
+Die Tafel lädt die Datei **nicht** und darf es auch nicht, sonst ist sie keine geschlossene
+Datei mehr; sie zeigt nur einen Knopf nach `verlauf.html`.
 
 ## Ausrollen
 

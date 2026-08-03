@@ -1147,7 +1147,15 @@
       <section class="block" id="block" hidden>
         <div class="block-kopf kr">
           <span class="titel">Wer hat kalt</span>
-          <span class="datum" id="block-datum"></span>
+          <span class="kopf-neben">
+            <!-- Der Weg zu den Bildern. Er hängt an DIESEM Block, weil dieser
+                 Block die Daten sind: die Bilder sind seine Vorgeschichte.
+                 Sichtbar nur für Angemeldete — draußen zeigt die Tafel nur den
+                 Ersten, ein Verlauf über Wochen ist Innenraum, und ein Link
+                 auf lauter 401er wäre eine Einladung ins Leere. -->
+            <button class="neben" id="verlauf-auf" type="button" hidden>wie es läuft</button>
+            <span class="datum" id="block-datum"></span>
+          </span>
         </div>
 
         <div id="rangliste"></div>
@@ -2207,6 +2215,8 @@
     document.body.classList.toggle('draussen', !drin);
     $('rangliste').toggleAttribute('inert', !drin);
     $('wer-bin-ich').textContent = meinName ? 'angemeldet als ' + meinName : 'angemeldet';
+    // Der Weg zu den Bildern gilt dieselbe Bedingung wie die Liste selbst.
+    $('verlauf-auf').hidden = !drin;
   }
 
   /* Der Platzhalter unter dem verwischten Satz. Draussen kommt gar kein Feld
@@ -3523,6 +3533,11 @@
   $('fly-schirm').addEventListener('click', flyZu);
 
   $('chronik-auf').addEventListener('click', chronikAuf);
+  /* Eine eigene Seite, kein Flyout: sechs Grafiken passen nicht auf ein Blatt,
+     das von der Seite hereinfährt, und die Tafel bleibt dadurch, was sie ist —
+     eine geschlossene Datei, die von den Bildern nichts weiß außer diesem
+     einen Knopf. */
+  $('verlauf-auf').addEventListener('click', () => { location.href = 'verlauf.html'; });
   $('ch-zu').addEventListener('click', chronikZu);
   $('ch-schirm').addEventListener('click', chronikZu);
   $('ch-mehr').addEventListener('click', chronikMehr);
