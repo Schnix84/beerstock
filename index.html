@@ -489,18 +489,6 @@
   .lm-knoepfe .knopf { flex: 1; }
   .lm-grund { margin-top: 12px; }
 
-  /* Ein Gerät je Zeile: links, wann es zuletzt da war, rechts der Weg hinaus.
-     Das eigene trägt keinen Knopf — wer sich hier selbst abmeldet, hat den
-     Knopf „alle abmelden" darunter, und ein Versehen wäre teurer als der
-     gesparte Griff. */
-  .dk-geraet {
-    display: flex; align-items: baseline; justify-content: space-between;
-    gap: 10px; padding: 8px 0; border-bottom: 1px dashed #ffffff16;
-    font-size: 12.5px; color: var(--kreide-matt);
-  }
-  .dk-geraet:last-child { border-bottom: none; }
-  .dk-geraet.dieses { color: var(--kreide); }
-  .dk-geraet .wann { font-size: 10.5px; color: var(--kreide-weg); }
   .dk-fuss {
     display: flex; flex-wrap: wrap; justify-content: space-between;
     align-items: baseline; gap: 8px; margin-top: 18px;
@@ -1347,17 +1335,14 @@
       </p>
       <div id="dk-schalter"></div>
 
-      <div class="ko-titel">Angemeldete Geräte</div>
-      <!-- Eines je Zeile, mit „zuletzt gesehen": jedes Einlösen eines Links
-           legt ein neues an, auch im selben Browser. Ohne diese Liste wächst
-           die Zahl unerklärlich, und wegräumen kann man nur alle auf einmal. -->
-      <div id="dk-geraete"></div>
-      <p class="dk-folge" id="dk-ha-hinweis" hidden>
-        Eines dieser Geräte ist Home Assistant. Meldest du es ab, meldet die
-        Wohnung ihren Bestand nicht mehr, bis dort ein neues Token liegt.
-      </p>
+      <!-- Nur die Zahl und der eine Weg hinaus. Hier stand kurzzeitig eine
+           Liste aller gültigen Token mit „zuletzt gesehen" und einem Knopf je
+           Zeile — sieben Einträge für zwei benutzte Browser, weil jedes
+           Einlösen eines Links ein neues Token anlegt. Das erklärt die Zahl,
+           macht aber aus einer Randnotiz das größte Feld des Blattes. Wer
+           aufräumen will, meldet alle ab und kommt einmal neu. -->
       <div class="dk-fuss">
-        <span></span>
+        <span id="dk-geraete"></span>
         <button class="ko-tat" id="dk-alle" type="button">alle abmelden</button>
       </div>
 
@@ -3324,34 +3309,14 @@
       }
     });
 
-    /* Die Geräte einzeln. `kurzZeit` ist dieselbe Formulierung wie überall
-       sonst auf der Seite — „vor 2 Tagen" heißt hier dasselbe wie an einem
-       Kommentar. Wer nie wiedergekommen ist, trägt das Anmeldedatum: „nie
-       benutzt" allein ließe offen, seit wann. */
-    const liste = $('dk-geraete');
-    liste.textContent = '';
-    (d.geraete || []).forEach(g => {
-      const zeile = el('div', 'dk-geraet' + (g.dieses ? ' dieses' : ''));
-      const links = el('div');
-      links.appendChild(el('div', null, g.dieses ? 'dieses Gerät' : 'ein anderes Gerät'));
-      links.appendChild(el('div', 'wann', g.zuletzt
-        ? 'zuletzt ' + kurzZeit(g.zuletzt)
-        : 'seit dem Anmelden nicht gesehen · ' + kurzZeit(g.seit)));
-      zeile.appendChild(links);
-      /* Das eigene bekommt keinen Knopf: dafür steht „alle abmelden" darunter,
-         und ein Fehlgriff hier wäre teurer als der gesparte Griff. */
-      if (!g.dieses) {
-        const weg = el('button', 'ko-tat', 'abmelden');
-        weg.dataset.geraet = g.id;
-        zeile.appendChild(weg);
-      }
-      liste.appendChild(zeile);
-    });
-
-    /* Nur beim gemessenen Melder: eines dieser Token gehört Home Assistant,
-       und welches, kann die Seite nicht wissen — es sieht aus wie jedes
-       andere. Also der ehrliche Hinweis statt einer Marke, die raten müsste. */
-    $('dk-ha-hinweis').hidden = !d.gemessen || (d.geraete || []).length < 2;
+    /* Nur die Zahl. Sie ist höher, als man Geräte benutzt hat — jedes
+       Einlösen eines Magic Links legt ein neues Token an, auch im selben
+       Browser, und keines läuft ab. Das aufzudröseln wäre ein eigenes Feld;
+       wer aufräumen will, meldet alle ab und kommt einmal neu. */
+    const n = d.geraete || 1;
+    $('dk-geraete').textContent = n === 1
+      ? 'Angemeldet auf einem Gerät'
+      : 'Angemeldet auf ' + n + ' Geräten';
   }
 
   /* Einzeln und sofort, ohne Speichern-Knopf: sechs Schalter mit
@@ -3553,22 +3518,6 @@
   // Kästchen ginge dabei verloren.
   $('dk-schalter').addEventListener('change', ev => {
     if (ev.target.dataset.art) deckelSchalten(ev.target);
-  });
-
-  // Dasselbe für die Geräteliste: ein Zuhörer, nicht einer je Zeile.
-  $('dk-geraete').addEventListener('click', async ev => {
-    const knopf = ev.target.closest('[data-geraet]');
-    if (!knopf) return;
-    knopf.disabled = true;
-    dkSagt('');
-    try {
-      await ruf('/api/geraete/abmelden', { id: Number(knopf.dataset.geraet) });
-      await deckelLaden();
-      dkSagt('Das Gerät ist abgemeldet.');
-    } catch (e) {
-      knopf.disabled = false;
-      dkSagt(e.message, true);
-    }
   });
 
   $('dk-name-form').addEventListener('submit', async ev => {

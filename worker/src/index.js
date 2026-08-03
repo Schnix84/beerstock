@@ -1640,20 +1640,15 @@ const ROUTEN = {
   'GET /api/me': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    /* Die Geraete einzeln, damit man ein altes gezielt wegraeumen kann. Vorher
-       stand hier nur eine Zahl, und die wuchs unerklaerlich: JEDES Einloesen
-       eines Magic Links legt ein neues Token an, auch im selben Browser, und
-       entfernt wird keines. "7 Geraete" waren in Wirklichkeit sieben gueltige
-       Zugaenge, davon fuenf die Leichen geleerter Browserspeicher.
-
-       Als Kennung reist `rowid` mit, nicht der Hash: der Hash ist zwar nicht
-       umkehrbar, aber er ist der Schluessel zum Zugang selbst, und der hat in
-       keiner Antwort etwas verloren. */
-    const geraete = await env.DB.prepare(`
-      SELECT rowid AS id, erstellt, zuletzt, (token_hash = ?) AS dieses
-      FROM tokens WHERE user_id = ?
-      ORDER BY coalesce(zuletzt, erstellt) DESC
-    `).bind(ich._token_hash, ich.id).all();
+    /* Nur die Zahl. Sie ist hoeher, als der Nutzer Geraete benutzt hat: JEDES
+       Einloesen eines Magic Links legt ein neues Token an, auch im selben
+       Browser, und entfernt wird keines. Hier stand kurzzeitig die ganze
+       Liste mit Zeitstempeln, damit man einzelne wegraeumen kann - sieben
+       Zeilen fuer zwei benutzte Browser, und damit das groesste Feld des
+       Blattes fuer die unwichtigste Auskunft darauf. Wer aufraeumen will,
+       meldet alle ab und kommt einmal neu. */
+    const geraete = await env.DB
+      .prepare('SELECT count(*) AS n FROM tokens WHERE user_id = ?').bind(ich.id).first();
     return antwort(request, {
       name: ich.name,
       braucht_namen: !ich.name,
@@ -1665,16 +1660,7 @@ const ROUTEN = {
       gesperrt: ich.gesperrt_am ? { seit: utc(ich.gesperrt_am), grund: ich.gesperrt_grund } : null,
       mail: mailWahl(ich),
       mail_stumm: !!ich.mail_stumm_am,
-      geraete: geraete.results.map(g => ({
-        id: g.id,
-        seit: utc(g.erstellt),
-        /* NULL heisst: seit dem Anmelden nicht mehr gesehen. Das gilt
-           rueckwirkend auch fuer alles, was vor dieser Ausbaustufe entstand -
-           der Zeitstempel wurde bis dahin nie geschrieben, obwohl die Spalte
-           seit Schema 2 dasteht. */
-        zuletzt: utc(g.zuletzt),
-        dieses: !!g.dieses,
-      })),
+      geraete: geraete ? geraete.n : 1,
     });
   },
 
@@ -1717,34 +1703,6 @@ const ROUTEN = {
     if (!ich) return antwort(request, { ok: true });   // schon weg, auch gut
     await env.DB.prepare('DELETE FROM tokens WHERE token_hash = ?').bind(ich._token_hash).run();
     return antwort(request, { ok: true });
-  },
-
-  // -------------------------------------------------------------------------
-  /* Ein einzelnes Geraet wegraeumen. Der Fall ist nicht das verlorene Handy,
-     sondern der Normalfall: nach ein paar Wochen stehen dort Token, die zu
-     Browserspeichern gehoeren, die es nicht mehr gibt.
-
-     Die Besitzpruefung steckt in der WHERE-Klausel und nicht in einem
-     vorherigen SELECT - so gibt es keinen Moment, in dem geprueft und noch
-     nicht gehandelt wurde, und eine fremde `rowid` trifft schlicht nichts. */
-  'POST /api/geraete/abmelden': async (request, env) => {
-    const ich = await nutzer(request, env);
-    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    const daten = await json(request);
-    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
-    const id = Number(daten.id);
-    if (!Number.isInteger(id)) return fehler(request, 'id: eine Zahl');
-
-    const weg = await env.DB
-      .prepare('DELETE FROM tokens WHERE rowid = ? AND user_id = ?')
-      .bind(id, ich.id).run();
-    if (!weg.meta.changes) return fehler(request, 'Das Gerät gibt es nicht', 404);
-
-    // Ob er sich gerade selbst hinausgeworfen hat - dann muss die Seite das
-    // Token wegwerfen, statt weiter damit zu fragen.
-    const dieses = await env.DB.prepare('SELECT 1 FROM tokens WHERE token_hash = ?')
-      .bind(ich._token_hash).first();
-    return antwort(request, { ok: true, war_dieses: !dieses });
   },
 
   // -------------------------------------------------------------------------
