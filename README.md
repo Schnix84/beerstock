@@ -319,6 +319,9 @@ der ja derselbe Kommentar wird. Fotos: 2 MB, JPEG/PNG/WebP, ebenfalls 30 am Tag 
 läuft und die Kommentarsperre hier noch nichts aufhält. Verkleinert wird schon im
 Browser (lange Kante 1600 px, JPEG 0.8), aus 4 MB Handyfoto werden ~250 kB; der
 Deckel steht trotzdem, denn der Worker redet nicht nur mit unserem Browser.
+Weil das Hochladen vor dem Abschicken läuft, bleibt liegen, wer es sich anders
+überlegt: solche Bilder ohne Kommentar räumt der tägliche Cron weg, aber erst
+nach einem Tag — solange darf das Formular offen stehen bleiben.
 Zeiten reisen als ISO-8601 mit Zone, und der Worker rechnet in den ANTWORTEN nie
 um — die Seite kennt die Ortszeit ihres Betrachters, er nur die der Wohnung. In
 den **Mails** tut er es doch, denn dort steht kein Browser dazwischen: die

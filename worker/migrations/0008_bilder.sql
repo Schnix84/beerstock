@@ -27,6 +27,12 @@ ALTER TABLE kommentare ADD COLUMN bild_key TEXT;
 -- `kommentare.bild_key`. Aufgeraeumt wird bewusst nicht laufend (bei 250 kB je
 -- Foto dauert es Jahre bis zu einem spuerbaren Rest); falls es je stoert, ist
 -- es ein LEFT JOIN von hier nach dort und ein `delete()` je Treffer.
+--
+-- NACHTRAG: gebaut. `waisenWegraeumen()` in `src/index.js` haengt seit
+-- 2026-08-03 am taeglichen Cron und macht genau das - mit einem Tag
+-- Schonfrist, damit niemandem das Bild unter dem noch offenen Formular
+-- weggeraeumt wird. Die Zeilen verschwinden dabei mit; diese Tabelle ist
+-- seither kein Archiv mehr, sondern nur noch Sperre und Arbeitsvorrat.
 -- ---------------------------------------------------------------------------
 CREATE TABLE bild_uploads (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,

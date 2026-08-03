@@ -149,6 +149,19 @@ const BILD_MAX     = 2 * 1024 * 1024;  // Bytes
 const BILDSPERRE   = 10;               // Sekunden zwischen zwei Uploads desselben Nutzers
 const BILDER_TAG   = 30;               // je Nutzer und Tag, wie KOMMENTARE_TAG
 
+/* Die Schonfrist der Waisen. Hochgeladen wird VOR dem Abschicken, dazwischen
+   liegt das Tippen - ein Bild ohne Kommentar ist also erst dann wirklich
+   liegengeblieben, wenn niemand mehr daran schreibt. Ein Tag ist grosszuegig
+   gerechnet (getippt wird in Minuten), aber die Kosten der Grosszuegigkeit
+   sind ein Vierteltelmegabyte je Fall - die eines zu frueh geloeschten Bildes
+   waere ein Kommentar, dessen Foto beim Abschicken schon weg ist.
+
+   Der Deckel je Lauf haelt den Zeitgeber kurz. 200 Waisen am Tag entstehen
+   hier nie; er greift nur beim ersten Lauf, wenn Altbestand da ist, und laesst
+   den dann ueber ein paar Tage abfliessen statt in einem Rutsch. */
+const WAISENFRIST  = '-1 day';
+const WAISEN_PRO_LAUF = 200;
+
 /* Der Bierabend-Tag endet nicht um Mitternacht, sondern zwei Stunden spaeter
    (03:00 bzw. 04:00 Ortszeit) - sonst faellt die Drehung um kurz nach eins auf
    den naechsten Tag, obwohl sie zu demselben Abend gehoert. Bewusst in UTC
@@ -3392,6 +3405,54 @@ const ROUTEN = {
   },
 };
 
+/* ---------------------------------------------------------------------------
+   Die Waisen wegraeumen.
+
+   `POST /api/bild` legt das Objekt ab, bevor der Kommentar geschrieben ist -
+   wer hochlaedt und dann abbricht, hinterlaesst eines ohne Zeile. `0008` hat
+   das Verzeichnis dafuer angelegt und das Aufraeumen offengelassen; hier ist
+   es. Angehaengt an den einzigen Zeitgeber, den es gibt: eigener Cron waere
+   ein zweiter Eintrag in `wrangler.jsonc` fuer eine Arbeit von Millisekunden.
+
+   Mitgenommen werden dabei auch die Zeilen geloeschter Kommentare: dort ist
+   das Objekt beim Loeschen schon weggeraeumt und `bild_key` auf NULL gesetzt
+   worden, die Upload-Zeile blieb aber stehen. Sie faellt hier unter dieselbe
+   Bedingung, das `delete()` darauf geht ins Leere - und das ist in R2 kein
+   Fehler, sondern ein Nichts.
+
+   REIHENFOLGE wie beim Kommentarloeschen, aus dem umgekehrten Grund: dort
+   zuerst das Objekt, damit kein Foto ohne Zeile abrufbar bleibt. Hier zuerst
+   das Objekt, weil die Zeile der EINZIGE Zeiger darauf ist - andersherum und
+   der zweite Schritt scheitert, liegt es fuer immer im Bucket, ohne dass
+   irgendetwas noch von ihm weiss. So bleibt im schlechteren Fall eine Zeile
+   ohne Objekt stehen, und der naechste Lauf holt sie. */
+async function waisenWegraeumen(env) {
+  if (!env.BILDER) return 0;
+
+  /* NOT EXISTS, nicht LEFT JOIN: haengt derselbe Schluessel an zwei
+     Kommentaren, gaebe der Join die Upload-Zeile doppelt zurueck. Hier zaehlt
+     nur, OB es irgendwo eine Verwendung gibt. */
+  const waisen = await env.DB.prepare(`
+    SELECT b.id, b.bild_key
+    FROM bild_uploads b
+    WHERE b.erstellt < datetime('now', ?)
+      AND NOT EXISTS (SELECT 1 FROM kommentare k WHERE k.bild_key = b.bild_key)
+    ORDER BY b.erstellt
+    LIMIT ?
+  `).bind(WAISENFRIST, WAISEN_PRO_LAUF).all();
+
+  if (!waisen.results.length) return 0;
+
+  // Ein Aufruf fuer den ganzen Stapel; R2 nimmt bis zu 1000 Schluessel.
+  await env.BILDER.delete(waisen.results.map(w => w.bild_key));
+
+  const platzhalter = waisen.results.map(() => '?').join(',');
+  await env.DB.prepare(`DELETE FROM bild_uploads WHERE id IN (${platzhalter})`)
+    .bind(...waisen.results.map(w => w.id)).run();
+
+  return waisen.results.length;
+}
+
 export default {
   /* Der einzige Zeitgeber im ganzen Dienst. Alles andere traegt sich beim
      naechsten Schreiben nach (siehe `verfallStmt`) - eine Erinnerung kann das
@@ -3410,6 +3471,16 @@ export default {
       WHERE date(t.beginnt_am) = date('now') AND t.abgesagt_am IS NULL
     `).all();
     for (const t of heute.results) mailErinnerung(env, ctx, t);
+
+    /* Nach der Post, und abgeschirmt: das Aufraeumen hat keine Frist, die
+       Erinnerung schon. Faellt der Bucket aus, soll das nicht der Grund sein,
+       warum am Abend niemand vom Termin weiss. */
+    try {
+      const weg = await waisenWegraeumen(env);
+      if (weg) console.log(`Waisenbilder weggeraeumt: ${weg}`);
+    } catch (e) {
+      console.error('Waisenbilder:', e && e.stack || e);
+    }
   },
 
   async fetch(request, env, ctx) {
