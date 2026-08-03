@@ -1922,6 +1922,18 @@
   const nimm  = t => { try { localStorage.setItem(SPEICHER, t); } catch {} };
   const wirf  = () => { try { localStorage.removeItem(SPEICHER); } catch {} };
 
+  /* JEDER Ruf an den Worker geht hier durch, auch die lesenden. Seit die
+     Leserouten ohne Token nur noch den Siegerplatz herausgeben, ist ein
+     vergessener Kopf kein fehlender Luxus mehr, sondern eine Abmeldung:
+     `hole` fragte anonym, bekam die beschnittene Antwort mit `draussen: true`
+     und setzte damit `vonDraussen` - der Tuersteher blieb stehen, obwohl das
+     Token gueltig im Speicher lag. Deshalb eine Stelle statt vier Kopien. */
+  const mitToken = (kopf = {}) => {
+    const t = merke();
+    if (t) kopf['Authorization'] = 'Bearer ' + t;
+    return kopf;
+  };
+
   let meinName = null;      // steht nach der ersten Antwort fest
   let brauchtNamen = false; // angemeldet, aber noch ohne Namen fuer die Liste
   let linkRaus = false;     // Magic Link ist unterwegs: Feld weg, Meldung steht
@@ -2580,11 +2592,8 @@
     if (!ziel) return;
     if (still && (dreht || laeuft)) { merkeAnstoss(false, ziel); return; }
     try {
-      const kopf = {};
-      const token = merke();
-      if (token) kopf['Authorization'] = 'Bearer ' + token;
       const r = await fetch(API + '/api/bewertungen?ziel=' + encodeURIComponent(ziel),
-        { headers: kopf, cache: 'no-store' });
+        { headers: mitToken(), cache: 'no-store' });
       const roh = await r.text();
       let d = {};
       try { d = JSON.parse(roh); } catch {}
@@ -2925,7 +2934,8 @@
        soll beim stillen Nachfassen nicht auf die erste zurückfallen. Der Worker
        deckelt das auf 100, mehr fragen wir gar nicht erst. */
     else p.set('anzahl', String(Math.min(100, Math.max(CH_SEITE, chronikAbende.length))));
-    const r = await fetch(API + '/api/chronik?' + p, { cache: 'no-store' });
+    const r = await fetch(API + '/api/chronik?' + p,
+      { headers: mitToken(), cache: 'no-store' });
     const roh = await r.text();
     let d = {};
     try { d = JSON.parse(roh); } catch {}
@@ -3013,7 +3023,8 @@
     // und eine eigene Antwort ist jünger als alles, was hier ankäme.
     if (still && (dreht || laeuft)) { merkeAnstoss(true, null); return; }
     try {
-      const r = await fetch(API + '/api/leaderboard', { cache: 'no-store' });
+      const r = await fetch(API + '/api/leaderboard',
+        { headers: mitToken(), cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
       const roh = await r.text();
       if (still && roh === letzterStand) return;   // nichts Neues, nichts zu tun
@@ -3070,9 +3081,7 @@
   }
 
   async function ruf(pfad, rumpf) {
-    const kopf = { 'Content-Type': 'application/json', 'X-Tab': TAB };
-    const token = merke();
-    if (token) kopf['Authorization'] = 'Bearer ' + token;
+    const kopf = mitToken({ 'Content-Type': 'application/json', 'X-Tab': TAB });
     laeuft++;
     try {
       const r = await fetch(API + pfad, {
@@ -3095,9 +3104,7 @@
   /* Wie `ruf`, nur mit rohen Bytes statt JSON — für /api/bild. Kein Multipart:
      es geht genau eine Datei raus, der Rahmen drumherum trüge nichts bei. */
   async function rufRoh(pfad, blob) {
-    const kopf = { 'Content-Type': blob.type || 'application/octet-stream', 'X-Tab': TAB };
-    const token = merke();
-    if (token) kopf['Authorization'] = 'Bearer ' + token;
+    const kopf = mitToken({ 'Content-Type': blob.type || 'application/octet-stream', 'X-Tab': TAB });
     laeuft++;
     try {
       const r = await fetch(API + pfad, { method: 'POST', headers: kopf, body: blob });
@@ -3403,12 +3410,9 @@
      Meldung. Ein 401 heisst: das Token gilt nicht mehr, dann hier gleich
      wegwerfen, statt den Anmeldeknopf zu verstecken. */
   async function werBinIch() {
-    const token = merke();
-    if (!token) return;
+    if (!merke()) return;
     try {
-      const r = await fetch(API + '/api/me', {
-        headers: { Authorization: 'Bearer ' + token }, cache: 'no-store',
-      });
+      const r = await fetch(API + '/api/me', { headers: mitToken(), cache: 'no-store' });
       if (r.status === 401) { wirf(); return; }
       if (!r.ok) return;
       const d = await r.json();
