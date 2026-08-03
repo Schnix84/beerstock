@@ -354,19 +354,39 @@
     font-family: var(--hand); font-size: 13px; line-height: 1.25; color: var(--gelb);
   }
   .t-tag span { display: block; font-size: 11px; color: var(--kreide-weg); }
+  /* Die Herkunft unter dem Wochentag. Ohne Kasten: in der schmalen Spalte
+     stünde ein Rahmen als drittes Kästchen untereinander und machte aus der
+     Datumsspalte eine Liste. Das gesperrte Versalwort reicht als Marke. */
+  .t-tag .t-quelle {
+    font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--gelb); margin-top: 3px;
+  }
   .t-mitte { min-width: 0; }
   .t-titel {
     font-family: var(--hand); font-size: clamp(15px, 4vw, 17px); line-height: 1.2;
     overflow-wrap: anywhere;
   }
+  /* Dieselbe Rechnung wie bei `.z-unter`: über die volle Breite statt nur unter
+     dem Titel. Rechts steht höchstens „absagen", und das nur in der ersten
+     Reihe — die Marke „ausgelost" schob die Uhrzeit sonst regelmäßig in eine
+     zweite Zeile. */
   .t-unter {
-    display: flex; align-items: center; gap: .45em; flex-wrap: wrap;
+    grid-column: 2 / -1;
+    display: flex; align-items: center; gap: .4em; flex-wrap: wrap;
     margin-top: 4px; font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
+    overflow-wrap: anywhere;
   }
+  /* Nur die Uhrzeit und die Marken halten zusammen. Die Stücke dazwischen
+     tragen Namen („· bei Sebastian-Alexander"), und ein `nowrap` darauf schöbe
+     die Zeile im Zweifel aus der Tafel statt sie umzubrechen. */
+  .t-unter > span:first-child, .t-marke { white-space: nowrap; }
+  /* Die Marke ist gesperrt gesetzt, das kostet Breite. Etwas weniger Sperrung
+     und ein knapperes Polster halten sie lesbar und sparen die Handvoll Pixel,
+     die auf 320 px den Unterschied macht. */
   .t-marke {
-    font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .16em;
+    font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .12em;
     text-transform: uppercase; color: var(--gelb); border: 1px solid #e8c76655;
-    border-radius: 2px; padding: 1px 4px;
+    border-radius: 2px; padding: 1px 3px;
   }
   .t-weg {
     border: none; background: none; padding: 0; font: inherit; font-size: 10.5px;
@@ -742,10 +762,20 @@
     text-transform: uppercase; color: var(--gelb); border: 1px solid #e8c76655;
     border-radius: 2px; padding: 1px 4px; margin-left: 7px; vertical-align: 3px;
   }
+  /* Eine eigene Rasterzeile unter Name UND Zahl, nicht nur unter dem Namen:
+     rechts stehen Sparkline und Bierzahl in der ersten Reihe, darunter ist die
+     Spalte leer. Der Untertitel holt sich diesen Platz (rund 90 px mehr) und
+     bleibt damit einzeilig, auch bei „pisswarm · 12,0 °C · vor 3 Tagen".
+     `flex-wrap: wrap` bleibt als Notausgang für den Extremfall stehen — lieber
+     ein Umbruch als eine Zeile, die aus der Tafel läuft. Jedes Stück für sich
+     bricht nicht (`nowrap`), damit ein Umbruch dann wenigstens an einer
+     sinnvollen Stelle sitzt und nicht mitten in „5,0 °C". */
   .z-unter {
-    display: flex; align-items: center; gap: .45em; flex-wrap: wrap;
+    grid-column: 2 / -1;
+    display: flex; align-items: center; gap: .4em; flex-wrap: wrap;
     margin-top: 5px; font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
   }
+  .z-unter > * { white-space: nowrap; }
   .z-unter .wort { font-family: var(--hand); font-size: 12.5px; letter-spacing: 0; }
   .z-striche { margin-top: 7px; height: 18px; }
   .z-striche svg { height: 18px; width: auto; display: block; }
@@ -1634,7 +1664,6 @@
         b.appendChild(sternKurz(p.bewertung, p.kommentare));
         unter.appendChild(b);
       }
-      mitte.appendChild(unter);
       z.appendChild(mitte);
 
       const rechts = el('div', 'z-rechts');
@@ -1643,6 +1672,13 @@
       rechts.appendChild(sp);
       rechts.appendChild(el('div', 'z-zahl kr', String(p.biere)));
       z.appendChild(rechts);
+      /* Der Untertitel hängt NICHT in der Mitte, sondern ist eine eigene Zeile
+         des Rasters über die volle Breite (siehe `.z-unter`). Neben Sparkline
+         und Zahl steht ohnehin nur Luft; in der schmalen Mittelspalte brach
+         „noch keine" dagegen schon bei „vor 1 Tag" in die zweite Zeile um.
+         Deshalb steht er hier zuletzt: die automatische Platzierung braucht
+         die erste Reihe erst voll, bevor sie ihn darunter setzt. */
+      z.appendChild(unter);
       return z;
     },
 
@@ -1672,6 +1708,12 @@
       tag.textContent = d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
       tag.appendChild(el('span', null,
         d.toLocaleDateString('de-DE', { weekday: 'short' })));
+      /* Woher der Abend kommt, steht in der Datumsspalte und nicht mehr in der
+         Unterzeile. Es gehört dorthin: die Spalte sagt, WANN und WOHER, die
+         Unterzeile sagt, WIE der Abend läuft. Und es rechnet sich — unter dem
+         Wochentag ist die Spalte leer, in der Unterzeile kostete die Marke
+         gemessene 66 px, genau die, an denen die Uhrzeit umbrach. */
+      if (t.aus_ziehung) tag.appendChild(el('span', 't-quelle', 'ausgelost'));
       z.appendChild(tag);
 
       const mitte = el('div', 't-mitte');
@@ -1679,14 +1721,17 @@
 
       const unter = el('div', 't-unter');
       const uhr = x => x.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      /* „Uhr" nur hinter einer einzelnen Zeit. Hinter einer Spanne mit
+         Gedankenstrich sagt es nichts, was 19:00–23:00 nicht schon sagt — und
+         es sind die 26 px, die dieser längsten aller Zeilen fehlten. */
       unter.appendChild(el('span', null,
-        (e ? uhr(d) + '–' + uhr(e) : uhr(d)) + ' Uhr'));
+        e ? uhr(d) + '–' + uhr(e) : uhr(d) + ' Uhr'));
       // Nur solange er wirklich läuft — an einem abgesagten Abend läuft nichts.
       if (laeuft && !t.abgesagt) unter.appendChild(el('span', 't-marke jetzt', 'läuft'));
       if (t.titel) unter.appendChild(el('span', null, '· bei ' + t.gastgeber));
-      // Woher der Abend kommt: ausgelost oder von jemandem eingetragen.
-      if (t.aus_ziehung) unter.appendChild(el('span', 't-marke', 'ausgelost'));
-      else if (t.von && t.von !== t.gastgeber) {
+      // Ausgelost steht oben in der Datumsspalte; von Hand eingetragen nennt
+      // hier einen Namen und passt in keine 58 px breite Spalte.
+      if (!t.aus_ziehung && t.von && t.von !== t.gastgeber) {
         unter.appendChild(el('span', null, '· eingetragen von ' + t.von));
       }
       if (t.abgesagt) unter.appendChild(el('span', null, '· abgesagt'));
@@ -1709,7 +1754,6 @@
         : el('span', 'stern-kurz' + (t.kommentare ? ' hat' : ''),
              t.kommentare ? '💬 ' + t.kommentare : '💬'));
       unter.appendChild(b);
-      mitte.appendChild(unter);
       z.appendChild(mitte);
 
       const rechts = el('div', 't-rechts');
@@ -1723,6 +1767,9 @@
         rechts.appendChild(weg);
       }
       z.appendChild(rechts);
+      // Wie in der Liste: eigene Rasterzeile über die volle Breite, sonst
+      // drängt die Marke „ausgelost" die Uhrzeit in eine zweite Zeile.
+      z.appendChild(unter);
       return z;
     },
 
@@ -2374,7 +2421,7 @@
           ? (los.gewinner === meinName
               ? 'Noch kein Abend — die Flasche zeigt auf dich.'
               : 'Noch kein Abend — die Flasche wartet auf ' + los.gewinner + '.')
-          : (genug && darf) ? 'Kein Abend in Sicht. Das Rad drehen oder einen eintragen.'
+          : (genug && darf) ? 'Kein Abend in Sicht. Die Flasche drehen oder einen eintragen.'
           : darf            ? 'Kein Abend in Sicht. Trag einen ein.'
                             : 'Kein Abend in Sicht.'));
     }
@@ -2614,7 +2661,7 @@
            anzufahren — das Ergebnis steht schon fest und wird nur gelesen. */
         dreht = false;
         zeichneRad(d);
-        radSagt('Das Rad hatte sich heute schon gedreht.');
+        radSagt('Die Flasche hatte sich heute schon gedreht.');
         return;
       }
       selbstGedreht = true;

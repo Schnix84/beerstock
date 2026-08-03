@@ -2067,7 +2067,7 @@ const ROUTEN = {
     if (topf.length < lage.mindest) {
       return fehler(request, lage.raus.length
         ? 'Heute hat abgesagt, wer da war.'
-        : `Zu wenig gemeldet — das Rad braucht mindestens ${lage.mindest}, ` +
+        : `Zu wenig gemeldet — die Flasche braucht mindestens ${lage.mindest}, ` +
           'die heute etwas Kaltes haben.', 409);
     }
 
