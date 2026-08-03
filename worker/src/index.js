@@ -162,6 +162,34 @@ const BILDER_TAG   = 30;               // je Nutzer und Tag, wie KOMMENTARE_TAG
 const LOS_GRENZE = 2;
 const bierTag = () => new Date(Date.now() - LOS_GRENZE * 3600e3).toISOString().slice(0, 10);
 
+/* Die Benachrichtigungsarten. Wie KATEGORIEN: sie stehen HIER, nicht in der
+   Datenbank - sechs Zeilen Stammdaten waeren ein JOIN je Abruf, und was der
+   Nutzer davon abgewaehlt hat, liegt als JSON in `users.mail_prefs`.
+   Unbekannte Schluessel weist die Route ab, fehlende gelten als Vorgabe.
+
+   Die Beschriftung reist mit, damit die Seite sie nicht ein zweites Mal
+   fuehren muss - zwei Fassungen laufen auseinander.
+
+   `echo` ist die einzige mit Vorgabe AUS: sie ist die Art, die eine Runde an
+   einem lebhaften Abend zumuellt. Wer sie will, schaltet sie ein. */
+const MAIL_ARTEN = {
+  gewonnen:       { vorgabe: true,  titel: 'Die Flasche zeigt auf mich' },
+  termin_neu:     { vorgabe: true,  titel: 'Ein Abend steht fest' },
+  termin_aendert: { vorgabe: true,  titel: 'Ein Abend verschiebt sich oder fällt aus' },
+  erinnerung:     { vorgabe: true,  titel: 'Am Tag des Abends' },
+  echo:           { vorgabe: false, titel: 'Antwort auf meinen Beitrag, Sterne für mich' },
+  rundmail:       { vorgabe: true,  titel: 'Gelegentliche Nachricht vom Wirt' },
+};
+
+// Zwei Rollen, mehr nicht. Alles darueber waere Verwaltung von Verwaltung.
+const ROLLEN = new Set(['user', 'admin']);
+
+/* Was ein Gesperrter trotzdem noch darf. Abmelden gehoert dazu: es loescht
+   nur sein eigenes Geraete-Token, und wer draussen bleiben soll, soll auch
+   herauskommen duerfen. Lesen ist ohnehin frei - die Sperre trifft nur
+   Schreibrouten (siehe `nutzer`). */
+const SPERRE_FREI = new Set(['POST /api/abmelden']);
+
 // Magic Links. Kurz gueltig, weil eine Mail im Posteingang liegen bleibt.
 const LINK_MINUTEN = 15;
 /* Die Missbrauchsbremse. Offener Zugang plus Mailversand heisst: ohne diese
@@ -169,6 +197,19 @@ const LINK_MINUTEN = 15;
    beliebige Leute zumuellen kann - bis AgentMail das Konto dichtmacht. */
 const LINKS_PRO_ADRESSE = 3;    // je Stunde
 const LINKS_GESAMT      = 30;   // je Stunde, ueber alle Adressen
+/* Der Mailwechsel laeuft ueber dieselbe Tabelle und damit durch dieselben
+   zwei Bremsen oben. Diese hier kommt dazu, weil ein Angemeldeter sonst mit
+   drei Rufen die Stunde durchprobieren koennte, welche fremde Adresse schon
+   vergeben ist - die 409 ist eine Auskunft. */
+const MAILWECHSEL_PRO_TAG = 3;
+
+/* Die Rundmail. Vier Kilozeichen sind lang genug fuer alles, was ein Wirt
+   seiner Runde zu sagen hat, und kurz genug, dass niemand versehentlich einen
+   Roman verteilt. Die Stunde Sperre ist gegen den Fehlgriff um zwei Uhr
+   nachts, nicht gegen Missbrauch - missbrauchen kann sie nur ein Admin. */
+const RUNDMAIL_MAX         = 4000;  // Zeichen
+const RUNDMAIL_BETREFF_MAX = 120;
+const RUNDMAIL_SPERRE      = 1;     // Stunden zwischen zwei Rundmails
 
 // ---------------------------------------------------------------------------
 // Kleinkram
@@ -228,22 +269,62 @@ const istMail = s => /^[^\s@]+@[^\s@.]+\.[^\s@]{2,}$/.test(s) && s.length <= 120
 
 const normMail = s => String(s || '').trim().toLowerCase();
 
+/* Die Sperre, geworfen statt zurueckgegeben. Jede geschuetzte Route schreibt
+   heute `if (!ich) return 401` - ein zweiter Rueckgabewert muesste in allen
+   achtzehn geprueft werden, und die eine vergessene Stelle waere das Loch.
+   Geworfen kommt sie unten im Router an genau EINER Stelle wieder heraus. */
+class Gesperrt extends Error {}
+
 /* Der Traeger eines Geraete-Tokens ist der Nutzer. Ein Nutzer kann mehrere
-   haben - Handy und Laptop sollen sich nicht gegenseitig ausloggen. */
+   haben - Handy und Laptop sollen sich nicht gegenseitig ausloggen.
+
+   Das hier ist das einzige Tor: Rolle und Sperre gehoeren genau hierher und
+   nirgendwo sonst. Wer gesperrt ist, darf lesen (die Tafel sieht er weiter),
+   aber nichts mehr schreiben; wer entfernt wurde, ist niemand mehr. */
 async function nutzer(request, env) {
   const kopf = request.headers.get('Authorization') || '';
   const token = kopf.startsWith('Bearer ') ? kopf.slice(7).trim() : '';
   if (!token) return null;
   const h = await hash(token);
   const u = await env.DB.prepare(`
-    SELECT u.id, u.name, u.email, u.quelle FROM tokens t
+    SELECT u.id, u.name, u.email, u.quelle, u.rolle,
+           u.gesperrt_am, u.gesperrt_grund, u.entfernt_am,
+           u.mail_prefs, u.mail_stumm_am
+    FROM tokens t
     JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?
   `).bind(h).first();
-  if (u) {
-    // Nebenbei, ohne die Antwort aufzuhalten: wann war dieses Geraet zuletzt da.
-    u._token_hash = h;
+  if (!u) return null;
+
+  /* Ein Entfernter ist kein Halbangemeldeter, sondern niemand. Seine Token
+     sind beim Entfernen ohnehin geloescht - das hier faengt nur den Fall ab,
+     dass eines ueberlebt hat. */
+  if (u.entfernt_am) return null;
+
+  if (u.gesperrt_am && request.method !== 'GET'
+      && !SPERRE_FREI.has(`${request.method} ${new URL(request.url).pathname}`)) {
+    throw new Gesperrt(u.gesperrt_grund
+      ? `Dein Zugang ist gesperrt: ${u.gesperrt_grund}`
+      : 'Dein Zugang ist gesperrt.');
   }
+
+  // Nebenbei, ohne die Antwort aufzuhalten: wann war dieses Geraet zuletzt da.
+  u._token_hash = h;
   return u;
+}
+
+const istAdmin = ich => ich && ich.rolle === 'admin' && !ich.gesperrt_am;
+
+/* Die Schalter eines Nutzers, aufgeloest: JSON-Spalte ueber die Vorgaben
+   gelegt. Fehlende Schluessel gelten als Vorgabe, kaputtes JSON auch - eine
+   halb gespeicherte Zeile darf niemanden aus dem Verteiler werfen. */
+function mailWahl(u) {
+  let eigen = {};
+  try { eigen = JSON.parse(u.mail_prefs || '{}') || {}; } catch { eigen = {}; }
+  const raus = {};
+  for (const [art, def] of Object.entries(MAIL_ARTEN)) {
+    raus[art] = typeof eigen[art] === 'boolean' ? eigen[art] : def.vorgabe;
+  }
+  return raus;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,13 +334,18 @@ async function nutzer(request, env) {
 /* Wer heute im Topf ist. Beide Aufrufer benutzen DIESE Abfrage - die
    Bestenliste zum Zeichnen des Rades, die Ziehung zum Ziehen. Zwei Fassungen
    derselben Regel liefen frueher oder spaeter auseinander, und dann zeigt das
-   Rad ein Feld, aus dem gar nicht gezogen wurde. */
+   Rad ein Feld, aus dem gar nicht gezogen wurde.
+
+   Und darum steht die Sperre AUCH nur hier: wer gesperrt ist, faellt aus dem
+   Topf - aus dem gezeichneten wie aus dem gezogenen, in einem Zug. */
 const losFeldStmt = env => env.DB.prepare(`
   SELECT u.id, u.name, u.quelle, r.biere
   FROM users u
   JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j ON j.user_id = u.id
   JOIN reports r ON r.id = j.id
   WHERE u.name IS NOT NULL
+    AND u.gesperrt_am IS NULL
+    AND u.entfernt_am IS NULL
     AND r.biere >= ?
   ORDER BY r.biere DESC, u.name ASC
 `).bind(LOS_MIN);
@@ -271,7 +357,8 @@ const losFeldStmt = env => env.DB.prepare(`
 const losTagStmt = (env, tag) => env.DB.prepare(`
   SELECT l.id, l.tag, l.user_id, l.biere, l.feld, l.gedreht_am,
          l.status, l.grund, l.entschieden_am,
-         u.name AS gewinner, g.name AS von,
+         coalesce(u.name, 'Ehemaliger') AS gewinner,
+         coalesce(g.name, 'Ehemaliger') AS von,
          (l.status = 'offen' AND l.gedreht_am < datetime('now', ?)) AS abgelaufen
   FROM los l
   JOIN users u ON u.id = l.user_id
@@ -388,7 +475,9 @@ function pruefeEnde(roh, beginn) {
    Absage sichtbar - sonst verschwindet ein Abend, unter dem Kommentare stehen. */
 const termineStmt = env => env.DB.prepare(`
   SELECT t.id, t.gastgeber_id, t.beginnt_am, t.endet_am, t.titel, t.los_id,
-         t.abgesagt_am, t.erstellt_von, u.name AS gastgeber, e.name AS eingetragen_von
+         t.abgesagt_am, t.erstellt_von,
+         coalesce(u.name, 'Ehemaliger') AS gastgeber,
+         coalesce(e.name, 'Ehemaliger') AS eingetragen_von
   FROM termine t
   JOIN users u ON u.id = t.gastgeber_id
   LEFT JOIN users e ON e.id = t.erstellt_von
@@ -626,9 +715,14 @@ const baumStmts = (env, ziel) => [
   /* `k.sterne` ist der Schnappschuss aus dem Moment des Absendens, kein Join
      auf `bewertungen` - die Zeile dort wird ueberschrieben, die Karte hier
      soll stehen bleiben (siehe 0009_sterne_am_kommentar.sql). */
+  /* `coalesce(..., 'Ehemaliger')` an jeder Stelle, wo ein Name zum Anzeigen
+     geholt wird: wer entfernt wurde, hat keinen mehr (weiche Loeschung, siehe
+     0011), seine Beitraege bleiben aber stehen - sonst risse ein Austritt die
+     halbe Chronik mit. Ein Kommentar von `null` saehe wie ein Fehler aus. */
   env.DB.prepare(`
     SELECT k.id, k.autor_id, k.antwort_auf, k.text, k.erstellt, k.geaendert,
-           k.geloescht_am, k.bild_key, k.sterne, u.name AS autor
+           k.geloescht_am, k.bild_key, k.sterne,
+           coalesce(u.name, 'Ehemaliger') AS autor
     FROM kommentare k
     JOIN users u ON u.id = k.autor_id
     WHERE k.ziel_art = ? AND k.ziel_id = ?
@@ -636,7 +730,7 @@ const baumStmts = (env, ziel) => [
     LIMIT ?
   `).bind(ziel.art, ziel.id, KOMMENTARE_ZIEL),
   env.DB.prepare(`
-    SELECT r.kommentar_id, r.art, r.autor_id, u.name AS autor
+    SELECT r.kommentar_id, r.art, r.autor_id, coalesce(u.name, 'Ehemaliger') AS autor
     FROM reaktionen r
     JOIN kommentare k ON k.id = r.kommentar_id
     JOIN users u ON u.id = r.autor_id
@@ -737,7 +831,27 @@ const kommentarZaehlerStmt = env => env.DB.prepare(`
 /* Der eine Weg nach draussen. Beide Mails - der Magic Link an den Nutzer und
    die Meldung an den Betreiber - gehen hier durch, damit Absender, Fehlerbild
    und Protokollzeile nur an einer Stelle stehen. */
-async function schickeMail(env, empfaenger, betreff, text, html) {
+async function schickeMail(env, empfaenger, betreff, text, html, anhaenge) {
+  /* Der Pruefstand. Ohne diese Weiche ist jeder lokale Testlauf eine echte
+     Mail an eine echte Adresse - und beim Durchspielen des Verteilers sind
+     das schnell sechs auf einen Schlag. Gesetzt wird sie nur in `.dev.vars`,
+     draussen gibt es sie nicht. */
+  if (env.MAIL_ATTRAPPE) {
+    console.log(`[Mail-Attrappe] an ${empfaenger}: ${betreff}\n${text}`);
+    /* Den Anhang im Klartext dazu: eine .ics faellt nur auf, wenn man sie
+       liest - ein falsches DTSTART sieht man einer base64-Zeile nicht an.
+       Der Weg zurueck geht ueber den TextDecoder, nicht ueber `atob` allein:
+       `atob` gibt Latin-1 zurueck, und dann steht im Protokoll "JÃ¶rg" statt
+       "Jörg" - ein Schreckmoment, der wie ein Kodierfehler aussieht und keiner
+       ist. */
+    for (const a of anhaenge || []) {
+      const roh = Uint8Array.from(atob(a.content), z => z.charCodeAt(0));
+      console.log(`[Mail-Attrappe] Anhang ${a.filename} (${a.content_type}):\n`
+        + new TextDecoder().decode(roh));
+    }
+    return;
+  }
+
   const r = await fetch(
     `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(env.AGENTMAIL_INBOX)}/messages/send`,
     {
@@ -746,7 +860,13 @@ async function schickeMail(env, empfaenger, betreff, text, html) {
         'Authorization': `Bearer ${env.AGENTMAIL_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ to: empfaenger, subject: betreff, text, html }),
+      body: JSON.stringify({
+        to: empfaenger, subject: betreff, text, html,
+        // Das Feld nur setzen, wenn wirklich etwas dranhaengt: ein leeres
+        // Array ist zwar erlaubt, aber jede Mail traegt sonst das Geruest
+        // eines Anhangs, den es nicht gibt.
+        ...(anhaenge && anhaenge.length ? { attachments: anhaenge } : {}),
+      }),
     });
 
   if (!r.ok) {
@@ -782,6 +902,65 @@ angefordert, ist nichts passiert - dann wirf die Mail einfach weg.`;
 </div>`;
 
   await schickeMail(env, empfaenger, 'Dein Link zum Bierranking', text, html);
+}
+
+/* Der Mailwechsel, beide Haelften. Der Link geht an die NEUE Adresse - erst
+   der Klick dort schaltet um, bis dahin gilt die alte weiter. Und die alte
+   erfaehrt davon, ohne etwas tun zu muessen: wer den Wechsel nicht war, weiss
+   dann, dass jemand an seinem Konto sitzt. Das ist die einzige Warnung, die
+   ihn ueberhaupt noch erreichen kann. */
+async function schickeWechselLink(env, empfaenger, link) {
+  const text =
+`Du willst kuenftig hierunter angeschrieben werden. Ein Klick, dann gilt es:
+
+${link}
+
+Der Link gilt ${LINK_MINUTEN} Minuten und genau einmal. Bis dahin bleibt
+deine alte Adresse in Kraft. Warst du das nicht, wirf die Mail weg - dann
+passiert nichts.`;
+
+  const html =
+`<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#1d2a24">
+  <p>Du willst k&uuml;nftig hierunter angeschrieben werden. Ein Klick, dann gilt es:</p>
+  <p><a href="${link}" style="display:inline-block;background:#2f5d4a;color:#e3d8c1;
+     padding:12px 22px;border-radius:3px;text-decoration:none;letter-spacing:.15em;
+     text-transform:uppercase;font-size:13px">Adresse best&auml;tigen</a></p>
+  <p style="font-size:13px;color:#6f6653">Der Link gilt ${LINK_MINUTEN} Minuten und genau
+     einmal. Bis dahin bleibt deine alte Adresse in Kraft. Warst du das nicht, wirf
+     die Mail weg &ndash; dann passiert nichts.</p>
+</div>`;
+
+  await schickeMail(env, empfaenger, 'Bestätige deine neue Adresse', text, html);
+}
+
+function warneAlteAdresse(env, ctx, alt, neu) {
+  if (!ctx || !alt) return;
+  const text =
+`Jemand hat gerade angefordert, dass das Bierranking dich kuenftig unter
+
+    ${neu}
+
+anschreibt. Bestaetigt ist es noch nicht - dazu muss der Link in der Mail an
+die neue Adresse geklickt werden.
+
+Warst du das nicht: melde dich in der Runde. Solange nichts bestaetigt wurde,
+gilt diese Adresse hier weiter.`;
+
+  const html =
+`<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#1d2a24">
+  <p>Jemand hat gerade angefordert, dass das Bierranking dich k&uuml;nftig unter
+     <strong>${nurText(neu)}</strong> anschreibt.</p>
+  <p>Best&auml;tigt ist es noch nicht &ndash; dazu muss der Link in der Mail an die
+     neue Adresse geklickt werden.</p>
+  <p style="font-size:13px;color:#6f6653">Warst du das nicht: melde dich in der Runde.
+     Solange nichts best&auml;tigt wurde, gilt diese Adresse hier weiter.</p>
+</div>`;
+
+  // Stumm und nebenher: der Wechsel darf nicht daran scheitern, dass die
+  // Warnung an die alte Adresse nicht ankommt (sie kann tot sein - das ist
+  // oft genau der Grund fuer den Wechsel).
+  ctx.waitUntil(schickeMail(env, alt, 'Deine Adresse soll sich ändern', text, html)
+    .catch(e => console.error('Wechsel-Warnung:', e && e.stack || e)));
 }
 
 /* Der Betreiber erfaehrt von jedem Neuen - genau einmal, in dem Moment, in dem
@@ -821,6 +1000,416 @@ Angemeldet: ${wann} UTC`;
 }
 
 // ---------------------------------------------------------------------------
+// Benachrichtigungen
+// ---------------------------------------------------------------------------
+
+/* Zwei Links in den Mails kommen ohne Anmeldung aus - das Abmelden und die
+   Antwort des Gewinners. Beide tragen eine Signatur statt einer Zeile in der
+   Datenbank: die Signatur steht nirgends, sie wird gerechnet. Ein
+   Datenbankabzug enthaelt damit weiterhin nichts Handlungsfaehiges, und ein
+   Rundumschlag ist ein neues Secret (`wrangler secret put MAIL_GEHEIM`).
+
+   32 Zeichen base64url sind 192 Bit - mehr als genug fuer etwas, das nur
+   sagt, welchen Knopf jemand druecken darf. */
+const b64url = puffer => btoa(String.fromCharCode(...new Uint8Array(puffer)))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+async function sig(env, zweck, id) {
+  if (!env.MAIL_GEHEIM) return null;
+  const k = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(env.MAIL_GEHEIM),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const roh = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(`${zweck}:${id}`));
+  return b64url(roh).slice(0, 32);
+}
+
+/* Zeichenweise bis zum Ende, ohne fruehen Ausstieg: ein Vergleich, der beim
+   ersten Unterschied abbricht, verraet ueber seine Laufzeit, wie viele Zeichen
+   gestimmt haben. Bei 32 Zeichen ueber ein Netz ist das kaum auszunutzen -
+   aber es kostet auch nichts, es richtig zu machen. */
+async function sigStimmt(env, zweck, id, gegeben) {
+  const soll = await sig(env, zweck, id);
+  if (!soll || typeof gegeben !== 'string' || gegeben.length !== soll.length) return false;
+  let ab = 0;
+  for (let i = 0; i < soll.length; i++) ab |= soll.charCodeAt(i) ^ gegeben.charCodeAt(i);
+  return ab === 0;
+}
+
+/* Ein Zeitpunkt, wie ihn ein Mensch liest. Die Laufzeit hat volles ICU
+   einschliesslich Zeitzonen - gemessen 2026-08-03: 17:00 UTC wird im August
+   zu 19:00, im Januar zu 18:00, die Sommerzeit stimmt also von selbst.
+   (Weiter oben steht bei TERMIN_VORGABE_UTC noch, der Worker koenne das
+   nicht. Das galt einmal; die Vorgabe bleibt trotzdem, wo sie ist - der
+   Client kennt die Ortszeit des NUTZERS, wir nur die der Wohnung.) */
+const alsText = dbZeit => new Date(utc(dbZeit)).toLocaleString('de-DE', {
+  timeZone: 'Europe/Berlin', weekday: 'long', day: 'numeric', month: 'long',
+  hour: '2-digit', minute: '2-digit',
+});
+
+const alsTag = dbZeit => new Date(utc(dbZeit)).toLocaleDateString('de-DE', {
+  timeZone: 'Europe/Berlin', weekday: 'long', day: 'numeric', month: 'long',
+});
+
+// ---------------------------------------------------------------------------
+// Der Kalendereintrag
+//
+// Eine .ics-Datei am Anhang, damit der Abend mit einem Griff im eigenen
+// Kalender steht statt abgetippt zu werden.
+//
+// DIE TRAGENDE ENTSCHEIDUNG ist die feste `UID`: `termin-<id>@beerstock`.
+// Zusammen mit einer STEIGENDEN `SEQUENCE` (Spalte `termine.fassung`, siehe
+// 0012) ersetzt eine Verschiebung den vorhandenen Eintrag, statt einen zweiten
+// daneben zu legen. Ohne beides stuende nach drei Verschiebungen viermal
+// derselbe Abend im Kalender - genau das, was solche Mails unbrauchbar macht.
+//
+// METHOD:PUBLISH und NICHT REQUEST, obwohl REQUEST beim Ersetzen zuverlaessiger
+// waere: REQUEST ist eine Einladung, verlangt ORGANIZER und ATTENDEE und zeigt
+// im Postfach Zusagen/Absagen-Knoepfe. Deren Antwort ginge an
+// `beerstock@agentmail.to` - ein Postfach, das niemand liest. Zwei Knoepfe, die
+// ins Leere zeigen, sind schlimmer als ein Eintrag, den ein exotischer Client
+// beim Verschieben doppelt ablegt. Zugesagt wird auf der Tafel.
+// Ehrlich dazu: Apple Kalender und Google werten UID + SEQUENCE auch bei
+// PUBLISH aus, andere nicht durchweg. Der Satz in der Mail sagt die Aenderung
+// deshalb ohnehin im Klartext - der Anhang ist die Bequemlichkeit, nicht die
+// Nachricht.
+// ---------------------------------------------------------------------------
+
+/* iCalendar ist streng: CRLF als Zeilenende, in TEXT-Werten sind
+   Backslash, Semikolon, Komma und Zeilenumbruch zu maskieren, und keine Zeile
+   darf laenger als 75 Oktette sein - laengere werden mit CRLF + Leerzeichen
+   gefaltet. Wer eines davon auslaesst, bekommt bei kurzen Titeln scheinbar
+   funktionierende Dateien und beim ersten langen eine, die der Kalender
+   wortlos verwirft. */
+const icsText = s => String(s)
+  .replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,')
+  .replace(/\r?\n/g, '\\n');
+
+function icsFalten(zeile) {
+  const bytes = new TextEncoder().encode(zeile);
+  if (bytes.length <= 75) return zeile;
+  /* Gefaltet wird nach OKTETTEN, nicht nach Zeichen - und niemals mitten in
+     einer UTF-8-Folge, sonst steht im Kalender ein Ersatzzeichen statt des
+     Umlauts. Deshalb byteweise gezaehlt und nur an Zeichengrenzen getrennt. */
+  const stuecke = [];
+  let zeichen = '', laenge = 0, grenze = 75;
+  for (const z of zeile) {
+    const n = new TextEncoder().encode(z).length;
+    if (laenge + n > grenze) {
+      stuecke.push(zeichen);
+      zeichen = ''; laenge = 0; grenze = 74;   // die Folgezeile traegt ein Leerzeichen
+    }
+    zeichen += z; laenge += n;
+  }
+  if (zeichen) stuecke.push(zeichen);
+  return stuecke.join('\r\n ');
+}
+
+// 'YYYY-MM-DD HH:MM:SS' (UTC) -> '20260808T170000Z'. Absichtlich in UTC und
+// ohne VTIMEZONE: das ist die eine Form, die jeder Client gleich versteht.
+const icsZeit = dbZeit => String(dbZeit).replace(/[-:]/g, '').replace(' ', 'T') + 'Z';
+
+function icsBauen(env, termin, abgesagt) {
+  const titel = termin.titel || `Bierabend${termin.gastgeber ? ' bei ' + termin.gastgeber : ''}`;
+  const zeilen = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//beerstock//Tafel//DE',
+    'CALSCALE:GREGORIAN',
+    `METHOD:${abgesagt ? 'CANCEL' : 'PUBLISH'}`,
+    'BEGIN:VEVENT',
+    `UID:termin-${termin.id}@beerstock`,
+    `SEQUENCE:${termin.fassung || 0}`,
+    `DTSTAMP:${icsZeit(alsDbZeit(new Date()))}`,
+    `DTSTART:${icsZeit(termin.beginnt_am)}`,
+    // Ohne Ende faellt der Kalender auf eine Stunde zurueck - falsch fuer
+    // einen Abend. `endet_am` ist seit 0010 immer gefuellt.
+    `DTEND:${icsZeit(termin.endet_am
+      || alsDbZeit(new Date(new Date(utc(termin.beginnt_am)).getTime()
+                            + TERMIN_DAUER_STD * 36e5)))}`,
+    `SUMMARY:${icsText(titel)}`,
+    `DESCRIPTION:${icsText(`Steht auf der Tafel: ${env.SEITE}`)}`,
+    `URL:${icsText(env.SEITE)}`,
+    `STATUS:${abgesagt ? 'CANCELLED' : 'CONFIRMED'}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ];
+  return zeilen.map(icsFalten).join('\r\n') + '\r\n';
+}
+
+/* Als Anhang, wie AgentMail ihn will: base64 des UTF-8-Textes. Der Umweg ueber
+   den TextEncoder ist noetig, weil `btoa` nur Latin-1 kennt - ein "Grillen bei
+   Jörg" im Titel kaeme sonst als Fehler heraus, nicht als Umlaut. */
+function icsAnhang(env, termin, abgesagt) {
+  const roh = new TextEncoder().encode(icsBauen(env, termin, abgesagt));
+  let binaer = '';
+  for (const b of roh) binaer += String.fromCharCode(b);
+  return [{
+    filename: 'bierabend.ics',
+    content_type: `text/calendar; charset=utf-8; method=${abgesagt ? 'CANCEL' : 'PUBLISH'}`,
+    content_disposition: 'attachment',
+    content: btoa(binaer),
+  }];
+}
+
+/* Der Rumpf jeder Mail. Dieselbe Schrift und dieselben Farben wie beim Magic
+   Link - das Kontorbuch des Wirts, nicht die Tafel: eine Mail wird in einem
+   fremden Programm auf weissem Grund gelesen. */
+const mailRumpf = inhalt =>
+`<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#1d2a24">
+${inhalt}
+</div>`;
+
+const mailKnopf = (link, wort) =>
+`<p><a href="${link}" style="display:inline-block;background:#2f5d4a;color:#e3d8c1;
+   padding:12px 22px;border-radius:3px;text-decoration:none;letter-spacing:.15em;
+   text-transform:uppercase;font-size:13px">${wort}</a></p>`;
+
+/* Der Verteiler. Zwilling von `anstoss()`: gleiche Aufrufstelle, gleiche
+   Stummheit, immer `ctx.waitUntil`. Eine Zusage darf nicht daran scheitern,
+   dass AgentMail 502 sagt.
+
+   `empfaenger` ist eine Liste von Ids oder null fuer die ganze Runde.
+
+   HIER STAND EINMAL EIN `ausser`, das den Ausloeser aus dem Kreis nahm - "wer
+   selbst schreibt, weiss es schon", dasselbe Prinzip wie die X-Tab-Kennung
+   beim Durable Object. Es ist weg, seit die Termin-Mails einen
+   Kalendereintrag tragen: ausgerechnet der Gastgeber haette den Abend dann in
+   keinem Kalender stehen. Wer nur benachrichtigt und nichts mitliefert
+   (`echo`), schliesst sich weiterhin aus - aber an der Aufrufstelle, wo man
+   sieht, wen es betrifft.
+
+   `betreff`/`text`/`html` duerfen Funktionen des Empfaengers sein, und die
+   Termin-Mails nutzen das: dem Ausloeser wird nicht mitgeteilt, was er selbst
+   gerade getan hat, ihm wird der Anhang gereicht. Die Gewinner-Mail braucht
+   den Empfaenger ohnehin - ihre Signatur haengt an ihm. */
+function benachrichtige(env, ctx, art, empfaenger, opt) {
+  if (!ctx || !env.AGENTMAIL_KEY) return;
+  if (empfaenger && !empfaenger.length) return;
+  const { betreff, text, html, bezug = null, anhaenge = null } = opt;
+
+  ctx.waitUntil((async () => {
+    /* Die drei Bedingungen aus dem Plan, an einer Stelle: keine Adresse,
+       gesperrt oder entfernt heisst kein Empfaenger - der HA-Dienstnutzer
+       faellt damit von selbst aus jedem Kreis. `mail_stumm_am` schlaegt
+       alles, auch die Rundmail. */
+    const wo = ['email IS NOT NULL', 'gesperrt_am IS NULL',
+                'entfernt_am IS NULL', 'mail_stumm_am IS NULL'];
+    const werte = [];
+    if (empfaenger) {
+      wo.push(`id IN (${empfaenger.map(() => '?').join(',')})`);
+      werte.push(...empfaenger);
+    }
+
+    const kreis = await env.DB
+      .prepare(`SELECT id, name, email, mail_prefs FROM users WHERE ${wo.join(' AND ')}`)
+      .bind(...werte).all();
+
+    for (const u of kreis.results) {
+      if (!mailWahl(u)[art]) continue;
+
+      /* Erst eintragen, dann schicken. Der partielle UNIQUE-Index bremst das
+         Doppel: ein wiederholter Aufruf nach abgebrochener Verbindung
+         schickte sonst dieselbe Termin-Mail zweimal. Rundmails tragen keinen
+         Bezug und duerfen darum beliebig oft gehen. */
+      let zeile;
+      try {
+        zeile = await env.DB.prepare(
+          'INSERT INTO mail_ausgang (user_id, art, bezug) VALUES (?, ?, ?) RETURNING id')
+          .bind(u.id, art, bezug).first();
+      } catch (e) {
+        if (String(e.message || '').includes('UNIQUE')) continue;   // ging schon raus
+        throw e;
+      }
+
+      const marke = await sig(env, 'abmelden', u.id);
+      const ab = marke ? `${env.SEITE}#stumm=${u.id}.${marke}` : null;
+      /* `await` auch bei den festen Zeichenketten: die Gewinner-Mail rechnet
+         ihre Signatur erst hier aus, und `sig()` ist asynchron. Ohne das
+         stuende in der Mail das Wort "[object Promise]". */
+      const roh  = await (typeof text  === 'function' ? text(u)  : text);
+      const auge = await (typeof html  === 'function' ? html(u)  : html);
+
+      try {
+        await schickeMail(env, u.email,
+          await (typeof betreff === 'function' ? betreff(u) : betreff),
+          ab ? `${roh}\n\n—\nKeine Mails mehr vom Wirt: ${ab}` : roh,
+          ab ? mailRumpf(`${auge}
+  <p style="font-size:12px;color:#6f6653;border-top:1px solid #e0dccf;padding-top:10px">
+    <a href="${ab}" style="color:#6f6653">Keine Mails mehr vom Wirt</a> &middot;
+    einzeln abwählen kannst du sie unter „mein Deckel“ auf der Tafel.
+  </p>`) : mailRumpf(auge),
+          anhaenge);
+      } catch (e) {
+        /* Der Fehler bleibt an der Zeile stehen, statt den Lauf abzubrechen:
+           die anderen fünf sollen ihre Mail bekommen, und im Kontor steht
+           dann, welche nicht rausging. */
+        console.error(`Mail ${art} an ${u.id}:`, e.message);
+        await env.DB.prepare('UPDATE mail_ausgang SET fehler = ? WHERE id = ?')
+          .bind(String(e.message || 'unbekannt').slice(0, 200), zeile.id).run();
+      }
+    }
+  })().catch(e => console.error('benachrichtige:', e && e.stack || e)));
+}
+
+/* Die einzelnen Anlaesse. Sie stehen hier beieinander und nicht in den
+   Routen: eine Route soll entscheiden, WANN etwas rausgeht, nicht WIE es
+   klingt - und die sechs Texte nebeneinander verraten sofort, wenn einer aus
+   der Reihe faellt. */
+
+/* Die Gewinner-Mail. Sie traegt als einzige einen Link, der etwas TUT - und
+   deshalb tut der Link selbst nichts: er fuehrt auf die Seite, die zwei
+   Knoepfe zeigt, und erst der Klick dort schickt die Antwort. Mailscanner und
+   Vorschaudienste laden Links vor; ein GET, das zusagt, waere binnen einer
+   Woche einmal von einem Virenscanner beantwortet worden.
+
+   Der Text haengt am Empfaenger, weil die Signatur es tut - darum die
+   Funktionen statt fester Zeichenketten. */
+function mailGewonnen(env, ctx, losId, gewinnerId) {
+  // Die Signatur bindet Los UND Empfaenger: mit einem fremden Link laesst
+  // sich damit weder ein anderes Los beantworten noch als jemand anderes.
+  const linkFuer = async u =>
+    `${env.SEITE}#los=${losId}&t=${u.id}.${await sig(env, `los:${losId}`, u.id)}`;
+
+  benachrichtige(env, ctx, 'gewonnen', [gewinnerId], {
+    bezug: `los:${losId}`,
+    betreff: 'Die Flasche zeigt auf dich',
+    text: async u =>
+`Die Flasche hat dich getroffen — heute Abend waerst du dran.
+
+Sag zu oder ab:
+${await linkFuer(u)}
+
+Antwortest du gar nicht, verfaellt das Los nach ${LOS_FRIST} Stunden und der
+Tag ist wieder frei.`,
+    html: async u => `<p>Die Flasche hat dich getroffen &ndash; heute Abend w&auml;rst du dran.</p>`
+      + mailKnopf(await linkFuer(u), 'Bei mir?')
+      + `<p style="font-size:13px;color:#6f6653">Antwortest du gar nicht, verf&auml;llt das Los
+         nach ${LOS_FRIST} Stunden und der Tag ist wieder frei.</p>`,
+  });
+}
+
+/* HIER GILT DIE REGEL "der Ausloeser bekommt seine eigene Meldung nicht"
+   AUSDRUECKLICH NICHT - und das ist die einzige Ausnahme im ganzen Verteiler.
+
+   Sie stimmt, solange eine Mail bloss NACHRICHT ist: wer selbst zusagt oder
+   selbst eintraegt, weiss es schon. Seit die Termin-Mails einen
+   Kalendereintrag tragen, ist sie aber mehr als das - und ausgerechnet der
+   Gastgeber haette den Abend dann in keinem Kalender stehen. Wer zusagt, ist
+   der, der ihn am wenigsten vergessen darf.
+
+   Der Text nimmt darauf Ruecksicht: dem Ausloeser wird nichts mitgeteilt, was
+   er gerade selbst getan hat, ihm wird der Anhang gereicht. Deshalb sind
+   Betreff und Text hier Funktionen des Empfaengers. */
+function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen') {
+  const wann = alsText(termin.beginnt_am);
+  const wo = termin.gastgeber ? ` bei ${termin.gastgeber}` : '';
+  const was = termin.titel ? `\n\nEs geht um: ${termin.titel}` : '';
+  const selbst = u => u.id === ausloeser;
+  const eigen = wieEntstanden === 'zugesagt'
+    ? 'Du hast zugesagt'
+    : 'Du hast den Abend eingetragen';
+
+  benachrichtige(env, ctx, 'termin_neu', null, {
+    bezug: `termin:${termin.id}`,
+    anhaenge: icsAnhang(env, termin, false),
+    betreff: u => selbst(u)
+      ? `Für deinen Kalender: ${wann}${wo}`
+      : `Ein Abend steht fest: ${wann}${wo}`,
+    text: u => (selbst(u)
+        ? `${eigen} — ${wann}${wo}.${was}\n\nIm Anhang liegt er für deinen Kalender.`
+        : `${wann}${wo} wird getrunken.${was}\n\nIm Anhang liegt der Kalendereintrag.`)
+      + `\n\nSteht auf der Tafel: ${env.SEITE}`,
+    html: u => (selbst(u)
+        ? `<p>${nurText(eigen)} &ndash; <strong>${nurText(wann)}</strong>${nurText(wo)}.</p>`
+        : `<p><strong>${nurText(wann)}</strong>${nurText(wo)} wird getrunken.</p>`)
+      + (termin.titel ? `<p>Es geht um: ${nurText(termin.titel)}</p>` : '')
+      + '<p style="font-size:13px;color:#6f6653">'
+      + (selbst(u) ? 'Im Anhang liegt er für deinen Kalender.' : 'Im Anhang liegt der Kalendereintrag.')
+      + '</p>' + mailKnopf(env.SEITE, 'Zur Tafel'),
+  });
+}
+
+/* Auch hier bekommt der Ausloeser seine Mail - aus demselben Grund wie oben:
+   der Anhang raeumt seinen eigenen Kalendereintrag auf. Wer den Abend
+   verschiebt, hat ihn selbst als Erster eingetragen; bliebe er hier aussen
+   vor, stuende der Abend bei ihm zur alten Zeit und bei allen anderen zur
+   neuen - das schlechteste aller Ergebnisse. */
+function mailTerminAendert(env, ctx, termin, ausloeser, was) {
+  const wann = alsText(termin.beginnt_am);
+  const wo = termin.gastgeber ? ` bei ${termin.gastgeber}` : '';
+  const abgesagt = was === 'abgesagt';
+  const selbst = u => u.id === ausloeser;
+
+  const kopf = abgesagt ? `Der Abend am ${wann}${wo} fällt aus.`
+    : was === 'umbenannt'
+      ? `Der Abend am ${wann}${wo} heißt jetzt: ${termin.titel || 'nichts Bestimmtes'}.`
+      : `Der Abend${wo} ist jetzt am ${wann}.`;
+  // Dem Ausloeser wird nichts mitgeteilt, was er selbst gerade getan hat.
+  const eigen = abgesagt ? `Du hast den Abend am ${wann}${wo} abgesagt.`
+    : was === 'umbenannt'
+      ? `Du hast den Abend am ${wann}${wo} umbenannt.`
+      : `Du hast den Abend${wo} auf ${wann} gelegt.`;
+
+  const wort = abgesagt ? 'Fällt aus' : was === 'umbenannt' ? 'Neuer Anlass' : 'Verschoben';
+  const nachsatz = abgesagt
+    ? 'Der Anhang nimmt den Eintrag aus deinem Kalender.'
+    : 'Der Anhang bringt deinen Kalendereintrag auf den neuen Stand.';
+
+  benachrichtige(env, ctx, 'termin_aendert', null, {
+    /* Kein fester Bezug auf den Termin allein: ein Abend darf mehrfach
+       verschoben werden, und jede Verschiebung ist eine eigene Nachricht.
+       Der Zeitstempel im Bezug trennt sie - der doppelte Ruf innerhalb
+       derselben Sekunde bleibt gebremst, der ehrliche zweite Umzug nicht. */
+    bezug: `termin:${termin.id}:${was}:${Date.now()}`,
+    /* Dieselbe UID wie beim ersten Mal, aber eine hoehere SEQUENCE - damit
+       ersetzt der Anhang den vorhandenen Eintrag. Bei der Absage traegt er
+       METHOD:CANCEL und raeumt ihn weg. */
+    anhaenge: icsAnhang(env, termin, abgesagt),
+    betreff: u => selbst(u)
+      ? `Für deinen Kalender: ${wort.toLowerCase()} — ${wann}${wo}`
+      : `${wort}: ${wann}${wo}`,
+    text: u => `${selbst(u) ? eigen : kopf}\n\n${nachsatz}\n\n`
+        + `Steht auf der Tafel: ${env.SEITE}`,
+    html: u => `<p>${nurText(selbst(u) ? eigen : kopf)}</p>`
+        + `<p style="font-size:13px;color:#6f6653">${nachsatz}</p>`
+        + mailKnopf(env.SEITE, 'Zur Tafel'),
+  });
+}
+
+/* Die Erinnerung am Abendtag. Sie geht an ALLE, auch an den Gastgeber - der
+   ist der Einzige, der wirklich etwas vorbereiten muss.
+
+   `bezug` ist der Termin, und die Doppel-Sperre traegt hier mehr als sonst:
+   ein Cron kann von der Plattform wiederholt werden, und zwei Erinnerungen an
+   denselben Abend waeren genau die Sorte Mail, wegen der man die Art
+   abschaltet. */
+function mailErinnerung(env, ctx, termin) {
+  const wann = alsText(termin.beginnt_am);
+  const wo = termin.gastgeber ? ` bei ${termin.gastgeber}` : '';
+  const was = termin.titel ? `\n\nEs geht um: ${termin.titel}` : '';
+  benachrichtige(env, ctx, 'erinnerung', null, {
+    bezug: `termin:${termin.id}`,
+    betreff: `Heute: ${wann}${wo}`,
+    text: `Heute Abend wird getrunken — ${wann}${wo}.${was}`
+        + `\n\nSteht auf der Tafel: ${env.SEITE}`,
+    html: `<p>Heute Abend wird getrunken &ndash; <strong>${nurText(wann)}</strong>${nurText(wo)}.</p>`
+        + (termin.titel ? `<p>Es geht um: ${nurText(termin.titel)}</p>` : '')
+        + mailKnopf(env.SEITE, 'Zur Tafel'),
+  });
+}
+
+/* Die einzige Art, die von Haus aus AUS ist: an einem lebhaften Abend ist sie
+   die, die eine Runde zumuellt. Wer sie will, schaltet sie ein. */
+function mailEcho(env, ctx, anWen, vonWem, worum, bezug) {
+  benachrichtige(env, ctx, 'echo', [anWen], {
+    bezug,
+    betreff: `${vonWem}: ${worum.kurz}`,
+    text: `${worum.lang}\n\nNachlesen: ${env.SEITE}`,
+    html: `<p>${nurText(worum.lang)}</p>` + mailKnopf(env.SEITE, 'Nachlesen'),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Routen
 // ---------------------------------------------------------------------------
 const ROUTEN = {
@@ -845,6 +1434,12 @@ const ROUTEN = {
       /* Ob der Betreiber von Neuen erfaehrt. Die Adresse selbst gehoert nicht
          in eine offene Route - hier steht nur, ob eine da ist. */
       neu_melden: env.MELDE_AN ? 'ok' : 'aus (MELDE_AN fehlt)',
+      /* Wie bei MELDE_AN und BILDER_URL: hier steht, OB eines da ist, nie
+         sein Wert. Ohne ADMIN_MAIL kommt niemand ins Kontor, ohne
+         MAIL_GEHEIM traegt keine Mail einen Abmeldelink - beides sieht von
+         aussen wie ein Fehler aus, wenn hier nichts darueber steht. */
+      admin: env.ADMIN_MAIL ? 'ok' : 'aus (ADMIN_MAIL fehlt)',
+      mail_geheim: env.MAIL_GEHEIM ? 'ok' : 'aus (MAIL_GEHEIM fehlt)',
       tafel: env.TAFEL ? 'ok' : 'nicht eingerichtet',
     });
   },
@@ -880,6 +1475,17 @@ const ROUTEN = {
     const email = normMail(daten.email);
     if (!istMail(email)) return fehler(request, 'Das sieht nicht nach einer Mailadresse aus');
     if (!env.AGENTMAIL_KEY) return fehler(request, 'Mailversand ist nicht eingerichtet', 503);
+
+    /* Die Sperre muss SCHON HIER greifen. Sonst holt sich der Gesperrte
+       schlicht einen frischen Link und ein neues Token - Token zu loeschen
+       braechte gar nichts, solange die Tuer daneben offen steht. */
+    const bekannt = await env.DB
+      .prepare('SELECT gesperrt_am, gesperrt_grund FROM users WHERE email = ?').bind(email).first();
+    if (bekannt && bekannt.gesperrt_am) {
+      return fehler(request, bekannt.gesperrt_grund
+        ? `Dein Zugang ist gesperrt: ${bekannt.gesperrt_grund}`
+        : 'Dein Zugang ist gesperrt.', 403);
+    }
 
     const [proAdresse, gesamt] = await env.DB.batch([
       env.DB.prepare("SELECT count(*) AS n FROM magic WHERE email = ? AND erstellt > datetime('now','-1 hour')").bind(email),
@@ -929,15 +1535,72 @@ const ROUTEN = {
       return fehler(request, 'Dieser Link ist abgelaufen oder schon benutzt. Fordere einen neuen an.', 403);
     }
 
-    const zeile = await env.DB.prepare('SELECT email FROM magic WHERE token_hash = ?').bind(h).first();
+    const zeile = await env.DB.prepare('SELECT email, zweck, user_id FROM magic WHERE token_hash = ?').bind(h).first();
     const email = zeile.email;
 
-    let u = await env.DB.prepare('SELECT id, name FROM users WHERE email = ?').bind(email).first();
+    /* Derselbe Link, zwei Zwecke. Der Wechsel geht ueber DIESE Route, weil
+       das Fragment auf der Seite schon abgeholt wird und ein zweiter Weg
+       hinein ein zweiter Weg hinein waere. */
+    if (zeile.zweck === 'mailwechsel') {
+      const wer = await env.DB
+        .prepare('SELECT id, name, email, gesperrt_am, gesperrt_grund, entfernt_am FROM users WHERE id = ?')
+        .bind(zeile.user_id).first();
+      if (!wer || wer.entfernt_am) return fehler(request, 'Dieses Konto gibt es nicht mehr', 404);
+      if (wer.gesperrt_am) {
+        return fehler(request, wer.gesperrt_grund
+          ? `Dein Zugang ist gesperrt: ${wer.gesperrt_grund}`
+          : 'Dein Zugang ist gesperrt.', 403);
+      }
+      /* In den fuenfzehn Minuten dazwischen kann sich jemand anders auf die
+         Adresse gesetzt haben. Der Link ist dann verbraucht - unschoen, aber
+         ehrlich: ein zweiter Anlauf kostet einen Klick. */
+      try {
+        await env.DB.prepare('UPDATE users SET email = ? WHERE id = ?').bind(email, wer.id).run();
+      } catch (e) {
+        if (String(e.message || '').includes('UNIQUE')) {
+          return fehler(request, 'Die Adresse gehört inzwischen jemandem', 409);
+        }
+        throw e;
+      }
+
+      /* Auch hier ein Geraete-Token: geklickt wird im neuen Postfach, und das
+         steht oft auf einem anderen Geraet als dem, an dem der Wechsel
+         angestossen wurde. Ohne Token saesse man dort vor der Tuer, obwohl
+         man gerade den Besitz der Adresse nachgewiesen hat. */
+      const frisch = wuerfel();
+      await env.DB.prepare('INSERT INTO tokens (token_hash, user_id) VALUES (?, ?)')
+        .bind(await hash(frisch), wer.id).run();
+
+      return antwort(request, {
+        token: frisch, name: wer.name, braucht_namen: !wer.name,
+        zweck: 'mailwechsel', email,
+      });
+    }
+
+    let u = await env.DB.prepare('SELECT id, name, rolle, gesperrt_am, gesperrt_grund FROM users WHERE email = ?')
+      .bind(email).first();
     if (!u) {
       // Neu. Der Name fuer die Liste kommt gleich danach, in einem eigenen
       // Schritt - hier weiss die Seite noch gar nicht, wer das ist.
-      u = await env.DB.prepare('INSERT INTO users (email) VALUES (?) RETURNING id, name')
+      u = await env.DB.prepare('INSERT INTO users (email) VALUES (?) RETURNING id, name, rolle')
         .bind(email).first();
+    }
+    /* Zweite Pruefung, obwohl `POST /api/anmelden` sie schon macht: zwischen
+       Anfordern und Klicken liegen bis zu fuenfzehn Minuten, und in denen
+       kann die Sperre gefallen sein. Der Link ist damit schon verbraucht -
+       richtig so, er soll nicht liegen bleiben und spaeter noch ziehen. */
+    if (u.gesperrt_am) {
+      return fehler(request, u.gesperrt_grund
+        ? `Dein Zugang ist gesperrt: ${u.gesperrt_grund}`
+        : 'Dein Zugang ist gesperrt.', 403);
+    }
+
+    /* Der erste Admin, und der Weg zurueck, wenn sich einer versehentlich
+       selbst degradiert hat: wer sich mit ADMIN_MAIL anmeldet, ist danach
+       Admin. Selbstheilend ueber das Postfach - sonst waere das Kontor zu und
+       nur noch per SQL zu oeffnen. Gleiches Muster wie MELDE_AN. */
+    if (env.ADMIN_MAIL && email === normMail(env.ADMIN_MAIL) && u.rolle !== 'admin') {
+      await env.DB.prepare("UPDATE users SET rolle = 'admin' WHERE id = ?").bind(u.id).run();
     }
 
     const token = wuerfel();
@@ -948,13 +1611,26 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
+  /* ACHTUNG, haengt an Home Assistant: `sensor.beerstock_ich` liest aus
+     dieser Antwort `value_json.name`. Erweitern ist frei, umbenennen nicht -
+     zusaetzliche Schluessel stoeren das Template nicht, ein fehlender schon. */
   'GET /api/me': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const geraete = await env.DB
+      .prepare('SELECT count(*) AS n FROM tokens WHERE user_id = ?').bind(ich.id).first();
     return antwort(request, {
       name: ich.name,
       braucht_namen: !ich.name,
       gemessen: ich.quelle === 'ha',
+      email: ich.email,
+      rolle: ich.rolle,
+      // Wer gesperrt ist, soll den Grund lesen koennen - er sieht die Tafel
+      // ja weiter, und ohne Grund waere jeder Schreibversuch ein Raetsel.
+      gesperrt: ich.gesperrt_am ? { seit: utc(ich.gesperrt_am), grund: ich.gesperrt_grund } : null,
+      mail: mailWahl(ich),
+      mail_stumm: !!ich.mail_stumm_am,
+      geraete: geraete ? geraete.n : 1,
     });
   },
 
@@ -997,6 +1673,147 @@ const ROUTEN = {
     if (!ich) return antwort(request, { ok: true });   // schon weg, auch gut
     await env.DB.prepare('DELETE FROM tokens WHERE token_hash = ?').bind(ich._token_hash).run();
     return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Das verlorene Handy. Wirft ALLE Geraete raus, auch das hier - wer diesen
+     Knopf drueckt, will nicht aussuchen, welches gemeint war. */
+  'POST /api/geraete/alle-abmelden': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const weg = await env.DB.prepare('DELETE FROM tokens WHERE user_id = ?').bind(ich.id).run();
+    return antwort(request, { ok: true, abgemeldet: weg.meta.changes });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Die Schalter aus "Mein Deckel". Sie schicken einzeln und sofort - sechs
+     Schalter mit Speichern-Knopf sind ein Formular zu viel -, deshalb nimmt
+     die Route auch einen einzelnen entgegen und ruehrt die anderen nicht an.
+
+     `stumm: false` ist der Weg zurueck aus dem Ein-Klick-Abmeldelink. Ohne
+     ihn waere der eine Klick in der Mail eine Einbahnstrasse. */
+  'POST /api/einstellungen': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const anweisungen = [];
+
+    if (daten.mail !== undefined) {
+      if (!daten.mail || typeof daten.mail !== 'object' || Array.isArray(daten.mail)) {
+        return fehler(request, 'mail: ein Objekt aus Schaltern');
+      }
+      /* Unbekannte Schluessel abweisen statt schlucken: eine Seite, die sich
+         vertippt, soll es merken - sonst schaltet der Nutzer jahrelang etwas
+         aus, das nie gelesen wird. */
+      const gemischt = { ...mailWahl(ich) };
+      for (const [art, wert] of Object.entries(daten.mail)) {
+        if (!Object.hasOwn(MAIL_ARTEN, art)) {
+          return fehler(request, `Unbekannte Benachrichtigung: ${art}`);
+        }
+        if (typeof wert !== 'boolean') return fehler(request, `${art}: an oder aus, sonst nichts`);
+        gemischt[art] = wert;
+      }
+      anweisungen.push(env.DB.prepare('UPDATE users SET mail_prefs = ? WHERE id = ?')
+        .bind(JSON.stringify(gemischt), ich.id));
+    }
+
+    if (daten.stumm !== undefined) {
+      if (typeof daten.stumm !== 'boolean') return fehler(request, 'stumm: an oder aus');
+      anweisungen.push(env.DB.prepare(
+        `UPDATE users SET mail_stumm_am = ${daten.stumm ? "datetime('now')" : 'NULL'} WHERE id = ?`)
+        .bind(ich.id));
+    }
+
+    if (!anweisungen.length) return fehler(request, 'Nichts zu ändern');
+    await env.DB.batch(anweisungen);
+
+    // Frisch lesen statt zusammenrechnen: die Antwort soll den Stand zeigen,
+    // der in der Datenbank steht, nicht den, den wir gerade gemeint haben.
+    const neu = await env.DB
+      .prepare('SELECT mail_prefs, mail_stumm_am FROM users WHERE id = ?').bind(ich.id).first();
+    return antwort(request, {
+      ok: true, mail: mailWahl(neu), mail_stumm: !!neu.mail_stumm_am,
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Der Ein-Klick-Abmelder aus der Fusszeile jeder Mail. Ohne Anmeldung -
+     genau darum geht es: wer keine Post mehr will, soll nicht erst einen
+     Magic Link anfordern muessen, um das zu sagen.
+
+     Umkehrbar, und im Deckel steht danach der Weg zurueck. Ein POST und kein
+     GET, obwohl der Link in einer Mail steht: Vorschaudienste laden Links vor
+     (siehe die Gewinner-Mail), und dann waere man abgemeldet, ohne geklickt
+     zu haben. Die Seite holt das Fragment ab und schickt es hierher. */
+  'POST /api/mail/stumm': async (request, env) => {
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const id = Number(daten.id);
+    if (!Number.isInteger(id) || id <= 0) return fehler(request, 'Link unvollständig');
+    if (!await sigStimmt(env, 'abmelden', id, String(daten.sig || ''))) {
+      return fehler(request, 'Dieser Link gilt nicht', 403);
+    }
+    await env.DB.prepare("UPDATE users SET mail_stumm_am = datetime('now') WHERE id = ?")
+      .bind(id).run();
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Die Adresse wechseln. Zweistufig, und die zweite Stufe liegt im NEUEN
+     Postfach: sonst schriebe sich jemand mit einem geliehenen Handy auf eine
+     Adresse um, die ihm gar nicht gehoert, und der Magic Link liefe kuenftig
+     dorthin. Bis zum Klick gilt die alte Adresse unveraendert weiter. */
+  'POST /api/mail/aendern': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!env.AGENTMAIL_KEY) return fehler(request, 'Mailversand ist nicht eingerichtet', 503);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const email = normMail(daten.email);
+    if (!istMail(email)) return fehler(request, 'Das sieht nicht nach einer Mailadresse aus');
+    if (email === normMail(ich.email)) {
+      return fehler(request, 'Das ist schon deine Adresse');
+    }
+
+    const [belegt, proNutzer, proAdresse, gesamt] = await env.DB.batch([
+      env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email),
+      env.DB.prepare(`SELECT count(*) AS n FROM magic
+                      WHERE zweck = 'mailwechsel' AND user_id = ?
+                        AND erstellt > datetime('now','-1 day')`).bind(ich.id),
+      env.DB.prepare("SELECT count(*) AS n FROM magic WHERE email = ? AND erstellt > datetime('now','-1 hour')").bind(email),
+      env.DB.prepare("SELECT count(*) AS n FROM magic WHERE erstellt > datetime('now','-1 hour')"),
+    ]);
+    if (belegt.results.length) {
+      return fehler(request, 'Die Adresse gehört schon jemandem', 409);
+    }
+    if (proNutzer.results[0].n >= MAILWECHSEL_PRO_TAG) {
+      return fehler(request, `Höchstens ${MAILWECHSEL_PRO_TAG} Adresswechsel am Tag. Morgen wieder.`, 429);
+    }
+    if (proAdresse.results[0].n >= LINKS_PRO_ADRESSE) {
+      return fehler(request, 'An diese Adresse ging gerade schon ein Link raus. Schau ins Postfach, auch im Spam.', 429);
+    }
+    if (gesamt.results[0].n >= LINKS_GESAMT) {
+      return fehler(request, 'Gerade zu viel Andrang. Versuch es in einer Stunde nochmal.', 429);
+    }
+
+    const token = wuerfel();
+    await env.DB.prepare(`
+      INSERT INTO magic (token_hash, email, laeuft_ab, zweck, user_id)
+      VALUES (?, ?, datetime('now', ?), 'mailwechsel', ?)
+    `).bind(await hash(token), email, `+${LINK_MINUTEN} minutes`, ich.id).run();
+
+    try {
+      await schickeWechselLink(env, email, `${env.SEITE}#anmelden=${token}`);
+    } catch (e) {
+      console.error('Mailversand:', e.message);
+      return fehler(request, 'Die Mail ging nicht raus. Das liegt an uns, nicht an dir.', 502);
+    }
+    warneAlteAdresse(env, ctx, ich.email, email);
+
+    return antwort(request, { ok: true, wartet_auf: email });
   },
 
   // -------------------------------------------------------------------------
@@ -1098,6 +1915,13 @@ const ROUTEN = {
     ]);
     const lage2 = tagesLage(tagRoh2.results);
     const selbst = gesetzt.meta.changes === 1;
+
+    /* Nur wenn HIER gezogen wurde. War ein anderer schneller, hat dessen Ruf
+       die Mail schon geschickt - und die Doppel-Sperre in `mail_ausgang`
+       faengt den Rest. Der Gewinner bekommt sie auch dann, wenn er selbst
+       gedreht hat: er sieht das Ergebnis zwar auf der Seite, aber die Mail ist
+       der Weg zur Antwort, wenn er das Fenster gleich darauf zumacht. */
+    if (selbst && lage2.gueltig) mailGewonnen(env, ctx, lage2.gueltig.id, gewinner.id);
     /* Der Anstoss geht auch dann raus, wenn ein anderer schneller war: dessen
        Ziehung kennen die uebrigen Seiten ja auch noch nicht, wenn sein eigener
        Anstoss unterwegs verlorenging. Zweimal dieselbe Marke kostet die
@@ -1116,11 +1940,39 @@ const ROUTEN = {
      bleibt danach draussen, sonst zieht ihn dieselbe Flasche gleich noch
      einmal. */
   'POST /api/los/antwort': async (request, env, ctx) => {
-    const ich = await nutzer(request, env);
-    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    /* Zwei Wege herein. Der gewoehnliche ist das Geraete-Token; der zweite ist
+       die Signatur aus der Gewinner-Mail, damit man aus dem Postfach heraus
+       antworten kann, ohne sich anzumelden. Sie bindet Los UND Empfaenger,
+       und die Los-Id wird unten noch einmal gegen die geltende Ziehung
+       gehalten - ein Link von vorgestern beantwortet die heutige nicht. */
+    let ich = await nutzer(request, env);
+    let ausDerMail = false;
+    if (!ich && daten.t) {
+      const [rohId, marke] = String(daten.t).split('.');
+      const uid = Number(rohId), losId = Number(daten.los);
+      if (!Number.isInteger(uid) || !Number.isInteger(losId)) {
+        return fehler(request, 'Link unvollständig');
+      }
+      if (!await sigStimmt(env, `los:${losId}`, uid, marke || '')) {
+        return fehler(request, 'Dieser Link gilt nicht', 403);
+      }
+      ich = await env.DB.prepare(`
+        SELECT id, name, email, quelle, gesperrt_am, gesperrt_grund, entfernt_am
+        FROM users WHERE id = ?
+      `).bind(uid).first();
+      if (!ich || ich.entfernt_am) return fehler(request, 'Dieses Konto gibt es nicht mehr', 404);
+      if (ich.gesperrt_am) {
+        return fehler(request, ich.gesperrt_grund
+          ? `Dein Zugang ist gesperrt: ${ich.gesperrt_grund}`
+          : 'Dein Zugang ist gesperrt.', 403);
+      }
+      ausDerMail = true;
+    }
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
     const ja = daten.antwort === 'ja';
     if (!ja && daten.antwort !== 'nein') return fehler(request, "antwort: 'ja' oder 'nein'");
 
@@ -1161,6 +2013,12 @@ const ROUTEN = {
     if (z.user_id !== ich.id) {
       return fehler(request, 'Antworten darf nur, wen die Flasche getroffen hat.', 403);
     }
+    /* Aus der Mail heraus muss die Signatur auf GENAU dieses Los lauten. Ohne
+       diese Zeile beantwortete ein Link von vorgestern die heutige Ziehung
+       mit - dieselbe Person, dieselbe Signatur, anderer Abend. */
+    if (ausDerMail && z.id !== Number(daten.los)) {
+      return fehler(request, 'Dieser Link gehört zu einer älteren Ziehung.', 409);
+    }
     if (z.status !== 'offen') return fehler(request, 'Das steht schon fest.', 409);
 
     /* `changes === 1` gewinnt, wie beim Einloesen des Magic Links: zwei
@@ -1175,12 +2033,25 @@ const ROUTEN = {
        Termin hier und nicht schon beim Drehen. Getrennt vom UPDATE, weil dessen
        `changes === 1` die Entscheidung traegt; gegen einen doppelten Termin aus
        einem wiederholten Ruf steht `termine.los_id UNIQUE`. */
+    let neuerTermin = null;
     if (ja) {
-      await env.DB.prepare(`
+      neuerTermin = await env.DB.prepare(`
         INSERT INTO termine (gastgeber_id, beginnt_am, endet_am, los_id, erstellt_von)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(los_id) DO NOTHING
-      `).bind(ich.id, beginn, ende, z.id, ich.id).run();
+        RETURNING id
+      `).bind(ich.id, beginn, ende, z.id, ich.id).first();
+    }
+
+    /* Erst die Zusage macht aus der Ziehung einen Abend - also geht die
+       Nachricht auch erst hier raus, und nur, wenn der Termin WIRKLICH neu
+       entstanden ist. Beim zweiten Ruf greift `ON CONFLICT DO NOTHING`, und
+       dann gibt es nichts zu vermelden. */
+    if (neuerTermin) {
+      mailTerminNeu(env, ctx, {
+        id: neuerTermin.id, beginnt_am: beginn, endet_am: ende,
+        gastgeber: ich.name, titel: null, fassung: 0,
+      }, ich.id, 'zugesagt');
     }
 
     const [tagRoh2, feld, termine] = await env.DB.batch([
@@ -1241,6 +2112,11 @@ const ROUTEN = {
       VALUES (?, ?, ?, ?, ?) RETURNING id
     `).bind(gast.id, alsDbZeit(p.d), alsDbZeit(e.d), titel || null, ich.id).first();
 
+    mailTerminNeu(env, ctx, {
+      id: neu.id, beginnt_am: alsDbZeit(p.d), endet_am: alsDbZeit(e.d),
+      gastgeber: gast.name, titel: titel || null, fassung: 0,
+    }, ich.id, 'eingetragen');
+
     const alle = await termineStmt(env).all();
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
@@ -1262,9 +2138,11 @@ const ROUTEN = {
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
     const t = await env.DB.prepare(`
-      SELECT id, gastgeber_id, erstellt_von, los_id, beginnt_am, endet_am, abgesagt_am,
-             (beginnt_am <= datetime('now')) AS laeuft
-      FROM termine WHERE id = ?
+      SELECT t.id, t.gastgeber_id, t.erstellt_von, t.los_id, t.beginnt_am, t.endet_am,
+             t.titel, t.abgesagt_am, t.fassung,
+             coalesce(u.name, 'Ehemaliger') AS gastgeber,
+             (t.beginnt_am <= datetime('now')) AS laeuft
+      FROM termine t JOIN users u ON u.id = t.gastgeber_id WHERE t.id = ?
     `).bind(Number(daten.id)).first();
     if (!t) return fehler(request, 'Den Termin gibt es nicht', 404);
     if (t.gastgeber_id !== ich.id && t.erstellt_von !== ich.id) {
@@ -1278,9 +2156,14 @@ const ROUTEN = {
          sonst belegt ein abgesagter Abend den Tag weiter, und die Flasche
          bleibt liegen. Der Absagende ist damit fuer heute raus, genau wie bei
          einer Absage am Rad. */
+      /* `fassung` zaehlt mit hoch: die Absage ist die naechste Fassung dieses
+         Abends, und nur mit hoeherer SEQUENCE raeumt ein Kalender den
+         vorhandenen Eintrag weg (siehe 0012). */
       const schritte = [
-        env.DB.prepare("UPDATE termine SET abgesagt_am = datetime('now') WHERE id = ? AND abgesagt_am IS NULL")
-          .bind(t.id),
+        env.DB.prepare(`
+          UPDATE termine SET abgesagt_am = datetime('now'), fassung = fassung + 1
+          WHERE id = ? AND abgesagt_am IS NULL
+        `).bind(t.id),
       ];
       if (t.los_id) {
         schritte.push(env.DB.prepare(`
@@ -1289,6 +2172,7 @@ const ROUTEN = {
         `).bind(t.los_id));
       }
       await env.DB.batch(schritte);
+      mailTerminAendert(env, ctx, { ...t, fassung: t.fassung + 1 }, ich.id, 'abgesagt');
       const alle = await termineStmt(env).all();
       anstoss(request, env, ctx, 'tafel');
       return antwort(request, {
@@ -1316,15 +2200,20 @@ const ROUTEN = {
       beginn = p.d;
       setzt.push('beginnt_am = ?'); werte.push(alsDbZeit(p.d));
     }
+    /* Das neue Ende wird auch unten gebraucht: der Kalendereintrag traegt
+       DTEND, und ein Anhang mit dem ALTEN Ende an einem verschobenen Abend
+       stuende quer zu dem, was daneben im Text steht. */
+    let ende = t.endet_am;
     if (daten.endet_am != null) {
       const e = pruefeEnde(daten.endet_am, beginn);
       if (e.fehler) return fehler(request, e.fehler);
-      setzt.push('endet_am = ?'); werte.push(alsDbZeit(e.d));
+      ende = alsDbZeit(e.d);
+      setzt.push('endet_am = ?'); werte.push(ende);
     } else if (daten.beginnt_am != null) {
       // Ohne altes Ende (Zeile von vor Schema 10) greift wieder die Vorgabe.
       const spanne = altEnde ? altEnde - altBeginn : TERMIN_DAUER_STD * 36e5;
-      setzt.push('endet_am = ?');
-      werte.push(alsDbZeit(new Date(beginn.getTime() + spanne)));
+      ende = alsDbZeit(new Date(beginn.getTime() + spanne));
+      setzt.push('endet_am = ?'); werte.push(ende);
     }
     if (daten.titel != null) {
       const titel = String(daten.titel).trim().replace(/\s+/g, ' ');
@@ -1335,8 +2224,35 @@ const ROUTEN = {
     }
     if (!setzt.length) return fehler(request, 'Nichts zu ändern');
 
+    /* Verschoben oder nur umbenannt - das sind zwei verschiedene Nachrichten.
+       "Der Abend ist jetzt am Freitag" auf eine reine Titeländerung hin wäre
+       schlicht falsch, und wer das einmal bekommt, glaubt der nächsten Mail
+       nicht mehr. Ein Ende, das allein wandert, meldet niemand: es ist eine
+       Anzeige, keine Verabredung. Steht VOR dem Schreiben, weil der Vergleich
+       den alten Stand aus `t` braucht. */
+    const verschoben = daten.beginnt_am != null
+      && alsDbZeit(beginn) !== t.beginnt_am;
+    const umbenannt = daten.titel != null
+      && (String(daten.titel).trim().replace(/\s+/g, ' ') || null) !== t.titel;
+
+    /* Die Fassung steigt nur, wenn auch eine Mail mit Kalendereintrag
+       rausgeht. Ein stilles Nachjustieren des Endes ist keine neue Fassung -
+       zählte sie trotzdem hoch, liefe die SEQUENCE der Anhänge irgendwann der
+       Zahl davon, und niemand hätte etwas davon. */
+    if (verschoben || umbenannt) { setzt.push('fassung = fassung + 1'); }
+
     await env.DB.prepare(`UPDATE termine SET ${setzt.join(', ')} WHERE id = ?`)
       .bind(...werte, t.id).run();
+
+    if (verschoben || umbenannt) {
+      mailTerminAendert(env, ctx, {
+        ...t,
+        beginnt_am: alsDbZeit(beginn), endet_am: ende,
+        titel: daten.titel ?? t.titel,
+        fassung: t.fassung + 1,
+      }, ich.id, verschoben ? 'verschoben' : 'umbenannt');
+    }
+
     const alle = await termineStmt(env).all();
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, { ok: true, termine: alle.results.map(t => terminAntwort(t)) });
@@ -1412,11 +2328,17 @@ const ROUTEN = {
     const bi = await pruefeBild(env, daten.bild);
     if (bi.fehler) return fehler(request, bi.fehler, bi.status);
 
+    /* Wem die Sterne gelten - beim Nutzer er selbst, beim Abend sein
+       Gastgeber. Beide Zweige setzen es, damit die Meldung unten nur EINE
+       Stelle hat; im Zweig selbst waere sie zweimal derselbe Aufruf. */
+    let bewerteter = null;
+
     if (ziel.art === 'user') {
       if (ziel.id === ich.id) return fehler(request, 'Sich selbst bewerten gilt nicht', 403);
       const wer = await env.DB.prepare('SELECT 1 FROM users WHERE id = ? AND name IS NOT NULL')
         .bind(ziel.id).first();
       if (!wer) return fehler(request, 'Den gibt es nicht', 404);
+      bewerteter = ziel.id;
     } else {
       /* Ein Abend wird bewertet, nachdem er stattgefunden hat. Vorher waere es
          eine Erwartung, keine Bewertung - und ein abgesagter Abend hat gar
@@ -1446,6 +2368,7 @@ const ROUTEN = {
       if (t.gastgeber_id === ich.id) {
         return fehler(request, 'Den eigenen Abend bewertet man nicht', 403);
       }
+      bewerteter = t.gastgeber_id;
     }
 
     /* Wie die Meldesperre, aber ausdruecklich nur gegen ANDERE Ziele - warum,
@@ -1493,6 +2416,17 @@ const ROUTEN = {
         INSERT INTO kommentare (ziel_art, ziel_id, autor_id, bewertung_id, text, bild_key, sterne)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).bind(ziel.art, ziel.id, ich.id, b.id, text, bi.key, JSON.stringify(s.sterne)).run();
+    }
+
+    /* Der Bezug haengt an der Bewertung, nicht am Zeitpunkt: der UPSERT gibt
+       bei einer Nachbesserung dieselbe Id zurueck, und die Doppel-Sperre laesst
+       die zweite Mail dann liegen. Genau richtig - "Basti hat dir Sterne
+       gegeben" ist eine Nachricht, kein Abonnement auf sein Nachjustieren. */
+    if (bewerteter && bewerteter !== ich.id) {
+      mailEcho(env, ctx, bewerteter, ich.name, ziel.art === 'user'
+        ? { kurz: 'Sterne für dich', lang: `${ich.name} hat dir Sterne gegeben.` }
+        : { kurz: 'Sterne für deinen Abend', lang: `${ich.name} hat deinen Abend bewertet.` },
+        `bewertung:${b.id}`);
     }
 
     /* Zwei Marken: der Schnitt steht auch in der Liste bzw. am Termin, der
@@ -1592,16 +2526,20 @@ const ROUTEN = {
 
     /* Genau eine Antwortebene: zeigt `antwort_auf` auf eine Antwort, haengt
        der Kommentar an DEREN Wurzel. Der Absender muss davon nichts wissen. */
-    let wurzel = null;
+    let wurzel = null, angesprochen = null;
     if (daten.antwort_auf != null) {
       const auf = await env.DB.prepare(`
-        SELECT id, antwort_auf, ziel_art, ziel_id FROM kommentare WHERE id = ?
+        SELECT id, antwort_auf, ziel_art, ziel_id, autor_id FROM kommentare WHERE id = ?
       `).bind(Number(daten.antwort_auf)).first();
       if (!auf) return fehler(request, 'Den Kommentar gibt es nicht', 404);
       if (auf.ziel_art !== ziel.art || auf.ziel_id !== ziel.id) {
         return fehler(request, 'Der Kommentar gehört woandershin');
       }
       wurzel = auf.antwort_auf || auf.id;
+      /* Gemeldet wird dem, auf DESSEN Karte geantwortet wurde - nicht dem
+         Wurzelautor. Wer einen Faden aufgemacht hat, will nicht jede Antwort
+         darunter erfahren, sondern die auf das, was er gesagt hat. */
+      angesprochen = auf.autor_id;
     }
 
     const grenze = await kommentarGrenze(env, ich.id);
@@ -1611,6 +2549,13 @@ const ROUTEN = {
       INSERT INTO kommentare (ziel_art, ziel_id, autor_id, antwort_auf, text, bild_key)
       VALUES (?, ?, ?, ?, ?, ?) RETURNING id
     `).bind(ziel.art, ziel.id, ich.id, wurzel, text, b.key).first();
+
+    if (angesprochen && angesprochen !== ich.id) {
+      mailEcho(env, ctx, angesprochen, ich.name, {
+        kurz: 'Antwort auf deinen Beitrag',
+        lang: `${ich.name} hat dir geantwortet: „${text.slice(0, 200)}${text.length > 200 ? ' …' : ''}"`,
+      }, `kommentar:${neu.id}`);
+    }
 
     // 'tafel' wegen des Zaehlers an der Zeile, das Ziel wegen des Threads.
     anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
@@ -1860,7 +2805,9 @@ const ROUTEN = {
        das ganze Archiv waere derselbe Satz zum doppelten Preis. */
     const zeilen = await env.DB.prepare(`
       SELECT t.id, t.gastgeber_id, t.beginnt_am, t.endet_am, t.titel, t.los_id,
-             t.abgesagt_am, t.erstellt_von, u.name AS gastgeber, e.name AS eingetragen_von
+             t.abgesagt_am, t.erstellt_von,
+         coalesce(u.name, 'Ehemaliger') AS gastgeber,
+         coalesce(e.name, 'Ehemaliger') AS eingetragen_von
       FROM termine t
       JOIN users u ON u.id = t.gastgeber_id
       LEFT JOIN users e ON e.id = t.erstellt_von
@@ -1902,6 +2849,374 @@ const ROUTEN = {
       // Der Zeiger fuer den naechsten Griff - oder null, dann ist das Archiv zu Ende.
       weiter: mehr && letzte ? { vor: utc(letzte.beginnt_am), vor_id: letzte.id } : null,
     });
+  },
+
+  // =========================================================================
+  // Das Kontor. Alle Routen hier antworten mit 403 "Nicht dein Zimmer" fuer
+  // jeden, der nicht Admin ist - die Sichtbarkeit des Links auf der Seite ist
+  // Kosmetik, das Tor sitzt hier. Und alle mit KEIN_FREMDER_CACHE: eine
+  // Nutzerliste mit Mailadressen darf in keinem Zwischenspeicher landen.
+  // =========================================================================
+
+  /* Die Runde, wie der Wirt sie sieht. Ein Zug statt zehn Rufen: die Tabelle
+     zeigt zehn Spalten je Nutzer, und zehn Unterabfragen in einer Anweisung
+     sind billiger als zehn Anweisungen. Bei sechs Freunden ist das ohnehin
+     nicht die Stelle, an der etwas teuer wird. */
+  'GET /api/admin/nutzer': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+
+    const [leute, mails] = await env.DB.batch([
+      env.DB.prepare(`
+        SELECT u.id, u.name, u.email, u.rolle, u.quelle, u.erstellt,
+               u.gesperrt_am, u.gesperrt_grund, u.entfernt_am,
+               u.mail_stumm_am, u.mail_prefs,
+               coalesce(g.name, 'Ehemaliger') AS gesperrt_von,
+               (SELECT count(*) FROM tokens t      WHERE t.user_id = u.id)   AS geraete,
+               (SELECT count(*) FROM reports r     WHERE r.user_id = u.id)   AS meldungen,
+               (SELECT max(r.gemeldet_am) FROM reports r WHERE r.user_id = u.id) AS zuletzt,
+               (SELECT count(*) FROM kommentare k  WHERE k.autor_id = u.id)  AS kommentare,
+               (SELECT count(*) FROM termine  t    WHERE t.gastgeber_id = u.id) AS gastgeber,
+               (SELECT count(*) FROM bewertungen b
+                 WHERE b.ziel_art = 'user' AND b.ziel_id = u.id)             AS bewertet
+        FROM users u
+        LEFT JOIN users g ON g.id = u.gesperrt_von
+        ORDER BY u.entfernt_am IS NOT NULL, u.name IS NULL, u.name COLLATE NOCASE
+      `),
+      env.DB.prepare(`
+        SELECT count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
+        FROM mail_ausgang WHERE gesendet_am > datetime('now','-1 day')
+      `),
+    ]);
+
+    const alle = leute.results;
+    return antwort(request, {
+      /* Der Kopf reitet mit, statt eine eigene Route zu bekommen: er sind
+         drei Zahlen aus derselben Liste, die gerade ohnehin dasteht. */
+      kopf: {
+        melder:   alle.filter(u => !u.entfernt_am).length,
+        aktiv:    alle.filter(u => !u.entfernt_am && !u.gesperrt_am).length,
+        gesperrt: alle.filter(u => u.gesperrt_am && !u.entfernt_am).length,
+        mails_24h: mails.results[0].n,
+        mails_kaputt_24h: mails.results[0].kaputt || 0,
+      },
+      nutzer: alle.map(u => ({
+        id: u.id,
+        name: u.name,
+        // Im Klartext, und das mit Absicht: ohne sie ist die Nutzerverwaltung
+        // blind. Die Seite dahinter liegt hinter der Adminpruefung.
+        email: u.email,
+        rolle: u.rolle,
+        gemessen: u.quelle === 'ha',
+        seit: utc(u.erstellt),
+        gesperrt: u.gesperrt_am
+          ? { seit: utc(u.gesperrt_am), grund: u.gesperrt_grund, von: u.gesperrt_von }
+          : null,
+        entfernt: u.entfernt_am ? utc(u.entfernt_am) : null,
+        stumm: !!u.mail_stumm_am,
+        mail: mailWahl(u),
+        geraete: u.geraete,
+        meldungen: u.meldungen,
+        zuletzt: utc(u.zuletzt),
+        kommentare: u.kommentare,
+        gastgeber: u.gastgeber,
+        bewertet: u.bewertet,
+        // Ich selbst: die Seite graut die Knoepfe aus, die ohnehin 409 gaeben.
+        ich: u.id === ich.id,
+      })),
+    }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
+  /* EINE Route fuer alle vier Handlungen - damit die Adminpruefung und die
+     drei Schutzregeln genau einmal existieren. Vier Routen waeren vier Stellen,
+     an denen man "und ist er vielleicht der letzte Admin?" vergessen kann. */
+  'POST /api/admin/nutzer': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const aktion = String(daten.aktion || '');
+    if (!['sperren', 'entsperren', 'rolle', 'entfernen'].includes(aktion)) {
+      return fehler(request, "aktion: 'sperren', 'entsperren', 'rolle' oder 'entfernen'");
+    }
+
+    const ziel = await env.DB.prepare(`
+      SELECT id, name, email, rolle, quelle, gesperrt_am, entfernt_am FROM users WHERE id = ?
+    `).bind(Number(daten.id)).first();
+    if (!ziel) return fehler(request, 'Den gibt es nicht', 404);
+    if (ziel.entfernt_am) return fehler(request, 'Der ist schon entfernt', 409);
+
+    // --- Die drei Schutzregeln, vor jeder Handlung ---------------------------
+    const gegenMich = ziel.id === ich.id;
+    if (gegenMich && aktion !== 'entsperren') {
+      /* Auch die Degradierung: wer sich selbst zum `user` macht, sperrt sich
+         aus dem Kontor aus. Zurueck kaeme er nur ueber ADMIN_MAIL - und das
+         ist der Notausgang, nicht der Weg. */
+      return fehler(request, 'Das machst du nicht mit dir selbst', 409);
+    }
+    /* Der Dienstnutzer aus Home Assistant. Sperren nimmt ihn nur aus dem Topf
+       und ist erlaubt; entfernen risse die Anbindung der Wohnung ab, und
+       verwalten kann ein Konto ohne Postfach ohnehin nicht. */
+    if (ziel.quelle === 'ha' && (aktion === 'rolle' || aktion === 'entfernen')) {
+      return fehler(request, aktion === 'rolle'
+        ? 'Ein Konto ohne Postfach kann nicht verwalten'
+        : 'Der gemessene Melder bleibt — sperren ja, entfernen nein', 409);
+    }
+    /* Der letzte Admin. Gezaehlt werden nur die, die es auch AUSUEBEN
+       koennen - ein gesperrter Admin ist keiner (siehe `istAdmin`).
+
+       Ehrlich dazu: heute kommt diese Pruefung nie zum Zug. Wer hier steht,
+       IST ein wirkender Admin, also gibt es bei einem fremden Ziel schon
+       zwei - und beim eigenen greift die Regel darueber zuerst. Sie bleibt
+       trotzdem stehen: sie kostet eine Abfrage im seltenen Fall und ist das
+       Netz, falls die Selbstregel je gelockert wird oder eine fuenfte Aktion
+       dazukommt. Ein Kontor ohne Admin waere nur noch per SQL zu oeffnen. */
+    const nimmtAdminWeg = ziel.rolle === 'admin'
+      && (aktion === 'sperren' || aktion === 'entfernen' || aktion === 'rolle');
+    if (nimmtAdminWeg) {
+      const z = await env.DB.prepare(`
+        SELECT count(*) AS n FROM users
+        WHERE rolle = 'admin' AND gesperrt_am IS NULL AND entfernt_am IS NULL
+      `).first();
+      if (z.n <= 1) {
+        return fehler(request, 'Das ist der letzte Admin — dann käme niemand mehr herein', 409);
+      }
+    }
+
+    // --- Die Handlung selbst -------------------------------------------------
+    let detail = null;
+    if (aktion === 'sperren') {
+      if (ziel.gesperrt_am) return fehler(request, 'Der ist schon gesperrt', 409);
+      const grund = String(daten.grund ?? '').trim().replace(/\s+/g, ' ').slice(0, GRUND_MAX);
+      detail = grund || null;
+      await env.DB.prepare(`
+        UPDATE users SET gesperrt_am = datetime('now'), gesperrt_von = ?, gesperrt_grund = ?
+        WHERE id = ?
+      `).bind(ich.id, grund || null, ziel.id).run();
+
+    } else if (aktion === 'entsperren') {
+      await env.DB.prepare(`
+        UPDATE users SET gesperrt_am = NULL, gesperrt_von = NULL, gesperrt_grund = NULL
+        WHERE id = ?
+      `).bind(ziel.id).run();
+
+    } else if (aktion === 'rolle') {
+      const neu = ziel.rolle === 'admin' ? 'user' : 'admin';
+      if (neu === 'admin' && !ziel.email) {
+        return fehler(request, 'Ohne Postfach kein Admin — er käme nie herein', 409);
+      }
+      detail = neu;
+      await env.DB.prepare('UPDATE users SET rolle = ? WHERE id = ?').bind(neu, ziel.id).run();
+
+    } else {
+      /* Weich. Ein hartes DELETE risse ueber `kommentare.autor_id`
+         ON DELETE CASCADE die Kommentare UND deren Antworten mit, und liefe
+         bei `termine.gastgeber_id` und `los.user_id` (beide ohne Kaskade) in
+         einen Fremdschluesselfehler oder hinterliesse Waisen. Also: Adresse
+         und Name weg, Token weg, aus Liste und Topf raus - die Beitraege
+         bleiben als "Ehemaliger" stehen. Hart loeschen bleibt Handarbeit per
+         SQL, mit Ansage.
+
+         Der Name wandert ins Protokoll, bevor er verschwindet: sonst stuende
+         im Kontor "entfernt: (null)". */
+      detail = ziel.name || ziel.email || null;
+      await env.DB.batch([
+        env.DB.prepare(`
+          UPDATE users SET entfernt_am = datetime('now'),
+                           email = NULL, name = NULL, name_klein = NULL,
+                           mail_prefs = NULL, mail_stumm_am = NULL
+          WHERE id = ?
+        `).bind(ziel.id),
+        env.DB.prepare('DELETE FROM tokens WHERE user_id = ?').bind(ziel.id),
+      ]);
+    }
+
+    await env.DB.prepare(
+      'INSERT INTO admin_log (admin_id, aktion, ziel_id, detail) VALUES (?, ?, ?, ?)')
+      .bind(ich.id, aktion, ziel.id, detail).run();
+
+    /* Sperren, Entfernen und der Rollenwechsel aendern die Tafel: der eine
+       faellt aus dem Topf, der andere aus der Liste. Ohne Anstoss sehen die
+       offenen Seiten den alten Stand bis zum naechsten Nachfassen. */
+    anstoss(request, env, ctx, 'tafel');
+    return antwort(request, { ok: true, aktion, id: ziel.id }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Nur Zahlenreihen, keine Texte: was hier herauskommt, wird gezeichnet.
+     Die Grafiken malt die Seite selbst, ohne Fremdbibliothek. */
+  'GET /api/admin/statistik': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+
+    const [meldungen, bestand, gastgeber, lose, betrieb, mails, anmeldungen, postwillig] =
+      await env.DB.batch([
+        // 1 — Meldungen je Tag, 60 Tage. Flaechenkurve.
+        env.DB.prepare(`
+          SELECT date(gemeldet_am) AS tag, count(*) AS n FROM reports
+          WHERE gemeldet_am > datetime('now','-60 days')
+          GROUP BY tag ORDER BY tag
+        `),
+        // 2 — Bestand je Melder, 30 Tage: der letzte Wert des Tages, wie im Verlauf.
+        env.DB.prepare(`
+          SELECT r.user_id, coalesce(u.name,'Ehemaliger') AS name,
+                 date(r.gemeldet_am) AS tag, r.biere
+          FROM reports r
+          JOIN users u ON u.id = r.user_id
+          JOIN (
+            SELECT user_id, date(gemeldet_am) AS tag, max(id) AS id
+            FROM reports WHERE gemeldet_am > datetime('now','-30 days')
+            GROUP BY user_id, date(gemeldet_am)
+          ) j ON j.id = r.id
+          ORDER BY r.user_id, tag
+        `),
+        // 3 — Wer war wie oft Gastgeber. Liegende Balken.
+        env.DB.prepare(`
+          SELECT coalesce(u.name,'Ehemaliger') AS name, count(*) AS n
+          FROM termine t JOIN users u ON u.id = t.gastgeber_id
+          WHERE t.abgesagt_am IS NULL
+          GROUP BY t.gastgeber_id ORDER BY n DESC
+        `),
+        // 4 — Ausgang der Ziehungen. Gestapelter Balken.
+        env.DB.prepare('SELECT status, count(*) AS n FROM los GROUP BY status'),
+        // 5 — Betrieb je Woche: Kommentare, Reaktionen, Sterne.
+        env.DB.prepare(`
+          SELECT woche, sum(k) AS kommentare, sum(r) AS reaktionen, sum(b) AS sterne FROM (
+            SELECT strftime('%Y-%W', erstellt) AS woche, 1 AS k, 0 AS r, 0 AS b FROM kommentare
+            UNION ALL
+            SELECT strftime('%Y-%W', erstellt), 0, 1, 0 FROM reaktionen
+            UNION ALL
+            SELECT strftime('%Y-%W', erstellt), 0, 0, 1 FROM bewertungen
+          ) GROUP BY woche ORDER BY woche
+        `),
+        // 6 — Mails je Art, 30 Tage, Fehler daneben.
+        env.DB.prepare(`
+          SELECT art, count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
+          FROM mail_ausgang WHERE gesendet_am > datetime('now','-30 days')
+          GROUP BY art ORDER BY n DESC
+        `),
+        // Und zwei Zahlen ohne Bild.
+        env.DB.prepare(`
+          SELECT date(erstellt) AS tag, count(*) AS n FROM users
+          WHERE entfernt_am IS NULL GROUP BY tag ORDER BY tag
+        `),
+        env.DB.prepare(`
+          SELECT count(*) AS alle, sum(mail_stumm_am IS NULL) AS willig
+          FROM users WHERE email IS NOT NULL AND entfernt_am IS NULL
+        `),
+      ]);
+
+    // Die Kurvenschar je Nutzer buendeln - eine Linie je Melder.
+    const kurven = new Map();
+    for (const z of bestand.results) {
+      if (!kurven.has(z.user_id)) kurven.set(z.user_id, { name: z.name, tage: [], werte: [] });
+      const k = kurven.get(z.user_id);
+      k.tage.push(z.tag);
+      k.werte.push(z.biere);
+    }
+
+    // Kumuliert, nicht je Tag: die Frage ist "wie viele sind wir inzwischen".
+    let summe = 0;
+    const wachstum = anmeldungen.results.map(z => ({ tag: z.tag, n: (summe += z.n) }));
+
+    const p = postwillig.results[0];
+    return antwort(request, {
+      meldungen: meldungen.results,
+      bestand: [...kurven.values()],
+      gastgeber: gastgeber.results,
+      lose: lose.results,
+      betrieb: betrieb.results,
+      mails: mails.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
+      wachstum,
+      postwillig: { alle: p.alle, willig: p.willig || 0 },
+    }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Die Rundmail. Geht durch denselben Verteiler wie alles andere - also auch
+     nur an die, die sie wollen, und mit demselben Abmeldelink. Ohne `bezug`,
+     damit die Doppel-Sperre sie nicht nach der ersten fuer immer blockiert;
+     gegen den Fehlgriff steht die Stundensperre. */
+  'POST /api/admin/rundmail': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+    if (!env.AGENTMAIL_KEY) return fehler(request, 'Mailversand ist nicht eingerichtet', 503);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const betreff = String(daten.betreff ?? '').trim().replace(/\s+/g, ' ');
+    const text = String(daten.text ?? '').trim();
+    if (!betreff) return fehler(request, 'Ohne Betreff keine Rundmail');
+    if (betreff.length > RUNDMAIL_BETREFF_MAX) {
+      return fehler(request, `Der Betreff darf höchstens ${RUNDMAIL_BETREFF_MAX} Zeichen haben`);
+    }
+    if (!text) return fehler(request, 'Ohne Text keine Rundmail');
+    if (text.length > RUNDMAIL_MAX) {
+      return fehler(request, `Höchstens ${RUNDMAIL_MAX} Zeichen`);
+    }
+
+    const letzte = await env.DB.prepare(`
+      SELECT erstellt FROM admin_log WHERE aktion = 'rundmail'
+        AND erstellt > datetime('now', ?) LIMIT 1
+    `).bind(`-${RUNDMAIL_SPERRE} hours`).first();
+    if (letzte) {
+      return fehler(request, 'Die letzte Rundmail ist noch keine Stunde her', 429);
+    }
+
+    /* Die Empfaengerzahl VOR dem Versand, mit denselben Bedingungen wie der
+       Verteiler - sonst antwortet die Route "an 7" und drei bekommen nichts.
+       Der Schalter `rundmail` steht in `mail_prefs` und wird in JS geprueft;
+       SQL koennte das zwar auch, aber dann stuende die Regel an zwei Stellen. */
+    const kreis = await env.DB.prepare(`
+      SELECT id, mail_prefs FROM users
+      WHERE email IS NOT NULL AND gesperrt_am IS NULL
+        AND entfernt_am IS NULL AND mail_stumm_am IS NULL
+    `).all();
+    const wieViele = kreis.results.filter(u => mailWahl(u).rundmail).length;
+
+    /* Absätze bleiben Absätze, sonst kommt der ganze Text als eine Wand an.
+       Mehr Auszeichnung gibt es nicht: was der Wirt tippt, ist Text, und ein
+       HTML-Editor im Kontor wäre ein Projekt für sich. */
+    const html = text.split(/\n{2,}/)
+      .map(a => `<p>${nurText(a).replace(/\n/g, '<br>')}</p>`).join('\n');
+
+    benachrichtige(env, ctx, 'rundmail', null, { betreff, text, html });
+
+    await env.DB.prepare(
+      'INSERT INTO admin_log (admin_id, aktion, detail) VALUES (?, ?, ?)')
+      .bind(ich.id, 'rundmail', betreff.slice(0, 120)).run();
+
+    return antwort(request, { ok: true, empfaenger: wieViele }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
+  'GET /api/admin/protokoll': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+
+    const zeilen = await env.DB.prepare(`
+      SELECT l.id, l.aktion, l.detail, l.erstellt,
+             coalesce(a.name, 'Ehemaliger') AS wer,
+             coalesce(z.name, l.detail, '—') AS wen
+      FROM admin_log l
+      LEFT JOIN users a ON a.id = l.admin_id
+      LEFT JOIN users z ON z.id = l.ziel_id
+      ORDER BY l.id DESC LIMIT 50
+    `).all();
+
+    return antwort(request, {
+      zeilen: zeilen.results.map(z => ({
+        id: z.id, aktion: z.aktion, wer: z.wer, wen: z.wen,
+        detail: z.detail, wann: utc(z.erstellt),
+      })),
+    }, 200, KEIN_FREMDER_CACHE);
   },
 
   // -------------------------------------------------------------------------
@@ -1957,8 +3272,12 @@ const ROUTEN = {
     const tag = bierTag();
     const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler, chronik] =
       await env.DB.batch([
+      /* Gesperrte bleiben in der Liste stehen - das ist Historie, und ein
+         Name, der ueber Nacht verschwindet, sieht nach Datenverlust aus. Sie
+         tragen nur eine stille Marke und fallen aus dem Topf (losFeldStmt).
+         Entfernte fallen von selbst heraus: ihr Name ist dann NULL. */
       env.DB.prepare(`
-        SELECT u.id, u.name, u.quelle, r.biere, r.temperatur, r.gemeldet_am
+        SELECT u.id, u.name, u.quelle, u.gesperrt_am, r.biere, r.temperatur, r.gemeldet_am
         FROM users u
         JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j
           ON j.user_id = u.id
@@ -2018,6 +3337,7 @@ const ROUTEN = {
       // und ohne Zonenangabe verschiebt sich das je nach Betrachter.
       gemeldet: r.gemeldet_am.replace(' ', 'T') + 'Z',
       gemessen: r.quelle === 'ha',
+      gesperrt: !!r.gesperrt_am,
       best: bestmarke.get(r.id) ?? r.biere,
       verlauf: kurve.get(r.id) || [r.biere],
     }));
@@ -2036,6 +3356,25 @@ const ROUTEN = {
 };
 
 export default {
+  /* Der einzige Zeitgeber im ganzen Dienst. Alles andere traegt sich beim
+     naechsten Schreiben nach (siehe `verfallStmt`) - eine Erinnerung kann das
+     nicht, sie MUSS zu einer Uhrzeit losgehen.
+
+     09:00 UTC ist 11:00 deutscher Sommerzeit: frueh genug, um noch einkaufen
+     zu koennen, spaet genug, dass niemand davon geweckt wird. Der Tag wird in
+     UTC verglichen, wie ueberall hier - ein Abend, der um 23:30 Ortszeit
+     anfaengt, faellt damit auf denselben UTC-Tag wie die Erinnerung, und die
+     halbe Stunde Drift an dieser Kante ist es nicht wert, eine Zeitzone in
+     die Abfrage zu ziehen. */
+  async scheduled(event, env, ctx) {
+    const heute = await env.DB.prepare(`
+      SELECT t.id, t.beginnt_am, t.titel, coalesce(u.name, 'Ehemaliger') AS gastgeber
+      FROM termine t JOIN users u ON u.id = t.gastgeber_id
+      WHERE date(t.beginnt_am) = date('now') AND t.abgesagt_am IS NULL
+    `).all();
+    for (const t of heute.results) mailErinnerung(env, ctx, t);
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
@@ -2050,6 +3389,10 @@ export default {
     try {
       return await treffer(request, env, ctx);
     } catch (e) {
+      /* Die Sperre kommt aus `nutzer()` geflogen und landet hier - an einer
+         Stelle statt in jeder Schreibroute. Ihr Text ist fuer den Nutzer
+         bestimmt und darf darum ausnahmsweise mit hinaus. */
+      if (e instanceof Gesperrt) return fehler(request, e.message, 403);
       /* Der Fehlertext geht ins Log, nicht an den Aufrufer: er kann
          Tabellennamen, Adressen oder Werte enthalten. */
       console.error('unerwartet:', e && e.stack || e);

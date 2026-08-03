@@ -19,6 +19,13 @@
 
   "observability": { "enabled": true },
 
+  // Der einzige Zeitgeber: die Erinnerung am Abend des Termins (scheduled()
+  // in src/index.js). 09:00 UTC ist 11:00 deutscher Sommerzeit - frueh genug
+  // zum Einkaufen, spaet genug, dass niemand davon geweckt wird.
+  // Zum Ausprobieren:  npx wrangler dev --test-scheduled
+  //                    curl "localhost:8787/__scheduled?cron=0+9+*+*+*"
+  "triggers": { "crons": ["0 9 * * *"] },
+
   // Kein Geheimnis, deshalb hier und nicht als Secret. Der API-Schluessel
   // dazu heisst AGENTMAIL_KEY und liegt bei Cloudflare:
   //     npx wrangler secret put AGENTMAIL_KEY
