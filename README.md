@@ -227,6 +227,14 @@ Kreide (Verlauf) und einmal in Tinte (Kontor). **Die Tafel lädt sie nicht** —
 `index.html` gilt weiter: eine Datei, keine externen Ressourcen. Sie zeigt nur
 einen Knopf, der hinüberführt.
 
+In „Bestand je Melder" und „Temperatur je Melder" laufen **stumme Tage
+fortgeschrieben** weiter: wer nichts meldet, hat deshalb nicht weniger im
+Kühlschrank — er hat nichts gesagt. Der letzte bekannte Stand bleibt waagerecht
+stehen, bis eine neue Zahl kommt. Das ist reine Zeichnung: fortgeschriebene Tage
+zählen **nicht** als Meldung (das Bild „Meldungen je Tag" bleibt unberührt), und
+im Tooltip stehen sie blass, mit dem Datum ihrer Meldung dahinter. Vor der ersten
+Meldung wird nichts fortgeschrieben — die Linie beginnt, wo der Mensch beginnt.
+
 Die Seite ist statisch und fragt nur. Geschrieben wird ausschließlich über den
 Worker; die Wohnung selbst ist von außen nicht erreichbar und ruft dort an, statt
 angerufen zu werden.
@@ -305,7 +313,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages — ohne Token nur der Siegerplatz |
-| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit |
+| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit. Stumme Tage stehen **nicht** in der Antwort — die schreibt erst die Zeichnung fort (siehe unten) |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
 | `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen', grund?}` — nur Admin |

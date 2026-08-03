@@ -111,6 +111,9 @@ window.Bilder = (function () {
   .tip .t-z {
     display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   }
+  /* Fortgeschrieben, nicht gemeldet. Blass genug, um sich abzuheben, kräftig
+     genug zum Lesen — der Wert ist ja nicht weniger wahr, er ist nur älter. */
+  .tip .t-z.matt { opacity: .5; }
   .tip .t-z > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
   .tip .t-z i { width: 7px; height: 7px; border-radius: 2px; display: block; flex: none; }
   .tip .t-z b {
@@ -179,7 +182,9 @@ window.Bilder = (function () {
     TIP.textContent = '';
     if (inhalt.titel) TIP.appendChild(el('div', 't-kopf', inhalt.titel));
     (inhalt.zeilen || []).forEach(z => {
-      const zeile = el('div', 't-z');
+      // `matt`: der Wert steht da, stammt aber nicht von diesem Tag — die
+      // Kurvenschar schreibt stumme Tage fort. Siehe `bildSchar`.
+      const zeile = el('div', z.matt ? 't-z matt' : 't-z');
       const links = el('span');
       if (z.farbe) {
         const punkt = el('i');
@@ -491,7 +496,26 @@ window.Bilder = (function () {
   /* 2 — Bestand je Melder. Eine Linie je Mensch, über eine gemeinsame
      Zeitachse: nur so sieht man, wer wann nachgelegt hat. Die Achse kommt aus
      der Vereinigung aller Tage, nicht aus der längsten Reihe — sonst säßen
-     zwei Kurven mit verschiedenen Startpunkten übereinander und logen. */
+     zwei Kurven mit verschiedenen Startpunkten übereinander und logen.
+
+     **Stumme Tage werden FORTGESCHRIEBEN.** Wer eine Woche lang nichts meldet,
+     hat deshalb nicht weniger im Kühlschrank — er hat nichts gesagt. Vorher zog
+     die Kurve quer von der einen Meldung zur nächsten, und diese Schräge war
+     eine Behauptung über sieben Tage, für die es keine einzige Zahl gab. Jetzt
+     läuft der letzte bekannte Stand waagerecht weiter, bis eine neue Zahl
+     kommt; erst dort steigt oder fällt die Linie.
+
+     Drei Dinge, die daran hängen:
+
+       - **Fortgeschrieben wird nur GEZEICHNET, nicht gezählt.** „Meldungen je
+         Tag" bleibt unberührt — das Bild zählt Meldungen, und eine
+         fortgeschriebene ist keine. Die Daten vom Worker sind unverändert: er
+         gibt weiter nur die Tage heraus, an denen wirklich gemeldet wurde.
+       - **Vor der ersten Meldung wird nichts fortgeschrieben.** Rückwärts gäbe
+         es nichts zu wissen; die Linie beginnt, wo der Mensch beginnt.
+       - Im Kasten steht der fortgeschriebene Wert **blass**, der frisch
+         gemeldete normal. Sonst läse man ihn als heutige Meldung, und das wäre
+         genau die Lüge, die die Schräge vorher erzählt hat. */
   function bildSchar(titel, kurven, o = {}) {
     const box = rahmen(titel);
     const mitWerten = kurven.filter(k => k.werte.length);
@@ -510,14 +534,34 @@ window.Bilder = (function () {
     const spanne = max - tief || 1;
     // Wie ein Wert im Kasten steht. Nur die Grad brauchen mehr als die Zahl.
     const text = o.text || ((k, j) => zahl(k.werte[j]));
-    const x = tag => PAD.l + (tage.length > 1 ? tage.indexOf(tag) / (tage.length - 1) : .5) * IX;
+    // Über den Index statt über den Tag: seit fortgeschrieben wird, wird für
+    // JEDEN Tag der Achse gerechnet, und ein `indexOf` je Tag und Melder wäre
+    // dieselbe Suche neunzigmal.
+    const x = d => PAD.l + (tage.length > 1 ? d / (tage.length - 1) : .5) * IX;
     const y = v => PAD.o + IY - ((v - tief) / spanne) * IY;
+
+    /* Der Stand je Melder an jedem Tag der Achse: `j` zeigt auf die Meldung,
+       aus der der Wert stammt, `frisch` sagt, ob sie von diesem Tag ist. Vor
+       der ersten Meldung steht `null` — da gibt es nichts fortzuschreiben.
+
+       Ein Durchlauf, kein Suchen: `k.tage` ist aufsteigend und die Achse ist
+       die sortierte Vereinigung, also kommt jeder Tag eines Melders in
+       derselben Reihenfolge vorbei. */
+    const stand = mitWerten.map(k => {
+      let j = -1, naechste = 0;
+      return tage.map(tag => {
+        const frisch = k.tage[naechste] === tag;
+        if (frisch) j = naechste++;
+        return j < 0 ? null : { j, frisch };
+      });
+    });
 
     const svg = svgNeu();
     achse(svg, max, true, tief);
     const striche = [];      // je Kurve ihr gezeichnetes Element, für das Hervorheben
     mitWerten.forEach((k, i) => {
-      const px = k.tage.map((t, j) => [x(t), y(k.werte[j])]);
+      const px = [];
+      stand[i].forEach((s, d) => { if (s) px.push([x(d), y(k.werte[s.j])]); });
       const farbe = REIHE[i % REIHE.length];
       const strich = px.length === 1
         ? s_el('circle', { cx: px[0][0], cy: px[0][1], r: 2.2, fill: farbe })
@@ -532,46 +576,61 @@ window.Bilder = (function () {
     beschriftung(svg, PAD.l, H - 4, nurTag(tage[0]), 'start');
     if (tage.length > 1) beschriftung(svg, PAD.l + IX, H - 4, nurTag(tage[tage.length - 1]), 'end');
 
-    /* Ein Band je Tag, und im Kasten steht, wer an diesem Tag wieviel hatte —
-       nur wer gemeldet hat. Eine Null für jeden Schweigenden wäre gelogen:
-       die Kurve zieht dort schlicht durch. */
+    /* Ein Band je Tag, und im Kasten steht, wer an diesem Tag wie stand — auch
+       der, der geschwiegen hat, aber blass und mit dem Tag seiner Meldung
+       dahinter. Der Ring im Bild wird bei ihm kleiner und schwächer: die Linie
+       läuft dort durch, sie hat dort keinen Halt. */
     const zeiger = zeigerNeu(svg);
     const linie = s_el('line',
       { y1: PAD.o, y2: PAD.o + IY, stroke: P.textWeg, 'stroke-width': .7, 'stroke-dasharray': '2 2' });
     zeiger.appendChild(linie);
 
     const halb = tage.length > 1 ? IX / (tage.length - 1) / 2 : IX / 2;
-    treffer(svg, tage.map(tag => {
+    treffer(svg, tage.map((tag, d) => {
       const da = mitWerten
         .map((k, i) => {
-          const j = k.tage.indexOf(tag);
-          return j < 0
-            ? null
-            : { farbe: REIHE[i % REIHE.length], was: k.name, wert: k.werte[j], zeigt: text(k, j) };
+          const s = stand[i][d];
+          return !s ? null : {
+            farbe: REIHE[i % REIHE.length], was: k.name,
+            wert: k.werte[s.j], zeigt: text(k, s.j),
+            frisch: s.frisch, seit: k.tage[s.j],
+          };
         })
         .filter(Boolean)
         .sort((a, b) => b.wert - a.wert);
+      const stumm = da.filter(z => !z.frisch).length;
       return {
         flaeche: s_el('rect', {
-          x: Math.max(PAD.l, x(tag) - halb), y: PAD.o,
+          x: Math.max(PAD.l, x(d) - halb), y: PAD.o,
           width: Math.min(halb * 2, IX), height: IY,
         }),
         hervor: an => {
           zeiger.setAttribute('opacity', an ? 1 : 0);
-          linie.setAttribute('x1', x(tag)); linie.setAttribute('x2', x(tag));
+          linie.setAttribute('x1', x(d)); linie.setAttribute('x2', x(d));
           // Die Ringe wechseln mit dem Tag die Zahl — deshalb neu gesetzt
           // statt vorgehalten.
           [...zeiger.querySelectorAll('circle')].forEach(c => c.remove());
           if (!an) return;
           da.forEach(z => zeiger.appendChild(s_el('circle', {
-            cx: x(tag), cy: y(z.wert), r: 2.6,
-            fill: P.grund, stroke: z.farbe, 'stroke-width': 1.4,
+            cx: x(d), cy: y(z.wert), r: z.frisch ? 2.6 : 1.7,
+            fill: P.grund, stroke: z.farbe, 'stroke-width': z.frisch ? 1.4 : 1,
+            opacity: z.frisch ? 1 : .55,
           })));
         },
         inhalt: () => ({
           titel: nurTag(tag),
-          zeilen: da.map(z => ({ farbe: z.farbe, was: z.was, wert: z.zeigt })),
-          fuss: da.length ? null : o.fussLeer || 'Niemand hat gemeldet.',
+          /* Der fortgeschriebene Wert trägt SEIN Datum, nicht der Fuß: bei drei
+             Schweigern sind es drei verschiedene, und eines davon unten
+             hinzuschreiben hieße, für die anderen beiden zu raten. */
+          zeilen: da.map(z => ({
+            farbe: z.farbe, was: z.was, matt: !z.frisch,
+            wert: z.frisch ? z.zeigt : z.zeigt + ' · ' + nurTag(z.seit),
+          })),
+          fuss: !da.length
+            ? o.fussLeer || 'Niemand hat gemeldet.'
+            : stumm
+              ? 'Blass: an dem Tag nicht gemeldet, der Stand läuft weiter.'
+              : null,
         }),
       };
     }));
