@@ -629,7 +629,7 @@ window.Bilder = (function () {
           fuss: !da.length
             ? o.fussLeer || 'Niemand hat gemeldet.'
             : stumm
-              ? 'Blass: an dem Tag nicht gemeldet, der Stand läuft weiter.'
+              ? 'Blass: nicht gemeldet, Stand läuft weiter'
               : null,
         }),
       };
