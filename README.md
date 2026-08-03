@@ -192,7 +192,7 @@ zweistufig — der Link geht an die neue Adresse, die alte bekommt eine Warnung 
 gilt weiter, bis dort geklickt wurde.
 
 **Das Kontor** (`admin.html`) gehört der Rolle `admin`: sperren, entsperren,
-Rolle tauschen, entfernen, sechs Grafiken, Rundmail, Protokoll. Gleiche Herkunft
+Rolle tauschen, entfernen, sieben Grafiken, Rundmail, Protokoll. Gleiche Herkunft
 wie die Tafel, also dasselbe Token — kein zweiter Login und damit auch kein
 zweiter Angriffsweg. Wer der erste Admin ist, sagt das Secret `ADMIN_MAIL`: wer
 sich mit dieser Adresse anmeldet, wird beim Einlösen des Links zum Admin. Das ist
@@ -298,7 +298,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
 | `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen', grund?}` — nur Admin |
-| `GET /api/admin/statistik` 🔒 | die Zahlenreihen hinter den sechs Grafiken — nur Admin |
+| `GET /api/admin/statistik` 🔒 | die Zahlenreihen hinter den sieben Grafiken — nur Admin |
 | `POST /api/admin/rundmail` 🔒 | `{betreff, text}` an alle, die sie wollen — nur Admin |
 | `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
 | `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM` |

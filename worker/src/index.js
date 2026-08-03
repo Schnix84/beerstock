@@ -3104,7 +3104,7 @@ const ROUTEN = {
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
-    const [meldungen, bestand, gastgeber, lose, betrieb, mails, anmeldungen, postwillig] =
+    const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb, mails, anmeldungen, postwillig] =
       await env.DB.batch([
         // 1 — Meldungen je Tag, 60 Tage. Flaechenkurve.
         env.DB.prepare(`
@@ -3134,6 +3134,15 @@ const ROUTEN = {
         `),
         // 4 — Ausgang der Ziehungen. Gestapelter Balken.
         env.DB.prepare('SELECT status, count(*) AS n FROM los GROUP BY status'),
+        // 4b — dasselbe je Melder: wer wurde wie oft gezogen, und was hat er
+        // daraus gemacht. Der Balken daneben beantwortet nur den Anteil ueber
+        // alle; wer dauernd zieht und dauernd absagt, faellt darin nicht auf.
+        env.DB.prepare(`
+          SELECT l.user_id, coalesce(u.name,'Ehemaliger') AS name,
+                 l.status, count(*) AS n
+          FROM los l JOIN users u ON u.id = l.user_id
+          GROUP BY l.user_id, l.status
+        `),
         // 5 — Betrieb je Woche: Kommentare, Reaktionen, Sterne.
         env.DB.prepare(`
           SELECT woche, sum(k) AS kommentare, sum(r) AS reaktionen, sum(b) AS sterne FROM (
@@ -3170,6 +3179,24 @@ const ROUTEN = {
       k.werte.push(z.biere);
     }
 
+    /* Eine Zeile je Melder statt einer je Melder UND Status - die Seite malt
+       daraus einen liegenden Balken, und der braucht alle vier Ausgaenge
+       nebeneinander. Fehlende Status stehen als 0 drin, sonst muesste die
+       Seite raten, ob "kein Wert" nie oder null heisst. */
+    const jeMelderZeilen = new Map();
+    for (const z of jeMelder.results) {
+      if (!jeMelderZeilen.has(z.user_id)) {
+        jeMelderZeilen.set(z.user_id, {
+          name: z.name, gezogen: 0,
+          zugesagt: 0, abgelehnt: 0, verfallen: 0, offen: 0,
+        });
+      }
+      const m = jeMelderZeilen.get(z.user_id);
+      m.gezogen += z.n;
+      if (z.status in m) m[z.status] = z.n;
+    }
+    const losJeMelder = [...jeMelderZeilen.values()].sort((a, b) => b.gezogen - a.gezogen);
+
     // Kumuliert, nicht je Tag: die Frage ist "wie viele sind wir inzwischen".
     let summe = 0;
     const wachstum = anmeldungen.results.map(z => ({ tag: z.tag, n: (summe += z.n) }));
@@ -3180,6 +3207,7 @@ const ROUTEN = {
       bestand: [...kurven.values()],
       gastgeber: gastgeber.results,
       lose: lose.results,
+      lose_je_melder: losJeMelder,
       betrieb: betrieb.results,
       mails: mails.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
       wachstum,

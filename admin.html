@@ -219,12 +219,19 @@
   .tuer { text-align: center; padding: 50px 20px; }
   .tuer p { color: var(--tinte-weg); font-size: 14px; }
   .zurueck { display: inline-block; margin-top: 14px; color: var(--gruen); font-size: 13px; }
+  /* Im Kopf steht er über dem Titel statt unter einem Absatz — dort ist der
+     Abstand nach oben falsch herum. */
+  #kopf-blatt .zurueck { margin: 0 0 8px; }
 </style>
 </head>
 <body>
 <div class="buch">
 
   <div class="blatt" id="kopf-blatt" hidden>
+    <!-- Der Weg zurück. Stand bisher nur auf der verschlossenen Tür — wer
+         hereinkam, hatte keinen mehr und musste die Adresse von Hand kürzen.
+         Über den Titel, weil man ihn dort sucht und nicht unter der Ampel. -->
+    <a class="zurueck" href="./">← zurück zur Tafel</a>
     <h1>Kontor</h1>
     <p class="unter" id="wer"></p>
     <div class="zahlen" id="zahlen"></div>
@@ -545,6 +552,65 @@
     return box;
   }
 
+  /* 4b — Dasselbe je Melder: ein liegender Balken je Mensch, so lang wie er
+     gezogen wurde, darin die Ausgänge in denselben Farben wie im Band
+     darüber. Die Länge beantwortet „wen trifft es oft", die Aufteilung „und
+     was macht er daraus" — zwei Bilder nebeneinander würden dieselbe Zeile
+     zweimal suchen lassen. Die Zahl am Ende ist die Summe; die einzelnen
+     Ausgänge stehen im Titel des Segments, denn in einen Streifen von vier
+     Pixeln passt keine Ziffer. */
+  const LOS_ORDNUNG = ['zugesagt', 'abgelehnt', 'verfallen', 'offen'];
+  function bildLosJeMelder(titel, daten) {
+    const box = rahmen(titel);
+    const zeilen = daten.filter(z => z.gezogen).slice(0, 8);
+    if (!zeilen.length) return leer(box, 'Noch nicht gedreht.');
+    const max = Math.max(...zeilen.map(z => z.gezogen), 1);
+    const hoch = 15, luft = 5;
+    const hoehe = Math.max(zeilen.length * (hoch + luft) + 6, 40);
+    const svg = s_el('svg', { viewBox: `0 0 ${W} ${hoehe}`, role: 'img' });
+    const lx = 66;                   // Platz für den Namen, wie beim Balkenbild
+    const voll = W - lx - 22;        // Platz für den längsten Balken
+
+    zeilen.forEach((z, i) => {
+      const y = i * (hoch + luft) + 3;
+      const laenge = (z.gezogen / max) * voll;
+      let x = lx;
+      LOS_ORDNUNG.forEach(status => {
+        const v = z[status] || 0;
+        if (!v) return;
+        const b = (v / z.gezogen) * laenge;
+        const r = s_el('rect',
+          { x, y, width: Math.max(b, .5), height: hoch, fill: LOS_FARBE[status] });
+        const t = s_el('title');
+        t.textContent = `${z.name}: ${zahl(v)}× ${LOS_TITEL[status]}`;
+        r.appendChild(t);
+        svg.appendChild(r);
+        x += b;
+      });
+      const n = s_el('text',
+        { x: lx - 6, y: y + hoch - 4, 'text-anchor': 'end', 'font-size': 9.5, fill: '#47544d' });
+      n.textContent = z.name;
+      svg.appendChild(n);
+      const w = s_el('text',
+        { x: lx + Math.max(laenge, 1) + 5, y: y + hoch - 4, 'font-size': 9.5, fill: '#6f6653' });
+      w.textContent = zahl(z.gezogen);
+      svg.appendChild(w);
+    });
+    box.appendChild(svg);
+
+    const leg = el('div', 'legende');
+    LOS_ORDNUNG.forEach(status => {
+      const s = el('span');
+      const punkt = el('i');
+      punkt.style.background = LOS_FARBE[status];
+      s.appendChild(punkt);
+      s.appendChild(document.createTextNode(LOS_TITEL[status]));
+      leg.appendChild(s);
+    });
+    box.appendChild(leg);
+    return box;
+  }
+
   /* 5/6 — Gestapelte Säulen. Eine Woche (oder eine Mailart) je Säule, die
      Schichten übereinander. */
   function bildSaeulen(titel, gruppen, reihen, markeVon) {
@@ -773,6 +839,8 @@
     ziel.appendChild(bildLiegend('Wer war wie oft Gastgeber',
       s.gastgeber, z => z.name, z => z.n));
     ziel.appendChild(bildBand('Ausgang der Ziehungen', s.lose));
+    ziel.appendChild(bildLosJeMelder('Ausgang der Ziehungen je Melder',
+      s.lose_je_melder || []));
     ziel.appendChild(bildSaeulen('Betrieb je Woche', s.betrieb, [
       { feld: 'kommentare', titel: 'Kommentare', farbe: REIHE[0] },
       { feld: 'reaktionen', titel: 'Reaktionen', farbe: REIHE[1] },
