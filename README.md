@@ -131,10 +131,72 @@ Gemeldete Werte sind **ungeprüft**. Die einzige Ausnahme trägt die Marke
 *gemessen*: dieser Bestand kommt aus einer Kühlschrank-Inventur in Home Assistant
 (Kassenbon × Foto × KI), die Temperatur von einem Sensor im Kühlschrank.
 
+## Post vom Wirt, mein Deckel, das Kontor
+
+Wer eine Adresse hinterlegt hat, bekommt Mail — je Anlass abwählbar:
+
+| Art | wann | Vorgabe |
+|---|---|---|
+| `gewonnen` | die Flasche hat einen getroffen | an |
+| `termin_neu` | ein Abend steht fest | an |
+| `termin_aendert` | ein Abend verschiebt sich, wird umbenannt oder fällt aus | an |
+| `erinnerung` | am Morgen des Abendtags (der einzige Cron im Dienst, 09:00 UTC) | an |
+| `echo` | jemand antwortet auf einen Beitrag oder gibt Sterne | **aus** |
+| `rundmail` | gelegentlich, vom Wirt | an |
+
+Zwei Regeln gelten für alle: Gesperrte und Entfernte bekommen gar keine (der
+gemessene Melder hat kein Postfach und fällt damit von selbst heraus), und der
+**Ein-Klick-Abmeldelink** in jeder Fußzeile schlägt jede Einzelwahl.
+
+Der **Auslöser** bekommt bei `echo` nichts — wer selbst schreibt, weiß es schon.
+Bei den beiden Terminarten bekommt er sehr wohl eine, nur mit anderem Text
+(*„Für deinen Kalender"* statt einer Ankündigung): diese Mails tragen einen
+Anhang, und ausgerechnet der Gastgeber hätte den Abend sonst in keinem Kalender
+stehen. Gegen die doppelte Mail nach einer
+abgebrochenen Verbindung steht ein `UNIQUE` auf `mail_ausgang`.
+
+An `termin_neu` und `termin_aendert` hängt ein **Kalendereintrag** (`.ics`). Er
+trägt eine feste `UID` (`termin-<id>@beerstock`) und eine steigende `SEQUENCE`
+(Spalte `termine.fassung`) — damit *ersetzt* eine Verschiebung den vorhandenen
+Eintrag, statt einen zweiten daneben zu legen, und eine Absage räumt ihn per
+`METHOD:CANCEL` weg. Bewusst `METHOD:PUBLISH` und nicht `REQUEST`: `REQUEST` ist
+eine Einladung und zeigt im Postfach Zusagen-/Absagen-Knöpfe, deren Antwort an
+ein Postfach ginge, das niemand liest. Zugesagt wird auf der Tafel. Die
+Erinnerung am Abendtag trägt keinen Anhang — der Eintrag steht dann längst.
+
+Zwei Links kommen ohne Anmeldung aus: das Abmelden und die Antwort des
+Gewinners. Beide tragen eine **HMAC-Signatur statt einer Zeile in der Datenbank**
+— sie steht nirgends, sie wird gerechnet, und ein Rundumschlag ist ein neues
+`MAIL_GEHEIM`. Beide führen auf die Seite und tun dort erst etwas, wenn man
+klickt: Mailscanner laden Links vor, und ein `GET`, das zusagt, wäre binnen einer
+Woche einmal von einem Virenscanner beantwortet worden.
+
+**Mein Deckel** (Flyout auf der Tafel) ist die Selbstverwaltung: Name ändern,
+Adresse wechseln, die sechs Schalter, alle Geräte abmelden. Der Adresswechsel ist
+zweistufig — der Link geht an die neue Adresse, die alte bekommt eine Warnung und
+gilt weiter, bis dort geklickt wurde.
+
+**Das Kontor** (`admin.html`) gehört der Rolle `admin`: sperren, entsperren,
+Rolle tauschen, entfernen, sechs Grafiken, Rundmail, Protokoll. Gleiche Herkunft
+wie die Tafel, also dasselbe Token — kein zweiter Login und damit auch kein
+zweiter Angriffsweg. Wer der erste Admin ist, sagt das Secret `ADMIN_MAIL`: wer
+sich mit dieser Adresse anmeldet, wird beim Einlösen des Links zum Admin. Das ist
+selbstheilend, sonst wäre ein Kontor ohne Admin nur noch per SQL zu öffnen.
+
+Entfernt wird **weich**: Adresse, Name und Token verschwinden, die Beiträge
+bleiben als *Ehemaliger* stehen. Hart geht nicht — `kommentare.autor_id` hat
+`ON DELETE CASCADE` und risse ganze Threads mit, `termine.gastgeber_id` und
+`los.user_id` haben keine und hinterließen Waisen. Gesperrte bleiben in der Liste
+stehen (mit der stillen Marke *ruht*) und fallen aus dem Rad; sie dürfen weiter
+lesen, aber nichts mehr schreiben, und bekommen auch keinen frischen Magic Link
+mehr. Der gemessene Melder ist sperrbar, aber nicht entfernbar: das risse die
+Anbindung der Wohnung ab.
+
 ## Aufbau
 
 ```
 index.html           eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
+admin.html           das Kontor: Nutzerverwaltung, Statistik, Rundmail — nur fuer Admins
 worker/              Cloudflare Worker + D1 + R2: Registrierung, Meldungen, Bestenliste
 worker/src/tafel.js  Durable Object: verteilt an alle offenen Seiten, was sich geändert hat
 worker/migrations/   das Schema, eine Datei je Schritt — die Reihenfolge ist die Geschichte
@@ -199,11 +261,15 @@ Drei Dinge, die dazugehören:
 | `POST /api/anmelden` | `{email}` → schickt einen Magic Link |
 | `POST /api/magic` | `{token}` aus dem Link → Geräte-Token |
 | `POST /api/name` | Name für die Liste setzen |
-| `GET /api/me` 🔒 | wem das Token gehört |
+| `GET /api/me` 🔒 | wem das Token gehört: Name, Adresse, Rolle, Sperre, Mailschalter, Gerätezahl |
 | `POST /api/report` | `{biere, temperatur}` mit `Bearer`-Token |
 | `POST /api/abmelden` | wirft nur dieses eine Gerät raus |
+| `POST /api/geraete/alle-abmelden` 🔒 | wirft **alle** raus, auch dieses — das verlorene Handy |
+| `POST /api/einstellungen` 🔒 | `{mail:{art:bool}}` und/oder `{stumm:bool}`; unbekannte Arten → 400 |
+| `POST /api/mail/aendern` 🔒 | neue Adresse; Link an die **neue**, Warnung an die **alte**, bis dahin gilt die alte |
+| `POST /api/mail/stumm` | `{id, sig}` aus dem Ein-Klick-Abmeldelink — ohne Anmeldung, per HMAC |
 | `POST /api/drehen` | die Flasche drehen; ein zweiter Ruf liefert dasselbe Los |
-| `POST /api/los/antwort` | `{antwort:'ja'\|'nein', grund?, beginnt_am?, endet_am?}` — nur der Gezogene |
+| `POST /api/los/antwort` | `{antwort:'ja'\|'nein', grund?, beginnt_am?, endet_am?}` — nur der Gezogene, per Token **oder** mit `{los, t}` aus der Gewinner-Mail |
 | `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand |
 | `POST /api/termin/aendern` | verschieben, umbenennen, absagen; ohne `endet_am` wandert das Ende beim Verschieben mit |
 | `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?, bild?}` — überschreibt |
@@ -215,7 +281,12 @@ Drei Dinge, die dazugehören:
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages — ohne Token nur der Siegerplatz |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
-| `GET /api/health` | Bereitschaft, inklusive Datenbank, Mailversand, Bilderablage, Neu-Meldung und Verteiler |
+| `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
+| `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen', grund?}` — nur Admin |
+| `GET /api/admin/statistik` 🔒 | die Zahlenreihen hinter den sechs Grafiken — nur Admin |
+| `POST /api/admin/rundmail` 🔒 | `{betreff, text}` an alle, die sie wollen — nur Admin |
+| `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
+| `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM` |
 
 🔒 heißt: braucht den `Bearer`-Token, sonst 401. Für die `POST`-Routen gilt das
 ohnehin — sie schreiben; die beiden Ausnahmen sind `/api/anmelden` und
@@ -233,7 +304,16 @@ der ja derselbe Kommentar wird. Fotos: 2 MB, JPEG/PNG/WebP, ebenfalls 30 am Tag 
 läuft und die Kommentarsperre hier noch nichts aufhält. Verkleinert wird schon im
 Browser (lange Kante 1600 px, JPEG 0.8), aus 4 MB Handyfoto werden ~250 kB; der
 Deckel steht trotzdem, denn der Worker redet nicht nur mit unserem Browser.
-Zeiten reisen als ISO-8601 mit Zone; der Worker hat kein ICU und rechnet nie um.
+Zeiten reisen als ISO-8601 mit Zone, und der Worker rechnet in den ANTWORTEN nie
+um — die Seite kennt die Ortszeit ihres Betrachters, er nur die der Wohnung. In
+den **Mails** tut er es doch, denn dort steht kein Browser dazwischen: die
+Laufzeit hat volles ICU einschließlich Zeitzonen (gemessen 2026-08-03, Sommer-
+und Winterzeit stimmen). Eine ältere Anmerkung im Quelltext behauptet das
+Gegenteil; sie stammt aus einer Zeit, in der es so war.
+
+Nutzerverwaltung: 3 Adresswechsel je Nutzer und Tag (dazu dieselben Bremsen wie
+beim Magic Link, es ist dieselbe Tabelle), Sperrgrund 120 Zeichen, Rundmail 4000
+Zeichen bei 120 im Betreff und höchstens eine je Stunde.
 
 Magic Links gelten 15 Minuten und genau einmal, höchstens 3 pro Adresse und Stunde und 30
 insgesamt — sonst wäre der Posteingang ein Versandknopf im Netz. CORS
@@ -271,9 +351,24 @@ npx wrangler d1 migrations apply beerstock --remote  # Schema
 npx wrangler deploy                                  # Worker
 ```
 
-Einmalig dazu die beiden Secrets, sonst geht keine Mail raus und keine Meldung
-ein: `npx wrangler secret put AGENTMAIL_KEY` und `npx wrangler secret put
-MELDE_AN`.
+Einmalig dazu die Secrets, sonst geht keine Mail raus und keine Meldung ein:
+
+```bash
+npx wrangler secret put AGENTMAIL_KEY   # der Schluessel fuer den Versand
+npx wrangler secret put MELDE_AN        # wer von jedem Neuen erfaehrt
+npx wrangler secret put ADMIN_MAIL      # wer sich damit anmeldet, wird Admin
+npx wrangler secret put MAIL_GEHEIM     # zufaellig, 32+ Zeichen, fuer die HMAC-Links
+```
+
+`GET /api/health` sagt zu jedem, ob er anliegt — nie seinen Wert. Ohne
+`ADMIN_MAIL` kommt niemand ins Kontor, ohne `MAIL_GEHEIM` trägt keine Mail einen
+Abmeldelink; beides sähe von außen wie ein Fehler im Browser aus.
+
+Zum Prüfen ohne echten Versand: eine `.dev.vars` mit `MAIL_ATTRAPPE=1` neben die
+`wrangler.jsonc` legen (gitignored). `schickeMail()` schreibt dann in die Konsole,
+statt AgentMail anzurufen — sonst ist jeder Testlauf eine echte Mail an eine echte
+Adresse, und beim Durchspielen des Verteilers sind das schnell sechs auf einen
+Schlag.
 
 Ebenfalls einmalig der Eimer für die Fotos — und der ist zweiteilig:
 
