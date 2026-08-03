@@ -37,8 +37,10 @@ Wen es trifft, der **sagt zu oder ab**. Erst die Zusage macht daraus den Abend �
 vorher steht nur, worauf die Flasche zeigt. Eine Absage gibt den Tag sofort wieder
 frei, und die Flasche darf erneut gedreht werden; wer abgesagt oder drei Stunden
 lang nicht geantwortet hat, ist für heute raus und wird nicht noch einmal gezogen.
-Der Bierabend-Tag endet dabei nicht um Mitternacht, sondern um vier Uhr morgens —
-wer um halb zwei dreht, meint den Abend, der gerade läuft.
+Der Bierabend-Tag endet dabei nicht um Mitternacht, sondern zwei Stunden später
+in UTC — hier also um vier Uhr morgens, im Winter um drei. Wer um halb zwei dreht,
+meint den Abend, der gerade läuft; die Stunde Sommerzeit-Drift ist an dieser Grenze
+egal, eine ICU-Abhängigkeit wäre es nicht.
 
 ## Termine, Sterne, Gesagtes
 
@@ -132,9 +134,10 @@ Gemeldete Werte sind **ungeprüft**. Die einzige Ausnahme trägt die Marke
 ## Aufbau
 
 ```
-index.html          eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
-worker/             Cloudflare Worker + D1: Registrierung, Meldungen, Bestenliste
-worker/src/tafel.js Durable Object: verteilt an alle offenen Seiten, was sich geändert hat
+index.html           eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
+worker/              Cloudflare Worker + D1 + R2: Registrierung, Meldungen, Bestenliste
+worker/src/tafel.js  Durable Object: verteilt an alle offenen Seiten, was sich geändert hat
+worker/migrations/   das Schema, eine Datei je Schritt — die Reihenfolge ist die Geschichte
 ```
 
 Die Seite ist statisch und fragt nur. Geschrieben wird ausschließlich über den
@@ -203,19 +206,21 @@ Drei Dinge, die dazugehören:
 | `POST /api/los/antwort` | `{antwort:'ja'\|'nein', grund?, beginnt_am?, endet_am?}` — nur der Gezogene |
 | `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand |
 | `POST /api/termin/aendern` | verschieben, umbenennen, absagen; ohne `endet_am` wandert das Ende beim Verschieben mit |
-| `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?}` — überschreibt |
+| `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?, bild?}` — überschreibt |
 | `GET /api/bewertungen` 🔒 | `?ziel=user:5` — Schnitte, eigene Abgabe, Kommentarbaum |
-| `POST /api/kommentar` | `{ziel_art, ziel_id, text, antwort_auf?}` |
+| `POST /api/bild` | rohe Bytes im Rumpf, kein JSON → `{key, bild}`; der `key` gehört an den nächsten Kommentar |
+| `POST /api/kommentar` | `{ziel_art, ziel_id, text?, bild?, antwort_auf?}` — eins von beiden muss da sein |
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages — ohne Token nur der Siegerplatz |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
-| `GET /api/health` | Bereitschaft, inklusive Datenbank, Mailversand, Neu-Meldung und Verteiler |
+| `GET /api/health` | Bereitschaft, inklusive Datenbank, Mailversand, Bilderablage, Neu-Meldung und Verteiler |
 
 🔒 heißt: braucht den `Bearer`-Token, sonst 401. Für die `POST`-Routen gilt das
-ohnehin — sie schreiben. `GET /api/leaderboard` antwortet auch ohne, dann aber
-nur mit dem Siegerplatz (siehe *Von außen*).
+ohnehin — sie schreiben; die beiden Ausnahmen sind `/api/anmelden` und
+`/api/magic`, denn das ist ja der Weg zum Token. `GET /api/leaderboard` antwortet
+auch ohne, dann aber nur mit dem Siegerplatz (siehe *Von außen*).
 
 Grenzen: 0–999 Biere, −30…+30 °C, eine Meldung pro Minute und Nutzer, ein
 Absagegrund von höchstens 120 Zeichen. Ausgelost wird ab zwei Meldern mit etwas
@@ -223,8 +228,12 @@ Kaltem; nach einer Absage genügt einer, sonst sperrte ein einziges Nein den Abe
 Termine: höchstens 3 je Nutzer und Tag, 90 Tage im Voraus. Kommentare: 400 Zeichen,
 30 am Tag, 200 je Ziel, 10 Sekunden Abstand — dieselbe Bremse wie bei den Meldungen,
 gegen den Freund, der zehnmal drückt. Sie gelten auch für den Text neben den Sternen,
-der ja derselbe Kommentar wird. Zeiten reisen als ISO-8601 mit Zone; der Worker
-hat kein ICU und rechnet nie um.
+der ja derselbe Kommentar wird. Fotos: 2 MB, JPEG/PNG/WebP, ebenfalls 30 am Tag und
+10 Sekunden Abstand — eine eigene Bremse, weil das Hochladen *vor* dem Abschicken
+läuft und die Kommentarsperre hier noch nichts aufhält. Verkleinert wird schon im
+Browser (lange Kante 1600 px, JPEG 0.8), aus 4 MB Handyfoto werden ~250 kB; der
+Deckel steht trotzdem, denn der Worker redet nicht nur mit unserem Browser.
+Zeiten reisen als ISO-8601 mit Zone; der Worker hat kein ICU und rechnet nie um.
 
 Magic Links gelten 15 Minuten und genau einmal, höchstens 3 pro Adresse und Stunde und 30
 insgesamt — sonst wäre der Posteingang ein Versandknopf im Netz. CORS
@@ -265,6 +274,21 @@ npx wrangler deploy                                  # Worker
 Einmalig dazu die beiden Secrets, sonst geht keine Mail raus und keine Meldung
 ein: `npx wrangler secret put AGENTMAIL_KEY` und `npx wrangler secret put
 MELDE_AN`.
+
+Ebenfalls einmalig der Eimer für die Fotos — und der ist zweiteilig:
+
+```bash
+npx wrangler r2 bucket create beerstock-bilder --location weur
+```
+
+Dazu im Dashboard unter *R2 > beerstock-bilder > Settings* die **Public
+Development URL** einschalten und die entstandene `r2.dev`-Adresse als
+`BILDER_URL` in die `wrangler.jsonc` eintragen, ohne Schrägstrich am Ende. Ohne
+den Eimer antwortet `POST /api/bild` mit 503; steht er, fehlt aber die Adresse,
+kommt jedes hochgeladene Bild als `bild: null` heraus und sieht von außen wie ein
+Fehler im Browser aus. `GET /api/health` sagt unter `bilder`, an welchem von
+beidem es liegt. Warum die öffentliche Adresse und keine geschützte Worker-Route:
+`<img>` schickt keinen `Authorization`-Kopf (siehe *Von außen*).
 
 Der Verteiler braucht kein eigenes Kommando: `Tafel` steht als Durable Object in
 `wrangler.jsonc` und entsteht beim ersten Deploy mit. Er speichert nichts —
