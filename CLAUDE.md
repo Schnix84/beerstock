@@ -33,10 +33,15 @@ Migration  →  Worker-Deploy  →  Push der Seite
 
 Ein Worker, der eine Tabelle abfragt, die es noch nicht gibt, macht jeden Aufruf zum 500er.
 
-**Der Agent rollt nicht selbst aus.** `npx wrangler deploy` und
-`npx wrangler d1 migrations apply beerstock --remote` sind ihm verwehrt; er gibt dem Nutzer
-die Zeile zum Selberausführen, wartet dessen Ausgabe ab und prüft danach gegen die Live-API.
-Wrangler läuft hier ohne `node_modules` über `npx`.
+Die Befehle dazu — Wrangler läuft hier ohne `node_modules` über `npx`:
+
+```
+cd worker && npx wrangler d1 migrations apply beerstock --remote
+cd worker && npx wrangler deploy
+```
+
+Der Agent führt sie aus, sobald er den Auftrag hat (siehe *Am Ende fragen*), und prüft danach
+gegen die Live-API. Ungefragt rollt er nicht aus.
 
 **Nach dem Deploy eine halbe Minute Karenz.** Die Edge antwortet kurz noch mit der alten
 Fassung — auch mit Cache-Buster. Das sieht aus wie ein wirkungsloser Deploy und ist keiner.
@@ -80,6 +85,26 @@ etwas gelernt wurde, dorthin zurückschreiben.
 lokale Testtoken. In einem frischen Klon ist das Verzeichnis deshalb schlicht nicht da; dann
 ist `README.md` alles, was es gibt.
 
-## Nicht committen ohne Auftrag
+## Am Ende fragen
 
-Der Nutzer committet selbst. Das gilt hier wie in seinem HA-Repo.
+Ist die Arbeit getan, sagt der Agent **nicht** „committen und deployen machst du". Er fragt —
+kurz, mit dem, was anstünde:
+
+> Fertig. Soll ich committen, pushen und ausrollen?
+
+Ohne Antwort passiert nichts: kein Commit, kein Push, kein Deploy. Ein einzelner Schritt geht
+auch einzeln („nur committen", „nur den Worker").
+
+### „go live"
+
+Sagt der Nutzer **go live**, ist damit immer die ganze Kette gemeint, ohne Rückfrage, in
+dieser Reihenfolge:
+
+1. **Commit** — alles, was zur Arbeit gehört, mit ordentlicher Nachricht
+2. **Migration**, falls `worker/migrations/` gewachsen ist
+3. **Worker-Deploy**
+4. **Push** der Seite nach `main` (GitHub Pages zieht sich den Rest)
+5. **HA-Seite**, falls die Änderung sie berührt: dort `git pull` und neu laden
+
+Die Reihenfolge aus *Ausrollen* gilt weiter — Schema vor Worker vor Seite. Danach die halbe
+Minute Karenz abwarten und gegen die Live-API prüfen, dann melden, was durchgelaufen ist.
