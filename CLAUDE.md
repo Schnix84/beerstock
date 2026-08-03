@@ -11,7 +11,7 @@ das Datenmodell. Diese Datei hier sagt nur, was ein Agent beim *Arbeiten* am Rep
 | Was | Wo |
 |---|---|
 | Die Seite | `index.html` — **eine** geschlossene Datei, kein Build, keine externen Ressourcen |
-| Die Bilder | `verlauf.html` („Wie es läuft", für jeden Angemeldeten) |
+| Die Bilder | `verlauf.html` („Statistiken", für jeden Angemeldeten) |
 | Nutzerverwaltung | `admin.html` (das „Kontor") |
 | Grafiken + Tooltip | `bilder.js` — **geteilt** von `verlauf.html` und `admin.html`, nie von der Tafel |
 | Worker | `worker/src/index.js` |

@@ -211,7 +211,7 @@ Anbindung der Wohnung ab.
 
 ```
 index.html           eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
-verlauf.html         „Wie es läuft": die Bilder zur Runde — für jeden Angemeldeten
+verlauf.html         die Statistiken: die Bilder zur Runde — für jeden Angemeldeten
 admin.html           das Kontor: Nutzerverwaltung, Statistik, Rundmail — nur fuer Admins
 bilder.js            die sechs Grafiken samt Tooltip; verlauf.html und admin.html teilen sie
 worker/              Cloudflare Worker + D1 + R2: Registrierung, Meldungen, Bestenliste
@@ -304,7 +304,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages — ohne Token nur der Siegerplatz |
-| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für „Wie es läuft“; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt |
+| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
 | `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen', grund?}` — nur Admin |

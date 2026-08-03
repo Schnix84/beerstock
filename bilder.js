@@ -2,7 +2,7 @@
    DIE BILDER
 
    Sechs Grafiken, ein Tooltip, kein Fremdcode — und seit es zwei Seiten gibt,
-   die sie zeigen (das Kontor und „Wie es läuft"), liegen sie hier statt in
+   die sie zeigen (das Kontor und die „Statistiken"), liegen sie hier statt in
    einer der beiden. Der Grund ist kein Aufwand, sondern die Erfahrung: an
    einem Tooltip, der zweimal dasteht, ändert man beim zweiten Mal nichts mehr.
 
