@@ -286,13 +286,36 @@ async function nutzer(request, env) {
   const token = kopf.startsWith('Bearer ') ? kopf.slice(7).trim() : '';
   if (!token) return null;
   const h = await hash(token);
-  const u = await env.DB.prepare(`
-    SELECT u.id, u.name, u.email, u.quelle, u.rolle,
-           u.gesperrt_am, u.gesperrt_grund, u.entfernt_am,
-           u.mail_prefs, u.mail_stumm_am
-    FROM tokens t
-    JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?
-  `).bind(h).first();
+
+  /* Der Zeitstempel des Geraets wird HIER mitgeschrieben, im selben `batch`
+     wie die Abfrage - eine Runde zur Datenbank, kein loser Promise. Ein
+     `waitUntil` gaebe es hier gar nicht: `ctx` reist nicht bis in diese
+     Funktion, und ein nicht abgewarteter Schreibvorgang wird von der Laufzeit
+     abgeschnitten, sobald die Antwort raus ist.
+
+     GEDROSSELT auf eine Stunde, und das ist der Punkt: die offenen Seiten
+     fragen im Minutentakt nach, und ein Schreibvorgang je Abruf waeren
+     Tausende am Tag, damit eine Anzeige minutengenau statt stundengenau ist.
+     Trifft die WHERE-Klausel nicht, schreibt SQLite keine Zeile.
+
+     Der `UPDATE` steht VOR dem `SELECT` - ein `batch` laeuft der Reihe nach in
+     einer Transaktion, das gelesene `zuletzt` ist also schon das neue. Fuer
+     das Geraet, das gerade fragt, ist "jetzt" auch die richtige Antwort. */
+  const [, gefunden] = await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE tokens SET zuletzt = datetime('now')
+      WHERE token_hash = ?
+        AND (zuletzt IS NULL OR zuletzt < datetime('now','-1 hour'))
+    `).bind(h),
+    env.DB.prepare(`
+      SELECT u.id, u.name, u.email, u.quelle, u.rolle,
+             u.gesperrt_am, u.gesperrt_grund, u.entfernt_am,
+             u.mail_prefs, u.mail_stumm_am
+      FROM tokens t
+      JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?
+    `).bind(h),
+  ]);
+  const u = gefunden.results[0] || null;
   if (!u) return null;
 
   /* Ein Entfernter ist kein Halbangemeldeter, sondern niemand. Seine Token
@@ -1617,8 +1640,20 @@ const ROUTEN = {
   'GET /api/me': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    const geraete = await env.DB
-      .prepare('SELECT count(*) AS n FROM tokens WHERE user_id = ?').bind(ich.id).first();
+    /* Die Geraete einzeln, damit man ein altes gezielt wegraeumen kann. Vorher
+       stand hier nur eine Zahl, und die wuchs unerklaerlich: JEDES Einloesen
+       eines Magic Links legt ein neues Token an, auch im selben Browser, und
+       entfernt wird keines. "7 Geraete" waren in Wirklichkeit sieben gueltige
+       Zugaenge, davon fuenf die Leichen geleerter Browserspeicher.
+
+       Als Kennung reist `rowid` mit, nicht der Hash: der Hash ist zwar nicht
+       umkehrbar, aber er ist der Schluessel zum Zugang selbst, und der hat in
+       keiner Antwort etwas verloren. */
+    const geraete = await env.DB.prepare(`
+      SELECT rowid AS id, erstellt, zuletzt, (token_hash = ?) AS dieses
+      FROM tokens WHERE user_id = ?
+      ORDER BY coalesce(zuletzt, erstellt) DESC
+    `).bind(ich._token_hash, ich.id).all();
     return antwort(request, {
       name: ich.name,
       braucht_namen: !ich.name,
@@ -1630,7 +1665,16 @@ const ROUTEN = {
       gesperrt: ich.gesperrt_am ? { seit: utc(ich.gesperrt_am), grund: ich.gesperrt_grund } : null,
       mail: mailWahl(ich),
       mail_stumm: !!ich.mail_stumm_am,
-      geraete: geraete ? geraete.n : 1,
+      geraete: geraete.results.map(g => ({
+        id: g.id,
+        seit: utc(g.erstellt),
+        /* NULL heisst: seit dem Anmelden nicht mehr gesehen. Das gilt
+           rueckwirkend auch fuer alles, was vor dieser Ausbaustufe entstand -
+           der Zeitstempel wurde bis dahin nie geschrieben, obwohl die Spalte
+           seit Schema 2 dasteht. */
+        zuletzt: utc(g.zuletzt),
+        dieses: !!g.dieses,
+      })),
     });
   },
 
@@ -1673,6 +1717,34 @@ const ROUTEN = {
     if (!ich) return antwort(request, { ok: true });   // schon weg, auch gut
     await env.DB.prepare('DELETE FROM tokens WHERE token_hash = ?').bind(ich._token_hash).run();
     return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Ein einzelnes Geraet wegraeumen. Der Fall ist nicht das verlorene Handy,
+     sondern der Normalfall: nach ein paar Wochen stehen dort Token, die zu
+     Browserspeichern gehoeren, die es nicht mehr gibt.
+
+     Die Besitzpruefung steckt in der WHERE-Klausel und nicht in einem
+     vorherigen SELECT - so gibt es keinen Moment, in dem geprueft und noch
+     nicht gehandelt wurde, und eine fremde `rowid` trifft schlicht nichts. */
+  'POST /api/geraete/abmelden': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const id = Number(daten.id);
+    if (!Number.isInteger(id)) return fehler(request, 'id: eine Zahl');
+
+    const weg = await env.DB
+      .prepare('DELETE FROM tokens WHERE rowid = ? AND user_id = ?')
+      .bind(id, ich.id).run();
+    if (!weg.meta.changes) return fehler(request, 'Das Gerät gibt es nicht', 404);
+
+    // Ob er sich gerade selbst hinausgeworfen hat - dann muss die Seite das
+    // Token wegwerfen, statt weiter damit zu fragen.
+    const dieses = await env.DB.prepare('SELECT 1 FROM tokens WHERE token_hash = ?')
+      .bind(ich._token_hash).first();
+    return antwort(request, { ok: true, war_dieses: !dieses });
   },
 
   // -------------------------------------------------------------------------
@@ -2958,13 +3030,22 @@ const ROUTEN = {
          ist der Notausgang, nicht der Weg. */
       return fehler(request, 'Das machst du nicht mit dir selbst', 409);
     }
-    /* Der Dienstnutzer aus Home Assistant. Sperren nimmt ihn nur aus dem Topf
-       und ist erlaubt; entfernen risse die Anbindung der Wohnung ab, und
-       verwalten kann ein Konto ohne Postfach ohnehin nicht. */
-    if (ziel.quelle === 'ha' && (aktion === 'rolle' || aktion === 'entfernen')) {
-      return fehler(request, aktion === 'rolle'
-        ? 'Ein Konto ohne Postfach kann nicht verwalten'
-        : 'Der gemessene Melder bleibt — sperren ja, entfernen nein', 409);
+    /* Der Dienstnutzer aus Home Assistant laesst sich nicht ENTFERNEN: das
+       risse die Anbindung der Wohnung ab (`rest_command.beerstock_melden`
+       bekaeme 401 auf jede Meldung). Sperren ist erlaubt, es nimmt ihn nur
+       aus dem Topf. */
+    if (ziel.quelle === 'ha' && aktion === 'entfernen') {
+      return fehler(request, 'Der gemessene Melder bleibt — sperren ja, entfernen nein', 409);
+    }
+    /* Zum Admin wird, wer sich anmelden kann - und das haengt am POSTFACH,
+       nicht an der Quelle. Hier stand `quelle === 'ha'` mit der Begruendung
+       "ein Konto ohne Postfach kann nicht verwalten"; das war ein Fehlschluss
+       aus der Annahme, der Dienstnutzer habe nie eine Adresse. In dieser
+       Instanz hat er eine: `Schnix` ist der Melder aus der Wohnung UND das
+       persoenliche Konto dahinter, beides dieselbe Zeile. Die Regel hätte
+       ausgerechnet dieses Konto vom Kontor ausgesperrt. */
+    if (aktion === 'rolle' && ziel.rolle !== 'admin' && !ziel.email) {
+      return fehler(request, 'Ohne Postfach kein Admin — er käme nie herein', 409);
     }
     /* Der letzte Admin. Gezaehlt werden nur die, die es auch AUSUEBEN
        koennen - ein gesperrter Admin ist keiner (siehe `istAdmin`).
@@ -3005,10 +3086,8 @@ const ROUTEN = {
       `).bind(ziel.id).run();
 
     } else if (aktion === 'rolle') {
+      // Die Postfachpruefung steht oben bei den Schutzregeln, nicht hier.
       const neu = ziel.rolle === 'admin' ? 'user' : 'admin';
-      if (neu === 'admin' && !ziel.email) {
-        return fehler(request, 'Ohne Postfach kein Admin — er käme nie herein', 409);
-      }
       detail = neu;
       await env.DB.prepare('UPDATE users SET rolle = ? WHERE id = ?').bind(neu, ziel.id).run();
 
