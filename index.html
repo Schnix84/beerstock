@@ -351,15 +351,24 @@
   }
   .t-zeile:last-child { border-bottom: none; }
   .t-tag {
+    position: relative;
     font-family: var(--hand); font-size: 13px; line-height: 1.25; color: var(--gelb);
   }
   .t-tag span { display: block; font-size: 11px; color: var(--kreide-weg); }
   /* Die Herkunft unter dem Wochentag. Ohne Kasten: in der schmalen Spalte
      stünde ein Rahmen als drittes Kästchen untereinander und machte aus der
-     Datumsspalte eine Liste. Das gesperrte Versalwort reicht als Marke. */
+     Datumsspalte eine Liste. Das gesperrte Versalwort reicht als Marke.
+
+     Und ausgehängt: in der Rasterzeile steht der Titel neben der Datumsspalte,
+     die Unterzeile darunter — eine dritte Zeile in der Spalte machte die erste
+     Rasterreihe höher, und der ausgeloste Abend bekam einen sichtbar größeren
+     Abstand zwischen Titel und Unterzeile als der eingetragene. Absolut
+     gesetzt zählt die Marke für die Zeilenhöhe nicht mit; sie hängt unter dem
+     Wochentag in dem Platz, den die Unterzeile ohnehin freilässt (Spalte 1). */
   .t-tag .t-quelle {
+    position: absolute; top: 100%; left: 0; margin-top: 3px;
     font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .1em;
-    text-transform: uppercase; color: var(--gelb); margin-top: 3px;
+    text-transform: uppercase; color: var(--gelb);
   }
   .t-mitte { min-width: 0; }
   .t-titel {
