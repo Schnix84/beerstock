@@ -6,3 +6,7 @@ node_modules/
 
 # Lokale Secrets fuer `wrangler dev`. Gehoert NIE ins Repo.
 worker/.dev.vars
+
+# Lokale Planungsnotizen und das Projektgedaechtnis. Oeffentliches Repo — hier
+# stehen Kontodetails und lokale Testtoken drin.
+ideas/
