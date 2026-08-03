@@ -127,6 +127,16 @@ Handy wechselt, den Browserspeicher leert oder von Safari nach sieben Tagen
 Untätigkeit ausgeräumt wird, tippt einfach wieder seine Adresse ein. Handy und
 Laptop können gleichzeitig angemeldet sein.
 
+**Jedes Einlösen legt dabei ein neues Token an — auch im selben Browser.** Alte
+laufen nicht ab und verschwinden nicht von selbst; nach ein paar Wochen stehen
+in „mein Deckel" mehr Geräte, als je benutzt wurden, und die überzähligen sind
+die Reste geleerter Browserspeicher. Die Liste dort zeigt zu jedem, wann er
+zuletzt gesehen wurde, und räumt einzeln oder auf einen Schlag auf. Der
+Zeitstempel (`tokens.zuletzt`) wird beim Abruf mitgeschrieben, aber höchstens
+einmal je Stunde — die offenen Seiten fragen im Minutentakt nach, und ein
+Schreibvorgang je Abruf wären Tausende am Tag für eine Anzeige, die stundengenau
+genügt.
+
 Gemeldete Werte sind **ungeprüft**. Die einzige Ausnahme trägt die Marke
 *gemessen*: dieser Bestand kommt aus einer Kühlschrank-Inventur in Home Assistant
 (Kassenbon × Foto × KI), die Temperatur von einem Sensor im Kühlschrank.
@@ -261,9 +271,10 @@ Drei Dinge, die dazugehören:
 | `POST /api/anmelden` | `{email}` → schickt einen Magic Link |
 | `POST /api/magic` | `{token}` aus dem Link → Geräte-Token |
 | `POST /api/name` | Name für die Liste setzen |
-| `GET /api/me` 🔒 | wem das Token gehört: Name, Adresse, Rolle, Sperre, Mailschalter, Gerätezahl |
+| `GET /api/me` 🔒 | wem das Token gehört: Name, Adresse, Rolle, Sperre, Mailschalter, Geräteliste |
 | `POST /api/report` | `{biere, temperatur}` mit `Bearer`-Token |
 | `POST /api/abmelden` | wirft nur dieses eine Gerät raus |
+| `POST /api/geraete/abmelden` 🔒 | `{id}` — ein einzelnes altes Token wegräumen |
 | `POST /api/geraete/alle-abmelden` 🔒 | wirft **alle** raus, auch dieses — das verlorene Handy |
 | `POST /api/einstellungen` 🔒 | `{mail:{art:bool}}` und/oder `{stumm:bool}`; unbekannte Arten → 400 |
 | `POST /api/mail/aendern` 🔒 | neue Adresse; Link an die **neue**, Warnung an die **alte**, bis dahin gilt die alte |
