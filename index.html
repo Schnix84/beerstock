@@ -355,20 +355,30 @@
     font-family: var(--hand); font-size: 13px; line-height: 1.25; color: var(--gelb);
   }
   .t-tag span { display: block; font-size: 11px; color: var(--kreide-weg); }
-  /* Die Herkunft unter dem Wochentag. Ohne Kasten: in der schmalen Spalte
-     stünde ein Rahmen als drittes Kästchen untereinander und machte aus der
-     Datumsspalte eine Liste. Das gesperrte Versalwort reicht als Marke.
+  /* Die Marken unter dem Wochentag: „läuft" und „ausgelost". Ohne Kasten: in
+     der schmalen Spalte stünde ein Rahmen als drittes Kästchen untereinander
+     und machte aus der Datumsspalte eine Liste. Das gesperrte Versalwort
+     reicht als Marke.
 
      Und ausgehängt: in der Rasterzeile steht der Titel neben der Datumsspalte,
      die Unterzeile darunter — eine dritte Zeile in der Spalte machte die erste
      Rasterreihe höher, und der ausgeloste Abend bekam einen sichtbar größeren
      Abstand zwischen Titel und Unterzeile als der eingetragene. Absolut
-     gesetzt zählt die Marke für die Zeilenhöhe nicht mit; sie hängt unter dem
-     Wochentag in dem Platz, den die Unterzeile ohnehin freilässt (Spalte 1). */
-  .t-tag .t-quelle {
+     gesetzt zählen die Marken für die Zeilenhöhe nicht mit; sie hängen unter
+     dem Wochentag in dem Platz, den die Unterzeile ohnehin freilässt
+     (Spalte 1). Der gemeinsame Kasten stapelt sie, damit ein ausgeloster Abend,
+     der gerade läuft, nicht zwei Marken übereinanderlegt. */
+  .t-tag .t-marken {
     position: absolute; top: 100%; left: 0; margin-top: 3px;
-    font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .1em;
-    text-transform: uppercase; color: var(--gelb);
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  /* Eng gesetzt, weil der freie Platz unter dem Wochentag gezählt ist: von der
+     Unterkante der Datumsspalte bis zur gestrichelten Trennlinie sind es die
+     Unterzeile und die 9 px Polster, gut 27. Zwei Marken übereinander brauchen
+     mit dieser Zeilenhöhe rund 23 und bleiben damit über dem Strich. */
+  .t-tag .t-marken span {
+    font-family: system-ui, sans-serif; font-size: 8px; line-height: 1.15;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--gelb);
   }
   .t-mitte { min-width: 0; }
   .t-titel {
@@ -385,18 +395,10 @@
     margin-top: 4px; font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
     overflow-wrap: anywhere;
   }
-  /* Nur die Uhrzeit und die Marken halten zusammen. Die Stücke dazwischen
-     tragen Namen („· bei Sebastian-Alexander"), und ein `nowrap` darauf schöbe
-     die Zeile im Zweifel aus der Tafel statt sie umzubrechen. */
-  .t-unter > span:first-child, .t-marke { white-space: nowrap; }
-  /* Die Marke ist gesperrt gesetzt, das kostet Breite. Etwas weniger Sperrung
-     und ein knapperes Polster halten sie lesbar und sparen die Handvoll Pixel,
-     die auf 320 px den Unterschied macht. */
-  .t-marke {
-    font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .12em;
-    text-transform: uppercase; color: var(--gelb); border: 1px solid #e8c76655;
-    border-radius: 2px; padding: 1px 3px;
-  }
+  /* Nur die Uhrzeit hält zusammen. Die Stücke dahinter tragen Namen („· bei
+     Sebastian-Alexander"), und ein `nowrap` darauf schöbe die Zeile im Zweifel
+     aus der Tafel statt sie umzubrechen. */
+  .t-unter > span:first-child { white-space: nowrap; }
   .t-weg {
     border: none; background: none; padding: 0; font: inherit; font-size: 10.5px;
     color: var(--kreide-weg); text-decoration: underline; cursor: pointer;
@@ -408,7 +410,7 @@
      Anfang und Ende ist ein Abend weder „kommend" noch „gewesen" — vorher
      rutschte er in der Minute, in der er anfing, unter den Trenner. */
   .t-zeile.jetzt .t-titel { color: var(--gelb); }
-  .t-marke.jetzt { animation: t-puls 2.4s ease-in-out infinite; }
+  .t-marken .jetzt { animation: t-puls 2.4s ease-in-out infinite; }
   @keyframes t-puls { 50% { opacity: .4; } }
   /* Abgesagt: durchgestrichen, wie an einer Tafel. Die Zeile bleibt stehen. */
   .t-zeile.ab .t-titel { text-decoration: line-through; text-decoration-color: var(--rot); }
@@ -921,7 +923,7 @@
        ohnehin fest, bevor sich das erste Bild bewegt — es geht nichts verloren. */
     .erg-kringel { animation: none; stroke-dashoffset: 0; }
     /* Die „läuft"-Marke steht ohnehin da; das Pulsen ist die Zugabe. */
-    .t-marke.jetzt { animation: none; }
+    .t-marken .jetzt { animation: none; }
     /* Emoji-Auswahl und Namenszeile sind sofort da, statt aufzugehen. */
     .ko-repick, .ko-wer { animation: none; }
   }
@@ -1723,12 +1725,19 @@
       tag.textContent = d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
       tag.appendChild(el('span', null,
         d.toLocaleDateString('de-DE', { weekday: 'short' })));
-      /* Woher der Abend kommt, steht in der Datumsspalte und nicht mehr in der
-         Unterzeile. Es gehört dorthin: die Spalte sagt, WANN und WOHER, die
-         Unterzeile sagt, WIE der Abend läuft. Und es rechnet sich — unter dem
-         Wochentag ist die Spalte leer, in der Unterzeile kostete die Marke
-         gemessene 66 px, genau die, an denen die Uhrzeit umbrach. */
-      if (t.aus_ziehung) tag.appendChild(el('span', 't-quelle', 'ausgelost'));
+      /* Die Marken stehen in der Datumsspalte und nicht mehr in der Unterzeile.
+         Sie gehören dorthin: die Spalte sagt, WANN, WOHER und WORAN man ist,
+         die Unterzeile sagt nur noch, wie der Abend gemacht ist. Und es
+         rechnet sich — unter dem Wochentag ist die Spalte leer, in der
+         Unterzeile kosteten die Marken gemessene 66 px, genau die, an denen
+         die Uhrzeit umbrach.
+
+         „läuft" zuerst: was gerade ist, steht über dem, was war. Und nur
+         solange er wirklich läuft — an einem abgesagten Abend läuft nichts. */
+      const marken = el('div', 't-marken');
+      if (laeuft && !t.abgesagt) marken.appendChild(el('span', 'jetzt', 'läuft'));
+      if (t.aus_ziehung) marken.appendChild(el('span', 't-quelle', 'ausgelost'));
+      if (marken.firstChild) tag.appendChild(marken);
       z.appendChild(tag);
 
       const mitte = el('div', 't-mitte');
@@ -1741,8 +1750,6 @@
          es sind die 26 px, die dieser längsten aller Zeilen fehlten. */
       unter.appendChild(el('span', null,
         e ? uhr(d) + '–' + uhr(e) : uhr(d) + ' Uhr'));
-      // Nur solange er wirklich läuft — an einem abgesagten Abend läuft nichts.
-      if (laeuft && !t.abgesagt) unter.appendChild(el('span', 't-marke jetzt', 'läuft'));
       if (t.titel) unter.appendChild(el('span', null, '· bei ' + t.gastgeber));
       // Ausgelost steht oben in der Datumsspalte; von Hand eingetragen nennt
       // hier einen Namen und passt in keine 58 px breite Spalte.
