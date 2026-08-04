@@ -355,10 +355,7 @@
     font-family: var(--hand); font-size: 13px; line-height: 1.25; color: var(--gelb);
   }
   .t-tag span { display: block; font-size: 11px; color: var(--kreide-weg); }
-  /* Die Marken unter dem Wochentag: „läuft" und „ausgelost". Ohne Kasten: in
-     der schmalen Spalte stünde ein Rahmen als drittes Kästchen untereinander
-     und machte aus der Datumsspalte eine Liste. Das gesperrte Versalwort
-     reicht als Marke.
+  /* Die Marken unter dem Wochentag: „läuft" und „ausgelost", beide im Kasten.
 
      Und ausgehängt: in der Rasterzeile steht der Titel neben der Datumsspalte,
      die Unterzeile darunter — eine dritte Zeile in der Spalte machte die erste
@@ -372,13 +369,30 @@
     position: absolute; top: 100%; left: 0; margin-top: 3px;
     display: flex; flex-direction: column; gap: 1px;
   }
-  /* Eng gesetzt, weil der freie Platz unter dem Wochentag gezählt ist: von der
-     Unterkante der Datumsspalte bis zur gestrichelten Trennlinie sind es die
-     Unterzeile und die 9 px Polster, gut 27. Zwei Marken übereinander brauchen
-     mit dieser Zeilenhöhe rund 23 und bleiben damit über dem Strich. */
+  /* Der Kasten kostet an beiden Achsen, und beide sind hier gezählt.
+
+     Hoch: von der Unterkante der Datumsspalte bis zur gestrichelten Trennlinie
+     sind es die Unterzeile und die 9 px Polster, gut 27. Zwei Kästen mit Rand
+     brauchen rund 25 — deshalb steht das Polster nur an den Seiten und die
+     Zeilenhöhe gibt den Rand nach innen. Ein Kasten mit 1 px Polster oben und
+     unten wie in der Unterzeile schöbe den zweiten über den Strich.
+
+     Breit: „ausgelost" im Kasten misst 63 px und ist damit breiter als die
+     58 px der Spalte. Das geht, weil die Marken ausgehängt sind und die zweite
+     Rasterreihe in Spalte 1 leer ist — Platz ist bis zur Unterzeile bei 69 px.
+     Die Sperrung ist dafür knapper als früher, sonst wird es dort eng.
+
+     Gemessen am engsten Fall — beide Marken an einem einzeiligen Titel —
+     bleiben 7,6 px bis zum Strich und 5,7 px bis zur Unterzeile.
+
+     Stehen beide da, sind sie gleich breit — der Kasten schrumpft auf das
+     längere Wort, das kürzere zieht mit. Deshalb die Schrift darin mittig:
+     linksbündig hinge „läuft" schief unter „ausgelost". */
   .t-tag .t-marken span {
     font-family: system-ui, sans-serif; font-size: 8px; line-height: 1.15;
-    letter-spacing: .1em; text-transform: uppercase; color: var(--gelb);
+    letter-spacing: .08em; text-transform: uppercase; text-align: center;
+    color: var(--gelb); border: 1px solid #e8c76655; border-radius: 2px;
+    padding: 0 3px;
   }
   .t-mitte { min-width: 0; }
   .t-titel {
