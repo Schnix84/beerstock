@@ -438,6 +438,100 @@
      die beiden Enden und die Überschrift stünde dazwischen. */
   .block-kopf .kopf-neben { display: flex; gap: 14px; }
 
+  /* --- Der Notruf ----------------------------------------------------------
+     Steht über dem Rad, weil eine Not vor der Frage des Abends kommt. Solange
+     nichts los ist, ist es eine schmale Zeile mit einem Knopf — kein Kasten,
+     der eine Dringlichkeit behauptet, die gerade keine ist.
+     --------------------------------------------------------------------- */
+  .notruf-block { margin-top: clamp(14px, 3.6vw, 20px); }
+  .nr-knopf {
+    border: 1px solid #e0745c66; border-radius: 3px; background: none;
+    padding: 3px 9px; font: inherit; font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--rot); cursor: pointer;
+  }
+  .nr-knopf:hover { background: #e0745c14; }
+  /* Ein laufender eigener Notruf färbt den Knopf: er ist dann kein Angebot
+     mehr, sondern der Weg zurück. */
+  .nr-knopf.laeuft { color: var(--gelb); border-color: #e8c76677; }
+
+  .nr-zeile {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 11px;
+    align-items: center; padding: 9px 0;
+    border-bottom: 1px dashed #ffffff1f;
+  }
+  .nr-zeile:last-child { border-bottom: none; }
+  .nr-wer { font-family: var(--hand); font-size: clamp(15px, 4vw, 17px); color: var(--gelb); }
+  .nr-unter {
+    grid-column: 1 / -1;
+    font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
+  }
+  /* Der eigene Notruf sagt es in der ersten Person — man soll nicht erst den
+     Namen lesen müssen, um zu merken, dass man sich selbst ansieht. */
+  .nr-zeile.meiner .nr-wer { color: var(--kreide); }
+  .nr-hin {
+    border: 1px solid #e8c76677; border-radius: 3px; background: none;
+    padding: 4px 10px; font: inherit; font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--gelb); cursor: pointer;
+    text-decoration: none; white-space: nowrap;
+  }
+
+  /* --- Die Karte -----------------------------------------------------------
+     Selbstgezeichnet, keine Bibliothek: ein Raster aus 256er-Kacheln, absolut
+     gesetzt, darüber eine Nadel. Das ist alles, was diese Seite von einer
+     Karte braucht — schieben und zoomen kann sie nicht, und das ist Absicht:
+     die ganze Fläche IST der Knopf in die Navigation, ein Ziehen darauf wäre
+     ein Klick, der keiner sein wollte.
+
+     `background` liegt darunter, damit ein Loch im Kachelnetz (Kachel weg,
+     Netz weg) wie ein unbedruckter Fleck aussieht und nicht wie ein Fehler.
+     --------------------------------------------------------------------- */
+  .karte {
+    position: relative; display: block; width: 100%; height: 150px;
+    margin-top: 8px; overflow: hidden; border-radius: 3px;
+    background: #2b3230; border: 1px solid #ffffff1f; cursor: pointer;
+  }
+  .karte img {
+    position: absolute; width: 256px; height: 256px; max-width: none;
+    /* Die Kacheln sind hell, die Tafel ist dunkel. Etwas Zurückhaltung nimmt
+       ihnen das Grelle, ohne die Straßennamen unlesbar zu machen. */
+    filter: grayscale(.35) brightness(.82) contrast(1.05);
+    -webkit-user-drag: none; user-select: none;
+  }
+  /* Der Streuradius der Ortung. Er steht VOR der Nadel im Stapel und ist
+     bewusst kein Punkt: eine WLAN-Ortung liegt gern zwei Kilometer daneben,
+     und ein scharfer Punkt behauptete eine Schärfe, die es nicht gibt. */
+  .karte-streu {
+    position: absolute; border-radius: 50%;
+    background: #e8c7661f; border: 1px solid #e8c76659;
+    transform: translate(-50%, -50%); pointer-events: none;
+  }
+  .karte-nadel {
+    position: absolute; width: 13px; height: 13px; border-radius: 50%;
+    background: var(--gelb); border: 2px solid #1d2320;
+    transform: translate(-50%, -50%); pointer-events: none;
+    box-shadow: 0 0 0 1px #e8c76688;
+  }
+  .karte-nadel.puls { animation: t-puls 2.4s ease-in-out infinite; }
+  /* Namensnennung. Lizenzpflicht bei OSM-Kacheln, und sie darf nicht unter
+     der Oberfläche verschwinden — deshalb unten rechts auf der Karte, mit
+     eigenem Grund, damit sie auf jeder Kachel lesbar bleibt. */
+  .karte-quelle {
+    position: absolute; right: 0; bottom: 0; z-index: 2;
+    padding: 1px 4px; background: #10141391; font-size: 8.5px;
+    color: var(--kreide-weg); border-radius: 3px 0 0 0;
+  }
+  .karte-quelle a { color: inherit; }
+
+  /* Die zwei Nöte im Blatt. Große Flächen, weil danach gegriffen wird und
+     nicht gezielt. */
+  .nr-wahl { display: grid; gap: 9px; margin-top: 4px; }
+  .nr-wahl .knopf { width: 100%; }
+  .nr-nochmal {
+    border: none; background: none; padding: 6px 0 0; font: inherit;
+    font-size: 12px; color: var(--kreide-weg); text-decoration: underline;
+    cursor: pointer;
+  }
+
   /* --- Die Chronik ---------------------------------------------------------
      Dasselbe Blatt wie das Flyout, nur eine Ebene tiefer (38 gegen 40): sie ist
      die Liste, aus der man einen Abend aufschlägt, und der aufgeschlagene
@@ -1082,6 +1176,18 @@
 
       <div class="strich-linie"></div>
 
+      <!-- ============ Der Notruf ========================================
+           Über dem Rad, weil eine Not vor der Frage des Abends kommt. Nur für
+           Angemeldete: draußen kommt vom Worker gar keine Zeile davon an.
+           ============================================================= -->
+      <section class="notruf-block" id="notruf-block" hidden>
+        <div class="block-kopf kr">
+          <span class="titel">Notruf</span>
+          <button class="nr-knopf" id="notruf-auf" type="button">Ich brauche was</button>
+        </div>
+        <div id="notruf-liste"></div>
+      </section>
+
       <!-- ============ Das Glücksrad =====================================
            Steht zwischen dem Ersten und der Karte, weil es die Frage des
            Abends beantwortet — der Kopf gehört weiter dem, der am meisten
@@ -1467,6 +1573,34 @@
     </div>
   </div>
 
+  <!-- Der Notruf. Zwei Knöpfe, dann die Karte mit dem eigenen Standort — was
+       die anderen gleich sehen werden, sieht man hier zuerst selbst. -->
+  <div class="flyout" id="notruf" hidden>
+    <div class="fly-schirm" id="nr-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="nr-titel" aria-modal="true">
+      <div class="fly-kopf">
+        <div>
+          <div class="fly-titel kr" id="nr-titel">Notruf</div>
+          <div class="fly-unter" id="nr-unter">was fehlt?</div>
+        </div>
+        <button class="fly-zu" id="nr-zu" type="button" aria-label="Schließen">×</button>
+      </div>
+
+      <div class="nr-wahl" id="nr-wahl">
+        <button class="knopf" id="nr-bier" type="button">Ich brauche Bier</button>
+        <button class="knopf" id="nr-kamerad" type="button">Ich brauche Trinkkameraden</button>
+      </div>
+
+      <!-- Was danach dasteht: die eigene Karte, der Weg dorthin, der Rückzug. -->
+      <div id="nr-lage" hidden>
+        <div id="nr-karte"></div>
+        <button class="nr-nochmal" id="nr-weg" type="button">Notruf zurücknehmen</button>
+      </div>
+
+      <p class="sagt" id="nr-sagt" hidden></p>
+    </div>
+  </div>
+
   <!-- Ein Foto groß. Eine Ebene über dem Flyout, mit derselben Mechanik:
        Schirm zum Schließen, Escape schließt erst die Lupe, dann das Blatt. -->
   <div class="lupe" id="lupe" hidden>
@@ -1603,6 +1737,100 @@
 
   const KRINGEL = 'M28,16 C8,26 6,50 40,58 C86,68 172,60 186,42 C196,28 168,10 116,8 ' +
                   'C74,6 40,10 26,20';
+
+  /* --- Kartenrechnung -------------------------------------------------------
+     Web-Mercator, dieselbe Projektion, in der jede Kachel jedes Kartendienstes
+     liegt. Drei Zeilen Mathematik, und danach ist eine Karte ein Raster aus
+     Bildern — mehr ist sie nicht.
+
+     `kachelX/Y` geben die Kachelnummer MIT Nachkommastellen zurück: die ganze
+     Zahl sagt, welche Kachel, der Bruch, wo darin der Punkt sitzt. Ohne den
+     Bruch säße jede Nadel in der Kachelecke.
+     ------------------------------------------------------------------------ */
+  const KACHEL = 256;              // Kantenlänge einer Kachel in Pixeln
+  const KACHEL_ZOOM_MIN = 12;      // dieselben Grenzen wie im Worker
+  const KACHEL_ZOOM_MAX = 18;
+
+  const kachelX = (lon, z) => (lon + 180) / 360 * 2 ** z;
+  const kachelY = (lat, z) => {
+    const r = lat * Math.PI / 180;
+    return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** z;
+  };
+  /* Wieviel Meter ein Bildpunkt deckt. Am Äquator sind es bei Zoom 0 rund
+     156.543 — der Kosinus rechnet die Breite dazu, weil Mercator nach Norden
+     hin streckt. Daran hängt der Streukreis: ohne ihn wäre er in Hamburg ein
+     anderer als in Rom. */
+  const meterJePixel = (lat, z) =>
+    156543.03392 * Math.cos(lat * Math.PI / 180) / 2 ** z;
+
+  /* Der Weg dorthin, in derselben Form wie im Worker (dort steht, warum). Zwei
+     Fassungen desselben Links laufen auseinander — diese hier ist die für den
+     Finger, die andere die für die Mail. */
+  const mapsLink = (lat, lon) =>
+    'https://www.google.com/maps/dir/?api=1&destination='
+    + lat.toFixed(6) + ',' + lon.toFixed(6);
+
+  // Meter menschlich: unter einem Kilometer in Metern, darüber gerundet.
+  const weite = m => m < 1000 ? Math.round(m) + ' m'
+    : (Math.round(m / 100) / 10).toString().replace('.', ',') + ' km';
+
+  /* Die Kacheln einhängen, sobald das Feld im Dokument steht und eine Breite
+     hat. Getrennt vom Zeichnen, weil `clientWidth` vorher 0 ist und das Raster
+     dann aus einer einzigen Kachel bestünde.
+
+     Geholt wird genau das Sichtfenster und keine Kachel mehr — kein Vorrat,
+     kein Nachladen auf Verdacht. Das ist nicht Sparsamkeit, das verlangen die
+     Nutzungsbedingungen der Kacheln ausdrücklich. */
+  function karteFuellen(a) {
+    const lage = a._lage;
+    if (!lage || a._voll) return;
+    const b = a.clientWidth, h = a.clientHeight;
+    if (!b || !h) return;
+    a._voll = true;
+
+    const { z, mx, my, streu, pulsen } = lage;
+    // Die Bildpunktlage des Punktes, absolut in der Weltkarte dieses Zooms.
+    const px = mx * KACHEL, py = my * KACHEL;
+    // Die linke obere Ecke des Sichtfensters, in denselben Weltpunkten.
+    const l = px - b / 2, o = py - h / 2;
+
+    const kante = 2 ** z;
+    for (let x = Math.floor(l / KACHEL); x <= Math.floor((l + b) / KACHEL); x++) {
+      for (let y = Math.floor(o / KACHEL); y <= Math.floor((o + h) / KACHEL); y++) {
+        // Am Datumswechsel läuft x um die Welt, y hat kein Jenseits.
+        if (y < 0 || y >= kante) continue;
+        const bild = new Image();
+        bild.alt = '';
+        bild.loading = 'eager';
+        bild.style.left = (x * KACHEL - l) + 'px';
+        bild.style.top = (y * KACHEL - o) + 'px';
+        // Eine Kachel, die nicht kommt, hinterlässt den Untergrund und keine
+        // kaputte Bildmarke.
+        bild.addEventListener('error', () => bild.remove());
+        bild.src = API + '/api/kachel?z=' + z
+          + '&x=' + ((x % kante) + kante) % kante + '&y=' + y;
+        a.insertBefore(bild, a.firstChild);
+      }
+    }
+
+    if (streu) {
+      /* Durchmesser, nicht Radius: der Kreis wird über `width`/`height`
+         gesetzt. Nach oben gedeckelt, damit eine sehr grobe Ortung das Feld
+         nicht komplett zumalt — dass es dann nur noch "irgendwo hier" heißt,
+         sagt schon die Zeile darüber. */
+      const gross = Math.min(Math.min(b, h) * 1.6,
+        Math.max(16, streu / meterJePixel(lage.lat, z) * 2));
+      const kreis = el('span', 'karte-streu');
+      kreis.style.width = kreis.style.height = gross + 'px';
+      kreis.style.left = (b / 2) + 'px';
+      kreis.style.top = (h / 2) + 'px';
+      a.appendChild(kreis);
+    }
+    const nadel = el('span', 'karte-nadel' + (pulsen ? ' puls' : ''));
+    nadel.style.left = (b / 2) + 'px';
+    nadel.style.top = (h / 2) + 'px';
+    a.appendChild(nadel);
+  }
 
   const VARIANTE = {
     kopf(p, modus) {
@@ -2050,6 +2278,86 @@
 
       ziel.hidden = false;
     },
+
+    /* --- Die Karte ---------------------------------------------------------
+       Ein Raster aus 256er-Kacheln, absolut gesetzt, darüber der Streuradius
+       der Ortung und eine Nadel. Keine Bibliothek: Leaflet wären 42 K für ein
+       Bild mit einem Punkt darauf, und die Tafel bliebe dann keine geschlossene
+       Datei mehr. Das hier sind vierzig Zeilen Mercator.
+
+       Das GANZE Feld ist der Link in die Navigation — deshalb ein <a> und kein
+       <div> mit Klickhörer: so trägt es Tastatur, Mittelklick und „Link
+       kopieren" von selbst.
+
+       Die Kacheln kommen über den Worker (`/api/kachel`), nicht von OSM
+       direkt. Warum, steht dort ausführlich: eine Kachel-URL IST der Standort.
+       Geholt wird ausschließlich, was hier sichtbar ist — kein Vorrat, das
+       verlangen die Nutzungsbedingungen ausdrücklich. */
+    karte(n, pulsen) {
+      const a = el('a', 'karte');
+      a.href = mapsLink(n.lat, n.lon);
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.setAttribute('aria-label', 'Route dorthin öffnen');
+
+      /* Der Zoom richtet sich nach der Streuung: eine Ortung auf 20 m verträgt
+         die Straßenansicht, eine auf 5 km zeigt sonst einen Kreis, der über
+         alle Ränder läuft. Gerechnet wird gegen die halbe Feldbreite, damit
+         der Kreis hineinpasst statt es zu behaupten. */
+      const streu = Number.isFinite(n.genau) ? Math.max(n.genau, 20) : 60;
+      let z = KACHEL_ZOOM_MAX;
+      while (z > KACHEL_ZOOM_MIN && streu / meterJePixel(n.lat, z) > 62) z--;
+
+      // Die Kachelnummer mit Nachkomma: der Bruch ist der Punkt IN der Kachel.
+      const mx = kachelX(n.lon, z), my = kachelY(n.lat, z);
+      /* Ohne Maße kein Raster. Beim ersten Zeichnen steht das Feld noch nicht
+         im Dokument, `clientWidth` ist dann 0 — die Karte wird deshalb erst
+         gefüllt, wenn sie hängt (siehe `karteFuellen`). */
+      a.appendChild(el('span', 'karte-quelle')).innerHTML =
+        '© <a href="https://www.openstreetmap.org/copyright" target="_blank" ' +
+        'rel="noopener">OpenStreetMap</a>-Mitwirkende';
+      a._lage = { z, mx, my, streu, pulsen, lat: n.lat };
+      return a;
+    },
+
+    /* Eine Zeile im Notrufblock. Der Name, was fehlt, seit wann — und die
+       Karte darunter, weil sie die eigentliche Auskunft ist. */
+    notruf(n, meiner) {
+      const z = el('div', 'nr-zeile' + (meiner ? ' meiner' : ''));
+      z.appendChild(el('div', 'nr-wer', meiner
+        ? (n.art === 'bier' ? 'Du brauchst Bier' : 'Du suchst Gesellschaft')
+        : n.name + (n.art === 'bier' ? ' braucht Bier' : ' sucht Gesellschaft')));
+
+      /* Zum eigenen Notruf führt kein „hin" — man ist schon da. Stattdessen
+         der Weg zurück, derselbe wie im Blatt. */
+      if (meiner) {
+        const weg = el('button', 'nr-hin', 'zurücknehmen');
+        weg.type = 'button';
+        weg.id = 'nr-weg-zeile';
+        z.appendChild(weg);
+      } else {
+        const hin = el('a', 'nr-hin', 'hin');
+        hin.href = mapsLink(n.lat, n.lon);
+        hin.target = '_blank';
+        hin.rel = 'noopener';
+        z.appendChild(hin);
+      }
+
+      const unter = el('div', 'nr-unter');
+      const uhr = z => new Date(z)
+        .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      const seit = Math.max(0, Math.round((Date.now() - new Date(n.erstellt)) / 60000));
+      unter.textContent = (seit < 1 ? 'gerade eben'
+        : 'seit ' + seit + (seit === 1 ? ' Minute' : ' Minuten'))
+        + (Number.isFinite(n.genau) ? ' · auf ' + weite(n.genau) + ' genau' : '')
+        + ' · erlischt um ' + uhr(n.bis);
+      z.appendChild(unter);
+
+      const k = VARIANTE.karte(n, !meiner);
+      k.style.gridColumn = '1 / -1';
+      z.appendChild(k);
+      return z;
+    },
   };
 
   // ==========================================================================
@@ -2233,6 +2541,11 @@
   };
 
   let meinName = null;      // steht nach der ersten Antwort fest
+  /* Der eigene laufende Notruf, oder null. Kommt aus der Bestenliste und wird
+     bei jedem Zeichnen neu gesetzt - nicht gemerkt: er erlischt von selbst,
+     und ein gemerkter Notruf stünde im Blatt noch, wenn die Tafel ihn längst
+     nicht mehr kennt. */
+  let meineNot = null;
   let brauchtNamen = false; // angemeldet, aber noch ohne Namen fuer die Liste
   let linkRaus = false;     // Magic Link ist unterwegs: Feld weg, Meldung steht
   let vonDraussen = false;  // die letzte Antwort war die beschnittene (siehe `hole`)
@@ -2344,7 +2657,7 @@
     });
   }
 
-  function zeichneFeld(feld, los, termine) {
+  function zeichneFeld(feld, los, termine, notrufe) {
     $('block').hidden = false;
     $('block-datum').textContent =
       new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
@@ -2356,9 +2669,145 @@
     else VARIANTE.kopf(null, 'leer');
     // Vor der Liste: dort faerbt der Gewinner schon eine Zeile ein.
     zeichneRad(los);
+    zeichneNotrufe(notrufe || []);
     zeichneTermine(termine || [], chronikZahl);
     liste(feld);
     formular();
+  }
+
+  /* --- Die Notrufe ---------------------------------------------------------
+     Der Block steht für jeden Angemeldeten da, auch leer: der Knopf ist der
+     Sinn der Sache, und einer, der erst auftaucht, wenn schon jemand in Not
+     ist, kommt zu spät. Die Zeilen darunter gibt es nur, solange etwas gilt —
+     der Worker schickt gar nichts anderes.
+
+     `meiner` geht über den Namen, wie überall auf dieser Seite (`p.name ===
+     meinName` in der Liste): eine Id gibt `/api/me` nicht her, und die Namen
+     sind das, woran sich diese Runde erkennt.
+     ------------------------------------------------------------------------ */
+  function zeichneNotrufe(notrufe) {
+    meineNot = null;
+    const block = $('notruf-block'), liste = $('notruf-liste');
+    liste.textContent = '';
+    // Draussen gibt es den Knopf nicht: die Routen dahinter sind zu, und ein
+    // Knopf, der nur 401 sagen kann, ist eine Einladung ins Leere.
+    block.hidden = vonDraussen || !meinName;
+    if (block.hidden) return;
+
+    for (const n of notrufe) {
+      const meiner = n.name === meinName;
+      if (meiner) meineNot = n;
+      liste.appendChild(VARIANTE.notruf(n, meiner));
+    }
+    // Erst jetzt, wo die Zeilen hängen und eine Breite haben.
+    for (const k of liste.querySelectorAll('.karte')) karteFuellen(k);
+
+    const knopf = $('notruf-auf');
+    knopf.classList.toggle('laeuft', !!meineNot);
+    knopf.textContent = meineNot ? 'Mein Notruf läuft' : 'Ich brauche was';
+  }
+
+  /* --- Das Notrufblatt -----------------------------------------------------
+     Zwei Knöpfe, dann die Ortung, dann die eigene Karte. Der Standort wird
+     ERST NACH der Wahl geholt: wer nur nachsieht, was hinter dem Knopf steckt,
+     soll nicht schon gefragt werden, wo er ist.
+     ------------------------------------------------------------------------ */
+  function notrufSagt(text, schlecht) {
+    const p = $('nr-sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  function notrufAuf() {
+    $('nr-karte').textContent = '';
+    notrufSagt('');
+    /* Aufmachen VOR dem Zeichnen. Ein verstecktes Blatt hat keine Breite, und
+       ohne Breite gibt es kein Kachelraster — die Karte blieb dann leer und
+       zeigte nur ihre Namensnennung. */
+    $('notruf').hidden = false;
+    koerperSperren();
+    // Läuft schon einer, ist das Blatt der Rückweg und keine neue Wahl.
+    notrufLage(meineNot);
+  }
+
+  function notrufZu() {
+    $('notruf').hidden = true;
+    koerperSperren();
+  }
+
+  /* Was das Blatt zeigt: die Wahl, oder die Lage. Eine Funktion für beides,
+     damit die zwei Zustände nicht auseinanderlaufen. */
+  function notrufLage(n) {
+    $('nr-wahl').hidden = !!n;
+    $('nr-lage').hidden = !n;
+    $('nr-unter').textContent = n
+      ? (n.art === 'bier' ? 'du brauchst Bier' : 'du suchst Gesellschaft')
+      : 'was fehlt?';
+    const feld = $('nr-karte');
+    feld.textContent = '';
+    if (!n) return;
+    const k = VARIANTE.karte(n, true);
+    feld.appendChild(k);
+    karteFuellen(k);
+  }
+
+  /* Den Standort holen. `enableHighAccuracy` kostet Sekunden und Akku und ist
+     hier trotzdem richtig: eine Ortung über Funkzelle schickt jemanden in den
+     falschen Stadtteil. `maximumAge` erlaubt eine Minute alte Position — wer
+     eben schon einmal geortet wurde, wartet nicht noch einmal. */
+  const standort = () => new Promise((gut, schlecht) => {
+    if (!navigator.geolocation) return schlecht(new Error('kein_dienst'));
+    navigator.geolocation.getCurrentPosition(gut, schlecht,
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  });
+
+  async function notrufSenden(art) {
+    notrufSagt('Standort wird gesucht …');
+    let p;
+    try {
+      p = await standort();
+    } catch (e) {
+      /* Der Browser sagt hier drei verschiedene Dinge, und sie brauchen drei
+         verschiedene Antworten: verweigert ist eine Einstellung, nicht
+         verfügbar ist Pech, abgelaufen ist ein Grund, es nochmal zu
+         versuchen. Ein gemeinsames "ging nicht" hilft bei keinem davon. */
+      const c = e && e.code;
+      notrufSagt(
+        c === 1 ? 'Ohne Standort kein Notruf — die Freigabe steht in den Einstellungen der Seite.'
+        : c === 3 ? 'Die Ortung hat zu lange gebraucht. Nochmal?'
+        : 'Dein Gerät gibt gerade keinen Standort her.', true);
+      return;
+    }
+
+    notrufSagt('Wird angeschrieben …');
+    try {
+      const d = await ruf('/api/notruf', {
+        art,
+        lat: p.coords.latitude,
+        lon: p.coords.longitude,
+        genau: Number.isFinite(p.coords.accuracy) ? p.coords.accuracy : null,
+      });
+      meineNot = d.notruf;
+      notrufSagt('');
+      notrufLage(d.notruf);
+      hole(true);
+    } catch (e) {
+      notrufSagt(e.message, true);
+    }
+  }
+
+  async function notrufWeg() {
+    notrufSagt('Wird zurückgenommen …');
+    try {
+      await ruf('/api/notruf/weg', {});
+      meineNot = null;
+      notrufSagt('');
+      notrufZu();
+      hole(true);
+    } catch (e) {
+      notrufSagt(e.message, true);
+    }
   }
 
   // --- Termine --------------------------------------------------------------
@@ -2776,7 +3225,7 @@
      jedes Mal neu aus dem Zustand beider Blätter errechnet. */
   function koerperSperren() {
     document.body.style.overflow =
-      (!$('flyout').hidden || !$('chronik').hidden) ? 'hidden' : '';
+      (!$('flyout').hidden || !$('chronik').hidden || !$('notruf').hidden) ? 'hidden' : '';
   }
 
   async function flyAuf(ziel, titel) {
@@ -3482,7 +3931,7 @@
       vonDraussen = !!d.draussen;
       // Wie viele Abende im Archiv liegen — daran hängt der Knopf zur Chronik.
       chronikZahl = Number(d.chronik) || 0;
-      zeichneFeld(d.feld || [], d.los || null, d.termine || []);
+      zeichneFeld(d.feld || [], d.los || null, d.termine || [], d.notrufe || []);
     } catch (e) {
       if (still) return;
       // API weg: der Siegerplatz sagt genau das, Liste, Rad und Termine bleiben
@@ -3491,6 +3940,10 @@
       $('block').hidden = true;
       $('rad-block').hidden = true;
       $('termin-block').hidden = true;
+      // Ohne Worker kein Notruf: der Knopf führte in eine Fehlermeldung, und
+      // die Zeilen darunter wären ein Stand, den niemand mehr bestätigt.
+      $('notruf-block').hidden = true;
+      meineNot = null;
       VARIANTE.kopf(null, 'nichts');
     }
   }
@@ -3621,6 +4074,20 @@
      eine geschlossene Datei, die von den Bildern nichts weiß außer diesem
      einen Knopf. Dasselbe gilt für das Kontor. */
   $('verlauf-auf').addEventListener('click', () => { location.href = 'statistik.html'; });
+
+  // --- Der Notruf -----------------------------------------------------------
+  $('notruf-auf').addEventListener('click', notrufAuf);
+  $('nr-zu').addEventListener('click', notrufZu);
+  $('nr-schirm').addEventListener('click', notrufZu);
+  $('nr-bier').addEventListener('click', () => notrufSenden('bier'));
+  $('nr-kamerad').addEventListener('click', () => notrufSenden('kamerad'));
+  $('nr-weg').addEventListener('click', notrufWeg);
+  /* Der Rückzug steht auch an der eigenen Zeile auf der Tafel. Über den Block
+     gehört und nicht an die Zeile geheftet: die Zeilen werden bei jedem
+     Zeichnen neu gebaut, ein Hörer daran wäre nach dem ersten Anstoss weg. */
+  $('notruf-liste').addEventListener('click', ev => {
+    if (ev.target.id === 'nr-weg-zeile') notrufWeg();
+  });
   $('dk-kontor').addEventListener('click', () => { location.href = 'admin.html'; });
   $('ch-zu').addEventListener('click', chronikZu);
   $('ch-schirm').addEventListener('click', chronikZu);
@@ -3831,6 +4298,7 @@
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
     if (!$('lupe').hidden) { lupeZu(); return; }
+    if (!$('notruf').hidden) { notrufZu(); return; }
     if (!$('losmail').hidden) { losMailZu(); return; }
     if (!$('flyout').hidden) { flyZu(); return; }
     if (!$('deckel').hidden) { deckelZu(); return; }

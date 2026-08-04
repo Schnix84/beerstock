@@ -42,6 +42,30 @@ in UTC — hier also um vier Uhr morgens, im Winter um drei. Wer um halb zwei dr
 meint den Abend, der gerade läuft; die Stunde Sommerzeit-Drift ist an dieser Grenze
 egal, eine ICU-Abhängigkeit wäre es nicht.
 
+## Der Notruf
+
+Wer Bier braucht oder jemanden zum Trinken, drückt **Ich brauche was** und wählt
+zwischen den beiden. Dazu geht der eigene Standort mit — einmal gefragt, und ohne
+Freigabe im Browser passiert schlicht nichts. Auf der Tafel steht der Notruf dann
+für alle Angemeldeten, mit einer Karte darunter; ein Druck darauf öffnet die
+Navigation in Google Maps. Auch per Mail geht er raus, den Kartenlink gleich darin.
+
+**Er erlischt von selbst, nach anderthalb Stunden.** Das ist der Kern und nicht
+die Kosmetik: ein Notruf, der stehen bleibt, ist keiner mehr, sondern ein
+veröffentlichter Aufenthaltsort. Wer früher fertig ist, nimmt ihn zurück; wer
+erneut drückt, ersetzt seinen alten, statt einen zweiten daneben zu stellen. Die
+Zeile wird danach **gelöscht, nicht archiviert** — es gibt keine Geschichte der
+Orte, an denen jemand war, und es soll auch keine geben.
+
+Ohne Token bekommt man davon nichts zu sehen: der Worker schickt die Notrufe nur
+im angemeldeten Teil der Antwort mit.
+
+Die Karte zeichnet die Seite selbst — ein Raster aus Kacheln, ein Punkt, ein
+Streukreis für die Ungenauigkeit der Ortung. Keine Kartenbibliothek, und die
+Kacheln kommen **über den eigenen Worker** statt direkt von OpenStreetMap. Der
+Grund steht ausführlich im Code: eine Kachel-URL *ist* der Standort, und wer sie
+ausliefert, wüsste sonst minutengenau, wo jemand steht.
+
 ## Termine, Sterne, Gesagtes
 
 Eine Zusage legt den **Termin** gleich mit an — heute 19 Uhr, verschiebbar. Abende,
@@ -311,8 +335,11 @@ Drei Dinge, die dazugehören:
 | `POST /api/kommentar` | `{ziel_art, ziel_id, text?, bild?, antwort_auf?}` — eins von beiden muss da sein |
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
+| `POST /api/notruf` 🔒 | `{art:'bier'\|'kamerad', lat, lon, genau?}` — gilt 90 Minuten, ein erneuter Ruf ersetzt den eigenen |
+| `POST /api/notruf/weg` 🔒 | nimmt den eigenen zurück; zweimal gerufen ist kein Fehler |
+| `GET /api/kachel` | `?z=&x=&y=` — Kartenkachel über den Worker statt direkt von OSM; sieben Tage im Cache, fremder Referer → 403 |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
-| `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages — ohne Token nur der Siegerplatz |
+| `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages, laufende Notrufe — ohne Token nur der Siegerplatz |
 | `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit. Stumme Tage stehen **nicht** in der Antwort — die schreibt erst die Zeichnung fort (siehe unten) |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
@@ -351,6 +378,11 @@ Gegenteil; sie stammt aus einer Zeit, in der es so war.
 Nutzerverwaltung: 3 Adresswechsel je Nutzer und Tag (dazu dieselben Bremsen wie
 beim Magic Link, es ist dieselbe Tabelle), Sperrgrund 120 Zeichen, Rundmail 4000
 Zeichen bei 120 im Betreff und höchstens eine je Stunde.
+
+Notruf: 90 Minuten Geltung, 20 Sekunden zwischen zweien desselben Nutzers, einer
+je Nutzer gleichzeitig. Kartenkacheln nur zwischen Zoom 12 und 18 und nur mit
+eigenem Referer; geholt wird ausschließlich, was gerade jemand ansieht — kein
+Vorabladen, das verlangen die Nutzungsbedingungen der Kacheln ausdrücklich.
 
 Magic Links gelten 15 Minuten und genau einmal, höchstens 3 pro Adresse und Stunde und 30
 insgesamt — sonst wäre der Posteingang ein Versandknopf im Netz. CORS

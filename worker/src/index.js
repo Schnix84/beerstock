@@ -140,6 +140,41 @@ const KOMMENTARSPERRE  = 10;   // Sekunden zwischen zweien desselben Nutzers
 const KOMMENTARE_ZIEL  = 200;  // je Ziel; aeltere fallen weg, sonst waechst es unbegrenzt
 const REAKTIONEN = new Set(['daumen_hoch', 'daumen_runter', 'herz', 'bier']);
 
+/* Der Notruf. Zwei Noete, ein Ort, eine Frist.
+   ---------------------------------------------------------------------------
+   Die Frist ist der Kern und nicht die Kosmetik: ein Notruf, der stehen
+   bleibt, ist kein Notruf mehr, sondern ein veroeffentlichter Aufenthaltsort.
+   Anderthalb Stunden sind lang genug, dass jemand ankommt, und kurz genug,
+   dass niemand vergisst, dass er noch dasteht. Wer frueher fertig ist, nimmt
+   ihn zurueck; wer es vergisst, wird vergessen.
+
+   Die Sperre ist dieselbe Ueberlegung wie bei MELDESPERRE - der Freund, der
+   zweimal drueckt, weil er nichts passieren sieht. Sie steht hier niedriger,
+   weil ein zweiter Notruf durchaus eine echte Korrektur sein kann: falscher
+   Knopf, oder man ist inzwischen woanders. Wer erneut drueckt, ERSETZT seinen
+   offenen Notruf, er stellt keinen zweiten daneben. */
+const NOTRUF_MINUTEN = 90;   // so lange gilt einer, dann erlischt er von selbst
+const NOTRUFSPERRE   = 20;   // Sekunden zwischen zwei Notrufen desselben Nutzers
+const NOTRUF_ARTEN   = new Set(['bier', 'kamerad']);
+/* Wie lange eine erloschene Zeile noch herumliegt, bevor der Cron sie
+   wegraeumt. Sie ist da nicht mehr sichtbar - die Abfrage filtert nach `bis`
+   und `weg_am` - sie liegt nur noch da. Ein Tag Puffer, damit das Aufraeumen
+   ein Aufraeumen bleibt und keine Frist mit zwei Bedeutungen wird. */
+const NOTRUF_MUELL   = 1;    // Tage
+
+/* Der Kachelbereich der Karte. Enger als das, was OSM anbietet (0-19), und
+   zwar an beiden Enden mit Grund: unter 12 sieht man keine Strassen mehr,
+   sondern ein Bundesland, und ueber 18 nur noch Dachkanten. Beides waere
+   Verkehr fuer nichts. Die Karte der Seite bleibt von sich aus in diesem
+   Bereich; die Grenze hier gilt dem, der die Route direkt aufruft. */
+const KACHEL_ZOOM_MIN = 12;
+const KACHEL_ZOOM_MAX = 18;
+/* Die Untergrenze, wie lange eine geholte Kachel bei uns liegen bleibt. Sie
+   steht so hoch, weil die Nutzungsbedingungen genau das verlangen: entweder
+   die Cache-Kopfe des Servers achten oder mindestens sieben Tage halten. Wir
+   nehmen den laengeren der beiden Werte. */
+const KACHEL_TTL = 7 * 24 * 3600;   // Sekunden
+
 /* Fotos an Kommentaren. Verkleinert wird im BROWSER (lange Kante 1600 px,
    JPEG 0.8) - aus 4 MB Handyfoto werden ~250 kB. Damit faellt alles weg, was
    sonst teuer waere: keine Bildverarbeitung hier, kein Multipart, keine
@@ -192,6 +227,9 @@ const MAIL_ARTEN = {
   erinnerung:     { vorgabe: true,  titel: 'Am Tag des Abends' },
   echo:           { vorgabe: false, titel: 'Antwort auf meinen Beitrag, Sterne für mich' },
   rundmail:       { vorgabe: true,  titel: 'Gelegentliche Nachricht vom Wirt' },
+  /* Abwaehlbar wie alles hier, aber mit Vorgabe AN: eine Not, von der niemand
+     erfaehrt, ist keine gemeldet. Wer sie abstellt, tut das bewusst. */
+  notruf:         { vorgabe: true,  titel: 'Jemand braucht Bier oder Gesellschaft' },
 };
 
 // Zwei Rollen, mehr nicht. Alles darueber waere Verwaltung von Verwaltung.
@@ -465,6 +503,14 @@ const losTopf = (feld, lage) => feld.filter(p => !lage.rausIds.has(p.id));
 // Immer mit Z, wie bei den Meldungen: die Seite rechnet daraus eine Uhrzeit.
 const utc = s => s ? s.replace(' ', 'T') + 'Z' : null;
 
+/* Das `max-age` aus einem Cache-Control-Kopf, oder 0. Nachsichtig mit Absicht:
+   was hier nicht herausfaellt, ist kein Fehler, sondern nur der Grund, die
+   eigene Untergrenze zu nehmen. */
+const alterAus = kopf => {
+  const t = /max-age\s*=\s*(\d+)/i.exec(kopf || '');
+  return t ? Number(t[1]) : 0;
+};
+
 // ---------------------------------------------------------------------------
 // Termine
 // ---------------------------------------------------------------------------
@@ -552,6 +598,48 @@ const terminAntwort = (t, noten, wieViele) => ({
     kommentare: (wieViele instanceof Map && wieViele.get('termin:' + t.id)) || 0,
   } : {}),
 });
+
+/* Was gerade an Notrufen gilt. Reitet im `batch` der Bestenliste mit, laeuft
+   also im Minutentakt je offener Seite - deshalb der Index auf (bis, weg_am).
+
+   `bis > datetime('now')` ist die ganze Frist: kein Verfallslauf, kein
+   Aufraeumen im Lesepfad. Eine erloschene Zeile faellt hier von selbst heraus
+   und wird spaeter vom Cron geholt.
+
+   Ehemalige stehen NICHT drin (`u.name IS NOT NULL`, nicht `coalesce`): ein
+   Notruf ohne Namen waere ein Punkt auf der Karte, zu dem niemand mehr sagen
+   kann, wer da steht. */
+const notrufeStmt = env => env.DB.prepare(`
+  SELECT n.id, n.user_id, n.art, n.lat, n.lon, n.genau, n.erstellt, n.bis,
+         u.name
+  FROM notrufe n
+  JOIN users u ON u.id = n.user_id
+  WHERE n.weg_am IS NULL AND n.bis > datetime('now') AND u.name IS NOT NULL
+  ORDER BY n.erstellt DESC
+`);
+
+const notrufAntwort = n => ({
+  id: n.id,
+  wer: n.user_id,
+  name: n.name,
+  art: n.art,
+  lat: n.lat,
+  lon: n.lon,
+  genau: n.genau ?? null,
+  erstellt: utc(n.erstellt),
+  bis: utc(n.bis),
+});
+
+/* Der Weg dorthin. Steht im Worker und nicht in der Seite, weil ihn beide
+   brauchen - die Karte unter dem Finger und die Mail im Bett - und zwei
+   Fassungen desselben Links laufen auseinander.
+
+   `dir/?api=1&destination=` ist die dokumentierte, plattformuebergreifende
+   Form: auf dem Handy uebernimmt die Maps-App mit gesetztem Ziel, am Rechner
+   der Browser. Sechs Nachkommastellen sind gut ein Zehntelmeter - mehr waere
+   eine Genauigkeit, die keine Ortung hergibt. */
+const mapsLink = (lat, lon) =>
+  `https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(6)},${lon.toFixed(6)}`;
 
 /* Eine Form fuer alle Antworten rund um das Los: die Seite muss nicht mehrere
    Faelle unterscheiden. `gewinner === null` heisst "heute ist gerade nichts
@@ -2063,6 +2151,112 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
+  /* Den Notruf absetzen. Zwei Noete, ein Ort, anderthalb Stunden.
+     -------------------------------------------------------------------------
+     Der ORT IST DIE FRACHT, und das macht diese Route zur empfindlichsten im
+     Dienst. Drei Dinge halten sie im Zaum, und alle drei stehen absichtlich
+     hier und nicht in der Seite:
+
+     1. Sie schreibt nur, was der Browser schickt - der Worker fragt nirgends
+        nach, wo jemand ist. Ohne ausdrueckliche Erlaubnis im Browser gibt es
+        gar keinen Notruf, nur die Meldung, dass es nicht ging.
+     2. Was hier landet, erlischt von selbst (`bis`) und wird geloescht, nicht
+        archiviert (siehe Migration 0013).
+     3. Wer erneut drueckt, ERSETZT sich selbst. Zwei offene Notrufe desselben
+        Menschen an zwei Orten sind keine zwei Noete, sondern ein veralteter
+        Punkt auf der Karte - und der schickt jemanden in die falsche Stadt. */
+  'POST /api/notruf': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const art = String(daten.art || '');
+    if (!NOTRUF_ARTEN.has(art)) return fehler(request, "art: 'bier' oder 'kamerad'");
+
+    const lat = Number(daten.lat), lon = Number(daten.lon);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90
+        || !Number.isFinite(lon) || lon < -180 || lon > 180) {
+      return fehler(request, 'lat/lon: Grad als Zahl, lat -90..90, lon -180..180');
+    }
+    /* Was der Browser ueber seine eigene Genauigkeit sagt, in Metern. Der
+       Deckel ist grosszuegig: eine reine IP-Ortung meldet gern 20 km, und die
+       soll durchkommen duerfen - die Karte zeigt dann eben einen sehr grossen
+       Kreis, was genau die richtige Auskunft ist. */
+    const rohGenau = Number(daten.genau);
+    const genau = Number.isFinite(rohGenau)
+      ? Math.min(50000, Math.max(0, Math.round(rohGenau))) : null;
+
+    const letzte = await env.DB.prepare(`
+      SELECT 1 FROM notrufe WHERE user_id = ? AND erstellt > datetime('now', ?) LIMIT 1
+    `).bind(ich.id, `-${NOTRUFSPERRE} seconds`).first();
+    if (letzte) return fehler(request, 'Zu schnell - einen Moment', 429);
+
+    const [, neu] = await env.DB.batch([
+      // Der eigene offene Notruf weicht dem neuen, in derselben Transaktion.
+      env.DB.prepare(`
+        UPDATE notrufe SET weg_am = datetime('now')
+        WHERE user_id = ? AND weg_am IS NULL
+      `).bind(ich.id),
+      env.DB.prepare(`
+        INSERT INTO notrufe (user_id, art, lat, lon, genau, bis)
+        VALUES (?, ?, ?, ?, ?, datetime('now', ?))
+        RETURNING id, erstellt, bis
+      `).bind(ich.id, art, lat, lon, genau, `+${NOTRUF_MINUTEN} minutes`),
+      env.DB.prepare("UPDATE users SET zuletzt = datetime('now') WHERE id = ?").bind(ich.id),
+    ]);
+    const zeile = neu.results[0];
+
+    /* Die Post. Ein Notruf MELDET nur, er liefert nichts mit - also gilt die
+       alte Regel und der Ausloeser bleibt draussen (siehe `benachrichtige`).
+       Der Kartenlink steht in der Mail selbst: wer sie im Bett liest, soll
+       nicht erst die Seite aufmachen muessen, um zu wissen, wohin. */
+    const kreis = await env.DB.prepare(
+      'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL').bind(ich.id).all();
+    const wohin = mapsLink(lat, lon);
+    const was = art === 'bier'
+      ? `${ich.name} braucht Bier`
+      : `${ich.name} sucht Gesellschaft`;
+    benachrichtige(env, ctx, 'notruf', kreis.results.map(r => r.id), {
+      bezug: `notruf:${zeile.id}`,
+      betreff: was,
+      text: `${was}.\n\nHin geht es hier: ${wohin}`
+        + `\n\nAuf der Tafel steht der Notruf ${NOTRUF_MINUTEN} Minuten lang: ${env.SEITE}`,
+      html: `<p><strong>${nurText(was)}.</strong></p>`
+        + mailKnopf(wohin, 'Route öffnen')
+        + `<p style="font-size:13px;color:#6f6653">Auf der Tafel steht der Notruf `
+        + `${NOTRUF_MINUTEN} Minuten lang.</p>`
+        + mailKnopf(env.SEITE, 'Zur Tafel'),
+    });
+
+    anstoss(request, env, ctx, 'tafel');
+    return antwort(request, {
+      ok: true,
+      notruf: notrufAntwort({ ...zeile, art, lat, lon, genau, name: ich.name, user_id: ich.id }),
+    }, 201);
+  },
+
+  /* Zurueckgenommen. Kein Loeschen: die Zeile bleibt bis zum Aufraeumen stehen,
+     damit die offenen Seiten den Notruf verschwinden SEHEN, statt ihn wortlos
+     zu verlieren - `weg_am` faellt aus der Abfrage, der Anstoss kommt trotzdem.
+     Wer keinen offenen hat, bekommt kein Nein: zweimal "weg" ist kein Fehler,
+     sondern derselbe Wunsch zweimal. */
+  'POST /api/notruf/weg': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const weg = await env.DB.prepare(`
+      UPDATE notrufe SET weg_am = datetime('now')
+      WHERE user_id = ? AND weg_am IS NULL
+    `).bind(ich.id).run();
+
+    if (weg.meta.changes) anstoss(request, env, ctx, 'tafel');
+    return antwort(request, { ok: true, weg: weg.meta.changes });
+  },
+
+  // -------------------------------------------------------------------------
   /* Das Rad drehen. Braucht ein Token: wer nicht mitspielt, soll den Tag nicht
      verbrauchen - und "gedreht von Basti" ist die Zeile, die aus der Ziehung
      eine Handlung macht. Ein zweiter Aufruf am selben Tag ist kein Fehler, er
@@ -3425,6 +3619,102 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
+  /* Die Kartenkacheln, durch den Worker statt direkt aus dem Browser.
+     -------------------------------------------------------------------------
+     WARUM UEBERHAUPT UEBER UNS. Eine Kachel-URL IST der Standort: `/16/35123/
+     22546.png` ist ein Quadrat von rund 600 Metern. Holte der Browser sie
+     selbst, wuesste ein fremder Server die IP des Nutzers, den Referer auf
+     diese Seite und die Koordinaten, minutengenau - und zwar genau in dem
+     Moment, in dem jemand einen Notruf absetzt. Das ist formgleich mit der
+     Spur, wegen der `status.json` abgeschafft wurde, nur praeziser. So sieht
+     der Kachelserver Cloudflare und sonst nichts.
+
+     WAS DAS KOSTET. Die Nutzungsbedingungen von tile.openstreetmap.org raten
+     von einem eigenen Cache-Proxy ausdruecklich ab ("we generally do not
+     recommend"). Erlaubt bleibt er unter Auflagen, und die sind hier alle
+     erfuellt:
+       - ein eigener, sprechender User-Agent mit Kontakt (Vorgabewerte von
+         Bibliotheken werden ohne Vorwarnung gesperrt),
+       - Cache-Kopfe des Servers achten oder mindestens sieben Tage halten -
+         wir nehmen den laengeren der beiden Werte,
+       - kein Vorabholen. Geholt wird ausschliesslich, was gerade jemand
+         ansieht; die Karte der Seite laedt nichts auf Vorrat. Wer hier je
+         eine Vorabladung einbaut ("die Nachbarkacheln schon mal"), verstoesst
+         gegen genau diesen Punkt.
+     Bei einer Runde von sechs Freunden und ein paar Dutzend Kacheln je Notruf
+     ist das weit von "heavy use" entfernt. Wird die Route je oeffentlicher,
+     gehoert sie auf einen Anbieter mit Schluessel.
+
+     OFFEN, ABER NICHT FUER JEDEN. Ein `<img>` kann keinen Authorization-Kopf
+     schicken, die Route kann also kein Token verlangen. Sie traegt aber auch
+     nichts Schuetzenswertes aus - dieselbe Kachel bekommt jeder direkt bei
+     OSM. Die Herkunftspruefung ist deshalb keine Sicherung, sondern eine
+     Hoeflichkeit gegen fremde Seiten, die sich hier einen kostenlosen
+     Kachelserver einrichten und uns die Sperre einbringen. Fehlt der Referer
+     ganz (manche Browser streichen ihn), geht es durch. */
+  'GET /api/kachel': async (request, env, ctx) => {
+    const p = new URL(request.url).searchParams;
+    const z = Number(p.get('z')), x = Number(p.get('x')), y = Number(p.get('y'));
+    if (!Number.isInteger(z) || z < KACHEL_ZOOM_MIN || z > KACHEL_ZOOM_MAX) {
+      return fehler(request, `z: ganze Zahl zwischen ${KACHEL_ZOOM_MIN} und ${KACHEL_ZOOM_MAX}`);
+    }
+    const kante = 2 ** z;
+    if (!Number.isInteger(x) || x < 0 || x >= kante
+        || !Number.isInteger(y) || y < 0 || y >= kante) {
+      return fehler(request, `x/y: ganze Zahl zwischen 0 und ${kante - 1}`);
+    }
+
+    const ref = request.headers.get('Referer');
+    if (ref) {
+      let fremd = true;
+      try { fremd = !ERLAUBTE_HERKUNFT.has(new URL(ref).origin); } catch {}
+      if (fremd) return fehler(request, 'Nicht von hier', 403);
+    }
+
+    /* Der Schluessel ist eine eigene, aufgeraeumte URL und NICHT die
+       eingehende Anfrage: die traegt je nach Aufrufer noch einen
+       Cache-Buster oder eine andere Parameterreihenfolge, und jede Variante
+       waere ein eigener Eintrag im Cache - der Proxy holte dann doch wieder
+       jedes Mal bei OSM. */
+    const schluessel = new Request(
+      `https://kachel.invalid/${z}/${x}/${y}.png`, { method: 'GET' });
+    const lager = caches.default;
+    const schon = await lager.match(schluessel);
+    if (schon) return schon;
+
+    const oben = await fetch(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`, {
+      headers: {
+        // Sprechend und mit Kontakt, wie die Bedingungen es verlangen.
+        'User-Agent': `beerstock/1.0 (+${env.SEITE || 'https://schnix84.github.io/beerstock/'})`,
+        'Accept': 'image/png,image/*;q=0.8',
+      },
+    });
+    if (!oben.ok) {
+      // Kein 500er: eine fehlende Kachel ist ein Loch in der Karte, kein
+      // kaputter Dienst. Die Seite zeichnet an der Stelle schlicht nichts.
+      return new Response(null, { status: 502, headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    /* Sieben Tage oder laenger - was der Server selbst sagt, wenn es mehr ist.
+       `immutable` fehlt mit Absicht: eine Kachel aendert sich sehr wohl, wenn
+       jemand die Karte verbessert, nur eben selten. */
+    const eigene = Math.max(KACHEL_TTL, alterAus(oben.headers.get('Cache-Control')));
+    const antw = new Response(oben.body, {
+      status: 200,
+      headers: {
+        'Content-Type': oben.headers.get('Content-Type') || 'image/png',
+        'Cache-Control': `public, max-age=${eigene}`,
+        // Kachelbilder gehen als <img> in die Seite, dafuer braucht es kein
+        // CORS - und ohne Freigabe kann sie auch niemand auslesen.
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+      },
+    });
+    // Eine Kopie ins Lager, die andere an den Aufrufer. Ohne `clone` liest
+    // eine der beiden Seiten aus einem Koerper, der schon weg ist.
+    if (ctx) ctx.waitUntil(lager.put(schluessel, antw.clone()));
+    return antw;
+  },
+
   'GET /api/leaderboard': async (request, env) => {
     /* Alles fuer eine Seitenansicht in einem Rutsch: aktueller Stand,
        Bestmarke, Verlauf, das Gluecksrad (Ziehung des Tages + wer heute im
@@ -3475,7 +3765,7 @@ const ROUTEN = {
     }
 
     const tag = bierTag();
-    const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler, chronik] =
+    const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler, chronik, notrufe] =
       await env.DB.batch([
       /* Gesperrte bleiben in der Liste stehen - das ist Historie, und ein
          Name, der ueber Nacht verschwindet, sieht nach Datenverlust aus. Sie
@@ -3514,6 +3804,14 @@ const ROUTEN = {
          und nur, damit die Seite weiss, ob der Knopf dahin einen Sinn ergibt -
          ohne sie stuende er auch an einer Tafel, hinter der nichts liegt. */
       env.DB.prepare("SELECT count(*) AS n FROM termine WHERE beginnt_am <= datetime('now')"),
+      /* Die Notrufe reiten hier mit statt auf einer eigenen Route - dieselbe
+         Ueberlegung wie beim Rest: eine Runde weniger, und die Marke 'tafel'
+         holt sie ohne eine zweite Sorte Anstoss mit nach. Dass sie NUR in
+         diesem Zweig steht, ist der Punkt: der beschnittene Stand fuer
+         Vorbeikommende oben enthaelt keine Zeile davon, und das ist keine
+         Sparsamkeit, sondern die Bedingung. Ein Ort geht niemanden etwas an,
+         der kein Token hat. */
+      notrufeStmt(env),
     ]);
 
     const bestmarke = new Map(best.results.map(r => [r.user_id, r.best]));
@@ -3556,6 +3854,7 @@ const ROUTEN = {
       los: losAntwort(tag, lage, losTopf(losFeld.results, lage), termine.results),
       termine: termine.results.map(t => terminAntwort(t, noten, wieViele)),
       chronik: chronik.results[0].n,
+      notrufe: notrufe.results.map(notrufAntwort),
     }, 200, KEIN_FREMDER_CACHE);
   },
 };
@@ -3626,6 +3925,21 @@ export default {
       WHERE date(t.beginnt_am) = date('now') AND t.abgesagt_am IS NULL
     `).all();
     for (const t of heute.results) mailErinnerung(env, ctx, t);
+
+    /* Die erloschenen Notrufe. Zuerst unter den Aufraeumarbeiten, weil es das
+       einzige Aufraeumen ist, das nicht nur Platz schafft: hier verschwindet
+       der Aufenthaltsort eines Menschen, und der soll nicht deshalb liegen
+       bleiben, weil der Bilder-Bucket gerade streikt. Eigener try, aus
+       demselben Grund. */
+    try {
+      const weg = await env.DB.prepare(`
+        DELETE FROM notrufe
+        WHERE bis < datetime('now', ?) OR weg_am < datetime('now', ?)
+      `).bind(`-${NOTRUF_MUELL} days`, `-${NOTRUF_MUELL} days`).run();
+      if (weg.meta.changes) console.log(`Notrufe weggeraeumt: ${weg.meta.changes}`);
+    } catch (e) {
+      console.error('Notrufe:', e && e.stack || e);
+    }
 
     /* Nach der Post, und abgeschirmt: das Aufraeumen hat keine Frist, die
        Erinnerung schon. Faellt der Bucket aus, soll das nicht der Grund sein,
