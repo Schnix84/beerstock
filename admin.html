@@ -237,7 +237,8 @@
   }
   button.gross:hover { background: #24493a; color: #fff; }
 
-  input[type="text"], input[type="email"], textarea {
+  input[type="text"], input[type="email"], input[type="date"], input[type="time"],
+  textarea {
     font: inherit; font-size: 14px; width: 100%;
     border: 1px solid var(--linie); border-radius: 3px; background: #ffffffcc;
     color: var(--tinte); padding: 7px 9px;
@@ -247,6 +248,34 @@
   label.feld-titel {
     display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--tinte-weg); margin: 12px 0 4px;
+  }
+
+  /* --- Die Mail-Vorschau ----------------------------------------------------
+     Dasselbe Aussehen wie `mailRumpf`/`mailKnopf` im Worker
+     (worker/src/index.js) - eine Mail wird in einem fremden Programm auf
+     weissem Grund gelesen, nicht im Kontorbuch. Aendert sich dort etwas an
+     Schrift oder Farbe, muss es hier nachgezogen werden, sonst luegt die
+     Vorschau.
+     --------------------------------------------------------------------- */
+  .mail-vorschau {
+    border: 1px solid var(--linie); border-radius: 3px; overflow: hidden;
+    margin-top: 14px; background: #fff;
+  }
+  .mv-kopf {
+    padding: 10px 16px; background: var(--papier); border-bottom: 1px solid var(--linie);
+    font-size: 12px; color: var(--tinte-weg); display: flex; gap: 8px; align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .mv-kopf strong { font-size: 14px; color: var(--tinte); font-weight: 600; }
+  .mv-rumpf {
+    padding: 18px 16px; font-family: Georgia, serif; font-size: 16px;
+    line-height: 1.6; color: #1d2a24;
+  }
+  .mv-bild { max-width: 100%; border-radius: 4px; display: block; margin: 0 0 12px; }
+  .mv-knopf {
+    display: inline-block; background: var(--gruen); color: var(--papier);
+    padding: 12px 22px; border-radius: 3px; text-decoration: none;
+    letter-spacing: .15em; text-transform: uppercase; font-size: 13px;
   }
 
   /* --- Die Grafiken --------------------------------------------------------
@@ -368,12 +397,35 @@
     <textarea id="r-text" maxlength="4000"
               placeholder="Was der Wirt zu sagen hat. Leerzeile trennt Absätze."></textarea>
     <p class="unter" id="r-zaehler" style="margin:6px 0 0"></p>
+
+    <label class="feld-titel" for="r-bild">Bild (Adresse, freiwillig)</label>
+    <input type="text" id="r-bild" placeholder="https://…">
+
+    <label class="feld-titel" for="r-knopf-text">Knopf (freiwillig)</label>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="r-knopf-text" maxlength="40" placeholder="Zur Tafel"
+             style="flex:1 1 40%">
+      <input type="text" id="r-knopf-link" placeholder="https://…" style="flex:1 1 60%">
+    </div>
+
+    <label class="feld-titel">Versand</label>
+    <div class="reiter" id="r-wann"></div>
+    <div id="r-spaeter" hidden style="display:flex;gap:8px;margin-top:4px">
+      <input type="date" id="r-datum" style="flex:1 1 auto">
+      <input type="time" id="r-zeit" style="flex:0 0 110px">
+    </div>
+
     <div class="k-tat" style="margin-top:14px">
       <button class="gross" id="r-ab" type="button">Vorschau</button>
       <button id="r-weg" type="button" hidden>verwerfen</button>
     </div>
     <div id="r-vorschau" hidden></div>
     <p class="sagt" id="rund-sagt" hidden></p>
+
+    <div id="r-geplant" hidden style="margin-top:22px;padding-top:14px;border-top:1px solid var(--linie)">
+      <h3>Geplant</h3>
+      <div id="r-geplant-liste" style="display:grid;gap:10px"></div>
+    </div>
   </div>
 
   <div class="blatt" id="log-blatt" hidden>
@@ -898,16 +950,22 @@
   }
 
   // ==========================================================================
-  // Rundmail — Vorschau, dann erst der Versand mit der Zahl im Knopf
+  // Rundmail — Vorschau, dann erst der Versand mit der Zahl im Knopf.
+  // Jetzt oder geplant, mit Bild und Knopf; die Vorschau sieht aus wie die
+  // echte Mail (siehe .mail-vorschau), nicht wie das Kontorbuch drumherum.
   // ==========================================================================
   let vorschauSteht = false;
+  let planModus = 'jetzt';   // 'jetzt' | 'spaeter'
+  let geplantId = null;      // gesetzt beim Bearbeiten einer geplanten Rundmail
+  let geplant = [];          // letzte Antwort von GET /api/admin/rundmail/geplant
 
   function zaehler() {
     const n = $('r-text').value.length;
     $('r-zaehler').textContent = n ? n + ' von 4000 Zeichen' : '';
   }
-  $('r-text').addEventListener('input', () => { zaehler(); vorschauWeg(); });
-  $('r-betreff').addEventListener('input', vorschauWeg);
+  ['r-text', 'r-betreff', 'r-bild', 'r-knopf-text', 'r-knopf-link', 'r-datum', 'r-zeit']
+    .forEach(id => $(id).addEventListener('input', vorschauWeg));
+  $('r-text').addEventListener('input', zaehler);
 
   function vorschauWeg() {
     if (!vorschauSteht) return;
@@ -920,50 +978,202 @@
 
   $('r-weg').addEventListener('click', vorschauWeg);
 
+  function planReiterZeichnen() {
+    const ziel = $('r-wann');
+    ziel.textContent = '';
+    [['jetzt', 'Jetzt'], ['spaeter', 'Später planen']].forEach(([k, titel]) => {
+      const b = el('button', k === planModus ? 'an' : null, titel);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        if (planModus === k) return;
+        planModus = k;
+        planReiterZeichnen();
+        $('r-spaeter').hidden = planModus !== 'spaeter';
+        vorschauWeg();
+      });
+      ziel.appendChild(b);
+    });
+  }
+  planReiterZeichnen();
+
+  /* Aus einem Datum ('YYYY-MM-DD') und einer Uhrzeit ('HH:MM') den
+     Zeitpunkt in UTC — dieselbe Rechnung wie auf der Tafel (`alsUTC`): ohne
+     Zonenangabe liest der Browser das als Ortszeit, und genau das ist hier
+     gewollt. */
+  function alsUTC(tag, zeit) {
+    if (!tag || !zeit) return null;
+    const d = new Date(tag + 'T' + zeit + ':00');
+    return isNaN(d) ? null : d.toISOString();
+  }
+
+  // Der Rückweg fürs Bearbeiten: aus einem UTC-Zeitpunkt wieder Datum und
+  // Uhrzeit in ORTSZEIT für die beiden Felder — nicht über `toISOString`,
+  // das würde auf UTC zurückrechnen und in der Nacht den falschen Tag zeigen.
+  function ortsFelder(iso) {
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2, '0');
+    return {
+      datum: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()),
+      zeit: pad(d.getHours()) + ':' + pad(d.getMinutes()),
+    };
+  }
+
+  function formZuruecksetzen() {
+    $('r-betreff').value = '';
+    $('r-text').value = '';
+    $('r-bild').value = '';
+    $('r-knopf-text').value = '';
+    $('r-knopf-link').value = '';
+    $('r-datum').value = '';
+    $('r-zeit').value = '';
+    geplantId = null;
+    planModus = 'jetzt';
+    planReiterZeichnen();
+    $('r-spaeter').hidden = true;
+    zaehler();
+    vorschauWeg();
+  }
+
+  // Eine geplante Rundmail zum Bearbeiten in die Maske laden.
+  function geplantInFormular(g) {
+    $('r-betreff').value = g.betreff;
+    $('r-text').value = g.text;
+    $('r-bild').value = g.bild_url || '';
+    $('r-knopf-text').value = g.knopf_text || '';
+    $('r-knopf-link').value = g.knopf_link || '';
+    geplantId = g.id;
+    planModus = 'spaeter';
+    planReiterZeichnen();
+    $('r-spaeter').hidden = false;
+    const f = ortsFelder(g.versand_am);
+    $('r-datum').value = f.datum;
+    $('r-zeit').value = f.zeit;
+    zaehler();
+    vorschauWeg();
+    $('r-betreff').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* Der Rahmen um die Mail, wie `mailRumpf` im Worker sie schickt — Georgia
+     auf Weiß, damit die Vorschau zeigt, was tatsächlich im Postfach landet,
+     nicht das Kontorbuch drumherum. Bild und Knopf kommen 1:1 aus denselben
+     Feldern, die auch die API bekommt. */
+  function mailVorschau({ betreff, text, bildUrl, knopfText, knopfLink }) {
+    const kasten = el('div', 'mail-vorschau');
+    const kopf = el('div', 'mv-kopf');
+    kopf.appendChild(el('span', null, 'Betreff'));
+    kopf.appendChild(el('strong', null, betreff));
+    kasten.appendChild(kopf);
+
+    const rumpf = el('div', 'mv-rumpf');
+    if (bildUrl) {
+      const img = document.createElement('img');
+      img.src = bildUrl;
+      img.alt = '';
+      img.className = 'mv-bild';
+      rumpf.appendChild(img);
+    }
+    text.split(/\n{2,}/).forEach(a => {
+      const p = el('p');
+      p.style.cssText = 'margin:0 0 12px';
+      a.split('\n').forEach((zeile, i) => {
+        if (i) p.appendChild(document.createElement('br'));
+        p.appendChild(document.createTextNode(zeile));
+      });
+      rumpf.appendChild(p);
+    });
+    if (knopfText && knopfLink) {
+      const a = document.createElement('a');
+      a.href = knopfLink;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'mv-knopf';
+      a.textContent = knopfText;
+      rumpf.appendChild(a);
+    }
+    kasten.appendChild(rumpf);
+    return kasten;
+  }
+
   $('r-ab').addEventListener('click', async () => {
     const betreff = $('r-betreff').value.trim();
     const text = $('r-text').value.trim();
+    const bildUrl = $('r-bild').value.trim();
+    const knopfText = $('r-knopf-text').value.trim();
+    const knopfLink = $('r-knopf-link').value.trim();
+
     if (!betreff || !text) {
       sagt('rund-sagt', 'Betreff und Text wollen beide etwas.', true);
       return;
     }
+    if (!!knopfText !== !!knopfLink) {
+      sagt('rund-sagt', 'Der Knopf braucht Text UND Adresse, oder keins von beiden.', true);
+      return;
+    }
+
+    let versandAm = null;
+    if (planModus === 'spaeter') {
+      versandAm = alsUTC($('r-datum').value, $('r-zeit').value);
+      if (!versandAm) {
+        sagt('rund-sagt', 'Datum und Uhrzeit wollen beide etwas.', true);
+        return;
+      }
+      if (new Date(versandAm).getTime() <= Date.now() + 60000) {
+        sagt('rund-sagt', 'Der Zeitpunkt muss in der Zukunft liegen.', true);
+        return;
+      }
+    }
 
     /* Erst zeigen, dann schicken. Eine Rundmail an die ganze Runde ist die
        eine Handlung hier, die sich nicht zurücknehmen lässt — sie liegt
-       binnen Sekunden in fünf Postfächern. */
+       binnen Sekunden in fünf Postfächern (oder wartet bis zum geplanten
+       Zeitpunkt, was dasselbe Versprechen ist, nur später eingelöst). */
     if (!vorschauSteht) {
       const v = $('r-vorschau');
       v.textContent = '';
       v.hidden = false;
-      const kasten = el('div', 'karte');
-      kasten.style.marginTop = '14px';
-      kasten.appendChild(el('div', 'k-name', betreff));
-      text.split(/\n{2,}/).forEach(a => {
-        const p = el('p', null, a);
-        p.style.cssText = 'margin:8px 0 0;white-space:pre-wrap;font-size:14px';
-        kasten.appendChild(p);
-      });
-      v.appendChild(kasten);
+      v.appendChild(mailVorschau({ betreff, text, bildUrl, knopfText, knopfLink }));
       vorschauSteht = true;
       $('r-weg').hidden = false;
-      const wieViele = stand ? stand.nutzer.filter(u =>
-        !u.entfernt && !u.gesperrt && !u.stumm && u.email && u.mail.rundmail).length : 0;
-      $('r-ab').textContent = wieViele === 1
-        ? 'An 1 Melder schicken'
-        : 'An ' + wieViele + ' Melder schicken';
+      if (planModus === 'jetzt') {
+        const wieViele = stand ? stand.nutzer.filter(u =>
+          !u.entfernt && !u.gesperrt && !u.stumm && u.email && u.mail.rundmail).length : 0;
+        $('r-ab').textContent = wieViele === 1
+          ? 'An 1 Melder schicken'
+          : 'An ' + wieViele + ' Melder schicken';
+      } else {
+        $('r-ab').textContent = (geplantId ? 'Änderung speichern — ' : 'Planen für ')
+          + datum(versandAm);
+      }
       return;
     }
 
     $('r-ab').disabled = true;
     try {
-      const d = await ruf('/api/admin/rundmail', { betreff, text });
-      $('r-betreff').value = '';
-      $('r-text').value = '';
-      zaehler();
-      vorschauWeg();
-      sagt('rund-sagt', d.empfaenger === 1
-        ? 'Raus an einen Melder.'
-        : 'Raus an ' + d.empfaenger + ' Melder.');
+      let erfolg;
+      if (planModus === 'jetzt') {
+        const d = await ruf('/api/admin/rundmail', {
+          betreff, text, bild_url: bildUrl, knopf_text: knopfText, knopf_link: knopfLink,
+        });
+        erfolg = d.empfaenger === 1 ? 'Raus an einen Melder.' : 'Raus an ' + d.empfaenger + ' Melder.';
+      } else if (geplantId) {
+        await ruf('/api/admin/rundmail/geplant/aendern', {
+          id: geplantId, betreff, text,
+          bild_url: bildUrl, knopf_text: knopfText, knopf_link: knopfLink,
+          versand_am: versandAm,
+        });
+        erfolg = 'Geändert — geplant für ' + datum(versandAm) + '.';
+      } else {
+        await ruf('/api/admin/rundmail/planen', {
+          betreff, text, bild_url: bildUrl, knopf_text: knopfText, knopf_link: knopfLink,
+          versand_am: versandAm,
+        });
+        erfolg = 'Geplant für ' + datum(versandAm) + '.';
+      }
+      // Erst zuruecksetzen (das raeumt auch die Vorschau und die alte
+      // Nachricht weg), DANACH die neue Nachricht setzen - sonst loescht
+      // `formZuruecksetzen` den Satz, den es gerade erst zu lesen gab.
+      formZuruecksetzen();
+      sagt('rund-sagt', erfolg);
       await laden();
     } catch (e) {
       sagt('rund-sagt', e.message, true);
@@ -971,6 +1181,69 @@
       $('r-ab').disabled = false;
     }
   });
+
+  // --- Die geplanten Rundmails: bearbeiten oder verwerfen, solange sie noch
+  //     anstehen. Verwerfen fragt zurück wie bei den Mitgliedern — zweiter
+  //     Klick auf denselben Knopf, kein confirm(). ---------------------------
+  let sicherGeplant = null;
+  let sicherGeplantUhr = null;
+
+  function geplantZeichnen(liste) {
+    geplant = liste;
+    const wrapper = $('r-geplant');
+    const ziel = $('r-geplant-liste');
+    ziel.textContent = '';
+    wrapper.hidden = !liste.length;
+    if (!liste.length) return;
+
+    liste.forEach(g => {
+      const k = el('div', 'karte' + (g.status === 'fehlgeschlagen' ? ' gesperrt' : ''));
+      const kopf = el('div', 'k-kopf');
+      kopf.appendChild(el('span', 'k-name', g.betreff));
+      if (g.status === 'fehlgeschlagen') kopf.appendChild(el('span', 'marke rot', 'fehlgeschlagen'));
+      k.appendChild(kopf);
+
+      k.appendChild(el('p', 'k-mail', 'geplant für ' + datum(g.versand_am)
+        + (g.status === 'fehlgeschlagen' && g.fehler ? ' — ' + g.fehler : '')));
+
+      if (g.status === 'geplant') {
+        const zeile = el('div', 'k-tat');
+        const bearb = el('button', null, 'bearbeiten');
+        bearb.type = 'button';
+        bearb.addEventListener('click', () => geplantInFormular(g));
+        zeile.appendChild(bearb);
+
+        const schluessel = 'geplant:' + g.id;
+        const weg = el('button', sicherGeplant === schluessel ? 'sicher' : null,
+          sicherGeplant === schluessel ? 'wirklich?' : 'verwerfen');
+        weg.type = 'button';
+        weg.addEventListener('click', () => geplantVerwerfen(g, schluessel));
+        zeile.appendChild(weg);
+        k.appendChild(zeile);
+      }
+      ziel.appendChild(k);
+    });
+  }
+
+  async function geplantVerwerfen(g, schluessel) {
+    if (sicherGeplant !== schluessel) {
+      sicherGeplant = schluessel;
+      clearTimeout(sicherGeplantUhr);
+      sicherGeplantUhr = setTimeout(() => { sicherGeplant = null; geplantZeichnen(geplant); }, 8000);
+      geplantZeichnen(geplant);
+      return;
+    }
+    sicherGeplant = null;
+    clearTimeout(sicherGeplantUhr);
+    try {
+      await ruf('/api/admin/rundmail/geplant/aendern', { id: g.id, verwerfen: true });
+      if (geplantId === g.id) formZuruecksetzen();
+      sagt('rund-sagt', '„' + g.betreff + '" verworfen.');
+      await laden();
+    } catch (e) {
+      sagt('rund-sagt', e.message, true);
+    }
+  }
 
   // ==========================================================================
   // Laden
@@ -1001,14 +1274,15 @@
       return;
     }
 
-    /* Alle vier auf einmal: sie hängen nicht voneinander ab, und
-       nacheinander wäre das Kontor viermal so lange leer. `health` darf
+    /* Alle fünf auf einmal: sie hängen nicht voneinander ab, und
+       nacheinander wäre das Kontor fünfmal so lange leer. `health` darf
        scheitern, ohne den Rest mitzureißen — es ist die Ampel, nicht der
        Inhalt. */
-    const [leute, stat, log, health] = await Promise.all([
+    const [leute, stat, log, geplantListe, health] = await Promise.all([
       ruf('/api/admin/nutzer'),
       ruf('/api/admin/statistik?tage=' + zeitraum),
       ruf('/api/admin/protokoll'),
+      ruf('/api/admin/rundmail/geplant'),
       fetch(API + '/api/health', { cache: 'no-store' }).then(r => r.json()).catch(() => null),
     ]);
 
@@ -1030,6 +1304,7 @@
     runde(leute.nutzer);
     statistik(stat);
     protokoll(log.zeilen);
+    geplantZeichnen(geplantListe.zeilen);
   }
 
   laden().catch(e => zeigeTuer('Das Kontor ließ sich nicht aufschlagen: ' + e.message));

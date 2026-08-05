@@ -267,6 +267,9 @@ const MAILWECHSEL_PRO_TAG = 3;
 const RUNDMAIL_MAX         = 4000;  // Zeichen
 const RUNDMAIL_BETREFF_MAX = 120;
 const RUNDMAIL_SPERRE      = 1;     // Stunden zwischen zwei Rundmails
+const RUNDMAIL_KNOPF_MAX   = 40;    // Zeichen auf dem Knopf
+const RUNDMAIL_LINK_MAX    = 500;   // Zeichen, Bild- und Knopf-Adresse
+const RUNDMAIL_VORAUS      = 90;    // Tage, so weit darf eine geplante Rundmail vorausliegen
 
 // ---------------------------------------------------------------------------
 // Kleinkram
@@ -1707,6 +1710,145 @@ function mailEcho(env, ctx, anWen, vonWem, worum, bezug) {
     text: `${worum.lang}\n\nNachlesen: ${env.SEITE}`,
     html: `<p>${nurText(worum.lang)}</p>` + mailKnopf(env.SEITE, 'Nachlesen'),
   });
+}
+
+/* Vorlage und Pruefung der Rundmail - fuer den Sofortversand UND die geplante
+   Fassung dieselbe Funktion, damit beide dieselbe Mail bauen und nicht zwei
+   leicht verschiedene Rundmail-Arten entstehen. Bild und Knopf sind das
+   ganze Zugestaendnis an HTML: kein freier Editor im Kontor, dafuer dasselbe
+   `mailKnopf`-Muster wie bei Termin- und Gewinner-Mails. */
+function rundmailPruefen(daten) {
+  const betreff = String(daten.betreff ?? '').trim().replace(/\s+/g, ' ');
+  const text = String(daten.text ?? '').trim();
+  const bildUrl = String(daten.bild_url ?? '').trim();
+  const knopfText = String(daten.knopf_text ?? '').trim();
+  const knopfLink = String(daten.knopf_link ?? '').trim();
+
+  if (!betreff) return { fehler: 'Ohne Betreff keine Rundmail' };
+  if (betreff.length > RUNDMAIL_BETREFF_MAX) {
+    return { fehler: `Der Betreff darf höchstens ${RUNDMAIL_BETREFF_MAX} Zeichen haben` };
+  }
+  if (!text) return { fehler: 'Ohne Text keine Rundmail' };
+  if (text.length > RUNDMAIL_MAX) return { fehler: `Höchstens ${RUNDMAIL_MAX} Zeichen` };
+
+  if (bildUrl && (bildUrl.length > RUNDMAIL_LINK_MAX || !/^https:\/\//i.test(bildUrl))) {
+    return { fehler: 'Das Bild braucht eine https-Adresse' };
+  }
+  if (knopfLink && (knopfLink.length > RUNDMAIL_LINK_MAX || !/^https:\/\//i.test(knopfLink))) {
+    return { fehler: 'Der Knopf braucht eine https-Adresse' };
+  }
+  if (!!knopfText !== !!knopfLink) {
+    return { fehler: 'Der Knopf braucht Text UND Adresse, oder keins von beiden' };
+  }
+  if (knopfText.length > RUNDMAIL_KNOPF_MAX) {
+    return { fehler: `Der Knopftext darf höchstens ${RUNDMAIL_KNOPF_MAX} Zeichen haben` };
+  }
+
+  return {
+    betreff, text,
+    bildUrl: bildUrl || null,
+    knopfText: knopfText || null,
+    knopfLink: knopfLink || null,
+  };
+}
+
+function rundmailHtml({ text, bildUrl, knopfText, knopfLink }) {
+  const bild = bildUrl
+    ? `<p><img src="${nurText(bildUrl)}" alt="" style="max-width:100%;border-radius:4px;
+         display:block;margin:0 0 4px"></p>`
+    : '';
+  const absaetze = text.split(/\n{2,}/)
+    .map(a => `<p>${nurText(a).replace(/\n/g, '<br>')}</p>`).join('\n');
+  return bild + absaetze + (knopfText ? mailKnopf(knopfLink, knopfText) : '');
+}
+
+const rundmailText = ({ text, bildUrl, knopfText, knopfLink }) => text
+  + (bildUrl ? `\n\n${bildUrl}` : '')
+  + (knopfText ? `\n\n${knopfText}: ${knopfLink}` : '');
+
+/* Der eigentliche Versand - Sofortversand UND geplante Rundmail rufen
+   dieselbe Funktion, damit die Stundensperre an einer einzigen Stelle greift,
+   egal auf welchem Weg die Mail losgeht. Wirft bei Sperre einen Fehler mit
+   `.sperre`, damit die Route daraus eine 429 macht und der Cron daraus ein
+   'fehlgeschlagen'. */
+async function rundmailAbschicken(env, ctx, adminId, geprueft) {
+  const letzte = await env.DB.prepare(`
+    SELECT erstellt FROM admin_log WHERE aktion = 'rundmail'
+      AND erstellt > datetime('now', ?) LIMIT 1
+  `).bind(`-${RUNDMAIL_SPERRE} hours`).first();
+  if (letzte) {
+    const e = new Error('Die letzte Rundmail ist noch keine Stunde her');
+    e.sperre = true;
+    throw e;
+  }
+
+  const kreis = await env.DB.prepare(`
+    SELECT id, mail_prefs FROM users
+    WHERE email IS NOT NULL AND gesperrt_am IS NULL
+      AND entfernt_am IS NULL AND mail_stumm_am IS NULL
+  `).all();
+  const wieViele = kreis.results.filter(u => mailWahl(u).rundmail).length;
+
+  benachrichtige(env, ctx, 'rundmail', null, {
+    betreff: geprueft.betreff,
+    text: rundmailText(geprueft),
+    html: rundmailHtml(geprueft),
+  });
+
+  await env.DB.prepare(
+    'INSERT INTO admin_log (admin_id, aktion, detail) VALUES (?, ?, ?)')
+    .bind(adminId, 'rundmail', geprueft.betreff.slice(0, 120)).run();
+
+  return wieViele;
+}
+
+/* Wie `pruefeBeginn` bei Terminen, aber fuer den Versandzeitpunkt einer
+   geplanten Rundmail: er muss in der Zukunft liegen - sonst waere es ein
+   Sofortversand - und nicht zu weit weg, dieselbe Obergrenze wie bei
+   Terminen und aus demselben Grund. */
+function pruefeVersand(roh) {
+  const d = new Date(String(roh || ''));
+  if (isNaN(d)) return { fehler: 'Zeitpunkt: ISO-8601 in UTC, etwa 2026-08-02T17:00:00Z' };
+  if (d.getTime() <= Date.now() + 60_000) {
+    return { fehler: 'Der Zeitpunkt muss mindestens eine Minute in der Zukunft liegen' };
+  }
+  if (d.getTime() > Date.now() + RUNDMAIL_VORAUS * 864e5) {
+    return { fehler: `Höchstens ${RUNDMAIL_VORAUS} Tage im Voraus` };
+  }
+  return { d };
+}
+
+/* Die geplanten Rundmails - aufgerufen vom zehnminuetigen Cron, siehe
+   `scheduled()` unten und den zweiten Eintrag in wrangler.jsonc. Keine
+   Uhrzeit auf die Minute, aber nah genug fuer eine Ankuendigung. Jede
+   faellige Zeile bekommt genau einen Versuch: schlaegt er fehl (etwa weil
+   die Stundensperre noch greift), bleibt sie 'fehlgeschlagen' liegen statt
+   es beim naechsten Lauf mit demselben Ergebnis wieder zu versuchen. */
+async function rundmailGeplantVersenden(env, ctx) {
+  const faellig = await env.DB.prepare(`
+    SELECT * FROM rundmail_geplant
+    WHERE status = 'geplant' AND versand_am <= datetime('now')
+    ORDER BY versand_am
+  `).all();
+
+  for (const m of faellig.results) {
+    try {
+      const wieViele = await rundmailAbschicken(env, ctx, m.admin_id, {
+        betreff: m.betreff, text: m.text,
+        bildUrl: m.bild_url, knopfText: m.knopf_text, knopfLink: m.knopf_link,
+      });
+      await env.DB.prepare(`
+        UPDATE rundmail_geplant
+        SET status = 'versendet', versendet_am = datetime('now'), empfaenger = ?
+        WHERE id = ?
+      `).bind(wieViele, m.id).run();
+    } catch (e) {
+      console.error('Geplante Rundmail:', e && e.stack || e);
+      await env.DB.prepare(`
+        UPDATE rundmail_geplant SET status = 'fehlgeschlagen', fehler = ? WHERE id = ?
+      `).bind(String(e && e.message || e).slice(0, 200), m.id).run();
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -3583,10 +3725,11 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
-  /* Die Rundmail. Geht durch denselben Verteiler wie alles andere - also auch
-     nur an die, die sie wollen, und mit demselben Abmeldelink. Ohne `bezug`,
-     damit die Doppel-Sperre sie nicht nach der ersten fuer immer blockiert;
-     gegen den Fehlgriff steht die Stundensperre. */
+  /* Die Rundmail, sofort. Geht durch denselben Verteiler wie alles andere -
+     also auch nur an die, die sie wollen, und mit demselben Abmeldelink.
+     Ohne `bezug`, damit die Doppel-Sperre sie nicht nach der ersten fuer
+     immer blockiert; gegen den Fehlgriff steht die Stundensperre in
+     `rundmailAbschicken`. */
   'POST /api/admin/rundmail': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
@@ -3595,49 +3738,111 @@ const ROUTEN = {
 
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
-    const betreff = String(daten.betreff ?? '').trim().replace(/\s+/g, ' ');
-    const text = String(daten.text ?? '').trim();
-    if (!betreff) return fehler(request, 'Ohne Betreff keine Rundmail');
-    if (betreff.length > RUNDMAIL_BETREFF_MAX) {
-      return fehler(request, `Der Betreff darf höchstens ${RUNDMAIL_BETREFF_MAX} Zeichen haben`);
-    }
-    if (!text) return fehler(request, 'Ohne Text keine Rundmail');
-    if (text.length > RUNDMAIL_MAX) {
-      return fehler(request, `Höchstens ${RUNDMAIL_MAX} Zeichen`);
-    }
+    const geprueft = rundmailPruefen(daten);
+    if (geprueft.fehler) return fehler(request, geprueft.fehler);
 
-    const letzte = await env.DB.prepare(`
-      SELECT erstellt FROM admin_log WHERE aktion = 'rundmail'
-        AND erstellt > datetime('now', ?) LIMIT 1
-    `).bind(`-${RUNDMAIL_SPERRE} hours`).first();
-    if (letzte) {
-      return fehler(request, 'Die letzte Rundmail ist noch keine Stunde her', 429);
+    try {
+      const wieViele = await rundmailAbschicken(env, ctx, ich.id, geprueft);
+      return antwort(request, { ok: true, empfaenger: wieViele }, 200, KEIN_FREMDER_CACHE);
+    } catch (e) {
+      if (e.sperre) return fehler(request, e.message, 429);
+      throw e;
     }
+  },
 
-    /* Die Empfaengerzahl VOR dem Versand, mit denselben Bedingungen wie der
-       Verteiler - sonst antwortet die Route "an 7" und drei bekommen nichts.
-       Der Schalter `rundmail` steht in `mail_prefs` und wird in JS geprueft;
-       SQL koennte das zwar auch, aber dann stuende die Regel an zwei Stellen. */
-    const kreis = await env.DB.prepare(`
-      SELECT id, mail_prefs FROM users
-      WHERE email IS NOT NULL AND gesperrt_am IS NULL
-        AND entfernt_am IS NULL AND mail_stumm_am IS NULL
+  // -------------------------------------------------------------------------
+  /* Dieselbe Rundmail, aber fuer spaeter vorgemerkt statt sofort geschickt -
+     editierbar und verwerfbar, solange sie noch ansteht. Der Versand selbst
+     laeuft ueber `rundmailGeplantVersenden`, angestossen vom zehnminuetigen
+     Cron in `scheduled()`. */
+  'POST /api/admin/rundmail/planen': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+    if (!env.AGENTMAIL_KEY) return fehler(request, 'Mailversand ist nicht eingerichtet', 503);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const geprueft = rundmailPruefen(daten);
+    if (geprueft.fehler) return fehler(request, geprueft.fehler);
+    const p = pruefeVersand(daten.versand_am);
+    if (p.fehler) return fehler(request, p.fehler);
+
+    const zeile = await env.DB.prepare(`
+      INSERT INTO rundmail_geplant
+        (admin_id, betreff, text, bild_url, knopf_text, knopf_link, versand_am)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      RETURNING id
+    `).bind(ich.id, geprueft.betreff, geprueft.text, geprueft.bildUrl,
+            geprueft.knopfText, geprueft.knopfLink, alsDbZeit(p.d)).first();
+
+    return antwort(request, { ok: true, id: zeile.id }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
+  'GET /api/admin/rundmail/geplant': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+
+    // 'fehlgeschlagen' steht mit da, sonst verschwindet eine Rundmail, deren
+    // Versand scheiterte (etwa an der Stundensperre), spurlos aus der Liste.
+    const zeilen = await env.DB.prepare(`
+      SELECT id, betreff, text, bild_url, knopf_text, knopf_link,
+             versand_am, status, fehler, empfaenger, erstellt
+      FROM rundmail_geplant
+      WHERE status IN ('geplant', 'fehlgeschlagen')
+      ORDER BY versand_am
     `).all();
-    const wieViele = kreis.results.filter(u => mailWahl(u).rundmail).length;
 
-    /* Absätze bleiben Absätze, sonst kommt der ganze Text als eine Wand an.
-       Mehr Auszeichnung gibt es nicht: was der Wirt tippt, ist Text, und ein
-       HTML-Editor im Kontor wäre ein Projekt für sich. */
-    const html = text.split(/\n{2,}/)
-      .map(a => `<p>${nurText(a).replace(/\n/g, '<br>')}</p>`).join('\n');
+    return antwort(request, {
+      zeilen: zeilen.results.map(z => ({
+        id: z.id, betreff: z.betreff, text: z.text,
+        bild_url: z.bild_url, knopf_text: z.knopf_text, knopf_link: z.knopf_link,
+        versand_am: utc(z.versand_am), status: z.status, fehler: z.fehler,
+        empfaenger: z.empfaenger, erstellt: utc(z.erstellt),
+      })),
+    }, 200, KEIN_FREMDER_CACHE);
+  },
 
-    benachrichtige(env, ctx, 'rundmail', null, { betreff, text, html });
+  // -------------------------------------------------------------------------
+  /* Aendern oder verwerfen - eine Route fuer beides, wie bei
+     '/api/kommentar/aendern'. Geht nur, solange die Rundmail noch 'geplant'
+     ist: einmal rausgegangen oder fehlgeschlagen ruehrt niemand mehr dran. */
+  'POST /api/admin/rundmail/geplant/aendern': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
-    await env.DB.prepare(
-      'INSERT INTO admin_log (admin_id, aktion, detail) VALUES (?, ?, ?)')
-      .bind(ich.id, 'rundmail', betreff.slice(0, 120)).run();
+    const daten = await json(request);
+    if (!daten || !daten.id) return fehler(request, 'Ohne id kein Ziel');
 
-    return antwort(request, { ok: true, empfaenger: wieViele }, 200, KEIN_FREMDER_CACHE);
+    const zeile = await env.DB.prepare(
+      'SELECT status FROM rundmail_geplant WHERE id = ?').bind(daten.id).first();
+    if (!zeile) return fehler(request, 'Die gibt es nicht (mehr)', 404);
+    if (zeile.status !== 'geplant') {
+      return fehler(request,
+        'Die ist schon dran oder weg — daran lässt sich nichts mehr ändern', 409);
+    }
+
+    if (daten.verwerfen) {
+      await env.DB.prepare('DELETE FROM rundmail_geplant WHERE id = ?').bind(daten.id).run();
+      return antwort(request, { ok: true }, 200, KEIN_FREMDER_CACHE);
+    }
+
+    const geprueft = rundmailPruefen(daten);
+    if (geprueft.fehler) return fehler(request, geprueft.fehler);
+    const p = pruefeVersand(daten.versand_am);
+    if (p.fehler) return fehler(request, p.fehler);
+
+    await env.DB.prepare(`
+      UPDATE rundmail_geplant SET
+        betreff = ?, text = ?, bild_url = ?, knopf_text = ?, knopf_link = ?, versand_am = ?
+      WHERE id = ?
+    `).bind(geprueft.betreff, geprueft.text, geprueft.bildUrl,
+            geprueft.knopfText, geprueft.knopfLink, alsDbZeit(p.d), daten.id).run();
+
+    return antwort(request, { ok: true }, 200, KEIN_FREMDER_CACHE);
   },
 
   // -------------------------------------------------------------------------
@@ -3963,8 +4168,22 @@ export default {
      UTC verglichen, wie ueberall hier - ein Abend, der um 23:30 Ortszeit
      anfaengt, faellt damit auf denselben UTC-Tag wie die Erinnerung, und die
      halbe Stunde Drift an dieser Kante ist es nicht wert, eine Zeitzone in
-     die Abfrage zu ziehen. */
+     die Abfrage zu ziehen.
+
+     Zweiter Cron seit Schema 15, siehe wrangler.jsonc: alle zehn Minuten,
+     nur fuer faellige geplante Rundmails. Beide in einer Funktion haette die
+     Erinnerung alle zehn Minuten neu verschickt statt einmal taeglich -
+     darum die Weiche gleich am Anfang. */
   async scheduled(event, env, ctx) {
+    if (event.cron !== '0 9 * * *') {
+      try {
+        await rundmailGeplantVersenden(env, ctx);
+      } catch (e) {
+        console.error('Geplante Rundmail:', e && e.stack || e);
+      }
+      return;
+    }
+
     const heute = await env.DB.prepare(`
       SELECT t.id, t.beginnt_am, t.titel, coalesce(u.name, 'Ehemaliger') AS gastgeber
       FROM termine t JOIN users u ON u.id = t.gastgeber_id

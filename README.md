@@ -184,7 +184,7 @@ Wer eine Adresse hinterlegt hat, bekommt Mail — je Anlass abwählbar:
 | `gewonnen` | die Flasche hat einen getroffen | an |
 | `termin_neu` | ein Abend steht fest | an |
 | `termin_aendert` | ein Abend verschiebt sich, wird umbenannt oder fällt aus | an |
-| `erinnerung` | am Morgen des Abendtags (der einzige Cron im Dienst, 09:00 UTC) | an |
+| `erinnerung` | am Morgen des Abendtags (09:00 UTC, einer von zwei Crons im Dienst) | an |
 | `echo` | jemand antwortet auf einen Beitrag oder gibt Sterne | **aus** |
 | `rundmail` | gelegentlich, vom Wirt | an |
 
@@ -227,6 +227,16 @@ wie die Tafel, also dasselbe Token — kein zweiter Login und damit auch kein
 zweiter Angriffsweg. Wer der erste Admin ist, sagt das Secret `ADMIN_MAIL`: wer
 sich mit dieser Adresse anmeldet, wird beim Einlösen des Links zum Admin. Das ist
 selbstheilend, sonst wäre ein Kontor ohne Admin nur noch per SQL zu öffnen.
+
+Die **Rundmail** kann ein Bild und einen Knopf tragen — dasselbe `mailKnopf`-Muster
+wie bei Termin- und Gewinner-Mails, kein freier HTML-Editor. Sie geht entweder
+sofort raus oder wird für einen Zeitpunkt vorgemerkt (Tabelle `rundmail_geplant`);
+vorgemerkt bleibt sie editierbar und verwerfbar, bis sie fällig wird. Ein zweiter
+Cron (alle zehn Minuten, siehe `wrangler.jsonc`) verschickt, was ansteht — jede
+fällige Zeile bekommt genau einen Versuch, eine an der Stundensperre gescheiterte
+bleibt `fehlgeschlagen` liegen statt es beim nächsten Lauf mit demselben Ergebnis
+erneut zu versuchen. Die Vorschau im Kontor sieht aus wie die echte Mail (Georgia
+auf Weiß), nicht wie das Kontorbuch drumherum.
 
 Entfernt wird **weich**: Adresse, Name und Token verschwinden, die Beiträge
 bleiben als *Ehemaliger* stehen. Hart geht nicht — `kommentare.autor_id` hat
@@ -351,7 +361,10 @@ Drei Dinge, die dazugehören:
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
 | `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen', grund?}` — nur Admin |
 | `GET /api/admin/statistik` 🔒 | dasselbe **plus Betrieb**: Mails je Art und je Tag, Anmeldungen, wer noch Post will — nur Admin |
-| `POST /api/admin/rundmail` 🔒 | `{betreff, text}` an alle, die sie wollen — nur Admin |
+| `POST /api/admin/rundmail` 🔒 | `{betreff, text, bild_url?, knopf_text?, knopf_link?}` sofort an alle, die sie wollen — nur Admin |
+| `POST /api/admin/rundmail/planen` 🔒 | dieselben Felder plus `{versand_am}` — vorgemerkt statt sofort verschickt, nur Admin |
+| `GET /api/admin/rundmail/geplant` 🔒 | die noch anstehenden und die fehlgeschlagenen geplanten Rundmails — nur Admin |
+| `POST /api/admin/rundmail/geplant/aendern` 🔒 | `{id, ...Felder}` ändert eine geplante Rundmail, `{id, verwerfen:true}` löscht sie — geht nur, solange sie noch `geplant` ist |
 | `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
 | `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM` |
 
@@ -383,7 +396,13 @@ Gegenteil; sie stammt aus einer Zeit, in der es so war.
 
 Nutzerverwaltung: 3 Adresswechsel je Nutzer und Tag (dazu dieselben Bremsen wie
 beim Magic Link, es ist dieselbe Tabelle), Sperrgrund 120 Zeichen, Rundmail 4000
-Zeichen bei 120 im Betreff und höchstens eine je Stunde.
+Zeichen bei 120 im Betreff und höchstens eine je Stunde — die Stunde gilt für den
+tatsächlichen Versand, nicht fürs Planen, und trifft eine geplante Rundmail sie
+beim Fälligwerden, bleibt sie `fehlgeschlagen` liegen statt es beim nächsten
+Cron-Lauf erneut zu versuchen. Bild- und Knopf-Adresse: `https://`, höchstens 500
+Zeichen, der Knopftext höchstens 40. Eine geplante Rundmail darf höchstens 90 Tage
+im Voraus liegen; der Cron dafür prüft alle zehn Minuten, keine Uhrzeit auf die
+Minute.
 
 Notruf: 90 Minuten Geltung, 20 Sekunden zwischen zweien desselben Nutzers, einer
 je Nutzer gleichzeitig. Kartenkacheln nur zwischen Zoom 12 und 18 und nur mit

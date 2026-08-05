@@ -19,12 +19,19 @@
 
   "observability": { "enabled": true },
 
-  // Der einzige Zeitgeber: die Erinnerung am Abend des Termins (scheduled()
-  // in src/index.js). 09:00 UTC ist 11:00 deutscher Sommerzeit - frueh genug
-  // zum Einkaufen, spaet genug, dass niemand davon geweckt wird.
+  // Zwei Zeitgeber, beide in scheduled() in src/index.js, per event.cron
+  // auseinandergehalten:
+  //   "0 9 * * *"    einmal taeglich, die Erinnerung am Abend des Termins.
+  //                  09:00 UTC ist 11:00 deutscher Sommerzeit - frueh genug
+  //                  zum Einkaufen, spaet genug, dass niemand davon geweckt
+  //                  wird.
+  //   "*/10 * * * *" alle zehn Minuten, faellige geplante Rundmails (Schema
+  //                  15) - keine Uhrzeit auf die Minute, aber nah genug fuer
+  //                  eine Ankuendigung.
   // Zum Ausprobieren:  npx wrangler dev --test-scheduled
   //                    curl "localhost:8787/__scheduled?cron=0+9+*+*+*"
-  "triggers": { "crons": ["0 9 * * *"] },
+  //                    curl "localhost:8787/__scheduled?cron=*/10+*+*+*+*"
+  "triggers": { "crons": ["0 9 * * *", "*/10 * * * *"] },
 
   // Kein Geheimnis, deshalb hier und nicht als Secret. Der API-Schluessel
   // dazu heisst AGENTMAIL_KEY und liegt bei Cloudflare:
