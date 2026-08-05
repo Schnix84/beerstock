@@ -1183,7 +1183,7 @@
       <section class="notruf-block" id="notruf-block" hidden>
         <div class="block-kopf kr">
           <span class="titel">Notruf</span>
-          <button class="nr-knopf" id="notruf-auf" type="button">Ich brauche was</button>
+          <button class="nr-knopf" id="notruf-auf" type="button">Notruf absetzen</button>
         </div>
         <div id="notruf-liste"></div>
       </section>
@@ -1587,8 +1587,8 @@
       </div>
 
       <div class="nr-wahl" id="nr-wahl">
-        <button class="knopf" id="nr-bier" type="button">Ich brauche Bier</button>
-        <button class="knopf" id="nr-kamerad" type="button">Ich brauche Trinkkameraden</button>
+        <button class="knopf" id="nr-bier" type="button">Bier</button>
+        <button class="knopf" id="nr-kamerad" type="button">Trinkkameraden</button>
       </div>
 
       <!-- Was danach dasteht: die eigene Karte, der Weg dorthin, der Rückzug. -->
@@ -2704,7 +2704,7 @@
 
     const knopf = $('notruf-auf');
     knopf.classList.toggle('laeuft', !!meineNot);
-    knopf.textContent = meineNot ? 'Mein Notruf läuft' : 'Ich brauche was';
+    knopf.textContent = meineNot ? 'Mein Notruf läuft' : 'Notruf absetzen';
   }
 
   /* --- Das Notrufblatt -----------------------------------------------------
