@@ -450,9 +450,16 @@
     text-transform: uppercase; color: var(--rot); cursor: pointer;
   }
   .nr-knopf:hover { background: #e0745c14; }
-  /* Ein laufender eigener Notruf färbt den Knopf: er ist dann kein Angebot
-     mehr, sondern der Weg zurück. */
-  .nr-knopf.laeuft { color: var(--gelb); border-color: #e8c76677; }
+
+  /* Läuft der eigene Notruf, tauschen die beiden Handlungen den Knopf in der
+     Kopfzeile aus, und der Titel rutscht darunter: `flex-basis: 100%` reißt
+     ihn aus der ersten Zeile, `order` hält ihn trotz DOM-Reihenfolge dort
+     unten. Ohne aktiven Notruf bleibt die Zeile wie sie war — Titel links,
+     Knopf rechts, eine Zeile. */
+  #notruf-kopf { flex-wrap: wrap; }
+  #notruf-kopf.notruf-kopf-aktiv .titel { order: 2; flex: 1 1 100%; }
+  #notruf-kopf.notruf-kopf-aktiv .nr-tafel-aktionen { order: 1; }
+  .nr-tafel-aktionen { display: flex; gap: 18px; }
 
   .nr-zeile {
     display: grid; grid-template-columns: 1fr auto; gap: 4px 11px;
@@ -1186,9 +1193,16 @@
            Angemeldete: draußen kommt vom Worker gar keine Zeile davon an.
            ============================================================= -->
       <section class="notruf-block" id="notruf-block" hidden>
-        <div class="block-kopf kr">
-          <span class="titel">Notruf</span>
+        <div class="block-kopf kr" id="notruf-kopf">
+          <span class="titel">Wo wird heute getrunken</span>
           <button class="nr-knopf" id="notruf-auf" type="button">Notruf absetzen</button>
+          <!-- Nur solange der eigene Notruf läuft: dann ersetzen die beiden
+               Handlungen den Knopf in der Kopfzeile, und der Titel wandert
+               darunter — siehe `.notruf-kopf-aktiv` in der CSS. -->
+          <span class="nr-tafel-aktionen" id="notruf-tafel-aktionen" hidden>
+            <button class="nr-nochmal" id="notruf-tafel-standort" type="button">Standort aktualisieren</button>
+            <button class="nr-nochmal" id="notruf-tafel-weg" type="button">Notruf zurücknehmen</button>
+          </span>
         </div>
         <div id="notruf-liste"></div>
       </section>
@@ -1537,7 +1551,7 @@
            Auskunft, und das Ziel sah aus wie eine Fußnote. Wer das Kontor
            führt, weiß es; er sucht den Weg hinein. -->
       <button class="knopf dk-kontor" id="dk-kontor" type="button" hidden>
-        Mitgliederverwaltung
+        Administration
       </button>
 
       <p class="sagt" id="dk-sagt" hidden></p>
@@ -2717,9 +2731,9 @@
     // Erst jetzt, wo die Zeilen hängen und eine Breite haben.
     for (const k of liste.querySelectorAll('.karte')) karteFuellen(k);
 
-    const knopf = $('notruf-auf');
-    knopf.classList.toggle('laeuft', !!meineNot);
-    knopf.textContent = meineNot ? 'Mein Notruf läuft' : 'Notruf absetzen';
+    $('notruf-kopf').classList.toggle('notruf-kopf-aktiv', !!meineNot);
+    $('notruf-auf').hidden = !!meineNot;
+    $('notruf-tafel-aktionen').hidden = !meineNot;
   }
 
   /* --- Das Notrufblatt -----------------------------------------------------
@@ -2962,11 +2976,16 @@
           : darf            ? 'Kein Abend in Sicht. Trag einen ein.'
                             : 'Kein Abend in Sicht.'));
     }
-    kommend.forEach(t => ziel.appendChild(VARIANTE.termin(t, darfWeg(t))));
+    /* Nur zwei Zeilen in der Hauptansicht — der Rest liegt in der Chronik.
+       Reicht das Kommende allein nicht, füllt das Gewesene die Lücke auf. */
+    const ANGEZEIGT = 2;
+    const kommendGezeigt = kommend.slice(0, ANGEZEIGT);
+    kommendGezeigt.forEach(t => ziel.appendChild(VARIANTE.termin(t, darfWeg(t))));
 
-    if (gewesen.length) {
+    const gewesenGezeigt = gewesen.slice(0, ANGEZEIGT - kommendGezeigt.length);
+    if (gewesenGezeigt.length) {
       ziel.appendChild(el('div', 't-trenner', 'gewesen'));
-      gewesen.forEach(t => ziel.appendChild(VARIANTE.termin(t, false)));
+      gewesenGezeigt.forEach(t => ziel.appendChild(VARIANTE.termin(t, false)));
     }
   }
 
@@ -4136,6 +4155,8 @@
   $('nr-alles').addEventListener('click', () => notrufSenden('alles'));
   $('nr-weg').addEventListener('click', notrufWeg);
   $('nr-standort').addEventListener('click', notrufStandortAktualisieren);
+  $('notruf-tafel-weg').addEventListener('click', notrufWeg);
+  $('notruf-tafel-standort').addEventListener('click', notrufStandortAktualisieren);
   /* Der Rückzug steht auch an der eigenen Zeile auf der Tafel. Über den Block
      gehört und nicht an die Zeile geheftet: die Zeilen werden bei jedem
      Zeichnen neu gebaut, ein Hörer daran wäre nach dem ersten Anstoss weg. */
