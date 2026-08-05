@@ -44,11 +44,16 @@ egal, eine ICU-Abhängigkeit wäre es nicht.
 
 ## Der Notruf
 
-Wer Bier braucht oder jemanden zum Trinken, drückt **Ich brauche was** und wählt
-zwischen den beiden. Dazu geht der eigene Standort mit — einmal gefragt, und ohne
-Freigabe im Browser passiert schlicht nichts. Auf der Tafel steht der Notruf dann
-für alle Angemeldeten, mit einer Karte darunter; ein Druck darauf öffnet die
-Navigation in Google Maps. Auch per Mail geht er raus, den Kartenlink gleich darin.
+Wer Bier braucht, jemanden zum Trinken oder beides, drückt **Notruf absetzen**
+und wählt zwischen **Bier**, **Trinkkameraden** und **Alles**. Dazu geht der
+eigene Standort mit — einmal gefragt, und ohne Freigabe im Browser passiert
+schlicht nichts. Auf der Tafel steht der Notruf dann für alle Angemeldeten, mit
+einer Karte darunter; ein Druck darauf öffnet die Navigation in Google Maps.
+Auch per Mail geht er raus, den Kartenlink gleich darin.
+
+Wer sich bewegt, während der Notruf noch läuft, trägt den neuen Standort über
+**Standort aktualisieren** nach — das ändert nur die Koordinaten an derselben
+Zeile, ohne die Runde ein zweites Mal anzuschreiben.
 
 **Er erlischt von selbst, nach anderthalb Stunden.** Das ist der Kern und nicht
 die Kosmetik: ein Notruf, der stehen bleibt, ist keiner mehr, sondern ein
@@ -336,6 +341,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
 | `POST /api/notruf` 🔒 | `{art:'bier'\|'kamerad', lat, lon, genau?}` — gilt 90 Minuten, ein erneuter Ruf ersetzt den eigenen |
+| `POST /api/notruf/standort` 🔒 | `{lat, lon, genau?}` — trägt nur den Standort am laufenden Notruf nach, ohne neue Mail |
 | `POST /api/notruf/weg` 🔒 | nimmt den eigenen zurück; zweimal gerufen ist kein Fehler |
 | `GET /api/kachel` | `?z=&x=&y=` — Kartenkachel über den Worker statt direkt von OSM; sieben Tage im Cache, fremder Referer → 403 |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |

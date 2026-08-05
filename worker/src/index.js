@@ -155,7 +155,7 @@ const REAKTIONEN = new Set(['daumen_hoch', 'daumen_runter', 'herz', 'bier']);
    offenen Notruf, er stellt keinen zweiten daneben. */
 const NOTRUF_MINUTEN = 90;   // so lange gilt einer, dann erlischt er von selbst
 const NOTRUFSPERRE   = 20;   // Sekunden zwischen zwei Notrufen desselben Nutzers
-const NOTRUF_ARTEN   = new Set(['bier', 'kamerad']);
+const NOTRUF_ARTEN   = new Set(['bier', 'kamerad', 'alles']);
 /* Wie lange eine erloschene Zeile noch herumliegt, bevor der Cron sie
    wegraeumt. Sie ist da nicht mehr sichtbar - die Abfrage filtert nach `bis`
    und `weg_am` - sie liegt nur noch da. Ein Tag Puffer, damit das Aufraeumen
@@ -640,6 +640,26 @@ const notrufAntwort = n => ({
    eine Genauigkeit, die keine Ortung hergibt. */
 const mapsLink = (lat, lon) =>
   `https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(6)},${lon.toFixed(6)}`;
+
+/* Lat/Lon/Genau aus dem Rumpf lesen und pruefen - fuer den neuen Notruf UND
+   das Nachtragen des Standorts an einem laufenden. Ein Fehlerstring statt
+   Wurf: beide Aufrufer geben ihn unveraendert an `fehler()` weiter, und ein
+   `throw` haette hier nur eine zweite Fehlerform in den Code gebracht. */
+function notrufKoordinaten(daten) {
+  const lat = Number(daten.lat), lon = Number(daten.lon);
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90
+      || !Number.isFinite(lon) || lon < -180 || lon > 180) {
+    return { fehler: 'lat/lon: Grad als Zahl, lat -90..90, lon -180..180' };
+  }
+  /* Was der Browser ueber seine eigene Genauigkeit sagt, in Metern. Der
+     Deckel ist grosszuegig: eine reine IP-Ortung meldet gern 20 km, und die
+     soll durchkommen duerfen - die Karte zeigt dann eben einen sehr grossen
+     Kreis, was genau die richtige Auskunft ist. */
+  const rohGenau = Number(daten.genau);
+  const genau = Number.isFinite(rohGenau)
+    ? Math.min(50000, Math.max(0, Math.round(rohGenau))) : null;
+  return { lat, lon, genau };
+}
 
 /* Eine Form fuer alle Antworten rund um das Los: die Seite muss nicht mehrere
    Faelle unterscheiden. `gewinner === null` heisst "heute ist gerade nichts
@@ -2174,20 +2194,11 @@ const ROUTEN = {
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
     const art = String(daten.art || '');
-    if (!NOTRUF_ARTEN.has(art)) return fehler(request, "art: 'bier' oder 'kamerad'");
+    if (!NOTRUF_ARTEN.has(art)) return fehler(request, "art: 'bier', 'kamerad' oder 'alles'");
 
-    const lat = Number(daten.lat), lon = Number(daten.lon);
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90
-        || !Number.isFinite(lon) || lon < -180 || lon > 180) {
-      return fehler(request, 'lat/lon: Grad als Zahl, lat -90..90, lon -180..180');
-    }
-    /* Was der Browser ueber seine eigene Genauigkeit sagt, in Metern. Der
-       Deckel ist grosszuegig: eine reine IP-Ortung meldet gern 20 km, und die
-       soll durchkommen duerfen - die Karte zeigt dann eben einen sehr grossen
-       Kreis, was genau die richtige Auskunft ist. */
-    const rohGenau = Number(daten.genau);
-    const genau = Number.isFinite(rohGenau)
-      ? Math.min(50000, Math.max(0, Math.round(rohGenau))) : null;
+    const koord = notrufKoordinaten(daten);
+    if (koord.fehler) return fehler(request, koord.fehler);
+    const { lat, lon, genau } = koord;
 
     const letzte = await env.DB.prepare(`
       SELECT 1 FROM notrufe WHERE user_id = ? AND erstellt > datetime('now', ?) LIMIT 1
@@ -2216,9 +2227,9 @@ const ROUTEN = {
     const kreis = await env.DB.prepare(
       'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL').bind(ich.id).all();
     const wohin = mapsLink(lat, lon);
-    const was = art === 'bier'
-      ? `${ich.name} braucht Bier`
-      : `${ich.name} sucht Gesellschaft`;
+    const was = art === 'bier' ? `${ich.name} braucht Bier`
+      : art === 'kamerad' ? `${ich.name} sucht Gesellschaft`
+      : `${ich.name} braucht Bier und Gesellschaft`;
     benachrichtige(env, ctx, 'notruf', kreis.results.map(r => r.id), {
       bezug: `notruf:${zeile.id}`,
       betreff: was,
@@ -2236,6 +2247,41 @@ const ROUTEN = {
       ok: true,
       notruf: notrufAntwort({ ...zeile, art, lat, lon, genau, name: ich.name, user_id: ich.id }),
     }, 201);
+  },
+
+  /* Den Standort nachtragen, an einem laufenden Notruf. Anders als ein neuer
+     Notruf (der den alten ERSETZT und erneut anschreibt) aendert das hier nur
+     die Koordinaten AN DERSELBEN Zeile - kein neues `erstellt`, kein `bis`,
+     das weiterlaeuft, und vor allem KEINE Post. Wer Bier braucht und sich vom
+     Sofa zur Kueche bewegt, soll das nachtragen koennen, ohne dass bei allen
+     anderen zum zweiten Mal die Mail aufploppt.
+
+     Deshalb auch ohne eigene Sperre: die teure Handlung an `POST /api/notruf`
+     ist der Mailversand an die ganze Runde, und den gibt es hier nicht - ein
+     zweimal getippter Knopf kostet nur eine zweite, gleich teure Zeile in
+     derselben Tabelle. */
+  'POST /api/notruf/standort': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const koord = notrufKoordinaten(daten);
+    if (koord.fehler) return fehler(request, koord.fehler);
+    const { lat, lon, genau } = koord;
+
+    const zeile = await env.DB.prepare(`
+      UPDATE notrufe SET lat = ?, lon = ?, genau = ?
+      WHERE user_id = ? AND weg_am IS NULL AND bis > datetime('now')
+      RETURNING id, art, erstellt, bis
+    `).bind(lat, lon, genau, ich.id).first();
+    if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
+
+    anstoss(request, env, ctx, 'tafel');
+    return antwort(request, {
+      ok: true,
+      notruf: notrufAntwort({ ...zeile, lat, lon, genau, name: ich.name, user_id: ich.id }),
+    });
   },
 
   /* Zurueckgenommen. Kein Loeschen: die Zeile bleibt bis zum Aufraeumen stehen,
