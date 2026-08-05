@@ -93,6 +93,26 @@ etwas gelernt wurde, dorthin zurückschreiben.
 lokale Testtoken. In einem frischen Klon ist das Verzeichnis deshalb schlicht nicht da; dann
 ist `README.md` alles, was es gibt.
 
+## Opus dazuholen
+
+Die Sitzung läuft auf **Sonnet**. Das trägt den Bau; an drei Stellen holt der Agent aber
+einen **Opus-Unteragenten** dazu, statt allein weiterzumachen:
+
+1. **Vor der Festlegung** — bevor ein Bauweg gewählt wird, der später teuer
+   zurückzunehmen wäre: Datenmodell, neue Route, Umbau am Verteiler.
+2. **Beim zweiten Mal** — kommt derselbe Fehler ein zweites Mal, wird nicht ein drittes
+   Mal geraten.
+3. **Zur Abnahme** — bevor „fertig" gesagt wird, sieht Opus die Änderung durch.
+
+Technisch ist das schlicht das Agent-Werkzeug mit `model: 'opus'`. Ein eigener Agententyp
+existiert nicht und wird auch nicht gebraucht.
+
+**Der Unteragent sieht die Unterhaltung nicht.** Er bekommt nur, was man ihm mitgibt —
+also: die Frage, die betroffenen Dateien mit Zeilennummern, was schon versucht wurde und
+woran es hängt. Ein „schau mal drüber" ohne Kontext ist verschenktes Geld.
+
+Läuft die Sitzung ohnehin schon auf Opus, entfällt das.
+
 ## Am Ende fragen
 
 Ist die Arbeit getan, sagt der Agent **nicht** „committen und deployen machst du". Er fragt —
