@@ -214,7 +214,11 @@
      Der Tooltip dreht sich wie drüben um: dort Papier auf Tinte, hier Kreide
      auf Schiefer, also ein helles Kärtchen. */
   Bilder.aufsetzen({
-    reihe:      ['#8fc9a6', '#e8c766', '#d9705f', '#8fb8d6', '#c2a4d8', '#cfd6cd'],
+    /* Platz 4+5 (Blau/Lila) waren sich zu ähnlich — für Farbenblinde kaum,
+       für Normalsichtige nur schwer zu trennen. Lila jetzt dunkler und
+       kräftiger statt nur im Farbton verschoben, weil gleiche Helligkeit
+       plus mehr Sättigung allein die Verwechslung nicht behoben hätte. */
+    reihe:      ['#8fc9a6', '#e8c766', '#d9705f', '#94c8ea', '#a1519e', '#cfd6cd'],
     linie:      '#ffffff33',
     text:       '#cfd6cd',
     textWeg:    '#93a09a',
