@@ -266,6 +266,60 @@ Kreide (Verlauf) und einmal in Tinte (Kontor). **Die Tafel lädt sie nicht** —
 `index.html` gilt weiter: eine Datei, keine externen Ressourcen. Sie zeigt nur
 einen Knopf, der hinüberführt.
 
+### Architektur
+
+Nur der Worker schreibt; alles andere ist statisch oder ruft bei ihm an. Die
+Tafel (`index.html`) ist die einzige Seite mit offener Leitung — Kontor und
+Statistik holen sich alles über REST nach.
+
+```mermaid
+flowchart LR
+    subgraph Browser["Browser — GitHub Pages, statisch"]
+        Tafel["index.html<br/>Tafel, öffentlich"]
+        Kontor["admin.html<br/>Kontor, nur Admin"]
+        Statistik["statistik.html<br/>Statistik"]
+        Bilder["bilder.js<br/>Grafiken + Tooltip"]
+        Kontor -. "import" .-> Bilder
+        Statistik -. "import" .-> Bilder
+    end
+
+    subgraph CF["Cloudflare"]
+        Worker["Worker · src/index.js<br/>REST-API"]
+        DO["Durable Object Tafel<br/>src/tafel.js"]
+        D1[("D1 · beerstock")]
+        R2[("R2 · beerstock-bilder")]
+    end
+
+    Cron["Cron ×2<br/>09:00 UTC Erinnerung<br/>alle 10 Min Rundmail"]
+    Mail["AgentMail<br/>HTTP-API"]
+    OSM["tile.openstreetmap.org"]
+    HA["Home Assistant<br/>privates Repo"]
+
+    Tafel -- "REST + WebSocket /api/strom" --> Worker
+    Kontor -- "REST" --> Worker
+    Statistik -- "REST" --> Worker
+    Tafel -. "GET Foto, öffentliche URL" .-> R2
+    Kontor -. "GET Foto, öffentliche URL" .-> R2
+    Statistik -. "GET Foto, öffentliche URL" .-> R2
+
+    Worker -- "SQL" --> D1
+    Worker -- "PUT Foto" --> R2
+    Worker -- "melden() RPC" --> DO
+    DO -- "push: Marken (tafel / user:5 / …)" --> Tafel
+
+    Cron -- "scheduled()" --> Worker
+    Worker -- "POST Mail senden" --> Mail
+    Worker -- "GET Kachel, Proxy" --> OSM
+    HA -- "POST /api/report, /api/los/antwort · Bearer" --> Worker
+```
+
+Drei Dinge, die die Zeichnung festhält und die Prosa sonst verstreut sagt: die
+Tafel lädt `bilder.js` **nicht** — nur Kontor und Statistik teilen sich die
+Grafiken. Fotos aus R2 liest der Browser **direkt** über die öffentliche
+`r2.dev`-Adresse, am Worker vorbei — nur das Hochladen läuft über ihn. Und die
+Wohnung ruft **an**, statt erreichbar zu sein: Home Assistant meldet sich beim
+Worker wie jeder andere Melder, nicht umgekehrt.
+
 In „Bestand je Melder" und „Temperatur je Melder" laufen **stumme Tage
 fortgeschrieben** weiter: wer nichts meldet, hat deshalb nicht weniger im
 Kühlschrank — er hat nichts gesagt. Der letzte bekannte Stand bleibt waagerecht
