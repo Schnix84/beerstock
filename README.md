@@ -399,6 +399,10 @@ Drei Dinge, die dazugehören:
 | `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?, bild?}` — überschreibt |
 | `GET /api/bewertungen` 🔒 | `?ziel=user:5` — Schnitte, eigene Abgabe, Kommentarbaum |
 | `POST /api/bild` | rohe Bytes im Rumpf, kein JSON → `{key, bild}`; der `key` gehört an den nächsten Kommentar |
+| `GET /api/gif` 🔒 | `?q=…&weiter=…` — GIF-Suche über Giphy, ohne `q` das Angesagte; `[{id, vorschau, breite, hoehe, titel}]` |
+| `POST /api/gif/holen` 🔒 | `{id}` holt das gewählte GIF nach R2 → `{key, bild}`, dieselbe Form wie `/api/bild` |
+| `GET /api/meme/vorlagen` 🔒 | die Imgflip-Vorlagen, abgespeckt: `[{id, name, breite, hoehe}]`, 24 Stunden im Cache |
+| `GET /api/meme/vorlage` | `?id=…` — ein Vorlagenbild durch den Worker (Grund wie bei `/api/kachel`: kein `Authorization`-Kopf im `<img>`), `id` muss in der gerade gecachten Vorlagenliste stehen, sonst 404 |
 | `POST /api/kommentar` | `{ziel_art, ziel_id, text?, bild?, antwort_auf?}` — eins von beiden muss da sein |
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
@@ -419,7 +423,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/admin/rundmail/geplant` 🔒 | die noch anstehenden und die fehlgeschlagenen geplanten Rundmails — nur Admin |
 | `POST /api/admin/rundmail/geplant/aendern` 🔒 | `{id, ...Felder}` ändert eine geplante Rundmail, `{id, verwerfen:true}` löscht sie — geht nur, solange sie noch `geplant` ist |
 | `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
-| `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM` |
+| `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM`, `GIPHY_KEY` |
 
 🔒 heißt: braucht den `Bearer`-Token, sonst 401. Für die `POST`-Routen gilt das
 ohnehin — sie schreiben; die beiden Ausnahmen sind `/api/anmelden` und
@@ -440,6 +444,11 @@ Deckel steht trotzdem, denn der Worker redet nicht nur mit unserem Browser.
 Weil das Hochladen vor dem Abschicken läuft, bleibt liegen, wer es sich anders
 überlegt: solche Bilder ohne Kommentar räumt der tägliche Cron weg, aber erst
 nach einem Tag — solange darf das Formular offen stehen bleiben.
+GIFs und Memes hängen sich an denselben Weg: ein GIF wird beim Holen ein
+`bild_key` wie ein Foto und zählt gegen dasselbe Tagesbudget und dieselbe
+Bremse, ein Meme ist ohnehin ein JPEG wie jedes andere. Die GIF-Suche selbst
+ist zusätzlich eine Stunde im Cache, damit Giphys Deckel von 100 Abrufen die
+Stunde für eine Runde wie diese nie in Sicht kommt.
 Zeiten reisen als ISO-8601 mit Zone, und der Worker rechnet in den ANTWORTEN nie
 um — die Seite kennt die Ortszeit ihres Betrachters, er nur die der Wohnung. In
 den **Mails** tut er es doch, denn dort steht kein Browser dazwischen: die
@@ -507,6 +516,7 @@ npx wrangler secret put AGENTMAIL_KEY   # der Schluessel fuer den Versand
 npx wrangler secret put MELDE_AN        # wer von jedem Neuen erfaehrt
 npx wrangler secret put ADMIN_MAIL      # wer sich damit anmeldet, wird Admin
 npx wrangler secret put MAIL_GEHEIM     # zufaellig, 32+ Zeichen, fuer die HMAC-Links
+npx wrangler secret put GIPHY_KEY       # fuer GET /api/gif, gratis-Beta-Schluessel reicht
 ```
 
 `GET /api/health` sagt zu jedem, ob er anliegt — nie seinen Wert. Ohne

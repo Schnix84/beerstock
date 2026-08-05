@@ -857,12 +857,68 @@
     position: absolute; inset: auto 0 0 0; padding: 4px 8px 5px;
     background: #05080799; font-size: 10.5px; color: var(--kreide-weg);
   }
-  /* Abschicken bleibt breit, der Fotoknopf nimmt nur, was er braucht. Beide
-     Regeln mit zwei Klassen, weil `.knopf { width: 100% }` weiter unten steht
-     und bei gleichem Gewicht sonst gewinnt. */
-  .ko-knoepfe { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
-  .ko-knoepfe .ko-ab { flex: 1; margin-top: 0; }
-  .ko-knoepfe .ko-foto { width: auto; flex: 0 0 auto; padding: 11px 16px; }
+  /* Abschicken bleibt breit, die Anhängeknöpfe nehmen nur, was sie brauchen.
+     Beide Regeln mit zwei Klassen, weil `.knopf { width: 100% }` weiter unten
+     steht und bei gleichem Gewicht sonst gewinnt.
+
+     Die drei Anhängeknöpfe (Foto/GIF/Meme) stehen als EINE Gruppe
+     `.ko-anhang` in der Zeile - `flex-wrap` auf `.ko-knoepfe` wirft die ganze
+     Gruppe in eine eigene Reihe, sobald neben "Abschicken" kein Platz mehr
+     ist, statt sie einzeln umzubrechen. Die Basisbreite von 160px an
+     "Abschicken" ist der Punkt, ab dem es auf einem schmalen Telefon eng
+     würde - erst darunter macht der Umbruch Platz. */
+  .ko-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 8px; }
+  .ko-knoepfe .ko-ab { flex: 1 1 160px; margin-top: 0; }
+  .ko-anhang { display: flex; gap: 8px; }
+  .ko-anhang .ko-foto { width: auto; flex: 0 0 auto; padding: 11px 12px; }
+
+  /* --- GIF- und Meme-Raster -------------------------------------------------
+     Dasselbe Kachelraster für beide Blätter: feste Kanten, damit das Auge
+     beim Scrollen nicht springt, egal ob Giphy- oder Imgflip-Bild gerade
+     nachlädt. */
+  .gif-raster, .meme-raster {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 6px; margin-top: 12px;
+  }
+  .gif-kachel, .meme-kachel {
+    display: block; border: 1px solid #ffffff26; border-radius: 3px;
+    background: #00000033; padding: 0; cursor: pointer; overflow: hidden;
+    aspect-ratio: 1;
+  }
+  .gif-kachel[disabled], .meme-kachel[disabled] { opacity: .45; cursor: default; }
+  .gif-kachel img, .meme-kachel img {
+    display: block; width: 100%; height: 100%; object-fit: cover;
+  }
+  /* Die Vorlage trägt ihren Namen mit - ohne den ist ein Klassiker aus der
+     Reihe schwer wiederzuerkennen, solange die Beschriftung noch fehlt. */
+  .meme-kachel { display: flex; flex-direction: column; aspect-ratio: auto; }
+  .meme-kachel img { aspect-ratio: 1; }
+  .meme-kachel span {
+    display: block; padding: 3px 4px; font-size: 9.5px; line-height: 1.25;
+    color: var(--kreide-weg); overflow-wrap: anywhere;
+  }
+  .meme-kopfzeile { display: flex; gap: 8px; margin-top: 4px; }
+  .meme-kopfzeile .feld { flex: 1 1 auto; width: auto; min-width: 0; }
+  .meme-kopfzeile .knopf { width: auto; flex: none; padding: 11px 14px; }
+
+  /* Die Leinwand beim Beschriften: volle Blattbreite, das Seitenverhältnis
+     der Vorlage bestimmt `canvas.width/height` selbst, `height: auto` in CSS
+     zieht nur mit. */
+  #meme-leinwand {
+    display: block; width: 100%; height: auto; margin-top: 10px;
+    border: 1px solid #ffffff26; border-radius: 3px; background: #000;
+  }
+  #meme-beschriften .feld { margin-top: 8px; }
+  /* Übernehmen und Zurück nebeneinander und gleich groß, wie die
+     Losantwort-Knöpfe (`.lm-knoepfe`) - eine gleichwertige Wahl, keine
+     Empfehlung des einen über den anderen. */
+  .meme-knoepfe { display: flex; gap: 8px; margin-top: 10px; }
+  .meme-knoepfe .knopf { flex: 1; }
+
+  /* Beide Blätter liegen ÜBER dem offenen Kommentarblatt (z-index 45 gegen
+     40) - dieselbe Ebenenlogik wie die Lupe, nur eine Stufe tiefer als sie,
+     falls je beides zugleich offen stünde. */
+  .flyout.gifblatt, .flyout.memeblatt { z-index: 45; }
 
   /* --- Die Lupe: ein Foto in voller Größe ---------------------------------
      Eine Ebene ÜBER dem Flyout (z-index 50 gegen 40), sonst läge das Bild
@@ -1459,12 +1515,18 @@
                   placeholder="Etwas dazu sagen …"></textarea>
         <div class="ko-knoepfe">
           <button class="knopf ko-ab" id="fly-ab" type="button">Abschicken</button>
-          <!-- Der Dateiwähler bleibt versteckt: sein Aussehen lässt sich nicht
-               gestalten, und auf dem Handy öffnet der Knopf ohnehin direkt die
-               Kamera-Auswahl des Systems. -->
-          <button class="knopf ko-foto" id="fly-foto" type="button"
-                  aria-label="Foto anhängen">Foto</button>
-          <input id="fly-datei" type="file" accept="image/*" hidden>
+          <div class="ko-anhang">
+            <!-- Der Dateiwähler bleibt versteckt: sein Aussehen lässt sich
+                 nicht gestalten, und auf dem Handy öffnet der Knopf ohnehin
+                 direkt die Kamera-Auswahl des Systems. -->
+            <button class="knopf ko-foto" id="fly-foto" type="button"
+                    aria-label="Foto anhängen">Foto</button>
+            <input id="fly-datei" type="file" accept="image/*" hidden>
+            <button class="knopf ko-foto" id="fly-gif" type="button"
+                    aria-label="GIF anhängen">GIF</button>
+            <button class="knopf ko-foto" id="fly-meme" type="button"
+                    aria-label="Meme anhängen">Meme</button>
+          </div>
         </div>
       </div>
 
@@ -1653,6 +1715,68 @@
       </div>
 
       <p class="sagt" id="nr-sagt" hidden></p>
+    </div>
+  </div>
+
+  <!-- Das GIF-Blatt. Über dem offenen Kommentarblatt, dieselbe Mechanik wie
+       die Lupe: Schirm zum Schließen, Escape nimmt erst dieses Blatt. Die
+       Vorschaubilder kommen direkt von Giphys CDN, nicht über den Worker -
+       erst das ausgewählte GIF holt der Worker nach R2. -->
+  <div class="flyout gifblatt" id="gifblatt" hidden>
+    <div class="fly-schirm" id="gif-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="gif-titel" aria-modal="true">
+      <div class="fly-kopf">
+        <div>
+          <div class="fly-titel" id="gif-titel">GIF</div>
+          <div class="fly-unter">Powered by GIPHY</div>
+        </div>
+        <button class="fly-zu" id="gif-zu" type="button" aria-label="Schließen">×</button>
+      </div>
+
+      <input class="feld" id="gif-suche" placeholder="GIF suchen …">
+      <div class="gif-raster" id="gif-raster"></div>
+      <button class="ch-mehr" id="gif-mehr" type="button" hidden>mehr laden</button>
+
+      <p class="sagt" id="gif-sagt" hidden></p>
+    </div>
+  </div>
+
+  <!-- Das Meme-Blatt. Zwei Zustände: Vorlage wählen (Raster plus "eigenes
+       Foto"), dann beschriften (Leinwand plus zwei Textfelder). Beide teilen
+       sich Kopf, Schirm und Escape-Mechanik mit dem GIF-Blatt. -->
+  <div class="flyout memeblatt" id="memeblatt" hidden>
+    <div class="fly-schirm" id="meme-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="meme-titel" aria-modal="true">
+      <div class="fly-kopf">
+        <div>
+          <div class="fly-titel" id="meme-titel">Meme</div>
+          <div class="fly-unter" id="meme-unter">eine Vorlage wählen</div>
+        </div>
+        <button class="fly-zu" id="meme-zu" type="button" aria-label="Schließen">×</button>
+      </div>
+
+      <div id="meme-auswahl">
+        <div class="meme-kopfzeile">
+          <input class="feld" id="meme-suche" placeholder="Vorlage suchen …">
+          <!-- Dieselbe versteckte Wahl wie beim Foto - auf dem Handy direkt
+               die Kamera-Auswahl des Systems. -->
+          <button class="knopf" id="meme-eigenes" type="button">eigenes Foto</button>
+          <input id="meme-datei" type="file" accept="image/*" hidden>
+        </div>
+        <div class="meme-raster" id="meme-raster"></div>
+      </div>
+
+      <div id="meme-beschriften" hidden>
+        <canvas id="meme-leinwand"></canvas>
+        <input class="feld" id="meme-oben" maxlength="80" placeholder="oben">
+        <input class="feld" id="meme-unten" maxlength="80" placeholder="unten">
+        <div class="meme-knoepfe">
+          <button class="knopf" id="meme-fertig" type="button">Übernehmen</button>
+          <button class="knopf" id="meme-zurueck" type="button">Zurück</button>
+        </div>
+      </div>
+
+      <p class="sagt" id="meme-sagt" hidden></p>
     </div>
   </div>
 
@@ -2577,6 +2701,17 @@
     : 'https://beerstock-api.mc-schneider84.workers.dev';
   const SPEICHER = 'beerstock-token';
 
+  /* GIFs und Memes an Kommentaren, siehe ideas/gifs-und-memes.md. GIF_SEITE
+     spiegelt GIF_LIMIT im Worker - stimmt die Trefferzahl einer Seite nicht
+     damit überein, war das schon die letzte, und "mehr laden" bleibt weg. */
+  const GIF_SEITE = 24;
+  const MEME_KANTE = 600;   // Leinwandkante beim Beschriften, siehe Abschnitt 4
+  /* Vor dem ersten Zeichnen auf die eingebettete Schrift warten (Abschnitt 6)
+     - sonst steht beim ersten Bild die Ersatzschrift drin. Ist keine eigene
+     `Anton` eingebunden, tut dieser Aufruf schlicht nichts, und die Leinwand
+     fällt von selbst auf die Systemschrift in der Kette zurück. */
+  const memeFontBereit = document.fonts.ready.then(() => document.fonts.load('900 10px Anton').catch(() => {}));
+
   /* Die Kennung DIESES Tabs. Reist bei jedem Schreibvorgang als `X-Tab` mit,
      und der Worker hängt sie an die Meldung, die er daraufhin verteilt — so
      erkennt der Absender seine eigene Meldung und lädt nicht nach, was er
@@ -3402,7 +3537,8 @@
      jedes Mal neu aus dem Zustand beider Blätter errechnet. */
   function koerperSperren() {
     document.body.style.overflow =
-      (!$('flyout').hidden || !$('chronik').hidden || !$('notruf').hidden) ? 'hidden' : '';
+      (!$('flyout').hidden || !$('chronik').hidden || !$('notruf').hidden
+        || !$('gifblatt').hidden || !$('memeblatt').hidden) ? 'hidden' : '';
   }
 
   async function flyAuf(ziel, titel) {
@@ -3430,6 +3566,10 @@
   function flyZu() {
     sterneJetzt();            // ein Tap kurz vor dem Schließen zählt trotzdem
     lupeZu();
+    // Beide Bilder-Blätter liegen ÜBER diesem hier - wer das Kommentarblatt
+    // schließt, soll nicht eines davon offen zurücklassen.
+    gifZu();
+    memeZu();
     $('flyout').hidden = true;
     flyZiel = null;
     koerperSperren();
@@ -3456,7 +3596,6 @@
   async function flyBildWaehlen(datei) {
     if (!datei) return;
     const lauf = ++flyBildLauf;
-    const v = $('fly-bild'), img = $('fly-bild-img'), sagt = $('fly-bild-sagt');
     flyBild = null;
     flySagt('');
 
@@ -3470,10 +3609,23 @@
     }
     if (lauf !== flyBildLauf) return;    // inzwischen verworfen oder ersetzt
 
-    // Die Vorschau kommt aus dem verkleinerten Blob — man sieht genau das,
-    // was gleich hochgeht, nicht das Original.
+    await flyBildHochladen(klein, lauf);
+  }
+
+  /* Den Rumpf von `flyBildWaehlen` teilt sich seit GIFs und Memes auch der
+     Meme-Weg: ein fertig zusammengesetzter Blob (das Foto ist dort schon
+     verkleinert, das Meme schon beschriftet) geht genauso über `/api/bild`
+     und landet in derselben Vorschau. `lauf` kommt vom Aufrufer herein, statt
+     hier neu gezogen zu werden - beim Foto liegt zwischen Auswahl und diesem
+     Aufruf noch das Verkleinern, und ein `flyBildWeg()` in der Lücke muss den
+     Upload noch abbrechen können. */
+  async function flyBildHochladen(blob, lauf) {
+    const v = $('fly-bild'), img = $('fly-bild-img'), sagt = $('fly-bild-sagt');
+
+    // Die Vorschau kommt aus dem Blob selbst — man sieht genau das, was
+    // gleich hochgeht.
     if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
-    img.src = URL.createObjectURL(klein);
+    img.src = URL.createObjectURL(blob);
     v.hidden = false;
     v.classList.add('laedt');
     sagt.textContent = 'wird hochgeladen …';
@@ -3481,7 +3633,7 @@
     $('fly-ab').disabled = true;
 
     try {
-      const d = await rufRoh('/api/bild', klein);
+      const d = await rufRoh('/api/bild', blob);
       if (lauf !== flyBildLauf) return;
       flyBild = { key: d.key };
       v.classList.remove('laedt');
@@ -3492,6 +3644,305 @@
       flyBildWeg();
     } finally {
       if (lauf === flyBildLauf) $('fly-ab').disabled = false;
+    }
+  }
+
+  /* Die Vorschau direkt auf eine schon öffentliche Adresse setzen - der GIF-
+     Weg: der Worker hat das Objekt schon nach R2 gelegt, es gibt also keinen
+     lokalen Blob und nichts mehr hochzuladen, nur die Vorschau zu zeigen. */
+  function flyBildVorschauZeigen(url) {
+    flyBildLauf++;          // eine evtl. laufende Foto-Auswahl gilt nicht mehr
+    const v = $('fly-bild'), img = $('fly-bild-img');
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    img.src = url;
+    v.hidden = false;
+    v.classList.remove('laedt');
+    $('fly-bild-sagt').hidden = true;
+    $('fly-ab').disabled = false;
+  }
+
+  /* --- Das GIF-Blatt --------------------------------------------------------
+     Giphy statt Tenor (siehe ideas/gifs-und-memes.md). Die Vorschaubilder
+     kommen direkt von Giphys CDN in ein <img> - erst das ausgewählte GIF
+     holt der Worker nach R2 und macht daraus ein ganz normales `flyBild`.
+     --------------------------------------------------------------------- */
+  let gifLauf = 0;          // gegen zwei Suchen oder ein Blatt, das inzwischen zu ist
+  let gifWeiter = 0;        // Offset für "mehr laden"
+  let gifSuchtext = '';
+  let gifSuchTimer = null;
+
+  function gifAuf() {
+    $('gif-suche').value = '';
+    gifSuchtext = '';
+    gifWeiter = 0;
+    $('gif-raster').textContent = '';
+    $('gif-mehr').hidden = true;
+    $('gif-sagt').hidden = true;
+    $('gifblatt').hidden = false;
+    koerperSperren();
+    gifSuchen(0);
+    $('gif-suche').focus();
+  }
+
+  function gifZu() {
+    $('gifblatt').hidden = true;
+    gifLauf++;                // eine laufende Suche oder ein laufendes Holen gilt nicht mehr
+    koerperSperren();
+  }
+
+  async function gifSuchen(weiter) {
+    const lauf = ++gifLauf;
+    if (!weiter) $('gif-raster').textContent = '';
+    $('gif-mehr').hidden = true;
+    $('gif-mehr').disabled = true;
+    $('gif-sagt').hidden = true;
+    try {
+      const p = new URLSearchParams({ weiter: String(weiter || 0) });
+      if (gifSuchtext) p.set('q', gifSuchtext);
+      const r = await fetch(`${API}/api/gif?${p}`, { headers: mitToken() });
+      let d = [];
+      try { d = await r.json(); } catch {}
+      if (lauf !== gifLauf) return;   // Blatt inzwischen zu oder neue Suche gestartet
+      if (!r.ok) throw new Error((d && d.fehler) || ('Fehler ' + r.status));
+      const treffer = Array.isArray(d) ? d : [];
+      treffer.forEach(g => {
+        const b = el('button', 'gif-kachel');
+        b.type = 'button';
+        b.dataset.id = g.id;
+        b.setAttribute('aria-label', g.titel || 'GIF auswählen');
+        const img = el('img');
+        img.src = g.vorschau;
+        img.loading = 'lazy';
+        img.alt = '';
+        b.appendChild(img);
+        $('gif-raster').appendChild(b);
+      });
+      gifWeiter = (weiter || 0) + treffer.length;
+      $('gif-mehr').hidden = treffer.length < GIF_SEITE;   // weniger als erbeten: das war schon alles
+    } catch (e) {
+      if (lauf !== gifLauf) return;
+      $('gif-sagt').textContent = e.message;
+      $('gif-sagt').hidden = false;
+    } finally {
+      if (lauf === gifLauf) $('gif-mehr').disabled = false;
+    }
+  }
+
+  async function gifHolen(kachel) {
+    const lauf = gifLauf;
+    $('gif-raster').querySelectorAll('.gif-kachel').forEach(x => x.disabled = true);
+    $('gif-sagt').hidden = true;
+    try {
+      const d = await ruf('/api/gif/holen', { id: kachel.dataset.id });
+      if (lauf !== gifLauf) return;    // Blatt inzwischen zu oder neue Suche gestartet
+      flyBild = { key: d.key };
+      flyBildVorschauZeigen(d.bild);
+      gifZu();
+    } catch (e) {
+      if (lauf !== gifLauf) return;
+      $('gif-sagt').textContent = e.message;
+      $('gif-sagt').hidden = false;
+    } finally {
+      if (lauf === gifLauf) $('gif-raster').querySelectorAll('.gif-kachel').forEach(x => x.disabled = false);
+    }
+  }
+
+  /* --- Das Meme-Blatt --------------------------------------------------------
+     Vorlagen von Imgflip, beschriftet wird im Browser auf einem <canvas> -
+     `caption_image` verlangt ein Konto und stempelt sonst ein Wasserzeichen
+     hinein (siehe ideas/gifs-und-memes.md, Abschnitt 4). Zwei Zustände:
+     #meme-auswahl (Raster plus eigenes Foto) und #meme-beschriften (Leinwand
+     plus die zwei Textfelder).
+     --------------------------------------------------------------------- */
+  let memeLauf = 0;
+  let memeVorlagen = null;   // die Liste, einmal geholt und im Speicher behalten
+  let memeBild = null;       // das ImageBitmap der gerade gewählten Vorlage/des eigenen Fotos
+
+  function memeAuf() {
+    $('meme-suche').value = '';
+    $('meme-sagt').hidden = true;
+    $('meme-auswahl').hidden = false;
+    $('meme-beschriften').hidden = true;
+    $('meme-unter').textContent = 'eine Vorlage wählen';
+    $('memeblatt').hidden = false;
+    koerperSperren();
+    memeVorlagenLaden();
+  }
+
+  function memeZu() {
+    $('memeblatt').hidden = true;
+    memeLauf++;
+    if (memeBild) { memeBild.close(); memeBild = null; }
+    koerperSperren();
+  }
+
+  async function memeVorlagenLaden() {
+    if (memeVorlagen) { memeRasterZeichnen(); return; }
+    const lauf = memeLauf;
+    $('meme-raster').textContent = '';
+    try {
+      const r = await fetch(`${API}/api/meme/vorlagen`, { headers: mitToken() });
+      let d = [];
+      try { d = await r.json(); } catch {}
+      if (!r.ok) throw new Error((d && d.fehler) || ('Fehler ' + r.status));
+      if (lauf !== memeLauf) return;
+      memeVorlagen = Array.isArray(d) ? d : [];
+      memeRasterZeichnen();
+    } catch (e) {
+      if (lauf !== memeLauf) return;
+      $('meme-sagt').textContent = e.message;
+      $('meme-sagt').hidden = false;
+    }
+  }
+
+  function memeRasterZeichnen() {
+    const filter = $('meme-suche').value.trim().toLowerCase();
+    const raster = $('meme-raster');
+    raster.textContent = '';
+    (memeVorlagen || [])
+      .filter(m => !filter || m.name.toLowerCase().includes(filter))
+      .forEach(m => {
+        const b = el('button', 'meme-kachel');
+        b.type = 'button';
+        b.dataset.id = m.id;
+        const img = el('img');
+        // Über den Worker, nicht direkt bei Imgflip: dieselbe Adresse zeichnet
+        // gleich beim Beschriften auf das <canvas>, und das braucht die
+        // CORS-Freigabe unserer eigenen Route (siehe die Route selbst).
+        img.src = `${API}/api/meme/vorlage?id=${m.id}`;
+        img.loading = 'lazy';
+        img.alt = m.name;
+        b.appendChild(img);
+        b.appendChild(el('span', null, m.name));
+        raster.appendChild(b);
+      });
+  }
+
+  /* Eine Bilddatei über `fetch()` als Blob laden und daraus ein ImageBitmap
+     machen - anders als ein `<img>`, das dieselbe Adresse zeigt, verunreinigt
+     das die Leinwand nicht: die Pixel kommen nie über ein cross-origin
+     `<img>`-Element, sondern direkt aus den geholten Bytes. */
+  async function ladeAlsBitmap(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('Fehler ' + r.status);
+    const blob = await r.blob();
+    return createImageBitmap(blob);
+  }
+
+  async function memeVorlageWaehlen(id) {
+    const lauf = memeLauf;
+    $('meme-sagt').hidden = true;
+    try {
+      const bild = await ladeAlsBitmap(`${API}/api/meme/vorlage?id=${id}`);
+      if (lauf !== memeLauf) { bild.close(); return; }
+      memeBeschriftenAuf(bild);
+    } catch {
+      if (lauf !== memeLauf) return;
+      $('meme-sagt').textContent = 'Das Bild ließ sich nicht laden.';
+      $('meme-sagt').hidden = false;
+    }
+  }
+
+  function memeBeschriftenAuf(bild) {
+    if (memeBild) memeBild.close();
+    memeBild = bild;
+    const faktor = Math.min(1, MEME_KANTE / Math.max(bild.width, bild.height));
+    const leinwand = $('meme-leinwand');
+    leinwand.width = Math.max(1, Math.round(bild.width * faktor));
+    leinwand.height = Math.max(1, Math.round(bild.height * faktor));
+    $('meme-oben').value = '';
+    $('meme-unten').value = '';
+    $('meme-auswahl').hidden = true;
+    $('meme-beschriften').hidden = false;
+    $('meme-unter').textContent = 'beschriften';
+    memeZeichnen();
+  }
+
+  function memeZurueck() {
+    if (memeBild) { memeBild.close(); memeBild = null; }
+    $('meme-beschriften').hidden = true;
+    $('meme-auswahl').hidden = false;
+    $('meme-unter').textContent = 'eine Vorlage wählen';
+  }
+
+  /* Zeilen umbrechen, so breit wie das Bild es zulässt - das Maß hängt von
+     der gerade gesetzten `ctx.font` ab, deshalb wird sie vorher gesetzt. */
+  function memeUmbrechen(ctx, text, breite, groesse, schrift) {
+    ctx.font = `900 ${groesse}px ${schrift}`;
+    const worte = text.split(/\s+/).filter(Boolean);
+    const zeilen = [];
+    let zeile = '';
+    worte.forEach(wort => {
+      const versuch = zeile ? zeile + ' ' + wort : wort;
+      if (zeile && ctx.measureText(versuch).width > breite - 12) {
+        zeilen.push(zeile);
+        zeile = wort;
+      } else {
+        zeile = versuch;
+      }
+    });
+    if (zeile) zeilen.push(zeile);
+    return zeilen;
+  }
+
+  /* Die Meme-Optik: Großbuchstaben, weiß mit schwarzer Kontur, auf
+     Bildbreite umgebrochen. Die Schriftgröße schrumpft, bis höchstens drei
+     Zeilen stehen. Jeder Tastendruck zeichnet neu - bei ${MEME_KANTE} px ist
+     das auf jedem Telefon flüssig. */
+  const MEME_SCHRIFT = "Anton, Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif";
+  async function memeZeichnen() {
+    if (!memeBild) return;
+    await memeFontBereit;
+    const leinwand = $('meme-leinwand');
+    const ctx = leinwand.getContext('2d');
+    const w = leinwand.width, h = leinwand.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(memeBild, 0, 0, w, h);
+
+    const zeichneZeile = (text, oben) => {
+      if (!text) return;
+      let gross = Math.round(w / 8);
+      let zeilen = memeUmbrechen(ctx, text.toUpperCase(), w, gross, MEME_SCHRIFT);
+      while (zeilen.length > 3 && gross > 10) {
+        gross -= 2;
+        zeilen = memeUmbrechen(ctx, text.toUpperCase(), w, gross, MEME_SCHRIFT);
+      }
+      ctx.font = `900 ${gross}px ${MEME_SCHRIFT}`;
+      ctx.textAlign = 'center';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = gross / 15;
+      ctx.strokeStyle = '#000';
+      ctx.fillStyle = '#fff';
+      const zeile = gross * 1.08;
+      zeilen.forEach((z, i) => {
+        const y = oben
+          ? gross + 6 + i * zeile
+          : h - 10 - (zeilen.length - 1 - i) * zeile;
+        ctx.strokeText(z, w / 2, y);
+        ctx.fillText(z, w / 2, y);
+      });
+    };
+
+    zeichneZeile($('meme-oben').value.trim(), true);
+    zeichneZeile($('meme-unten').value.trim(), false);
+  }
+
+  async function memeUebernehmen() {
+    const knopf = $('meme-fertig');
+    knopf.disabled = true;
+    try {
+      const blob = await new Promise(fertig =>
+        $('meme-leinwand').toBlob(b => fertig(b), 'image/jpeg', 0.85));
+      if (!blob) throw new Error('Das Bild ließ sich nicht umwandeln.');
+      const lauf = ++flyBildLauf;
+      flyBild = null;
+      memeZu();
+      await flyBildHochladen(blob, lauf);
+    } catch (e) {
+      $('meme-sagt').textContent = e.message;
+      $('meme-sagt').hidden = false;
+    } finally {
+      knopf.disabled = false;
     }
   }
 
@@ -4469,18 +4920,70 @@
   $('fly-bild-weg').addEventListener('click', flyBildWeg);
   // Irgendwo in die Lupe tippen schließt sie — der Weg zurück ist der kurze.
   $('lupe').addEventListener('click', lupeZu);
+
+  /* --- GIF- und Meme-Blatt: dieselbe Bedienung wie die übrigen Blätter --- */
+  $('fly-gif').addEventListener('click', gifAuf);
+  $('gif-zu').addEventListener('click', gifZu);
+  $('gif-schirm').addEventListener('click', gifZu);
+  $('gif-mehr').addEventListener('click', () => gifSuchen(gifWeiter));
+  $('gif-suche').addEventListener('input', () => {
+    clearTimeout(gifSuchTimer);
+    // 400 ms nach dem letzten Tastendruck - sonst schickt ein getipptes
+    // "bier" fünf Anfragen statt einer, siehe ideas/gifs-und-memes.md.
+    gifSuchTimer = setTimeout(() => {
+      gifSuchtext = $('gif-suche').value.trim();
+      gifWeiter = 0;
+      gifSuchen(0);
+    }, 400);
+  });
+  $('gif-raster').addEventListener('click', ev => {
+    const b = ev.target.closest('.gif-kachel');
+    if (b && !b.disabled) gifHolen(b);
+  });
+
+  $('fly-meme').addEventListener('click', memeAuf);
+  $('meme-zu').addEventListener('click', memeZu);
+  $('meme-schirm').addEventListener('click', memeZu);
+  $('meme-suche').addEventListener('input', memeRasterZeichnen);
+  $('meme-raster').addEventListener('click', ev => {
+    const b = ev.target.closest('.meme-kachel');
+    if (b && !b.disabled) memeVorlageWaehlen(b.dataset.id);
+  });
+  $('meme-eigenes').addEventListener('click', () => $('meme-datei').click());
+  $('meme-datei').addEventListener('change', async ev => {
+    const datei = ev.target.files[0];
+    ev.target.value = '';
+    if (!datei) return;
+    try {
+      // Wie beim Foto: EXIF-Drehung und GPS-Daten dürfen hier nicht
+      // vorbeilaufen, siehe `verkleinern()`.
+      const bild = await createImageBitmap(datei, { imageOrientation: 'from-image' });
+      memeBeschriftenAuf(bild);
+    } catch {
+      $('meme-sagt').textContent = 'Das ließ sich nicht als Bild lesen.';
+      $('meme-sagt').hidden = false;
+    }
+  });
+  $('meme-oben').addEventListener('input', memeZeichnen);
+  $('meme-unten').addEventListener('input', memeZeichnen);
+  $('meme-fertig').addEventListener('click', memeUebernehmen);
+  $('meme-zurueck').addEventListener('click', memeZurueck);
+
   /* Strg/Cmd + Enter schickt ab. Enter allein bleibt der Zeilenumbruch — in
      einem mehrzeiligen Feld erwartet das jeder so. */
   $('fly-feld').addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); flyAbschicken(); }
   });
-  /* Escape nimmt immer nur die oberste Ebene: erst die Lupe, dann das Blatt,
-     dann die Chronik darunter. Alles auf einmal wegzuräumen wäre der Griff, den
-     niemand wollte — wer aus einem alten Abend zurückkommt, will in die Liste
-     zurück, nicht auf die Tafel. */
+  /* Escape nimmt immer nur die oberste Ebene: erst die Lupe, dann GIF- und
+     Meme-Blatt (die über dem Kommentarblatt liegen), dann das Blatt selbst,
+     dann die Chronik darunter. Alles auf einmal wegzuräumen wäre der Griff,
+     den niemand wollte — wer aus einem alten Abend zurückkommt, will in die
+     Liste zurück, nicht auf die Tafel. */
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
     if (!$('lupe').hidden) { lupeZu(); return; }
+    if (!$('gifblatt').hidden) { gifZu(); return; }
+    if (!$('memeblatt').hidden) { memeZu(); return; }
     if (!$('notruf').hidden) { notrufZu(); return; }
     if (!$('losmail').hidden) { losMailZu(); return; }
     if (!$('flyout').hidden) { flyZu(); return; }

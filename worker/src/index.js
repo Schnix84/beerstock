@@ -197,6 +197,18 @@ const BILDER_TAG   = 30;               // je Nutzer und Tag, wie KOMMENTARE_TAG
 const WAISENFRIST  = '-1 day';
 const WAISEN_PRO_LAUF = 200;
 
+/* GIFs und Memes an Kommentaren (siehe ideas/gifs-und-memes.md). Ein GIF wird
+   wie ein Foto ein `bild_key` - dieselbe Sperre, dasselbe Tagesbudget, kein
+   eigener Weg. Giphys Deckel ist 100 Abrufe die Stunde; der Cache haelt eine
+   Suche eine Stunde vor, damit eine Runde von einer Handvoll Leuten darunter
+   bleibt. Die Imgflip-Vorlagenliste aendert sich praktisch nie binnen eines
+   Tages, deshalb dort 24 Stunden. */
+const GIF_SUCHE_MAX    = 60;      // Zeichen im Suchbegriff
+const GIF_LIMIT        = 24;      // Treffer je Seite
+const GIF_CACHE_TTL    = 3600;    // Sekunden, Giphy-Suche im caches.default
+const GIF_ID           = /^[A-Za-z0-9]{1,40}$/;
+const MEME_VORLAGEN_TTL = 24 * 3600; // Sekunden, Imgflip-Vorlagenliste und -bilder
+
 /* Der Bierabend-Tag endet nicht um Mitternacht, sondern zwei Stunden spaeter
    (03:00 bzw. 04:00 Ortszeit) - sonst faellt die Drehung um kurz nach eins auf
    den naechsten Tag, obwohl sie zu demselben Abend gehoert. Bewusst in UTC
@@ -835,12 +847,15 @@ function bildTyp(bytes) {
   // RIFF....WEBP - die vier Bytes dazwischen sind die Laenge.
   const wort = i => String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
   if (wort(0) === 'RIFF' && wort(8) === 'WEBP') return ['image/webp', 'webp'];
+  // GIF87a oder GIF89a - die sechs Bytes stehen fuer beide Varianten fest.
+  const sechs = String.fromCharCode(b[0], b[1], b[2], b[3], b[4], b[5]);
+  if (sechs === 'GIF87a' || sechs === 'GIF89a') return ['image/gif', 'gif'];
   return null;
 }
 
 /* Was aus dem Upload zurueckkommt und beim Abschicken wieder hereinkommt.
    Streng geprueft, weil der Wert ungeprueft in einen R2-Aufruf ginge. */
-const BILD_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/;
+const BILD_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp|gif)$/;
 
 /* Aus dem Schluessel wird erst hier eine Adresse. Steht BILDER_URL nicht (der
    Bucket ist noch nicht oeffentlich geschaltet), gibt es lieber gar kein Bild
@@ -860,6 +875,33 @@ async function pruefeBild(env, roh) {
   const da = await env.BILDER.head(key);
   if (!da) return { fehler: 'Das Bild gibt es nicht (mehr)', status: 404 };
   return { key };
+}
+
+/* Die ROHE Imgflip-Liste, einmal am Tag geholt und in caches.default
+   vorgehalten - `id`, `name`, `width`, `height` UND `url`. Beide Meme-Routen
+   brauchen sie: die eine zeigt sie abgespeckt (ohne `url`, die bleibt intern),
+   die andere prueft eine angefragte `id` dagegen und braucht dafuer die echte
+   Bildadresse. Eine Funktion statt zweier eigener Caches, damit beide Routen
+   garantiert denselben Stand sehen. */
+async function memeVorlagenRoh(env, ctx) {
+  const schluessel = new Request('https://meme.invalid/vorlagen-roh');
+  const lager = caches.default;
+  const schon = await lager.match(schluessel);
+  if (schon) return schon.json();
+
+  const oben = await fetch('https://api.imgflip.com/get_memes');
+  if (!oben.ok) return null;
+  const daten = await oben.json().catch(() => null);
+  if (!daten?.success) return null;
+
+  const memes = daten.data?.memes || [];
+  if (ctx) ctx.waitUntil(lager.put(schluessel, new Response(JSON.stringify(memes), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': `public, max-age=${MEME_VORLAGEN_TTL}`,
+    },
+  })));
+  return memes;
 }
 
 /* Dass das Ziel existiert, prueft der Worker - einen Fremdschluessel kann es
@@ -1909,6 +1951,9 @@ const ROUTEN = {
       admin: env.ADMIN_MAIL ? 'ok' : 'aus (ADMIN_MAIL fehlt)',
       mail_geheim: env.MAIL_GEHEIM ? 'ok' : 'aus (MAIL_GEHEIM fehlt)',
       tafel: env.TAFEL ? 'ok' : 'nicht eingerichtet',
+      // GIFs an Kommentaren: ohne Schluessel bleibt /api/gif ein 503, siehe
+      // ideas/gifs-und-memes.md.
+      giphy: env.GIPHY_KEY ? 'ok' : 'aus (GIPHY_KEY fehlt)',
     });
   },
 
@@ -3107,6 +3152,199 @@ const ROUTEN = {
       .bind(ich.id, key).run();
 
     return antwort(request, { key, bild: bildUrl(env, key) }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  /* GIFs suchen. Giphy statt Tenor - Google hat dessen API am 30.06.2026
+     abgeschaltet (siehe ideas/gifs-und-memes.md). Der Bearer-Token macht
+     daraus keinen offenen Suchdienst auf unsere Rechnung; die
+     Referer-Pruefung wie bei /api/kachel ist die zweite, hoefliche Schicht
+     darueber - hier tatsaechlich zweitrangig, weil ein `fetch()` von unserer
+     eigenen Seite ohnehin einen Referer mitschickt.
+
+     Ohne `q` kommt das gerade Angesagte - der Zustand, den das Blatt beim
+     Oeffnen zeigt, bevor getippt wurde. Gecacht wird nur das aufbereitete
+     Ergebnis, nicht die rohe Giphy-Antwort mitsamt CORS-Koepfen - so bleibt
+     der Cache-Eintrag unabhaengig vom Origin des jeweiligen Aufrufers. */
+  'GET /api/gif': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!env.GIPHY_KEY) return fehler(request, 'GIFs sind nicht eingerichtet', 503);
+
+    const ref = request.headers.get('Referer');
+    if (ref) {
+      let fremd = true;
+      try { fremd = !ERLAUBTE_HERKUNFT.has(new URL(ref).origin); } catch {}
+      if (fremd) return fehler(request, 'Nicht von hier', 403);
+    }
+
+    const p = new URL(request.url).searchParams;
+    const q = String(p.get('q') || '').trim().toLowerCase().slice(0, GIF_SUCHE_MAX);
+    const weiter = Math.max(0, Math.trunc(Number(p.get('weiter'))) || 0);
+
+    /* Der Schluessel ist die aufgeraeumte Suche, nicht die eingehende Anfrage
+       - sonst waere ein Cache-Buster oder eine andere Parameterreihenfolge
+       ein eigener Eintrag, und der Cache traefe nie. */
+    const schluessel = new Request(
+      `https://gif.invalid/${q ? 'suche/' + encodeURIComponent(q) : 'angesagt'}?weiter=${weiter}`);
+    const lager = caches.default;
+    const schon = await lager.match(schluessel);
+    if (schon) return antwort(request, await schon.json());
+
+    const params = new URLSearchParams({
+      api_key: env.GIPHY_KEY, limit: String(GIF_LIMIT), offset: String(weiter), rating: 'pg-13',
+    });
+    if (q) { params.set('q', q); params.set('lang', 'de'); }
+    const basis = q ? 'https://api.giphy.com/v1/gifs/search' : 'https://api.giphy.com/v1/gifs/trending';
+
+    const oben = await fetch(`${basis}?${params}`);
+    if (!oben.ok) return fehler(request, 'Giphy antwortet gerade nicht', 502);
+    const daten = await oben.json().catch(() => null);
+    if (!daten) return fehler(request, 'Giphy antwortet gerade nicht', 502);
+
+    const treffer = (daten.data || []).map(g => {
+      const b = g.images?.fixed_width_small || g.images?.fixed_height_small || {};
+      return {
+        id: g.id,
+        vorschau: b.url || null,
+        breite: Number(b.width) || 200,
+        hoehe: Number(b.height) || 200,
+        titel: g.title || '',
+      };
+    }).filter(t => t.vorschau);
+
+    if (ctx) ctx.waitUntil(lager.put(schluessel, new Response(JSON.stringify(treffer), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${GIF_CACHE_TTL}` },
+    })));
+    return antwort(request, treffer);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Das ausgewaehlte GIF nach R2 holen - dieselbe Antwortform wie
+     /api/bild, damit das Frontend keinen zweiten Weg braucht. Der Worker
+     baut die Adresse SELBST aus der `id`, ruft also nie eine vom Browser
+     geschickte Adresse ab - sonst waere die Route ein offener Bildproxy.
+     `200.gif` ist Giphys Fassung mit 200 px Hoehe, typisch 200-800 kB. */
+  'POST /api/gif/holen': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+    if (!env.BILDER) return fehler(request, 'Bilder sind nicht eingerichtet', 503);
+    if (!env.GIPHY_KEY) return fehler(request, 'GIFs sind nicht eingerichtet', 503);
+
+    const ref = request.headers.get('Referer');
+    if (ref) {
+      let fremd = true;
+      try { fremd = !ERLAUBTE_HERKUNFT.has(new URL(ref).origin); } catch {}
+      if (fremd) return fehler(request, 'Nicht von hier', 403);
+    }
+
+    const daten = await json(request);
+    const id = String(daten?.id ?? '');
+    if (!GIF_ID.test(id)) return fehler(request, 'Das ist keine gültige GIF-Kennung');
+
+    /* Dieselbe Sperre wie beim Foto-Upload, aus demselben Grund: das Holen
+       laeuft vor der Kommentarsperre. Ein GIF zaehlt gegen dasselbe
+       Tagesbudget wie ein Foto - der Deckel ist ein Speicherdeckel, dem ist
+       gleich, ob das Objekt fotografiert oder gesucht wurde. */
+    const [sperre, heute] = await env.DB.batch([
+      env.DB.prepare("SELECT 1 FROM bild_uploads WHERE autor_id = ? AND erstellt > datetime('now', ?) LIMIT 1")
+        .bind(ich.id, `-${BILDSPERRE} seconds`),
+      env.DB.prepare("SELECT count(*) AS n FROM bild_uploads WHERE autor_id = ? AND erstellt > datetime('now','-1 day')")
+        .bind(ich.id),
+    ]);
+    if (sperre.results.length) return fehler(request, 'Zu schnell — kurz durchatmen', 429);
+    if (heute.results[0].n >= BILDER_TAG) {
+      return fehler(request, `Höchstens ${BILDER_TAG} Fotos am Tag`, 429);
+    }
+
+    /* Beim Bauen zu verifizieren: haelt dieses Adressmuster nicht mehr, ist
+       der Umweg ein zusaetzlicher GET /v1/gifs/<id> gegen die API - kostet
+       einen Abruf vom Stundendeckel, sonst nichts. */
+    const oben = await fetch(`https://i.giphy.com/media/${id}/200.gif`);
+    if (!oben.ok) return fehler(request, 'Das GIF gibt es nicht (mehr)', 404);
+
+    const angesagt = Number(oben.headers.get('Content-Length') || 0);
+    if (angesagt > BILD_MAX) return fehler(request, 'Das GIF ist zu groß', 413);
+    const bytes = await oben.arrayBuffer();
+    if (bytes.byteLength > BILD_MAX) return fehler(request, 'Das GIF ist zu groß', 413);
+
+    const typ = bildTyp(bytes);
+    if (!typ || typ[1] !== 'gif') return fehler(request, 'Das war kein GIF', 415);
+
+    const key = `${crypto.randomUUID()}.gif`;
+    await env.BILDER.put(key, bytes, {
+      httpMetadata: { contentType: 'image/gif', cacheControl: 'public, max-age=31536000, immutable' },
+    });
+
+    await env.DB.prepare('INSERT INTO bild_uploads (autor_id, bild_key) VALUES (?, ?)')
+      .bind(ich.id, key).run();
+
+    return antwort(request, { key, bild: bildUrl(env, key) }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Meme-Vorlagen von Imgflip - beschriftet wird bei uns, nicht dort (siehe
+     ideas/gifs-und-memes.md, Abschnitt 4). `get_memes` ist gratis und
+     braucht kein Konto, rund 100 Klassiker. Abgespeckt auf das, was das
+     Raster braucht - die Bildadresse bleibt intern, damit die Frontend-Seite
+     keinen Fremdlink in der Hand haelt, sondern immer ueber unsere Route
+     geht (siehe die naechste Route, warum das noetig ist). */
+  'GET /api/meme/vorlagen': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const rohe = await memeVorlagenRoh(env, ctx);
+    if (!rohe) return fehler(request, 'Imgflip antwortet gerade nicht', 502);
+
+    return antwort(request, rohe.map(m => ({ id: m.id, name: m.name, breite: m.width, hoehe: m.height })));
+  },
+
+  // -------------------------------------------------------------------------
+  /* Das Vorlagenbild durch den Worker - nicht Bequemlichkeit, sondern
+     Notwendigkeit: die Seite zeichnet es gleich auf ein <canvas> und liest
+     die Pixel wieder aus (`toBlob()`), und das verweigert eine fremde
+     Bildherkunft ohne CORS-Freigabe den Dienst.
+
+     OHNE Bearer-Token, aus demselben Grund wie /api/kachel: die Vorschau im
+     Raster ist ein gewoehnliches <img>, und das schickt keinen
+     Authorization-Kopf. Schuetzenswert ist hier ohnehin nichts - dieselbe
+     Vorlage liegt oeffentlich bei Imgflip, `Access-Control-Allow-Origin: *`
+     ist deshalb kein Zugestaendnis, sondern ehrlich. Damit daraus trotzdem
+     kein offener Bildproxy fuer FREMDE Adressen wird, geht die `id` NICHT
+     roh in eine URL: sie muss in der geraden gecachten Vorlagenliste stehen,
+     die Bildadresse dahinter kennt nur der Worker. Eine `id`, die dort nicht
+     steht, ist ein 404 - nicht ein Abruf. */
+  'GET /api/meme/vorlage': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const id = String(new URL(request.url).searchParams.get('id') || '');
+    const rohe = await memeVorlagenRoh(env, ctx);
+    const vorlage = rohe && rohe.find(m => String(m.id) === id);
+    if (!vorlage) return fehler(request, 'Die Vorlage gibt es nicht', 404);
+
+    const bildSchluessel = new Request(`https://meme.invalid/vorlage/${id}`);
+    const lager = caches.default;
+    const schon = await lager.match(bildSchluessel);
+    if (schon) return schon;
+
+    const oben = await fetch(vorlage.url);
+    if (!oben.ok) {
+      return new Response(null, { status: 502, headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    const antw = new Response(oben.body, {
+      status: 200,
+      headers: {
+        'Content-Type': oben.headers.get('Content-Type') || 'image/jpeg',
+        'Cache-Control': `public, max-age=${MEME_VORLAGEN_TTL}`,
+        'Access-Control-Allow-Origin': '*',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+      },
+    });
+    if (ctx) ctx.waitUntil(lager.put(bildSchluessel, antw.clone()));
+    return antw;
   },
 
   // -------------------------------------------------------------------------
