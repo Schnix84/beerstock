@@ -529,6 +529,32 @@
   }
   .karte-quelle a { color: inherit; }
 
+  /* Der Schieberegler zwischen einmaliger Ortung und Live-Standort. Radios
+     statt Checkbox, weil es zwei sich ausschliessende Zustände sind, kein
+     Ein/Aus - und ein Wisch auf den falschen Knopf soll nicht "aus" heissen,
+     wenn "das andere von beiden" gemeint war. */
+  .nr-modus {
+    position: relative; display: flex; margin: 2px 0 12px;
+    border: 1px solid #ffffff26; border-radius: 999px; padding: 3px;
+  }
+  .nr-modus input { position: absolute; opacity: 0; pointer-events: none; }
+  .nr-modus label {
+    position: relative; z-index: 1; flex: 1 1 50%; text-align: center;
+    padding: 6px 8px; border-radius: 999px; cursor: pointer;
+    font-size: 12px; letter-spacing: .03em; color: var(--kreide-matt);
+    transition: color .18s;
+  }
+  .nr-modus input:focus-visible + label { outline: 2px solid var(--kreide); outline-offset: -2px; }
+  .nr-modus-schieber {
+    position: absolute; top: 3px; left: 3px; z-index: 0;
+    width: calc(50% - 3px); height: calc(100% - 6px);
+    border-radius: 999px; background: var(--gelb);
+    transition: transform .18s ease;
+  }
+  #nr-modus-live:checked ~ .nr-modus-schieber { transform: translateX(100%); }
+  #nr-modus-einmalig:checked ~ label[for="nr-modus-einmalig"],
+  #nr-modus-live:checked ~ label[for="nr-modus-live"] { color: var(--schiefer-t); font-weight: 600; }
+
   /* Die zwei Nöte im Blatt. Große Flächen, weil danach gegriffen wird und
      nicht gezielt. */
   .nr-wahl { display: grid; gap: 9px; margin-top: 4px; }
@@ -1600,6 +1626,16 @@
         <button class="fly-zu" id="nr-zu" type="button" aria-label="Schließen">×</button>
       </div>
 
+      <!-- Gilt fuer das Absetzen UND fuer einen schon laufenden eigenen Notruf
+           gleich mit - deshalb hier oben, ueber beiden Zustaenden des Blatts. -->
+      <div class="nr-modus" id="nr-modus" role="radiogroup" aria-label="Art der Standortfreigabe">
+        <input type="radio" name="nr-modus-wahl" id="nr-modus-einmalig" value="einmalig" checked>
+        <label for="nr-modus-einmalig">Einmalig</label>
+        <input type="radio" name="nr-modus-wahl" id="nr-modus-live" value="live">
+        <label for="nr-modus-live">Live</label>
+        <span class="nr-modus-schieber" aria-hidden="true"></span>
+      </div>
+
       <div class="nr-wahl" id="nr-wahl">
         <button class="knopf" id="nr-bier" type="button">Bier</button>
         <button class="knopf" id="nr-kamerad" type="button">Trinkkameraden</button>
@@ -2570,6 +2606,12 @@
      und ein gemerkter Notruf stünde im Blatt noch, wenn die Tafel ihn längst
      nicht mehr kennt. */
   let meineNot = null;
+  /* Der Schieberegler im Notrufblatt: bleibt fuer die Sitzung stehen, auch
+     wenn das Blatt zwischendurch schliesst - "live" gewaehlt und wieder
+     aufgemacht soll nicht auf "einmalig" zurueckfallen. */
+  let notrufLiveModus = false;
+  let notrufLiveId = null;     // watchPosition-Handle, oder null wenn aus
+  let notrufLiveLetzter = 0;   // Zeitstempel des letzten Nachtrags, fuer die Drossel
   let brauchtNamen = false; // angemeldet, aber noch ohne Namen fuer die Liste
   let linkRaus = false;     // Magic Link ist unterwegs: Feld weg, Meldung steht
   let vonDraussen = false;  // die letzte Antwort war die beschnittene (siehe `hole`)
@@ -2716,7 +2758,9 @@
     // Draussen gibt es den Knopf nicht: die Routen dahinter sind zu, und ein
     // Knopf, der nur 401 sagen kann, ist eine Einladung ins Leere.
     block.hidden = vonDraussen || !meinName;
-    if (block.hidden) return;
+    // Abgemeldet oder draussen gibt es sicher keinen eigenen Notruf mehr zu
+    // sehen - der frühe Ausstieg darf den Live-Nachtrag nicht überspringen.
+    if (block.hidden) { notrufLiveStoppen(); return; }
 
     for (const n of notrufe) {
       const meiner = n.name === meinName;
@@ -2729,6 +2773,9 @@
     $('notruf-kopf').classList.toggle('notruf-kopf-aktiv', !!meineNot);
     $('notruf-auf').hidden = !!meineNot;
     $('notruf-tafel-aktionen').hidden = !meineNot;
+    // Der eigene Notruf ist von selbst erloschen oder abgelaufen - dann gibt
+    // es nichts mehr, wohin ein Live-Standort nachtragen könnte.
+    if (!meineNot) notrufLiveStoppen();
   }
 
   /* --- Das Notrufblatt -----------------------------------------------------
@@ -2746,6 +2793,9 @@
   function notrufAuf() {
     $('nr-karte').textContent = '';
     notrufSagt('');
+    // Der Schieberegler bleibt über die Sitzung stehen - beim Wiederaufmachen
+    // zeigt er, was zuletzt gewählt war, nicht immer "einmalig".
+    $(notrufLiveModus ? 'nr-modus-live' : 'nr-modus-einmalig').checked = true;
     /* Aufmachen VOR dem Zeichnen. Ein verstecktes Blatt hat keine Breite, und
        ohne Breite gibt es kein Kachelraster — die Karte blieb dann leer und
        zeigte nur ihre Namensnennung. */
@@ -2823,6 +2873,7 @@
       notrufSagt('');
       notrufLage(d.notruf);
       hole(true);
+      if (notrufLiveModus) notrufLiveStarten();
     } catch (e) {
       notrufSagt(e.message, true);
     }
@@ -2863,11 +2914,73 @@
     try {
       await ruf('/api/notruf/weg', {});
       meineNot = null;
+      notrufLiveStoppen();
       notrufSagt('');
       notrufZu();
       hole(true);
     } catch (e) {
       notrufSagt(e.message, true);
+    }
+  }
+
+  /* --- Der Schieberegler: einmalig oder live ------------------------------
+     "Live" heißt: solange der eigene Notruf steht UND dieser Tab offen ist,
+     trägt `watchPosition` die Karte automatisch nach, gedrosselt statt bei
+     jeder Bewegung - ein Notruf ist keine Fahrtenaufzeichnung, und die Tafel
+     soll nicht öfter neu zeichnen, als jemand sie lesen kann. Beendet sich
+     von selbst: schließt der Tab, ist auch `watchPosition` weg, ohne dass
+     hier eine Spur davon bleibt. */
+  const NOTRUF_LIVE_ABSTAND = 20000;
+
+  function notrufModusSetzen(live) {
+    notrufLiveModus = live;
+    if (live) notrufLiveStarten();
+    else notrufLiveStoppen();
+  }
+
+  function notrufLiveStarten() {
+    // Ohne laufenden eigenen Notruf gibt es nichts nachzutragen - der Wunsch
+    // bleibt gemerkt und greift, sobald `notrufSenden` einen anlegt.
+    if (!meineNot || notrufLiveId != null || !navigator.geolocation) return;
+    // Nicht mit 0 starten: der erste `watchPosition`-Ruf liefert oft sofort
+    // einen zwischengespeicherten Fix - das wäre derselbe Punkt, der eben
+    // erst per `notrufSenden` oder Handwahl abgeschickt wurde.
+    notrufLiveLetzter = Date.now();
+    notrufLiveId = navigator.geolocation.watchPosition(
+      p => notrufLiveEingang(p),
+      e => {
+        notrufSagt(ortungsFehler(e, 'kein Live-Standort'), true);
+        notrufLiveStoppen();
+        notrufLiveModus = false;
+        $('nr-modus-einmalig').checked = true;
+      },
+      { enableHighAccuracy: true, maximumAge: 30000 },
+    );
+  }
+
+  function notrufLiveStoppen() {
+    if (notrufLiveId != null) navigator.geolocation.clearWatch(notrufLiveId);
+    notrufLiveId = null;
+  }
+
+  async function notrufLiveEingang(p) {
+    const jetzt = Date.now();
+    if (!meineNot || jetzt - notrufLiveLetzter < NOTRUF_LIVE_ABSTAND) return;
+    notrufLiveLetzter = jetzt;
+    try {
+      const d = await ruf('/api/notruf/standort', {
+        lat: p.coords.latitude,
+        lon: p.coords.longitude,
+        genau: Number.isFinite(p.coords.accuracy) ? p.coords.accuracy : null,
+      });
+      meineNot = d.notruf;
+      // Nur zeichnen, wenn das Blatt gerade offen ist - sonst schöbe das hier
+      // still eine Karte in ein verstecktes Blatt.
+      if (!$('notruf').hidden) notrufLage(d.notruf);
+      hole(true);
+    } catch {
+      // Ein einzelner verpasster Nachtrag ist kein Grund, den Notruf oder das
+      // Blatt zu stören - der nächste watchPosition-Tick versucht es wieder.
     }
   }
 
@@ -4007,6 +4120,7 @@
       // die Zeilen darunter wären ein Stand, den niemand mehr bestätigt.
       $('notruf-block').hidden = true;
       meineNot = null;
+      notrufLiveStoppen();
       VARIANTE.kopf(null, 'nichts');
     }
   }
@@ -4142,6 +4256,8 @@
   $('notruf-auf').addEventListener('click', notrufAuf);
   $('nr-zu').addEventListener('click', notrufZu);
   $('nr-schirm').addEventListener('click', notrufZu);
+  $('nr-modus-einmalig').addEventListener('change', () => notrufModusSetzen(false));
+  $('nr-modus-live').addEventListener('change', () => notrufModusSetzen(true));
   $('nr-bier').addEventListener('click', () => notrufSenden('bier'));
   $('nr-kamerad').addEventListener('click', () => notrufSenden('kamerad'));
   $('nr-alles').addEventListener('click', () => notrufSenden('alles'));

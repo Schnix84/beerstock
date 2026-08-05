@@ -878,6 +878,9 @@
     ziel.appendChild(Bilder.grad('Temperatur je Melder' + fenster, s.grad || []));
     ziel.appendChild(Bilder.liegend('Wer war wie oft Gastgeber, insgesamt',
       s.gastgeber, z => z.name, z => z.n, 'Abende'));
+    // `|| []` — die alte Antwort kennt das Feld noch nicht.
+    ziel.appendChild(Bilder.liegend('Wer wie oft einen Notruf abgesetzt hat, insgesamt',
+      s.notrufe || [], z => z.name, z => z.n, 'Notrufe'));
     ziel.appendChild(Bilder.band('Ausgang der Ziehungen, insgesamt', s.lose));
     ziel.appendChild(Bilder.losJeMelder('Ausgang der Ziehungen je Melder, insgesamt',
       s.lose_je_melder || []));

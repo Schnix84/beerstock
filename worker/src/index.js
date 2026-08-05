@@ -1021,7 +1021,7 @@ const statistikFenster = (request) => {
 
 // Wie viele es sind. Die Admin-Route schneidet ihren eigenen Teil hinter
 // dieser Marke ab - eine Zahl von Hand waere beim naechsten Bild falsch.
-const STATISTIK_ABFRAGEN = 7;
+const STATISTIK_ABFRAGEN = 8;
 
 const statistikAbfragen = (env, fenster) => [
   // 1 — Meldungen je Tag. Flaechenkurve.
@@ -1094,12 +1094,29 @@ const statistikAbfragen = (env, fenster) => [
     SELECT date(erstellt) AS tag, count(*) AS n FROM users
     WHERE entfernt_am IS NULL GROUP BY tag ORDER BY tag
   `),
+  /* 7 — Wer wie oft einen Notruf abgesetzt hat. Liegender Balken wie beim
+     Gastgeber, aber aus dem Zaehler auf `users` (Migration 0017), nicht aus
+     `notrufe` selbst: die Zeilen dort raeumt der Cron spaetestens einen Tag
+     nach Ablauf weg, eine Rangliste daraus waere fast immer fast leer. Kein
+     Fenster, aus demselben Grund wie Gastgeber und die Ziehungen: eine
+     30-Tage-Rangliste bei fuenf Leuten waere kaum eine Rangfolge.
+
+     ANDERS als bei Gastgeber: entfernte Nutzer fallen hier ganz raus, statt
+     als "Ehemaliger" stehen zu bleiben. Genau das war der Kern der alten
+     Entscheidung gegen ein Notruf-Archiv - ein Zaehler, der nach dem Entfernen
+     verschwindet, haeuft keine Spur an, die bleibt, wenn die Person es nicht
+     mehr tut. Da Entfernen den Namen loescht, waere die Zeile ohnehin nur
+     ein "Ehemaliger" ohne erkennbaren Bezug - hier lieber ganz weg. */
+  env.DB.prepare(`
+    SELECT name, notrufe_insgesamt AS n FROM users
+    WHERE notrufe_insgesamt > 0 AND entfernt_am IS NULL ORDER BY n DESC
+  `),
 ];
 
-/* Aus den sieben Ergebnissen die Form, die gezeichnet wird. Drei davon werden
+/* Aus den acht Ergebnissen die Form, die gezeichnet wird. Drei davon werden
    umgebaut, der Rest geht durch. */
 const statistikRunde = (ergebnis) => {
-  const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb, anmeldungen] = ergebnis;
+  const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb, anmeldungen, notrufe] = ergebnis;
 
   /* Die Kurvenschar je Nutzer buendeln - eine Linie je Melder, zweimal:
      einmal die Flaschen, einmal die Grad. Dieselbe Zeile fuellt beide, denn
@@ -1154,6 +1171,7 @@ const statistikRunde = (ergebnis) => {
     lose_je_melder: [...jeMelderZeilen.values()].sort((a, b) => b.gezogen - a.gezogen),
     betrieb: betrieb.results,
     wachstum,
+    notrufe: notrufe.results,
   };
 };
 
@@ -2366,7 +2384,14 @@ const ROUTEN = {
         VALUES (?, ?, ?, ?, ?, datetime('now', ?))
         RETURNING id, erstellt, bis
       `).bind(ich.id, art, lat, lon, genau, `+${NOTRUF_MINUTEN} minutes`),
-      env.DB.prepare("UPDATE users SET zuletzt = datetime('now') WHERE id = ?").bind(ich.id),
+      // Der Zaehler fuer die Statistik - siehe Migration 0017, warum nicht
+      // aus `notrufe` selbst gezaehlt wird. Nur beim ABSETZEN, nicht beim
+      // Standort-Nachtrag: der ersetzt keinen Notruf, er ergaenzt einen.
+      env.DB.prepare(`
+        UPDATE users SET zuletzt = datetime('now'),
+                         notrufe_insgesamt = notrufe_insgesamt + 1
+        WHERE id = ?
+      `).bind(ich.id),
     ]);
     const zeile = neu.results[0];
 
