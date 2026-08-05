@@ -363,6 +363,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/admin/statistik` 🔒 | dasselbe **plus Betrieb**: Mails je Art und je Tag, Anmeldungen, wer noch Post will — nur Admin |
 | `POST /api/admin/rundmail` 🔒 | `{betreff, text, bild_url?, knopf_text?, knopf_link?}` sofort an alle, die sie wollen — nur Admin |
 | `POST /api/admin/rundmail/planen` 🔒 | dieselben Felder plus `{versand_am}` — vorgemerkt statt sofort verschickt, nur Admin |
+| `POST /api/admin/rundmail/test` 🔒 | dieselben Felder ohne `versand_am`, geht nur an die eigene Adresse — ohne Stundensperre, ohne Protokoll- oder Statistikeintrag |
 | `GET /api/admin/rundmail/geplant` 🔒 | die noch anstehenden und die fehlgeschlagenen geplanten Rundmails — nur Admin |
 | `POST /api/admin/rundmail/geplant/aendern` 🔒 | `{id, ...Felder}` ändert eine geplante Rundmail, `{id, verwerfen:true}` löscht sie — geht nur, solange sie noch `geplant` ist |
 | `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
@@ -402,7 +403,9 @@ beim Fälligwerden, bleibt sie `fehlgeschlagen` liegen statt es beim nächsten
 Cron-Lauf erneut zu versuchen. Bild- und Knopf-Adresse: `https://`, höchstens 500
 Zeichen, der Knopftext höchstens 40. Eine geplante Rundmail darf höchstens 90 Tage
 im Voraus liegen; der Cron dafür prüft alle zehn Minuten, keine Uhrzeit auf die
-Minute.
+Minute. Die Testmail (`.../rundmail/test`) geht ausschließlich an den anfragenden
+Admin selbst, läuft an der Stundensperre vorbei und trägt sich weder ins Protokoll
+noch in die Mail-Statistik ein.
 
 Notruf: 90 Minuten Geltung, 20 Sekunden zwischen zweien desselben Nutzers, einer
 je Nutzer gleichzeitig. Kartenkacheln nur zwischen Zoom 12 und 18 und nur mit

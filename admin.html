@@ -417,6 +417,7 @@
 
     <div class="k-tat" style="margin-top:14px">
       <button class="gross" id="r-ab" type="button">Vorschau</button>
+      <button id="r-test" type="button">Testmail an mich</button>
       <button id="r-weg" type="button" hidden>verwerfen</button>
     </div>
     <div id="r-vorschau" hidden></div>
@@ -1093,6 +1094,39 @@
     kasten.appendChild(rumpf);
     return kasten;
   }
+
+  // Testmail: geht nur an den eigenen Posteingang, an der Stundensperre
+  // vorbei und ohne im Protokoll oder in der Mail-Statistik aufzutauchen
+  // (siehe /api/admin/rundmail/test im Worker) - deshalb ohne den
+  // Zwei-Klick-Umweg über die Vorschau, das Risiko ist ja nur die eigene Post.
+  $('r-test').addEventListener('click', async () => {
+    const betreff = $('r-betreff').value.trim();
+    const text = $('r-text').value.trim();
+    const bildUrl = $('r-bild').value.trim();
+    const knopfText = $('r-knopf-text').value.trim();
+    const knopfLink = $('r-knopf-link').value.trim();
+
+    if (!betreff || !text) {
+      sagt('rund-sagt', 'Betreff und Text wollen beide etwas.', true);
+      return;
+    }
+    if (!!knopfText !== !!knopfLink) {
+      sagt('rund-sagt', 'Der Knopf braucht Text UND Adresse, oder keins von beiden.', true);
+      return;
+    }
+
+    $('r-test').disabled = true;
+    try {
+      const d = await ruf('/api/admin/rundmail/test', {
+        betreff, text, bild_url: bildUrl, knopf_text: knopfText, knopf_link: knopfLink,
+      });
+      sagt('rund-sagt', 'Testmail raus an ' + d.email + '.');
+    } catch (e) {
+      sagt('rund-sagt', e.message, true);
+    } finally {
+      $('r-test').disabled = false;
+    }
+  });
 
   $('r-ab').addEventListener('click', async () => {
     const betreff = $('r-betreff').value.trim();

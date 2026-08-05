@@ -3751,6 +3751,32 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
+  /* Die Testmail - nur an den Admin selbst, der gerade im Kontor sitzt, und
+     bewusst AUSSERHALB von `rundmailAbschicken`: keine Stundensperre (sie
+     wuerde sonst den echten Versand danach blockieren), kein `admin_log`
+     (sonst stuende sie im Protokoll als Rundmail), kein `mail_ausgang` (sonst
+     zaehlte sie in der Mail-Statistik mit). Direkt `schickeMail`, mit einem
+     Praefix im Betreff, damit sie im Postfach nicht mit einer echten
+     verwechselt wird. */
+  'POST /api/admin/rundmail/test': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+    if (!env.AGENTMAIL_KEY) return fehler(request, 'Mailversand ist nicht eingerichtet', 503);
+    if (!ich.email) return fehler(request, 'Ohne eigene Adresse keine Testmail');
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const geprueft = rundmailPruefen(daten);
+    if (geprueft.fehler) return fehler(request, geprueft.fehler);
+
+    await schickeMail(env, ich.email, `[Test] ${geprueft.betreff}`,
+      rundmailText(geprueft), mailRumpf(rundmailHtml(geprueft)));
+
+    return antwort(request, { ok: true, email: ich.email }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
   /* Dieselbe Rundmail, aber fuer spaeter vorgemerkt statt sofort geschickt -
      editierbar und verwerfbar, solange sie noch ansteht. Der Versand selbst
      laeuft ueber `rundmailGeplantVersenden`, angestossen vom zehnminuetigen
