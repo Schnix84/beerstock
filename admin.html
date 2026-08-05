@@ -887,6 +887,14 @@
       { feld: 'n',      titel: 'verschickt', farbe: REIHE[0] },
       { feld: 'kaputt', titel: 'ging nicht raus', farbe: REIHE[2] },
     ], g => g.art.replace(/_/g, ' ')));
+    // Die Farbe kommt von hier, nicht vom Worker: der kennt die Palette des
+    // Kontors nicht, nur die Reihenfolge (meistbeschaeftigt zuerst).
+    const aufrufeReihen = (s.aufrufe_nutzer_reihen || [])
+      .map((r, i) => ({ ...r, farbe: REIHE[i % REIHE.length] }));
+    ziel.appendChild(Bilder.saeulen('Seitenaufrufe je Tag, nach Nutzer' + fenster,
+      s.aufrufe_je_tag || [], aufrufeReihen, g => nurTag(g.tag)));
+    ziel.appendChild(Bilder.liegend('Seitenaufrufe je Nutzer, insgesamt',
+      s.aufrufe_je_nutzer || [], z => z.name, z => z.n, 'Aufrufe'));
 
     /* Jedes Bild bekommt seine Überschrift als Namen. `role="img"` ohne
        Beschriftung ist für einen Screenreader ein leeres Bild — und seit die
@@ -913,6 +921,7 @@
     paar('Angemeldete insgesamt', zahl(w));
     paar('von ' + zahl(s.postwillig.alle) + ' mit Adresse wollen noch Post',
       zahl(s.postwillig.willig));
+    paar('Seitenaufrufe insgesamt', zahl(s.aufrufe_insgesamt || 0));
   }
 
   /* Ein Zeichen je Handlung. Keine Emoji: die kämen aus einer fremden

@@ -360,7 +360,15 @@ async function nutzer(request, env) {
 
      Der `UPDATE` steht VOR dem `SELECT` - ein `batch` laeuft der Reihe nach in
      einer Transaktion, das gelesene `zuletzt` ist also schon das neue. Fuer
-     das Geraet, das gerade fragt, ist "jetzt" auch die richtige Antwort. */
+     das Geraet, das gerade fragt, ist "jetzt" auch die richtige Antwort.
+
+     Die dritte Anweisung ist NICHT gedrosselt: `zugriffe` ist das Log, aus
+     dem das Kontor Aufrufe je Tag und Nutzer zeichnet, `tokens.zuletzt` nur
+     ein einzelner ueberschriebener Zeitpunkt. Bei einer Handvoll Nutzern
+     bleibt das eine Handvoll Zeilen am Tag - eine Drosselung wie oben wuerde
+     hier nur die Zahlen verfaelschen, die sie eigentlich zeigen soll. Traegt
+     der Token keinen Nutzer, liefert die Unterabfrage nichts und die Zeile
+     bleibt aus. */
   const [, gefunden] = await env.DB.batch([
     env.DB.prepare(`
       UPDATE tokens SET zuletzt = datetime('now')
@@ -373,6 +381,10 @@ async function nutzer(request, env) {
              u.mail_prefs, u.mail_stumm_am
       FROM tokens t
       JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?
+    `).bind(h),
+    env.DB.prepare(`
+      INSERT INTO zugriffe (user_id)
+      SELECT user_id FROM tokens WHERE token_hash = ?
     `).bind(h),
   ]);
   const u = gefunden.results[0] || null;
@@ -3703,13 +3715,48 @@ const ROUTEN = {
         SELECT count(*) AS alle, sum(mail_stumm_am IS NULL) AS willig
         FROM users WHERE email IS NOT NULL AND entfernt_am IS NULL
       `),
+      /* 7 — Aufrufe je Nutzer und Tag, im Fenster. Wird unten zu EINEM
+         gestapelten Balken gebogen: die Hoehe der Saeule beantwortet "je
+         Tag", die Schichten darin "je Nutzer und Tag" - zwei Fragen aus der
+         einen Abfrage, wie schon bei "Betrieb je Woche". */
+      env.DB.prepare(`
+        SELECT z.user_id, coalesce(u.name,'Ehemaliger') AS name,
+               date(z.erstellt) AS tag, count(*) AS n
+        FROM zugriffe z JOIN users u ON u.id = z.user_id
+        WHERE z.erstellt > datetime('now', ?1)
+        GROUP BY z.user_id, tag ORDER BY tag
+      `).bind(fenster),
+      // 7b — dieselben Aufrufe je Nutzer, aber ueber die ganze Geschichte:
+      // "insgesamt" ist keine Frage an den Zeitraum-Schalter, genau wie beim
+      // Gastgeber und den Ziehungen oben.
+      env.DB.prepare(`
+        SELECT z.user_id, coalesce(u.name,'Ehemaliger') AS name, count(*) AS n
+        FROM zugriffe z JOIN users u ON u.id = z.user_id
+        GROUP BY z.user_id ORDER BY n DESC
+      `),
+      env.DB.prepare('SELECT count(*) AS n FROM zugriffe'),
     ]);
 
-    const [mails, mailsJeTag, anmeldungen, postwillig] = ergebnis.slice(STATISTIK_ABFRAGEN);
+    const [mails, mailsJeTag, anmeldungen, postwillig,
+           aufrufeJeNutzerTag, aufrufeJeNutzer, aufrufeInsgesamt] = ergebnis.slice(STATISTIK_ABFRAGEN);
 
     // Kumuliert, nicht je Tag: die Frage ist "wie viele sind wir inzwischen".
     let summe = 0;
     const wachstum = anmeldungen.results.map(z => ({ tag: z.tag, n: (summe += z.n) }));
+
+    /* Die Saeule je Tag, aus den flachen Zeilen gebaut: eine Gruppe je Tag,
+       ein Feld je Nutzer darin. Die Reihenfolge der Reihen folgt der
+       Rangliste `aufrufeJeNutzer` (meistbeschaeftigt zuerst) - dieselbe
+       Reihenfolge, mit der die Seite ihnen Farben zuteilt. */
+    const aufrufeNutzerReihen = aufrufeJeNutzer.results.map(z => ({
+      feld: 'u' + z.user_id, titel: z.name,
+    }));
+    const tageJeAufruf = new Map();
+    for (const z of aufrufeJeNutzerTag.results) {
+      if (!tageJeAufruf.has(z.tag)) tageJeAufruf.set(z.tag, { tag: z.tag });
+      tageJeAufruf.get(z.tag)['u' + z.user_id] = z.n;
+    }
+    const aufrufeJeTag = [...tageJeAufruf.values()].sort((a, b) => a.tag < b.tag ? -1 : 1);
 
     const p = postwillig.results[0];
     return antwort(request, {
@@ -3721,6 +3768,10 @@ const ROUTEN = {
       mails_je_tag: mailsJeTag.results,
       wachstum,
       postwillig: { alle: p.alle, willig: p.willig || 0 },
+      aufrufe_je_tag: aufrufeJeTag,
+      aufrufe_nutzer_reihen: aufrufeNutzerReihen,
+      aufrufe_je_nutzer: aufrufeJeNutzer.results,
+      aufrufe_insgesamt: aufrufeInsgesamt.results[0].n,
     }, 200, KEIN_FREMDER_CACHE);
   },
 
