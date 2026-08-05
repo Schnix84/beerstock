@@ -566,7 +566,7 @@
   .ch-mehr[disabled] { opacity: .5; cursor: default; }
 
   /* --- Mein Deckel ---------------------------------------------------------
-     Die Selbstverwaltung: Name, Adresse, sechs Schalter, Geräte. Dasselbe
+     Die Selbstverwaltung: Name, Adresse, fünf Schalter, Geräte. Dasselbe
      Blatt wie Flyout und Chronik, auf derselben Ebene wie die Chronik — von
      hier aus schlägt man nichts weiter auf.
 
@@ -1475,7 +1475,7 @@
        Adresse, an die geschrieben wird, was geschrieben werden darf, und auf
        wie vielen Geräten man angemeldet ist.
 
-       Ein Flyout statt einer eigenen Seite: vier Felder und sechs Schalter,
+       Ein Flyout statt einer eigenen Seite: vier Felder und fünf Schalter,
        dafür die Tafel zu verlassen wäre unverhältnismäßig.
        ================================================================ -->
   <div class="flyout deckel" id="deckel" hidden>
@@ -3838,7 +3838,6 @@
     gewonnen:       'wenn die Flasche auf mich zeigt',
     termin_neu:     'wenn ein Abend feststeht',
     termin_aendert: 'wenn ein Abend sich ändert',
-    erinnerung:     'am Tag des Abends',
     echo:           'wenn jemand mir antwortet',
     rundmail:       'gelegentliche Nachricht vom Wirt',
   };
@@ -3902,7 +3901,7 @@
         : 'Dein Zugang ist gesperrt. Lesen geht weiter, schreiben nicht.';
     }
 
-    /* Der Hauptschalter schlägt jede Einzelwahl — also stehen die sechs zwar
+    /* Der Hauptschalter schlägt jede Einzelwahl — also stehen die fünf zwar
        weiter da (man soll sehen, was man gewählt hatte), aber ausgegraut und
        nicht bedienbar. Sie erst einzuschalten, während gar nichts rausgeht,
        wäre eine Handlung ohne Wirkung. */
@@ -3943,7 +3942,7 @@
     $('dk-kontor').hidden = d.rolle !== 'admin';
   }
 
-  /* Einzeln und sofort, ohne Speichern-Knopf: sechs Schalter mit
+  /* Einzeln und sofort, ohne Speichern-Knopf: fünf Schalter mit
      Bestätigung wären ein Formular zu viel. Fällt der Ruf durch, springt der
      Schalter zurück — sonst zeigt die Seite einen Stand, den der Worker nicht
      kennt, und das merkt niemand bis zur nächsten ausbleibenden Mail. */

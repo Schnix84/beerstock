@@ -21,10 +21,8 @@
 
   // Zwei Zeitgeber, beide in scheduled() in src/index.js, per event.cron
   // auseinandergehalten:
-  //   "0 9 * * *"    einmal taeglich, die Erinnerung am Abend des Termins.
-  //                  09:00 UTC ist 11:00 deutscher Sommerzeit - frueh genug
-  //                  zum Einkaufen, spaet genug, dass niemand davon geweckt
-  //                  wird.
+  //   "0 9 * * *"    einmal taeglich, raeumt erloschene Notrufe und
+  //                  verwaiste Bilder weg. Die Uhrzeit ist willkuerlich.
   //   "*/10 * * * *" alle zehn Minuten, faellige geplante Rundmails (Schema
   //                  15) - keine Uhrzeit auf die Minute, aber nah genug fuer
   //                  eine Ankuendigung.

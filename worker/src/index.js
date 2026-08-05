@@ -224,7 +224,6 @@ const MAIL_ARTEN = {
   gewonnen:       { vorgabe: true,  titel: 'Die Flasche zeigt auf mich' },
   termin_neu:     { vorgabe: true,  titel: 'Ein Abend steht fest' },
   termin_aendert: { vorgabe: true,  titel: 'Ein Abend verschiebt sich oder fällt aus' },
-  erinnerung:     { vorgabe: true,  titel: 'Am Tag des Abends' },
   echo:           { vorgabe: false, titel: 'Antwort auf meinen Beitrag, Sterne für mich' },
   rundmail:       { vorgabe: true,  titel: 'Gelegentliche Nachricht vom Wirt' },
   /* Abwaehlbar wie alles hier, aber mit Vorgabe AN: eine Not, von der niemand
@@ -1694,28 +1693,6 @@ function mailTerminAendert(env, ctx, termin, ausloeser, was) {
         + `Steht auf der Tafel: ${env.SEITE}`,
     html: u => `<p>${nurText(selbst(u) ? eigen : kopf)}</p>`
         + `<p style="font-size:13px;color:#6f6653">${nachsatz}</p>`
-        + mailKnopf(env.SEITE, 'Zur Tafel'),
-  });
-}
-
-/* Die Erinnerung am Abendtag. Sie geht an ALLE, auch an den Gastgeber - der
-   ist der Einzige, der wirklich etwas vorbereiten muss.
-
-   `bezug` ist der Termin, und die Doppel-Sperre traegt hier mehr als sonst:
-   ein Cron kann von der Plattform wiederholt werden, und zwei Erinnerungen an
-   denselben Abend waeren genau die Sorte Mail, wegen der man die Art
-   abschaltet. */
-function mailErinnerung(env, ctx, termin) {
-  const wann = alsText(termin.beginnt_am);
-  const wo = termin.gastgeber ? ` bei ${termin.gastgeber}` : '';
-  const was = termin.titel ? `\n\nEs geht um: ${termin.titel}` : '';
-  benachrichtige(env, ctx, 'erinnerung', null, {
-    bezug: `termin:${termin.id}`,
-    betreff: `Heute: ${wann}${wo}`,
-    text: `Heute Abend wird getrunken — ${wann}${wo}.${was}`
-        + `\n\nSteht auf der Tafel: ${env.SEITE}`,
-    html: `<p>Heute Abend wird getrunken &ndash; <strong>${nurText(wann)}</strong>${nurText(wo)}.</p>`
-        + (termin.titel ? `<p>Es geht um: ${nurText(termin.titel)}</p>` : '')
         + mailKnopf(env.SEITE, 'Zur Tafel'),
   });
 }
@@ -4243,21 +4220,16 @@ async function waisenWegraeumen(env) {
 }
 
 export default {
-  /* Der einzige Zeitgeber im ganzen Dienst. Alles andere traegt sich beim
-     naechsten Schreiben nach (siehe `verfallStmt`) - eine Erinnerung kann das
-     nicht, sie MUSS zu einer Uhrzeit losgehen.
+  /* Zwei Zeitgeber im ganzen Dienst. Alles sonst traegt sich beim naechsten
+     Schreiben nach (siehe `verfallStmt`).
 
-     09:00 UTC ist 11:00 deutscher Sommerzeit: frueh genug, um noch einkaufen
-     zu koennen, spaet genug, dass niemand davon geweckt wird. Der Tag wird in
-     UTC verglichen, wie ueberall hier - ein Abend, der um 23:30 Ortszeit
-     anfaengt, faellt damit auf denselben UTC-Tag wie die Erinnerung, und die
-     halbe Stunde Drift an dieser Kante ist es nicht wert, eine Zeitzone in
-     die Abfrage zu ziehen.
+     09:00 UTC raeumt einmal taeglich auf: erloschene Notrufe und verwaiste
+     Bilder, die sich sonst unbegrenzt ansammeln. Die Uhrzeit selbst ist
+     willkuerlich - nur niedrig genug, dass der Lauf niemanden stoert.
 
      Zweiter Cron seit Schema 15, siehe wrangler.jsonc: alle zehn Minuten,
-     nur fuer faellige geplante Rundmails. Beide in einer Funktion haette die
-     Erinnerung alle zehn Minuten neu verschickt statt einmal taeglich -
-     darum die Weiche gleich am Anfang. */
+     nur fuer faellige geplante Rundmails - eine eigene Weiche, damit das
+     taegliche Aufraeumen nicht zehnmal die Stunde mitlaeuft. */
   async scheduled(event, env, ctx) {
     if (event.cron !== '0 9 * * *') {
       try {
@@ -4267,13 +4239,6 @@ export default {
       }
       return;
     }
-
-    const heute = await env.DB.prepare(`
-      SELECT t.id, t.beginnt_am, t.titel, coalesce(u.name, 'Ehemaliger') AS gastgeber
-      FROM termine t JOIN users u ON u.id = t.gastgeber_id
-      WHERE date(t.beginnt_am) = date('now') AND t.abgesagt_am IS NULL
-    `).all();
-    for (const t of heute.results) mailErinnerung(env, ctx, t);
 
     /* Die erloschenen Notrufe. Zuerst unter den Aufraeumarbeiten, weil es das
        einzige Aufraeumen ist, das nicht nur Platz schafft: hier verschwindet
@@ -4290,9 +4255,8 @@ export default {
       console.error('Notrufe:', e && e.stack || e);
     }
 
-    /* Nach der Post, und abgeschirmt: das Aufraeumen hat keine Frist, die
-       Erinnerung schon. Faellt der Bucket aus, soll das nicht der Grund sein,
-       warum am Abend niemand vom Termin weiss. */
+    /* Eigener try wie oben: scheitert das eine Aufraeumen, soll das andere
+       trotzdem laufen. */
     try {
       const weg = await waisenWegraeumen(env);
       if (weg) console.log(`Waisenbilder weggeraeumt: ${weg}`);

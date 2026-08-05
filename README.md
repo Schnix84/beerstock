@@ -184,7 +184,6 @@ Wer eine Adresse hinterlegt hat, bekommt Mail — je Anlass abwählbar:
 | `gewonnen` | die Flasche hat einen getroffen | an |
 | `termin_neu` | ein Abend steht fest | an |
 | `termin_aendert` | ein Abend verschiebt sich, wird umbenannt oder fällt aus | an |
-| `erinnerung` | am Morgen des Abendtags (09:00 UTC, einer von zwei Crons im Dienst) | an |
 | `echo` | jemand antwortet auf einen Beitrag oder gibt Sterne | **aus** |
 | `rundmail` | gelegentlich, vom Wirt | an |
 
@@ -205,8 +204,7 @@ trägt eine feste `UID` (`termin-<id>@beerstock`) und eine steigende `SEQUENCE`
 Eintrag, statt einen zweiten daneben zu legen, und eine Absage räumt ihn per
 `METHOD:CANCEL` weg. Bewusst `METHOD:PUBLISH` und nicht `REQUEST`: `REQUEST` ist
 eine Einladung und zeigt im Postfach Zusagen-/Absagen-Knöpfe, deren Antwort an
-ein Postfach ginge, das niemand liest. Zugesagt wird auf der Tafel. Die
-Erinnerung am Abendtag trägt keinen Anhang — der Eintrag steht dann längst.
+ein Postfach ginge, das niemand liest. Zugesagt wird auf der Tafel.
 
 Zwei Links kommen ohne Anmeldung aus: das Abmelden und die Antwort des
 Gewinners. Beide tragen eine **HMAC-Signatur statt einer Zeile in der Datenbank**
@@ -216,7 +214,7 @@ klickt: Mailscanner laden Links vor, und ein `GET`, das zusagt, wäre binnen ein
 Woche einmal von einem Virenscanner beantwortet worden.
 
 **Mein Deckel** (Flyout auf der Tafel) ist die Selbstverwaltung: Name ändern,
-Adresse wechseln, die sechs Schalter, alle Geräte abmelden. Der Adresswechsel ist
+Adresse wechseln, die fünf Schalter, alle Geräte abmelden. Der Adresswechsel ist
 zweistufig — der Link geht an die neue Adresse, die alte bekommt eine Warnung und
 gilt weiter, bis dort geklickt wurde. Wer die Rolle `admin` hat, findet ganz
 unten den Knopf **Mitgliederverwaltung** — der einzige Wegweiser ins Kontor.
@@ -290,7 +288,7 @@ flowchart LR
         R2[("R2 · beerstock-bilder")]
     end
 
-    Cron["Cron ×2<br/>09:00 UTC Erinnerung<br/>alle 10 Min Rundmail"]
+    Cron["Cron ×2<br/>09:00 UTC Aufräumen<br/>alle 10 Min Rundmail"]
     Mail["AgentMail<br/>HTTP-API"]
     OSM["tile.openstreetmap.org"]
     HA["Home Assistant<br/>privates Repo"]
