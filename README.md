@@ -235,8 +235,8 @@ vorgemerkt bleibt sie editierbar und verwerfbar, bis sie fällig wird. Ein zweit
 Cron (alle zehn Minuten, siehe `wrangler.jsonc`) verschickt, was ansteht — jede
 fällige Zeile bekommt genau einen Versuch, eine an der Stundensperre gescheiterte
 bleibt `fehlgeschlagen` liegen statt es beim nächsten Lauf mit demselben Ergebnis
-erneut zu versuchen. Die Vorschau im Kontor sieht aus wie die echte Mail (Georgia
-auf Weiß), nicht wie das Kontorbuch drumherum.
+erneut zu versuchen. Die Vorschau im Kontor sieht aus wie die echte Mail
+(serifenlos auf Weiß), nicht wie das Kontorbuch drumherum.
 
 Entfernt wird **weich**: Adresse, Name und Token verschwinden, die Beiträge
 bleiben als *Ehemaliger* stehen. Hart geht nicht — `kommentare.autor_id` hat

@@ -1194,7 +1194,7 @@ Der Link gilt ${LINK_MINUTEN} Minuten und genau einmal. Hast du ihn nicht
 angefordert, ist nichts passiert - dann wirf die Mail einfach weg.`;
 
   const html =
-`<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#1d2a24">
+`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
   <p>Hier entlang, dann bist du drin:</p>
   <p><a href="${link}" style="display:inline-block;background:#2f5d4a;color:#e3d8c1;
      padding:12px 22px;border-radius:3px;text-decoration:none;letter-spacing:.15em;
@@ -1223,7 +1223,7 @@ deine alte Adresse in Kraft. Warst du das nicht, wirf die Mail weg - dann
 passiert nichts.`;
 
   const html =
-`<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#1d2a24">
+`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
   <p>Du willst k&uuml;nftig hierunter angeschrieben werden. Ein Klick, dann gilt es:</p>
   <p><a href="${link}" style="display:inline-block;background:#2f5d4a;color:#e3d8c1;
      padding:12px 22px;border-radius:3px;text-decoration:none;letter-spacing:.15em;
@@ -1250,7 +1250,7 @@ Warst du das nicht: melde dich in der Runde. Solange nichts bestaetigt wurde,
 gilt diese Adresse hier weiter.`;
 
   const html =
-`<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#1d2a24">
+`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
   <p>Jemand hat gerade angefordert, dass das Bierranking dich k&uuml;nftig unter
      <strong>${nurText(neu)}</strong> anschreibt.</p>
   <p>Best&auml;tigt ist es noch nicht &ndash; dazu muss der Link in der Mail an die
@@ -1291,7 +1291,7 @@ Adresse: ${neu.email}
 Angemeldet: ${wann} UTC`;
 
     const html =
-`<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#1d2a24">
+`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
   <p><strong>${nurText(neu.name)}</strong> ist dabei &ndash; der ${wievielter}Melder.</p>
   <p style="font-size:13px;color:#6f6653">
     Adresse: ${nurText(neu.email)}<br>Angemeldet: ${wann} UTC
@@ -1458,7 +1458,7 @@ function icsAnhang(env, termin, abgesagt) {
    Link - das Kontorbuch des Wirts, nicht die Tafel: eine Mail wird in einem
    fremden Programm auf weissem Grund gelesen. */
 const mailRumpf = inhalt =>
-`<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#1d2a24">
+`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
 ${inhalt}
 </div>`;
 
