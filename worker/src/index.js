@@ -362,11 +362,14 @@ async function nutzer(request, env) {
      einer Transaktion, das gelesene `zuletzt` ist also schon das neue. Fuer
      das Geraet, das gerade fragt, ist "jetzt" auch die richtige Antwort.
 
-     Die dritte Anweisung ist NICHT gedrosselt: `zugriffe` ist das Log, aus
-     dem das Kontor Aufrufe je Tag und Nutzer zeichnet, `tokens.zuletzt` nur
-     ein einzelner ueberschriebener Zeitpunkt. Bei einer Handvoll Nutzern
-     bleibt das eine Handvoll Zeilen am Tag - eine Drosselung wie oben wuerde
-     hier nur die Zahlen verfaelschen, die sie eigentlich zeigen soll. Traegt
+     Die dritte Anweisung traegt eine EIGENE, viel kuerzere Drosselung: zehn
+     Sekunden statt einer Stunde. Grund ist nicht Sparsamkeit wie oben,
+     sondern dass eine einzelne Seitenansicht mehrere Anfragen gleichzeitig
+     abschickt - das Kontor allein ruft beim Aufbau fuenf Routen parallel auf
+     (siehe admin.html). Ohne die Drosselung waere "ein Aufruf" im Log fuenf
+     Zeilen, und die Anzeige im Kontor zaehlte Anfragen statt Besuche. Zehn
+     Sekunden reichen, um so ein Buendel zusammenzufassen, sind aber kurz
+     genug, dass ein echter zweiter Besuch kurz danach wieder zaehlt. Traegt
      der Token keinen Nutzer, liefert die Unterabfrage nichts und die Zeile
      bleibt aus. */
   const [, gefunden] = await env.DB.batch([
@@ -384,7 +387,11 @@ async function nutzer(request, env) {
     `).bind(h),
     env.DB.prepare(`
       INSERT INTO zugriffe (user_id)
-      SELECT user_id FROM tokens WHERE token_hash = ?
+      SELECT user_id FROM tokens t WHERE t.token_hash = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM zugriffe z
+          WHERE z.user_id = t.user_id AND z.erstellt > datetime('now', '-10 seconds')
+        )
     `).bind(h),
   ]);
   const u = gefunden.results[0] || null;
