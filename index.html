@@ -456,7 +456,7 @@
      ihn aus der ersten Zeile, `order` hält ihn trotz DOM-Reihenfolge dort
      unten. Ohne aktiven Notruf bleibt die Zeile wie sie war — Titel links,
      Knopf rechts, eine Zeile. */
-  #notruf-kopf { flex-wrap: wrap; }
+  #notruf-kopf.notruf-kopf-aktiv { flex-wrap: wrap; }
   #notruf-kopf.notruf-kopf-aktiv .titel { order: 2; flex: 1 1 100%; }
   #notruf-kopf.notruf-kopf-aktiv .nr-tafel-aktionen { order: 1; }
   .nr-tafel-aktionen { display: flex; gap: 18px; }
@@ -1194,7 +1194,7 @@
            ============================================================= -->
       <section class="notruf-block" id="notruf-block" hidden>
         <div class="block-kopf kr" id="notruf-kopf">
-          <span class="titel">Wo wird heute getrunken</span>
+          <span class="titel">Wo wird heute getrunken?</span>
           <button class="nr-knopf" id="notruf-auf" type="button">Notruf absetzen</button>
           <!-- Nur solange der eigene Notruf läuft: dann ersetzen die beiden
                Handlungen den Knopf in der Kopfzeile, und der Titel wandert
@@ -1213,11 +1213,6 @@
            kalt hat, der wechselt nach Bestand und nicht nach Losglück.
            ============================================================= -->
       <section class="rad-block" id="rad-block" hidden>
-        <div class="block-kopf kr">
-          <span class="titel">Wo wird heute getrunken</span>
-          <span class="datum" id="rad-datum"></span>
-        </div>
-
         <div class="rad-buehne" id="rad-buehne" hidden>
           <!-- Links und rechts 45 Einheiten Luft im viewBox: dort stehen die
                Namen, und sie sollen nicht aus der Tafel laufen. -->
@@ -3119,8 +3114,6 @@
     if (!los) { block.hidden = true; return; }
     block.hidden = false;
     losTag = los.tag;
-    $('rad-datum').textContent =
-      new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
 
     const gezogen = !!los.gewinner;
     /* Ob gedreht werden darf, entscheidet der Worker — er kennt die Mindest-
