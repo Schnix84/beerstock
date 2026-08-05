@@ -3316,9 +3316,6 @@ const ROUTEN = {
      die Bildadresse dahinter kennt nur der Worker. Eine `id`, die dort nicht
      steht, ist ein 404 - nicht ein Abruf. */
   'GET /api/meme/vorlage': async (request, env, ctx) => {
-    const ich = await nutzer(request, env);
-    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-
     const id = String(new URL(request.url).searchParams.get('id') || '');
     const rohe = await memeVorlagenRoh(env, ctx);
     const vorlage = rohe && rohe.find(m => String(m.id) === id);
