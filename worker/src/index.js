@@ -998,7 +998,7 @@ const kommentarZaehlerStmt = env => env.DB.prepare(`
 // ---------------------------------------------------------------------------
 // Die Statistik der Runde
 //
-// Sechs Abfragen, die zwei Routen gemeinsam haben: `/api/statistik` fuer jeden
+// Sieben Abfragen, die zwei Routen gemeinsam haben: `/api/statistik` fuer jeden
 // Angemeldeten und `/api/admin/statistik`, das nur noch den Betrieb anhaengt.
 // Sie stehen hier und nicht in den Routen, damit es sie EINMAL gibt - zweimal
 // dasselbe SQL laeuft auseinander, sobald eine der beiden Seiten etwas
@@ -1021,7 +1021,7 @@ const statistikFenster = (request) => {
 
 // Wie viele es sind. Die Admin-Route schneidet ihren eigenen Teil hinter
 // dieser Marke ab - eine Zahl von Hand waere beim naechsten Bild falsch.
-const STATISTIK_ABFRAGEN = 6;
+const STATISTIK_ABFRAGEN = 7;
 
 const statistikAbfragen = (env, fenster) => [
   // 1 — Meldungen je Tag. Flaechenkurve.
@@ -1087,12 +1087,19 @@ const statistikAbfragen = (env, fenster) => [
       FROM bewertungen WHERE erstellt > datetime('now', ?1)
     ) GROUP BY woche ORDER BY woche
   `).bind(fenster),
+  /* 6 — Anmeldungen je Tag, ueber die ganze Geschichte: "wie viele sind wir
+     inzwischen" ist wie Gastgeber und Ziehungen oben eine Frage an die ganze
+     Runde, kein Fenster. Die Seite baut daraus eine Wachstumskurve. */
+  env.DB.prepare(`
+    SELECT date(erstellt) AS tag, count(*) AS n FROM users
+    WHERE entfernt_am IS NULL GROUP BY tag ORDER BY tag
+  `),
 ];
 
-/* Aus den sechs Ergebnissen die Form, die gezeichnet wird. Zwei davon werden
+/* Aus den sieben Ergebnissen die Form, die gezeichnet wird. Drei davon werden
    umgebaut, der Rest geht durch. */
 const statistikRunde = (ergebnis) => {
-  const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb] = ergebnis;
+  const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb, anmeldungen] = ergebnis;
 
   /* Die Kurvenschar je Nutzer buendeln - eine Linie je Melder, zweimal:
      einmal die Flaschen, einmal die Grad. Dieselbe Zeile fuellt beide, denn
@@ -1134,6 +1141,10 @@ const statistikRunde = (ergebnis) => {
     if (z.status in m) m[z.status] = z.n;
   }
 
+  // Kumuliert, nicht je Tag: die Frage ist "wie viele sind wir inzwischen".
+  let summe = 0;
+  const wachstum = anmeldungen.results.map(z => ({ tag: z.tag, n: (summe += z.n) }));
+
   return {
     meldungen: meldungen.results,
     bestand: [...kurven.values()],
@@ -1142,6 +1153,7 @@ const statistikRunde = (ergebnis) => {
     lose: lose.results,
     lose_je_melder: [...jeMelderZeilen.values()].sort((a, b) => b.gezogen - a.gezogen),
     betrieb: betrieb.results,
+    wachstum,
   };
 };
 
@@ -3676,13 +3688,13 @@ const ROUTEN = {
        waeren zwei Rundfluege zur Datenbank fuer eine einzige Seitenansicht. */
     const ergebnis = await env.DB.batch([
       ...statistikAbfragen(env, fenster),
-      // 6 — Mails je Art, Fehler daneben.
+      // 7 — Mails je Art, Fehler daneben.
       env.DB.prepare(`
         SELECT art, count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
         FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
         GROUP BY art ORDER BY n DESC
       `).bind(fenster),
-      /* 6b — dieselben Mails, aber je Tag: die Kachel "Mails, 24 h" im Kopf
+      /* 7b — dieselben Mails, aber je Tag: die Kachel "Mails, 24 h" im Kopf
          nennt eine einzelne Zahl, und eine einzelne Zahl sagt nicht, ob das
          viel ist. Die Linie darunter schon. */
       env.DB.prepare(`
@@ -3690,16 +3702,12 @@ const ROUTEN = {
         FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
         GROUP BY tag ORDER BY tag
       `).bind(fenster),
-      // Und zwei Zahlen ohne Bild.
-      env.DB.prepare(`
-        SELECT date(erstellt) AS tag, count(*) AS n FROM users
-        WHERE entfernt_am IS NULL GROUP BY tag ORDER BY tag
-      `),
+      // Und eine Zahl ohne Bild.
       env.DB.prepare(`
         SELECT count(*) AS alle, sum(mail_stumm_am IS NULL) AS willig
         FROM users WHERE email IS NOT NULL AND entfernt_am IS NULL
       `),
-      /* 7 — Aufrufe je Nutzer und Tag, im Fenster. Wird unten zu EINEM
+      /* 8 — Aufrufe je Nutzer und Tag, im Fenster. Wird unten zu EINEM
          gestapelten Balken gebogen: die Hoehe der Saeule beantwortet "je
          Tag", die Schichten darin "je Nutzer und Tag" - zwei Fragen aus der
          einen Abfrage, wie schon bei "Betrieb je Woche". */
@@ -3710,7 +3718,7 @@ const ROUTEN = {
         WHERE z.erstellt > datetime('now', ?1)
         GROUP BY z.user_id, tag ORDER BY tag
       `).bind(fenster),
-      // 7b — dieselben Aufrufe je Nutzer, aber ueber die ganze Geschichte:
+      // 8b — dieselben Aufrufe je Nutzer, aber ueber die ganze Geschichte:
       // "insgesamt" ist keine Frage an den Zeitraum-Schalter, genau wie beim
       // Gastgeber und den Ziehungen oben.
       env.DB.prepare(`
@@ -3721,12 +3729,8 @@ const ROUTEN = {
       env.DB.prepare('SELECT count(*) AS n FROM zugriffe'),
     ]);
 
-    const [mails, mailsJeTag, anmeldungen, postwillig,
+    const [mails, mailsJeTag, postwillig,
            aufrufeJeNutzerTag, aufrufeJeNutzer, aufrufeInsgesamt] = ergebnis.slice(STATISTIK_ABFRAGEN);
-
-    // Kumuliert, nicht je Tag: die Frage ist "wie viele sind wir inzwischen".
-    let summe = 0;
-    const wachstum = anmeldungen.results.map(z => ({ tag: z.tag, n: (summe += z.n) }));
 
     /* Die Saeule je Tag, aus den flachen Zeilen gebaut: eine Gruppe je Tag,
        ein Feld je Nutzer darin. Die Reihenfolge der Reihen folgt der
@@ -3750,7 +3754,6 @@ const ROUTEN = {
       ...statistikRunde(ergebnis),
       mails: mails.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
       mails_je_tag: mailsJeTag.results,
-      wachstum,
       postwillig: { alle: p.alle, willig: p.willig || 0 },
       aufrufe_je_tag: aufrufeJeTag,
       aufrufe_nutzer_reihen: aufrufeNutzerReihen,

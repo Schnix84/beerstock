@@ -295,6 +295,10 @@
     const fenster = ', ' + (s.tage || zeitraum) + ' Tage';
     ziel.appendChild(Bilder.flaeche('Meldungen je Tag' + fenster,
       s.meldungen, z => z.n, z => nurTag(z.tag), 'Meldungen'));
+    // Kein Fenster, wie bei Gastgeber und Ziehungen unten: „wie viele sind
+    // wir inzwischen" ist eine Frage an die ganze Geschichte der Runde.
+    ziel.appendChild(Bilder.flaeche('Melder, insgesamt',
+      s.wachstum || [], z => z.n, z => nurTag(z.tag), 'Melder'));
     ziel.appendChild(Bilder.schar('Bestand je Melder' + fenster, s.bestand));
     // Direkt hinter dem Bestand: beide Kurven kommen aus derselben Meldung,
     // und nebeneinander sieht man, ob der Kühlschrank mit dem Nachlegen
