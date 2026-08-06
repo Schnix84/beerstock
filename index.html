@@ -241,7 +241,37 @@
   .rad-block { margin-top: clamp(14px, 3.6vw, 20px); }
   .rad-buehne { position: relative; width: 100%; max-width: 320px; margin: 2px auto 4px; }
   .rad-buehne svg { display: block; width: 100%; }
-  .rad-flasche { transform-origin: 150px 150px; }
+  /* Die Drehachse. Sieht nach einer Kleinigkeit aus und ist die eine Stelle,
+     an der die Flasche im Rad umhereiern kann statt sich zu drehen.
+
+     Hier stand `transform-origin: 150px 150px` OHNE `transform-box`. Das geht
+     gut, solange die Laufzeit von sich aus `view-box` annimmt — tut sie es
+     nicht, zaehlt die Angabe ab der Ecke der Umrissbox der Flasche, und die
+     Achse liegt dann bei (282, 245,5) statt in der Mitte. Nachgemessen am
+     2026-08-06: die Flaschenmitte wandert waehrend einer Umdrehung um 264
+     Einheiten bei einer Buehne von 390. Genau das sah man in Safari, und die
+     ausgerollte Fassung hatte es auch.
+
+     Pixel und `view-box` sind hier zusaetzlich eine Falle, die keiner
+     vermutet: die viewBox dieses Rades beginnt bei `x = -45` (links und
+     rechts Luft fuer die Namen), und ob eine Laufzeit diesen Versatz
+     mitrechnet, ist zwischen den Engines nicht einig. Beim Glas weiter oben
+     faellt das nicht auf — dessen viewBox beginnt bei 0.
+
+     Deshalb `fill-box` und Prozent: die Umrissbox der Flasche ist eindeutig
+     definiert, ihre Mitte ist ihre Mitte, und die viewBox kommt gar nicht
+     erst vor. Gemessen bleibt die Achse damit unter `fill-box` (0,0
+     Einheiten) wie unter `border-box` (0,4) stehen. Es ist auch das, was eine
+     angestossene Flasche tut: sie dreht sich um sich selbst.
+
+     WER DIE FLASCHE UMZEICHNET, prueft das nach — `fill-box` haengt an der
+     Umrissbox, und ein Glanzlicht, das nur auf einer Seite uebersteht, kippt
+     die Achse mit:
+       document.getElementById('rad-flasche').getBBox()
+     muss um (150, 150) zentriert sein. Ist es gerade: x 132..168, y 95,5..204,
+     also 150,0 / 149,75 — das Viertel Einheit Versatz gegen den gezeichneten
+     Drehpunkt ist bei 300 Einheiten Hoehe nicht zu sehen. */
+  .rad-flasche { transform-box: fill-box; transform-origin: 50% 50%; }
   .rad-bogen { fill: none; stroke-width: 7; stroke-linecap: butt; opacity: .55; }
   .rad-name { font-family: var(--hand); fill: var(--kreide); font-size: 12.5px; }
   .rad-zahl { font-family: var(--hand); fill: var(--kreide-weg); font-size: 10.5px; }
