@@ -1219,8 +1219,15 @@
     .ko.ko-auf > .ko-bar [data-antwort] { display: none; }
     /* Der lange Druck gehört uns, nicht dem Textmarker und nicht dem
        Bildmenü. Der Preis steht dazu: aus einem Kommentar lässt sich auf dem
-       Handy nichts mehr herauskopieren. */
-    .ko { -webkit-touch-callout: none; user-select: none; }
+       Handy nichts mehr herauskopieren.
+
+       Das `-webkit-`-Präfix ist kein Beiwerk: unpräfixiertes `user-select`
+       versteht Safari erst seit 17, davor markierte der lange Druck den Text
+       mit, während die Leiste aufging. Und Bilder hängen an einer ANDEREN
+       Geste — `user-select` fasst sie gar nicht an, das Anheben-und-Ziehen
+       stoppt nur `-webkit-user-drag`. Darum die zweite Regel. */
+    .ko { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    .ko img { -webkit-user-drag: none; -webkit-touch-callout: none; }
     /* Hoch scrollt der Browser, quer ziehen wir. Ohne `pan-y` entscheidet er
        das beim ersten Millimeter selbst, und der Wisch ist dann nicht mehr
        abzufangen. */
@@ -1322,6 +1329,29 @@
     display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px;
     font-size: 11px; color: var(--gelb);
   }
+  /* Der zitierte Satz. Der Strich links ist dasselbe Zeichen, das im Thread
+     die Antworten an ihrer Wurzel hält — hier sagt er: das ist nicht deins,
+     das ist das, worauf du antwortest.
+
+     Zwei Zeilen, dann ist Schluss (`line-clamp`): ein Zitat, das sich über
+     den halben Bildschirm zieht, schiebt auf dem Handy genau das Feld weg,
+     an dem es steht. Und `word-break: break-word`, weil ein langer Link ohne
+     Leerzeichen sonst quer aus der Karte läuft.
+
+     Kein `margin-bottom` — aus demselben Grund wie bei der Bildvorschau: den
+     Abstand nach unten bringt die Schreibzeile selbst mit
+     (`.ko-knoepfe { margin-top: 8px }`), beides zusammen wären 16. */
+  .ko-zitat {
+    margin-top: 8px; padding: 5px 0 5px 9px;
+    border-left: 2px solid var(--gelb); opacity: .72;
+    font-size: 12.5px; line-height: 1.4; color: var(--kreide-weg);
+    word-break: break-word;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  /* „Foto" und „gelöscht" sind keine Zitate, sondern Auskunft darüber, dass
+     es keines gibt — kursiv, damit man sie nicht für den Satz selbst hält. */
+  .ko-zitat.leer { font-style: italic; opacity: .55; }
   /* Schrift, Zeilenlauf und Farbe des Schreibfelds. Rahmen, Höhe und Polster
      stehen NICHT hier, sondern bei `.ko-knoepfe .ko-feld`: seit dem Umbau
      trägt die Zeile den Rahmen, und das Feld darin ist rahmenlos. */
@@ -2324,6 +2354,17 @@
              der Schreibzeile; gefüllt wird sie von `flyVorZeichnen`, das "x"
              darin entsteht mit ihr. -->
         <div class="ko-vorlink" id="fly-vor" hidden></div>
+        <!-- Der Satz, auf den geantwortet wird. Er steht ALS LETZTES vor der
+             Schreibzeile, nicht oben bei „Antwort an Basti": mit Foto und
+             Linkkarte dazwischen läge er sonst drei Blöcke über dem Feld, und
+             genau das war die Klage. Was man beantwortet, gehört an die Kante
+             des Feldes, in dem man die Antwort tippt.
+
+             Wer im Thread nach oben gescrollt ist, um noch einmal nachzulesen,
+             verliert sonst beim Zurückscrollen genau das wieder, was er
+             nachgelesen hat. Nur beim Antworten, nicht beim Ändern: dort steht
+             der eigene Text schon IM Feld. -->
+        <div class="ko-zitat" id="fly-zitat" hidden></div>
         <!-- Feld, "+" und Absenden in EINER Zeile: die beiden Knöpfe nehmen
              ihr Quadrat, der ganze Rest der Breite gehört dem Schreibfeld. -->
         <div class="ko-knoepfe">
@@ -5928,6 +5969,35 @@
   // Ändern eines eigenen. Ein Feld für drei Aufgaben — mehr braucht es nicht.
   let flyModus = { art: 'neu', id: null, wer: null };
 
+  /* Der Satz, auf den geantwortet wird, direkt über dem Feld. Nur beim
+     Antworten: beim Ändern steht der eigene Text schon IM Feld, ein Zitat
+     daneben wäre dasselbe zweimal.
+
+     Drei Fälle, die keinen Satz haben und trotzdem etwas sagen müssen: eine
+     gelöschte Karte (der Worker gibt ihren Text gar nicht erst heraus — er ist
+     dann `null`, nicht leer), ein Kommentar aus nichts als einem Foto, und die
+     Karte, die inzwischen aus dem Thread gefallen ist. Ein leerer Streifen
+     stünde sonst da wie ein Fehler.
+
+     `textContent`, nicht `innerHTML`: hier landet fremder Text, und Links
+     werden im Zitat nicht angeklickt — es ist ein Beleg, kein Beitrag. */
+  function flyZitatZeigen() {
+    const z = $('fly-zitat');
+    if (flyModus.art !== 'antwort') { z.hidden = true; return; }
+    const k = flyFinden(flyModus.id);
+    let satz = k && !k.geloescht ? (k.text || '').trim() : '';
+    let leer = false;
+    if (!satz) {
+      leer = true;
+      satz = !k ? 'Der Kommentar steht nicht mehr im Faden'
+           : k.geloescht ? 'gelöscht'
+           : k.bild ? 'Foto' : 'ohne Text';
+    }
+    z.textContent = satz;
+    z.classList.toggle('leer', leer);
+    z.hidden = false;
+  }
+
   function flyAnZeigen() {
     const an = $('fly-an');
     an.hidden = flyModus.art === 'neu';
@@ -5936,6 +6006,7 @@
         ? 'Antwort an ' + flyModus.wer
         : 'Kommentar ändern';
     }
+    flyZitatZeigen();
     /* Der Knopf trägt ein Zeichen, keinen Text - das Wort steht jetzt in
        `title`/`aria-label`. `textContent` würde das SVG darin löschen. */
     const wort = flyModus.art === 'aendern' ? 'Übernehmen' : 'Abschicken';
@@ -7370,6 +7441,12 @@
        die Lupe auf. */
     druckGefallen = true;
     if (navigator.vibrate) navigator.vibrate(14);
+    /* Der Gürtel zum Hosenträger im Stylesheet: hat die Engine trotz
+       `user-select: none` schon markiert, wird die Markierung hier weggeräumt.
+       CSS wirkt je nach Engine und Version unterschiedlich weit, das hier
+       wirkt überall gleich — und es kostet nichts, wenn nichts markiert ist. */
+    const wahl = window.getSelection && getSelection();
+    if (wahl && !wahl.isCollapsed) wahl.removeAllRanges();
     koAuf = id;
     rePick = null;
     const t = $('fly-thread');

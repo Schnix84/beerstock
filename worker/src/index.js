@@ -1527,7 +1527,42 @@ const baumStmts = (env, ziel) => [
      noch, wenn diese Karte inzwischen weich geloescht ist. Ihr Text nicht, der
      wird hier gar nicht geholt: die Marke nennt einen Namen, sie zitiert
      nicht. */
+  /* Zwei Stufen, weil die 200er-Grenze sonst genau den Fall zerreisst, fuer den
+     die Reihenfolge gemacht ist: wer auf einen alten Faden antwortet, holt ihn
+     nach unten - dessen Wurzel liegt aber laengst jenseits der juengsten 200,
+     und `baumBauen` warf die Antwort dann weg (die Stelle mit `nachId.has`).
+     Die Antwort kam an und war nirgends zu sehen.
+
+     `noetig` legt darum die Wurzeln der geholten Antworten dazu. Genau EINE
+     Runde reicht: `antwort_auf` traegt immer die Wurzel, nie eine Antwort -
+     die Schreibroute normalisiert das beim Anlegen (`wurzel = auf.antwort_auf
+     || auf.id`). Ein nachgeladener Faden zeigt dann seine Wurzel und die
+     Antworten, die es in die 200 geschafft haben; was dazwischen liegt, bleibt
+     weg. Das ist der Preis der Grenze und nicht zu vermeiden, ohne sie ganz
+     aufzugeben.
+
+     Die Grenze bindet seither die ID-LISTE, nicht mehr die Zeilen: heraus
+     kommen die 200 plus die dazu nachgeladenen Wurzeln, im schlimmsten Fall
+     also 400. Mehr geht nicht - nachgeladen wird nur je Antwort eine Wurzel,
+     und `UNION` wirft Doppelte weg. Ein LIMIT auf der aeusseren Abfrage waere
+     hier falsch herum: sortiert wird absteigend, es schnitte genau die alten
+     Wurzeln wieder ab, um die es geht.
+
+     Die Bedingung auf `ziel` steht ABSICHTLICH zweimal da. Innen waehlt sie
+     aus, aussen sperrt sie: `antwort_auf` ist eine rohe Spalte, und zeigte
+     eine Zeile jemals auf einen Kommentar an einem anderen Ziel, haenge dessen
+     Karte ohne die zweite Bedingung in diesem Faden. */
   env.DB.prepare(`
+    WITH neueste AS (
+      SELECT id, antwort_auf FROM kommentare
+      WHERE ziel_art = ? AND ziel_id = ?
+      ORDER BY id DESC LIMIT ?
+    ),
+    noetig AS (
+      SELECT id FROM neueste
+      UNION
+      SELECT antwort_auf FROM neueste WHERE antwort_auf IS NOT NULL
+    )
     SELECT k.id, k.autor_id, k.antwort_auf, k.an_id, k.text, k.erstellt, k.geaendert,
            k.geloescht_am, k.bild_key, k.sterne,
            coalesce(u.name, 'Ehemaliger') AS autor,
@@ -1535,14 +1570,14 @@ const baumStmts = (env, ziel) => [
            v.url AS v_url, v.titel AS v_titel, v.text AS v_text,
            v.host AS v_host, v.bild_key AS v_bild, v.fehler AS v_fehler
     FROM kommentare k
+    JOIN noetig n ON n.id = k.id
     JOIN users u ON u.id = k.autor_id
     LEFT JOIN kommentare ak ON ak.id = k.an_id
     LEFT JOIN users au ON au.id = ak.autor_id
     LEFT JOIN vorschauen v ON v.id = k.vorschau_id
     WHERE k.ziel_art = ? AND k.ziel_id = ?
     ORDER BY k.id DESC
-    LIMIT ?
-  `).bind(ziel.art, ziel.id, KOMMENTARE_ZIEL),
+  `).bind(ziel.art, ziel.id, KOMMENTARE_ZIEL, ziel.art, ziel.id),
   env.DB.prepare(`
     SELECT r.kommentar_id, r.art, r.autor_id, coalesce(u.name, 'Ehemaliger') AS autor
     FROM reaktionen r
@@ -1650,6 +1685,20 @@ function baumBauen(zeilen, reaktionen, ichId, env) {
     for (const k of kinder.get(id) || []) { raus.push(k); auslegen(k.id, raus); }
   };
   for (const w of wurzeln) auslegen(w.id, w.antworten);
+
+  /* Ein Faden steht dort, wo zuletzt etwas in ihm gesagt wurde - nicht dort,
+     wo er angefangen hat. Wer auf eine alte Konversation antwortet, holt sie
+     damit ans Ende, wie man es aus einem Kanal kennt. Ohne das versackt die
+     Antwort weit oben, zwischen Karten von vor drei Wochen, und niemand sieht
+     sie.
+
+     Sortiert wird ueber die groesste ID im Faden, nicht ueber ein Datum: IDs
+     laufen monoton, das spart das Parsen und kann nicht danebengreifen. Und es
+     bumpen NUR Antworten - eine Reaktion oder eine nachtraegliche Aenderung
+     ruecken den Faden nicht, die sind kein neues Wort. `sort` ist stabil, also
+     behalten zwei Faden ohne Antwort ihre Reihenfolge nach Alter. */
+  const zuletzt = w => w.antworten.reduce((m, a) => Math.max(m, a.id), w.id);
+  wurzeln.sort((a, b) => zuletzt(a) - zuletzt(b));
   return wurzeln;
 }
 
