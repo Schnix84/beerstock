@@ -30,6 +30,10 @@
     --kreide-weg:  #93a09a;   /* halb weggewischt: Nebentext            */
     --gelb:        #e8c766;   /* die gelbe Kreide, nur für den Ersten   */
     --rot:         #d9705f;   /* rote Kreide: Querstrich, Warnung       */
+    --gruen:       #7fc08c;   /* grüne Kreide: "kann raus", bisher nur
+                                 am Absendeknopf. NICHT das #2f5d4a der
+                                 Ampel — das ist eine Füllfarbe hinter
+                                 Glas und auf dem Schiefer unsichtbar. */
     --ampel:       var(--kreide-matt);
     --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
 
@@ -983,6 +987,10 @@
   .fly-hinweis {
     font-size: 11px; color: var(--kreide-weg); line-height: 1.5; margin: 12px 0 0;
   }
+  /* Wer bewerten darf, liest hier nichts — dann darf der Absatz auch keine
+     12 px Luft unter den Sternen lassen. `:empty` statt `hidden`, weil die
+     Zeile an einer Stelle gefüllt und an einer anderen geleert wird. */
+  .fly-hinweis:empty { display: none; }
 
   /* „Absagen" wohnt jetzt hier statt in der Terminzeile — seit die Zeile
      selbst ein Knopf ist, kann in ihr keiner mehr stehen. Der Umzug tut ihr
@@ -1057,6 +1065,9 @@
   }
   .ko-antw .ko-bild { height: 130px; }
   .ko-fuss { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 7px; }
+  /* Seit "Antworten" aus dem Fuß weg ist, bleibt er an einer fremden Karte
+     ohne Reaktionen ganz leer — dann soll er auch keine 7 px kosten. */
+  .ko-fuss:empty { display: none; }
   .ko-re {
     border: 1px solid #ffffff22; border-radius: 999px; background: transparent;
     padding: 2px 8px 3px; font-size: 11px; color: var(--kreide-weg); cursor: pointer;
@@ -1097,6 +1108,18 @@
      Kommentar, das andere macht einen neuen. */
   .ko-bar .ko-re-auf { border-right: 1px solid #ffffff1f; border-radius: 999px 0 0 999px; }
 
+  /* Auf dem Handy bleibt von der Leiste nur der Wähler und der Antwortpfeil.
+     Dort gibt es kein Überfahren, die Leiste steht also unter JEDER Karte
+     dauerhaft da — mit fünf ausgefahrenen Zeichen wäre das unter einem
+     Zweizeiler mehr Knopf als Kommentar. Wer reagieren will, tippt den
+     Wähler an und hat dann alle fünfzig statt fünf.
+
+     Nur eine Frage des Stylesheets: `koLeiste` baut die Schnellreaktionen
+     weiter, und ein Fenster, das breiter wird, hat sie sofort wieder. */
+  @media (hover: none), (pointer: coarse) {
+    .ko-bar .ko-pick { display: none; }
+  }
+
   @media (hover: hover) and (pointer: fine) {
     /* Schwebend, und nur für die Karte UNTER dem Zeiger: ohne das `:has` trägt
        auch die Wurzel ihre Leiste, wenn man über einer Antwort steht — der
@@ -1117,8 +1140,12 @@
     /* Platz für die Leiste freihalten. Sie schwebt über der Kopfzeile, und dort
        steht rechts die Marke „an Basti" — ohne diesen Rand läge sie bei einem
        langen Namen darauf, sichtbar erst beim Überfahren. Reserviert wird nur,
-       gerückt wird nichts: die Kopfzeile ist linksbündig. */
-    .ko > .ko-kopf { padding-right: 170px; }
+       gerückt wird nichts: die Kopfzeile ist linksbündig.
+
+       200 statt der früheren 170 px: mit dem fünften Schnellzeichen misst die
+       Leiste 199 px (headless gemessen, auf dem Mac mit Farb-Emoji eher 210).
+       Wächst SCHNELL noch einmal, wächst diese Zahl mit. */
+    .ko > .ko-kopf { padding-right: 200px; }
   }
 
   /* Der Wähler: die ganze Tafel, ein Raster. Am Rechner hängt er unter der
@@ -1171,13 +1198,16 @@
   }
   .ko-feld:focus { outline: none; border-color: var(--gelb); }
   .ko-feld::placeholder { color: #ffffff30; }
-  .ko-ab { margin-top: 8px; }
 
   /* Die Vorschau steht ÜBER dem Feld, weil hochgeladen wird, sobald man das
      Foto ausgewählt hat — nicht erst beim Abschicken. So steht der Fortschritt
      sichtbar da, und das Abschicken bleibt eine schnelle JSON-Anfrage. */
+  /* Kein `margin-bottom`: den Abstand nach unten bringt seit dem Umbau die
+     Schreibzeile selbst mit (`.ko-knoepfe { margin-top: 8px }`). Beides
+     zusammen wären 16 px, und dann stünde das Bild weiter vom Feld weg als
+     vom Rand. */
   .ko-vorschau {
-    position: relative; margin-bottom: 8px; border: 1px solid #ffffff26;
+    position: relative; border: 1px solid #ffffff26;
     border-radius: 3px; overflow: hidden; background: #00000033;
   }
   .ko-vorschau img { display: block; width: 100%; height: 150px; object-fit: cover; }
@@ -1191,24 +1221,31 @@
     position: absolute; inset: auto 0 0 0; padding: 4px 8px 5px;
     background: #05080799; font-size: 10.5px; color: var(--kreide-weg);
   }
-  /* Abschicken und die Tür zu den Anhängen teilen sich die Zeile im
-     Verhältnis 4:1 - das eine ist die Tat, das andere nur ein Weg dorthin.
-     Alle Regeln hier mit zwei Klassen, weil `.knopf` weiter unten steht und
-     bei gleichem Gewicht sonst gewinnt.
+  /* Schreibfeld, "+" und Absenden in EINER Zeile. Die beiden Knöpfe nehmen
+     ihr Quadrat und keinen Punkt mehr, alles Übrige gehört dem Feld - eine
+     Zeile Text ist hier wertvoller als ein breiter Knopf.
+     `align-items: flex-end`, damit die Knöpfe unten stehen bleiben, wenn das
+     Feld gezogen wird (`resize: vertical`) oder mit dem Text wächst.
 
-     Foto, GIF und Meme standen früher zu dritt in dieser Zeile und drängten
-     "Abschicken" auf einem schmalen Telefon in eine eigene Reihe. Jetzt
-     liegen sie hinter dem "+" und klappen erst auf Tippen darüber auf -
-     gebraucht wird von ihnen ohnehin selten einer. */
-  .ko-knoepfe { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
-  .ko-knoepfe .ko-ab { flex: 4 1 0; margin-top: 0; }
-  /* Der Anker für das Menü: `absolute` darin rechnet gegen diese Kante. */
-  .ko-anhang { position: relative; flex: 1 1 0; }
+     Alle Regeln hier mit zwei Klassen, weil `.knopf` und `.ko-feld` weiter
+     oben bzw. unten stehen und bei gleichem Gewicht sonst gewinnen. */
+  .ko-knoepfe { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+  .ko-knoepfe .ko-feld { flex: 1 1 auto; width: auto; min-width: 0; }
+  .ko-knoepfe .ko-ab,
   .ko-anhang .ko-plus {
-    height: 100%; padding: 11px 0;
+    width: 46px; height: 46px; flex: none; padding: 0;
     display: flex; align-items: center; justify-content: center;
   }
-  .ko-anhang .ko-plus svg { width: 20px; height: 20px; transition: transform .18s; }
+  .ko-knoepfe .ko-ab svg, .ko-anhang .ko-plus svg { width: 21px; height: 21px; }
+  /* Die einzige Farbaussage am Schreibfeld: grau heißt "da ist nichts",
+     grün heißt "das kann raus". Kein `disabled` - siehe die Notiz am Knopf. */
+  .ko-knoepfe .ko-ab { color: var(--kreide-weg); }
+  .ko-knoepfe .ko-ab.bereit { color: var(--gruen); border-color: #7fc08c88; background: #7fc08c1a; }
+  .ko-knoepfe .ko-ab.bereit:hover { border-color: var(--gruen); background: #7fc08c2e; }
+
+  /* Der Anker für das Menü: `absolute` darin rechnet gegen diese Kante. */
+  .ko-anhang { position: relative; flex: none; }
+  .ko-anhang .ko-plus svg { transition: transform .18s; }
   /* Aus dem + wird beim Aufklappen ein × - derselbe Knopf schließt wieder. */
   .ko-anhang .ko-plus[aria-expanded="true"] svg { transform: rotate(45deg); }
 
@@ -1217,7 +1254,7 @@
 
      Nebeneinander, nicht als Turm: übereinander stand es 158 px hoch und
      stieß bei einem Abend ohne Beiträge oben an den Rand von `.fly-blatt`
-     (das scrollt, also wird dort abgeschnitten). In der Reihe sind es 54 px,
+     (das scrollt, also wird dort abgeschnitten). In der Reihe sind es 63 px,
      und die hat das Blatt über dem Schreibfeld immer. */
   .ko-anhang-menu {
     position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 2;
@@ -1883,10 +1920,9 @@
     <div class="fly-schirm" id="fly-schirm"></div>
     <div class="fly-blatt" role="dialog" aria-labelledby="fly-titel" aria-modal="true">
       <div class="fly-kopf">
-        <div>
-          <div class="fly-titel kr" id="fly-titel"></div>
-          <div class="fly-unter" id="fly-unter"></div>
-        </div>
+        <!-- Ohne Unterzeile: "der Abend" bzw. "als Gastgeber" sagte dem, der
+             die Zeile angetippt hat, nichts, was er nicht schon wusste. -->
+        <div class="fly-titel kr" id="fly-titel"></div>
         <button class="fly-zu" id="fly-zu" type="button" aria-label="Schließen">×</button>
       </div>
 
@@ -1920,10 +1956,14 @@
                   aria-label="Foto verwerfen">×</button>
           <div class="ko-vorschau-sagt" id="fly-bild-sagt" hidden></div>
         </div>
-        <textarea class="ko-feld" id="fly-feld" maxlength="400"
-                  placeholder="Etwas dazu sagen …"></textarea>
+        <!-- Feld, "+" und Absenden in EINER Zeile: die beiden Knöpfe nehmen
+             ihr Quadrat, der ganze Rest der Breite gehört dem Schreibfeld. -->
         <div class="ko-knoepfe">
-          <button class="knopf ko-ab" id="fly-ab" type="button">Abschicken</button>
+          <!-- Geschütztes Leerzeichen vor der Auslassung: das Feld ist seit
+               dem Umbau nur noch 180 px breit, der Platzhalter bricht dort
+               um, und ohne das stünde das "…" allein auf der zweiten Zeile. -->
+          <textarea class="ko-feld" id="fly-feld" maxlength="400"
+                    placeholder="Etwas dazu sagen&nbsp;…"></textarea>
           <div class="ko-anhang" id="fly-anhang-tuer">
             <!-- Die drei Wege zu einem Bild stehen über dem "+", nicht in der
                  Zeile. Sie tragen nur ihr Zeichen; den Namen sagen `title`
@@ -1979,6 +2019,18 @@
               </svg>
             </button>
           </div>
+          <!-- Der Papierflieger trägt keinen Text mehr, dafür die Auskunft in
+               der Farbe: grau, solange nichts abzuschicken ist, grün, sobald
+               es etwas gibt. Anklickbar bleibt er auch grau - die Meldung
+               "Ohne Text oder Foto kein Kommentar" ist beim Zeichen ohne
+               Wort die einzige Stelle, an der das noch jemand erklärt. -->
+          <button class="knopf ko-ab" id="fly-ab" type="button"
+                  title="Abschicken" aria-label="Abschicken">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20.5 3.5L10.2 13.8M20.5 3.5l-6.6 17.2-3.7-7.4-7.4-3.7z"/>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -2839,19 +2891,9 @@
           fuss.appendChild(b);
         });
 
-        /* Antworten steht unter JEDER Karte, auch unter einer Antwort — vorher
-           war unter einer Antwort Schluss, und wer auf sie eingehen wollte,
-           musste die Wurzel ansprechen und den Namen selbst dazuschreiben.
-
-           Am Baum ändert das nichts: der Worker hängt eine Antwort auf eine
-           Antwort an DEREN Wurzel (`wurzel = auf.antwort_auf || auf.id`,
-           worker/src/index.js), es bleibt bei einer Einrückungsebene. Was er
-           daraus zieht, ist die Meldung — die geht an den, auf dessen Karte
-           geantwortet wurde, nicht an den Wurzelautor. Der Knopf gibt also
-           genau das, was der Worker ohnehin schon konnte. */
-        const a = el('button', 'ko-tat', 'Antworten');
-        a.type = 'button'; a.dataset.antwort = k.id; a.dataset.wer = k.autor;
-        fuss.appendChild(a);
+        /* Kein Wort "Antworten" mehr im Fuß: der Pfeil in der Leiste tut
+           dasselbe, hängt an derselben Marke (`data-antwort`) und steht an
+           jeder Karte — zwei Knöpfe für einen Weg waren einer zu viel. */
         if (k.meins) {
           const ae = el('button', 'ko-tat', 'ändern');
           ae.type = 'button'; ae.dataset.aendern = k.id;
@@ -3156,10 +3198,11 @@
      dagegen, und was hier steht, aber dort fehlt, ist ein toter Knopf mit
      Fehlerzeile. Beim Erweitern also beide.
 
-     Die Reihenfolge ist die des Wählers: die vier schnellen zuerst, dann
+     Die Reihenfolge ist die des Wählers: die fünf schnellen zuerst, dann
      Gesichter, Gesten, Zeichen, Getränke und Essen, zuletzt der Rest. */
   const EMOJI_WORT = new Map([
     ['❤️', 'Herz'], ['👍', 'Daumen hoch'], ['🍺', 'Bier'], ['🍻', 'Prost'],
+    ['😆', 'Lacht'],
     ['👎', 'Daumen runter'], ['😂', 'Tränen gelacht'], ['🤣', 'Wälzt sich'],
     ['😮', 'Überrascht'], ['😢', 'Traurig'], ['😡', 'Wütend'], ['🥳', 'Feiert'],
     ['😍', 'Verliebt'], ['😎', 'Cool'], ['🤔', 'Nachdenklich'],
@@ -3175,10 +3218,13 @@
     ['⚽', 'Fußball'], ['🎵', 'Musik'], ['📸', 'Foto'], ['🚲', 'Rad'],
   ]);
 
-  /* Die vier, die ohne Umweg dastehen — wie die Schnellreaktionen bei Teams.
+  /* Die fünf, die ohne Umweg dastehen — wie die Schnellreaktionen bei Teams.
      Mehr wären eine Tastatur an jeder Karte, alles Weitere liegt einen Griff
-     entfernt hinter dem Wähler. */
-  const SCHNELL = ['❤️', '👍', '🍺', '🍻'];
+     entfernt hinter dem Wähler.
+
+     Nur am Rechner: auf dem Handy blendet das Stylesheet sie aus, dort stehen
+     unter der Karte allein der Wähler und der Antwortpfeil. */
+  const SCHNELL = ['❤️', '👍', '🍺', '🍻', '😆'];
 
   // Für einen Chip, dessen Zeichen aus einer älteren Runde stammt: lieber das
   // Emoji selbst vorlesen als gar nichts.
@@ -4337,7 +4383,6 @@
     rePick = null; reWer = null;   // aufgeklappt bleibt nichts über ein Ziel hinweg
     letzterThread = '';       // anderes Ziel, anderer Vergleichsstand
     $('fly-titel').textContent = titel;
-    $('fly-unter').textContent = ziel.startsWith('user') ? 'als Gastgeber' : 'der Abend';
     $('fly-gesamt').textContent = '';
     $('fly-sterne').textContent = '';
     $('fly-hinweis').textContent = '';
@@ -4410,6 +4455,17 @@
     $('fly-plus').setAttribute('aria-expanded', String(auf));
   }
 
+  /* Die Farbe des Absendeknopfs ist seine ganze Beschriftung, seit er nur
+     noch ein Zeichen trägt. Die Bedingung ist WÖRTLICH die von
+     `flyAbschicken` — beim Ändern zählt allein der Text, weil die
+     Änderungsroute das Bild nicht anfasst. Läuft die eine Stelle der anderen
+     davon, verspricht die Farbe etwas, das der Klick nicht hält. */
+  function flyAbPruefen() {
+    const text = $('fly-feld').value.trim();
+    const bild = flyModus.art === 'aendern' ? null : flyBild;
+    $('fly-ab').classList.toggle('bereit', !!(text || bild));
+  }
+
   /* --- Das Foto am Schreibfeld --------------------------------------------
      Hochgeladen wird SOFORT bei der Auswahl, nicht erst beim Abschicken: so
      steht der Fortschritt sichtbar da, und `flyAbschicken` bleibt eine
@@ -4426,6 +4482,7 @@
     $('fly-bild-sagt').hidden = true;
     // Ohne das löst dieselbe Datei beim nächsten Mal kein `change` mehr aus.
     $('fly-datei').value = '';
+    flyAbPruefen();
   }
 
   async function flyBildWaehlen(datei) {
@@ -4471,6 +4528,7 @@
       const d = await rufRoh('/api/bild', blob);
       if (lauf !== flyBildLauf) return;
       flyBild = { key: d.key };
+      flyAbPruefen();
       v.classList.remove('laedt');
       sagt.hidden = true;
     } catch (e) {
@@ -4494,6 +4552,7 @@
     v.classList.remove('laedt');
     $('fly-bild-sagt').hidden = true;
     $('fly-ab').disabled = false;
+    flyAbPruefen();
   }
 
   /* --- Das GIF-Blatt --------------------------------------------------------
@@ -4884,10 +4943,12 @@
       ziel.appendChild(reihe);
     });
 
-    /* Warum nicht, sagt der Worker — dort steht die Regel. Der Rückfall gilt
-       einer älteren Fassung der Route, die `darf_nicht` noch nicht kennt. */
-    $('fly-hinweis').textContent = d.darf
-      ? 'Ein Tap setzt, derselbe Stern noch einmal nimmt zurück. Keine Kategorie ist Pflicht.'
+    /* Die Zeile trägt nur noch, WARUM jemand nicht darf — die Bedienanleitung
+       ("ein Tap setzt, derselbe Stern nimmt zurück") stand über jeder Karte,
+       obwohl sie nach dem ersten Mal niemand mehr liest. Wer darf, sieht hier
+       nichts. Was hier steht, sagt der Worker; der Rückfall gilt einer älteren
+       Fassung der Route, die `darf_nicht` noch nicht kennt. */
+    $('fly-hinweis').textContent = d.darf ? ''
       : (d.darf_nicht
          || (merke() && meinName ? 'Sich selbst bewertet man nicht.' : 'Zum Bewerten anmelden.'));
 
@@ -4920,9 +4981,17 @@
         ? 'Antwort an ' + flyModus.wer
         : 'Kommentar ändern';
     }
-    $('fly-ab').textContent = flyModus.art === 'aendern' ? 'Übernehmen' : 'Abschicken';
+    /* Der Knopf trägt ein Zeichen, keinen Text - das Wort steht jetzt in
+       `title`/`aria-label`. `textContent` würde das SVG darin löschen. */
+    const wort = flyModus.art === 'aendern' ? 'Übernehmen' : 'Abschicken';
+    $('fly-ab').title = wort;
+    $('fly-ab').setAttribute('aria-label', wort);
+    /* `\u00a0` ist ein geschütztes Leerzeichen: das Feld ist seit dem Umbau
+       nur noch 180 px breit, der Platzhalter bricht dort um, und ohne das
+       stünde die Auslassung allein auf der zweiten Zeile. Als Escape
+       geschrieben — im Quelltext sähe es sonst aus wie ein gewöhnliches. */
     $('fly-feld').placeholder = flyModus.art === 'antwort'
-      ? 'Antwort an ' + flyModus.wer + ' …' : 'Etwas dazu sagen …';
+      ? 'Antwort an ' + flyModus.wer + '\u00a0…' : 'Etwas dazu sagen\u00a0…';
     /* Beim Ändern verschwindet die ganze Anhang-Tür: die Änderungsroute fasst
        das Bild nicht an, und `flyAbschicken` wirft dort jede Auswahl weg. Als
        nur der Fotoknopf fehlte, standen GIF und Meme weiter offen — wer eines
@@ -4932,6 +5001,7 @@
     $('fly-anhang-tuer').hidden = flyModus.art === 'aendern';
     // Ein Moduswechsel räumt das Menü weg: es gehörte zur vorigen Absicht.
     anhangZu();
+    flyAbPruefen();
   }
 
   function flyModusZurueck() {
@@ -5749,10 +5819,11 @@
       return;
     }
 
-    /* Antworten: der Pfeil in der Leiste und das Wort im Fuß tun dasselbe und
-       hängen deshalb an derselben Marke. Das Feld bleibt LEER — wer antwortet,
-       schreibt seinen eigenen Satz; wem die Antwort gilt, steht danach am Kopf
-       der Karte und muss nicht in ihrem Text stehen. */
+    /* Antworten: der Pfeil in der Leiste ist seit dem Wegfall des Wortes im
+       Fuß der einzige Weg hierher, die Marke `data-antwort` bleibt dieselbe.
+       Das Feld bleibt LEER — wer antwortet, schreibt seinen eigenen Satz; wem
+       die Antwort gilt, steht danach am Kopf der Karte und muss nicht in
+       ihrem Text stehen. */
     const ant = ev.target.closest('[data-antwort]');
     if (ant) {
       flyModus = { art: 'antwort', id: Number(ant.dataset.antwort), wer: ant.dataset.wer };
@@ -5858,6 +5929,9 @@
 
   /* Strg/Cmd + Enter schickt ab. Enter allein bleibt der Zeilenumbruch — in
      einem mehrzeiligen Feld erwartet das jeder so. */
+  // Bei jedem Tastendruck: aus dem ersten Zeichen wird der Knopf grün, mit
+  // dem letzten gelöschten wieder grau.
+  $('fly-feld').addEventListener('input', flyAbPruefen);
   $('fly-feld').addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); flyAbschicken(); }
   });

@@ -165,7 +165,7 @@ const KOMMENTARE_ZIEL  = 200;  // je Ziel; aeltere fallen weg, sonst waechst es 
    dieselbe Liste (EMOJI_WORT). Weichen die beiden voneinander ab, ist das ein
    400er auf einen Knopf, den die Seite anbietet - beim Erweitern also BEIDE. */
 const REAKTIONEN = new Set([
-  '❤️', '👍', '🍺', '🍻',
+  '❤️', '👍', '🍺', '🍻', '😆',
   '👎', '😂', '🤣', '😮', '😢', '😡', '🥳', '😍', '😎', '🤔',
   '🙈', '🫡', '🤷', '😴', '🥴', '🤢',
   '🎉', '🔥', '👏', '🙏', '💪', '🤝', '👀', '💯', '⭐', '⚡',
