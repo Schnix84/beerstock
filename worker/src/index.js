@@ -1062,12 +1062,41 @@ function baumBauen(zeilen, reaktionen, ichId, env) {
     nachId.set(z.id, k);
     wurzeln.push(k);
   }
+  /* Die Antworten stehen FLACH unter ihrer Wurzel - eine Einrueckungsebene,
+     dabei bleibt es. Ihre Reihenfolge ist aber nicht mehr die reine Uhrzeit,
+     sondern der Faden: eine Antwort steht direkt hinter der Karte, der sie
+     gilt, und hinter deren eigenen Antworten. Sonst rutscht eine Antwort auf
+     eine Antwort ans Ende der Liste, beliebig weit weg von dem, worauf sie
+     sich bezieht - dazwischen dann Karten, die damit nichts zu tun haben.
+
+     Gebaut wird also ein Baum ueber `an_id` und danach der Reihe nach
+     ausgelegt (Tiefe zuerst). Die Marke "an Basti" auf der Karte und diese
+     Reihenfolge sind dasselbe Anliegen von zwei Seiten: das eine sagt WEM,
+     das andere stellt sie DAZU.
+
+     Zwei Faelle fallen auf die Wurzel zurueck: Antworten von vor Migration
+     0020 (kein `an_id`) und solche, deren angesprochene Karte jenseits der
+     200er-Grenze liegt. Beide sind damit gewoehnliche Kinder der Wurzel und
+     stehen chronologisch - das ist genau der Stand von vorher. */
+  const kinder = new Map();
   for (const z of nachAlter) {
     if (!z.antwort_auf) continue;
-    const w = nachId.get(z.antwort_auf);
     // Haengt die Wurzel jenseits der 200er-Grenze, faellt die Antwort mit weg.
-    if (w) w.antworten.push(karte(z));
+    if (!nachId.has(z.antwort_auf)) continue;
+    const k = karte(z);
+    /* In `nachId` MIT: eine spaetere Antwort darf auf diese hier zeigen. Weil
+       `nachAlter` chronologisch laeuft und `an_id` immer auf etwas Aelteres
+       zeigt, ist die angesprochene Karte hier schon eingetragen - und ein
+       Kreis kann so gar nicht erst entstehen. */
+    nachId.set(z.id, k);
+    const vater = (z.an_id && nachId.has(z.an_id)) ? z.an_id : z.antwort_auf;
+    if (!kinder.has(vater)) kinder.set(vater, []);
+    kinder.get(vater).push(k);
   }
+  const auslegen = (id, raus) => {
+    for (const k of kinder.get(id) || []) { raus.push(k); auslegen(k.id, raus); }
+  };
+  for (const w of wurzeln) auslegen(w.id, w.antworten);
   return wurzeln;
 }
 
