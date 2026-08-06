@@ -1602,10 +1602,15 @@
      Eigenschaft, und der Griff säße jetzt ohnehin mitten im Rahmen der Zeile.
      Bei `max-height` ist Schluss - das Blatt darüber scrollt (`.fly-blatt`,
      88 vh), und ein Feld, das den Faden aus dem Bild schiebt, hilft niemandem.
-     Ab dort scrollt das Feld selbst. */
+     Ab dort scrollt das Feld selbst.
+
+     `min-height` ist genau die Höhe der beiden Knöpfe daneben (44 px), nicht
+     mehr: einzeilig steht das Feld damit auf derselben Kante wie sie, statt
+     zwei Pixel darüber hinauszuragen. Das Polster ist oben und unten gleich,
+     sonst klebte die eine Zeile in einem 44 px hohen Kasten am oberen Rand. */
   .ko-knoepfe .ko-feld {
     flex: 1 1 auto; width: auto; min-width: 0;
-    border-radius: 10px; padding: 8px 8px 10px; min-height: 46px;
+    border-radius: 10px; padding: 10px 8px; min-height: 44px;
     resize: none; max-height: 172px; overflow-y: auto;
   }
   .ko-knoepfe .ko-ab,
@@ -1619,21 +1624,25 @@
 
   /* Die einzige Farbaussage am Schreibfeld: grau heißt "da ist nichts",
      grün heißt "das kann raus". Kein `disabled` - siehe die Notiz am Knopf.
-     Gefüllt statt umrandet: grüne Kreide auf Schiefer ist ein Strich, eine
-     grüne Fläche mit dunklem Zeichen ist ein Knopf, den man drückt. */
+     Grün wird der FLIEGER, nicht die Fläche unter ihm: die gefüllte Kachel
+     war der einzige satte Farbblock im ganzen Flyout und zog das Auge vom
+     Text weg, den man gerade schreibt. Das Zeichen allein sagt dasselbe -
+     die beiden Knöpfe der Zeile bleiben ein Paar, nur einer von beiden
+     leuchtet. */
   .ko-knoepfe .ko-ab { color: var(--kreide-weg); }
   /* Auch grau muss er nach Knopf aussehen: sein Klick ist die EINZIGE Stelle,
      an der "Ohne Text oder Foto kein Kommentar" noch gesagt wird. Wer ihn für
      tot hält, drückt ihn nicht und erfährt es nie. Deshalb derselbe Rand beim
      Überfahren wie am "+". */
   .ko-knoepfe .ko-ab:hover { background: #ffffff14; border-color: #ffffff33; }
-  .ko-knoepfe .ko-ab.bereit {
-    color: #10201a; background: var(--gruen); border-color: var(--gruen);
-    box-shadow: 0 2px 10px -2px #7fc08c80;
-  }
-  .ko-knoepfe .ko-ab.bereit:hover { background: #93cf9e; border-color: #93cf9e; }
-  /* Dunkel auf hell trägt dünner als hell auf dunkel - nachgemessen. */
-  .ko-knoepfe .ko-ab.bereit svg { stroke-width: 1.9; }
+  /* Und zwar für beide Zustände gleich - kein eigenes `:hover` für `.bereit`
+     mehr: was den Finger anzieht, ist der Knopf, was er sagt, ist die Farbe
+     seines Zeichens. Zwei verschiedene Hebungen wären eine Aussage zu viel. */
+  .ko-knoepfe .ko-ab.bereit { color: var(--gruen); }
+  /* Ein Strich mehr Gewicht, damit "kann raus" nicht ALLEIN an der Farbe
+     hängt: wer Grün und Grau schlecht auseinanderhält, sieht wenigstens den
+     kräftigeren Flieger. */
+  .ko-knoepfe .ko-ab.bereit svg { stroke-width: 2; }
 
   /* Der Anker für das Menü: `absolute` darin rechnet gegen diese Kante. */
   .ko-anhang { position: relative; flex: none; }
@@ -2528,11 +2537,19 @@
         <!-- Feld, "+" und Absenden in EINER Zeile: die beiden Knöpfe nehmen
              ihr Quadrat, der ganze Rest der Breite gehört dem Schreibfeld. -->
         <div class="ko-knoepfe">
-          <!-- Geschütztes Leerzeichen vor der Auslassung: das Feld ist seit
-               dem Umbau nur noch 180 px breit, der Platzhalter bricht dort
-               um, und ohne das stünde das "…" allein auf der zweiten Zeile. -->
-          <textarea class="ko-feld" id="fly-feld" maxlength="400"
-                    placeholder="Etwas dazu sagen&nbsp;…"></textarea>
+          <!-- `rows="1"` ist nicht kosmetisch: ohne die Angabe steht ein
+               `textarea` auf ZWEI Zeilen, und `flyFeldWachsen()` läuft in
+               `flyModusZurueck()` noch, BEVOR `$('flyout').hidden` fällt — es
+               misst am zugeklappten Blatt 0, lässt die Höhe auf `auto` und
+               damit genau diese Vorgabe stehen. Das Feld ging also zweizeilig
+               auf und sprang beim ersten Anschlag zusammen. Eine Zeile reicht:
+               es wächst ohnehin mit dem Text mit. -->
+          <!-- Der Platzhalter steht hier nur für den Fall, dass jemand die
+               Seite ohne Skript sieht; im Betrieb setzt ihn `flyAnZeigen()`
+               bei jedem Moduswechsel neu. Warum ohne geschütztes Leerzeichen
+               und ohne Namen: die Begründung samt Zahlen steht dort. -->
+          <textarea class="ko-feld" id="fly-feld" maxlength="400" rows="1"
+                    placeholder="Etwas dazu sagen …"></textarea>
           <div class="ko-anhang" id="fly-anhang-tuer">
             <!-- Die drei Wege zu einem Bild stehen über dem "+", nicht in der
                  Zeile. Sie tragen nur ihr Zeichen; den Namen sagen `title`
@@ -6446,12 +6463,24 @@
     const wort = flyModus.art === 'aendern' ? 'Übernehmen' : 'Abschicken';
     $('fly-ab').title = wort;
     $('fly-ab').setAttribute('aria-label', wort);
-    /* `\u00a0` ist ein geschütztes Leerzeichen: das Feld ist seit dem Umbau
-       nur noch 180 px breit, der Platzhalter bricht dort um, und ohne das
-       stünde die Auslassung allein auf der zweiten Zeile. Als Escape
-       geschrieben — im Quelltext sähe es sonst aus wie ein gewöhnliches. */
+    /* Der Platzhalter der Antwort trägt den Namen NICHT mehr, seit das Feld
+       einreihig aufgeht: ein umbrechender Platzhalter wächst nicht mit, er wird
+       abgeschnitten — Platzhaltertext zählt nicht in `scrollHeight`, also sieht
+       `flyFeldWachsen()` ihn nie. Nachgemessen in Chalkduster 16 px gegen die
+       echte Feldbreite: "Antwort an Basti…" sind 177 px und passen auf einem
+       390er Telefon (233 px) gerade noch, "Antwort an Christopher…" sind 237 px
+       und passen nicht — ein Name entschied über abgeschnitten oder nicht.
+       Verloren geht nichts: WEM geantwortet wird, steht direkt darüber in
+       `#fly-an`, samt Knopf zum Abbrechen.
+       Das geschützte Leerzeichen vor der Auslassung ist aus demselben Grund
+       WEG. Es hielt "sagen…" zusammen, damit die Auslassung nicht allein auf
+       der zweiten Zeile steht — solange die zweite Zeile noch zu sehen war.
+       Jetzt ist sie abgeschnitten, und damit dreht sich der Nutzen um: bricht
+       "Etwas dazu sagen …" (187 px, passt ab 345 px Fensterbreite) doch
+       einmal um, will man "Etwas dazu sagen" sehen und nur das "…" verlieren,
+       nicht "Etwas dazu" sehen und "sagen…" verlieren. */
     $('fly-feld').placeholder = flyModus.art === 'antwort'
-      ? 'Antwort an ' + flyModus.wer + '\u00a0…' : 'Etwas dazu sagen\u00a0…';
+      ? 'Antworten …' : 'Etwas dazu sagen …';
     /* Beim Ändern verschwindet die ganze Anhang-Tür: die Änderungsroute fasst
        das Bild nicht an, und `flyAbschicken` wirft dort jede Auswahl weg. Als
        nur der Fotoknopf fehlte, standen GIF und Meme weiter offen — wer eines
