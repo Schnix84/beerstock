@@ -1191,12 +1191,15 @@
     display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px;
     font-size: 11px; color: var(--gelb);
   }
+  /* Schrift, Zeilenlauf und Farbe des Schreibfelds. Rahmen, Höhe und Polster
+     stehen NICHT hier, sondern bei `.ko-knoepfe .ko-feld`: seit dem Umbau
+     trägt die Zeile den Rahmen, und das Feld darin ist rahmenlos. */
   .ko-feld {
-    width: 100%; border: 1.5px solid #ffffff30; border-radius: 3px; padding: 9px 10px;
-    background: #00000026; color: var(--kreide); font-family: var(--hand); font-size: 15px;
-    line-height: 1.45; resize: vertical; min-height: 62px;
+    width: 100%; border: none; padding: 9px 10px;
+    background: transparent; color: var(--kreide); font-family: var(--hand); font-size: 15px;
+    line-height: 1.45;
   }
-  .ko-feld:focus { outline: none; border-color: var(--gelb); }
+  .ko-feld:focus { outline: none; }
   .ko-feld::placeholder { color: #ffffff30; }
 
   /* Die Vorschau steht ÜBER dem Feld, weil hochgeladen wird, sobald man das
@@ -1206,9 +1209,12 @@
      Schreibzeile selbst mit (`.ko-knoepfe { margin-top: 8px }`). Beides
      zusammen wären 16 px, und dann stünde das Bild weiter vom Feld weg als
      vom Rand. */
+  /* Dieselbe Ecke wie die Schreibzeile darunter (16 px außen, hier 14 bei
+     dünnerem Rand): zwischen beiden liegt kein Abstand, und eine 3-px-Ecke
+     direkt über einer 16-px-Ecke ist das Erste, was das Auge findet. */
   .ko-vorschau {
     position: relative; border: 1px solid #ffffff26;
-    border-radius: 3px; overflow: hidden; background: #00000033;
+    border-radius: 14px; overflow: hidden; background: #00000033;
   }
   .ko-vorschau img { display: block; width: 100%; height: 150px; object-fit: cover; }
   .ko-vorschau.laedt img { opacity: .35; }
@@ -1221,32 +1227,81 @@
     position: absolute; inset: auto 0 0 0; padding: 4px 8px 5px;
     background: #05080799; font-size: 10.5px; color: var(--kreide-weg);
   }
-  /* Schreibfeld, "+" und Absenden in EINER Zeile. Die beiden Knöpfe nehmen
-     ihr Quadrat und keinen Punkt mehr, alles Übrige gehört dem Feld - eine
-     Zeile Text ist hier wertvoller als ein breiter Knopf.
+  /* Schreibfeld, "+" und Absenden sind EIN Bauteil, nicht drei nebeneinander.
+     Den Rahmen trägt die Zeile; das Feld und die beiden Knöpfe wohnen darin
+     und haben keinen eigenen mehr. Vorher standen hier drei Kästen mit drei
+     Rändern in einer Reihe - man sah die Fuge, nicht die Zeile.
+
+     Deshalb hängt der Fokus auch an der Zeile (`:focus-within`) und nicht am
+     Feld: wer schreibt, hat das ganze Ding in der Hand.
+
      `align-items: flex-end`, damit die Knöpfe unten stehen bleiben, wenn das
-     Feld gezogen wird (`resize: vertical`) oder mit dem Text wächst.
+     Feld mit dem Text wächst (`flyFeldWachsen`).
 
      Alle Regeln hier mit zwei Klassen, weil `.knopf` und `.ko-feld` weiter
      oben bzw. unten stehen und bei gleichem Gewicht sonst gewinnen. */
-  .ko-knoepfe { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
-  .ko-knoepfe .ko-feld { flex: 1 1 auto; width: auto; min-width: 0; }
+  .ko-knoepfe {
+    display: flex; gap: 4px; align-items: flex-end; margin-top: 8px;
+    padding: 5px; border: 1.5px solid #ffffff2b; border-radius: 16px;
+    background: #00000033;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+  }
+  /* `:has(.ko-feld:focus)` und nicht `:focus-within`: sonst leuchtet die Zeile
+     auch auf, wenn jemand nur das "+" antippt - das sähe aus wie "du
+     schreibst", während sich in Wahrheit ein Menü öffnet. Der Knopf sagt
+     seinen eigenen Zustand ohnehin (`[aria-expanded="true"]`). */
+  .ko-knoepfe:has(.ko-feld:focus) {
+    border-color: #e8c766aa; background: #00000042;
+    box-shadow: 0 0 0 3px #e8c76614;
+  }
+  /* Das Feld wächst mit dem Text, statt bei der zweiten Zeile eine Bildlaufleiste
+     aufzuschieben - `flyFeldWachsen()` setzt die Höhe nach jedem Anschlag.
+     Deshalb `resize: none`: Ziehen und Mitwachsen streiten sich um dieselbe
+     Eigenschaft, und der Griff säße jetzt ohnehin mitten im Rahmen der Zeile.
+     Bei `max-height` ist Schluss - das Blatt darüber scrollt (`.fly-blatt`,
+     88 vh), und ein Feld, das den Faden aus dem Bild schiebt, hilft niemandem.
+     Ab dort scrollt das Feld selbst. */
+  .ko-knoepfe .ko-feld {
+    flex: 1 1 auto; width: auto; min-width: 0;
+    border-radius: 10px; padding: 8px 8px 10px; min-height: 46px;
+    resize: none; max-height: 172px; overflow-y: auto;
+  }
   .ko-knoepfe .ko-ab,
   .ko-anhang .ko-plus {
-    width: 46px; height: 46px; flex: none; padding: 0;
+    width: 44px; height: 44px; flex: none; padding: 0;
     display: flex; align-items: center; justify-content: center;
+    border: 1px solid transparent; border-radius: 12px; background: transparent;
+    transition: background .2s, border-color .2s, color .2s, transform .06s;
   }
   .ko-knoepfe .ko-ab svg, .ko-anhang .ko-plus svg { width: 21px; height: 21px; }
+
   /* Die einzige Farbaussage am Schreibfeld: grau heißt "da ist nichts",
-     grün heißt "das kann raus". Kein `disabled` - siehe die Notiz am Knopf. */
+     grün heißt "das kann raus". Kein `disabled` - siehe die Notiz am Knopf.
+     Gefüllt statt umrandet: grüne Kreide auf Schiefer ist ein Strich, eine
+     grüne Fläche mit dunklem Zeichen ist ein Knopf, den man drückt. */
   .ko-knoepfe .ko-ab { color: var(--kreide-weg); }
-  .ko-knoepfe .ko-ab.bereit { color: var(--gruen); border-color: #7fc08c88; background: #7fc08c1a; }
-  .ko-knoepfe .ko-ab.bereit:hover { border-color: var(--gruen); background: #7fc08c2e; }
+  /* Auch grau muss er nach Knopf aussehen: sein Klick ist die EINZIGE Stelle,
+     an der "Ohne Text oder Foto kein Kommentar" noch gesagt wird. Wer ihn für
+     tot hält, drückt ihn nicht und erfährt es nie. Deshalb derselbe Rand beim
+     Überfahren wie am "+". */
+  .ko-knoepfe .ko-ab:hover { background: #ffffff14; border-color: #ffffff33; }
+  .ko-knoepfe .ko-ab.bereit {
+    color: #10201a; background: var(--gruen); border-color: var(--gruen);
+    box-shadow: 0 2px 10px -2px #7fc08c80;
+  }
+  .ko-knoepfe .ko-ab.bereit:hover { background: #93cf9e; border-color: #93cf9e; }
+  /* Dunkel auf hell trägt dünner als hell auf dunkel - nachgemessen. */
+  .ko-knoepfe .ko-ab.bereit svg { stroke-width: 1.9; }
 
   /* Der Anker für das Menü: `absolute` darin rechnet gegen diese Kante. */
   .ko-anhang { position: relative; flex: none; }
+  .ko-anhang .ko-plus:hover { background: #ffffff14; border-color: #ffffff33; }
   .ko-anhang .ko-plus svg { transition: transform .18s; }
-  /* Aus dem + wird beim Aufklappen ein × - derselbe Knopf schließt wieder. */
+  /* Aus dem + wird beim Aufklappen ein × - derselbe Knopf schließt wieder.
+     Offen trägt er die Farbe des Menüs, das er aufgemacht hat. */
+  .ko-anhang .ko-plus[aria-expanded="true"] {
+    color: var(--gelb); background: #e8c76618; border-color: #e8c76666;
+  }
   .ko-anhang .ko-plus[aria-expanded="true"] svg { transform: rotate(45deg); }
 
   /* Das Menü klappt nach OBEN auf: unter dem Knopf endet auf dem Telefon das
@@ -1262,7 +1317,7 @@
     /* Ein zusammenhängendes Feld statt drei schwebender Plättchen: das Menü
        liegt über dem Schreibfeld, und durch die Lücken dazwischen blitzte der
        Text darunter hervor. Deckend, mit einem Rahmen um alle drei. */
-    border: 1.5px solid #ffffff55; border-radius: 4px; background: #151b1a;
+    border: 1.5px solid #ffffff55; border-radius: 14px; background: #151b1a;
     box-shadow: 0 6px 18px #0009;
   }
   .ko-anhang-menu[hidden] { display: none; }
@@ -1271,7 +1326,7 @@
     display: flex; align-items: center; justify-content: center;
     /* Den eigenen Rahmen trägt das Feld; hier bleibt er unsichtbar, bis der
        Finger darauf liegt - dann zieht `.knopf:hover` ihn gelb. */
-    border-color: transparent; background: transparent;
+    border-color: transparent; background: transparent; border-radius: 10px;
   }
   .ko-anhang-menu .ko-anhang-knopf svg { width: 24px; height: 24px; }
 
@@ -4466,6 +4521,22 @@
     $('fly-ab').classList.toggle('bereit', !!(text || bild));
   }
 
+  /* Die Höhe des Schreibfelds folgt dem Text. Erst auf `auto` zurück, sonst
+     misst `scrollHeight` gegen die alte, schon zu große Höhe und das Feld
+     schrumpft beim Löschen nie wieder.
+     Die Grenze zieht das CSS (`max-height`), nicht diese Zeile — sonst stünden
+     zwei Zahlen für dieselbe Sache an zwei Stellen. Ist der Text länger,
+     bleibt die Höhe an der Grenze kleben und das Feld scrollt selbst.
+     Muss überall laufen, wo `.value` gesetzt wird, nicht nur beim Tippen:
+     ein programmatisch gefülltes Feld löst kein `input` aus. */
+  function flyFeldWachsen() {
+    const f = $('fly-feld');
+    f.style.height = 'auto';
+    // Liegt das Blatt zu, misst der Browser 0 - dann die eigene Zahl wieder
+    // wegnehmen und dem CSS die Höhe überlassen, statt 0 px festzuschreiben.
+    if (f.scrollHeight) f.style.height = f.scrollHeight + 'px';
+  }
+
   /* --- Das Foto am Schreibfeld --------------------------------------------
      Hochgeladen wird SOFORT bei der Auswahl, nicht erst beim Abschicken: so
      steht der Fortschritt sichtbar da, und `flyAbschicken` bleibt eine
@@ -5002,6 +5073,10 @@
     // Ein Moduswechsel räumt das Menü weg: es gehörte zur vorigen Absicht.
     anhangZu();
     flyAbPruefen();
+    /* Der eine Ort für alle drei Stellen, die `.value` von Hand setzen
+       (Zurücksetzen, Antworten, Ändern): sie laufen alle hier durch, und ein
+       gesetztes `.value` löst kein `input` aus. */
+    flyFeldWachsen();
   }
 
   function flyModusZurueck() {
@@ -5931,7 +6006,7 @@
      einem mehrzeiligen Feld erwartet das jeder so. */
   // Bei jedem Tastendruck: aus dem ersten Zeichen wird der Knopf grün, mit
   // dem letzten gelöschten wieder grau.
-  $('fly-feld').addEventListener('input', flyAbPruefen);
+  $('fly-feld').addEventListener('input', () => { flyAbPruefen(); flyFeldWachsen(); });
   $('fly-feld').addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); flyAbschicken(); }
   });
