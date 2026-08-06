@@ -1165,6 +1165,32 @@
      hier kommen nur Polster und Füllung, und die Füllung ist die der
      Linkkarte: dieselbe Sorte „gehört zusammen". */
   .ko-foto .ko-text { margin: 0; padding: 7px 9px 8px; }
+
+  /* Dasselbe für den Link: Karte oben, Satz darunter, ein Rahmen um beides.
+     Aufgebaut wie `.ko-foto` und aus demselben Grund — nur die Ecke ist die
+     der Linkkarte (12) und nicht die des Fotos (3): was hier eingefasst wird,
+     ist rund, und ein kantiger Rahmen um eine runde Karte säße schief.
+
+     Der Rahmen wandert von der Karte an die Umfassung, sonst stünden zwei
+     ineinander. `overflow: hidden` klemmt die Ecken der Karte in die des
+     Rahmens. */
+  .ko-linkkarte {
+    margin: 8px 0 0; border: 1px solid #ffffff26; border-radius: 12px;
+    overflow: hidden; background: #00000033;
+  }
+  .ko-linkkarte .ko-vor {
+    margin: 0; border: none; border-radius: 0; background: transparent;
+  }
+  .ko-linkkarte .ko-text { margin: 0; padding: 7px 9px 8px; }
+  /* Angefasst wird die Karte, aufleuchten muss der Rahmen — der sitzt jetzt
+     aber am Elternknoten. `:has` ist der einzige Weg von innen nach außen;
+     wo es fehlt, bleibt schlicht die Füllung als Rückmeldung. */
+  .ko-linkkarte .ko-vor:hover, .ko-linkkarte .ko-vor:focus-visible {
+    background: #00000042;
+  }
+  .ko-linkkarte:has(.ko-vor:hover), .ko-linkkarte:has(.ko-vor:focus-visible) {
+    border-color: var(--gelb);
+  }
   /* Die Vorschaukarte zum ersten Link. Angelehnt (nicht angeklebt) an
      `.ko-bild`: dieselbe Rundung wie die Schreibzeile, damit der Faden eine
      Formsprache hat. */
@@ -3411,9 +3437,21 @@
 
       const beschriftet = !k.geloescht && !!k.text && !!k.bild && !nurLink;
 
+      /* Und dasselbe für den Link: Karte oben, Satz darunter, ein Rahmen um
+         beides — genau wie beim Foto. Wer etwas zu einem Link schreibt, sagt
+         etwas ZU DIESEM Link, und das soll man sehen, ohne es sich aus zwei
+         freistehenden Blöcken zusammenzureimen.
+
+         NUR ohne Foto. Sind Bild, Satz und Karte beisammen, gehört der Satz
+         weiter dem Bild (`beschriftet` oben) — er kann nur an einer Stelle
+         stehen, und das Foto ist das Nähere. Die Karte hängt sich dann nackt
+         darunter, wie bisher. */
+      const linkBeschriftet = !k.geloescht && !!k.text && !!k.vorschau
+                              && !k.bild && !nurLink;
+
       /* Ein Foto allein ist ein gültiger Kommentar — dann steht hier keine
          leere Textzeile, die im Kreidebild wie ein Fehler aussähe. */
-      if (!beschriftet && !nurLink && (k.geloescht || k.text)) {
+      if (!beschriftet && !linkBeschriftet && !nurLink && (k.geloescht || k.text)) {
         const t = el('div', 'ko-text' + (k.geloescht ? ' weg' : ''));
         if (k.geloescht) t.textContent = 'gelöscht';
         else t.appendChild(mitLinks(k.text));
@@ -3443,9 +3481,23 @@
 
       /* Die Linkkarte steht NACH dem Foto und nicht mehr davor: sie stammt aus
          dem Satz, und der Satz steht jetzt unter dem Bild. Vor der Beschriftung
-         läge die Karte zwischen Bild und dem Link, aus dem sie kommt. Ohne Foto
-         ist die Reihenfolge dieselbe wie vorher — Satz, dann Karte. */
-      if (k.vorschau) z.appendChild(vorschauKarte(k.vorschau));
+         läge die Karte zwischen Bild und dem Link, aus dem sie kommt.
+
+         Gehört ein Satz zur Karte, wandert er MIT ihr in denselben Rahmen —
+         dieselben zwei Elemente wie beim Foto, aus demselben Grund: `figure`
+         und `figcaption` sagen dem Vorleser von selbst, dass das eine zum
+         anderen gehört. */
+      if (k.vorschau) {
+        const karte = vorschauKarte(k.vorschau);
+        if (!linkBeschriftet) z.appendChild(karte);
+        else {
+          const f = el('figure', 'ko-linkkarte');
+          const t = el('figcaption', 'ko-text');
+          t.appendChild(mitLinks(k.text));
+          f.append(karte, t);
+          z.appendChild(f);
+        }
+      }
 
       const fuss = el('div', 'ko-fuss');
       if (!k.geloescht) {
