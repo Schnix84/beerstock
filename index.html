@@ -1043,14 +1043,25 @@
      Polsterung weg und der Griff bringt seine eigene mit. Seitlich bleibt
      sie stehen, darum dort der negative Rand und die Breite mit Zuschlag.
 
-     Verwischt wird der Grund hinter ihm, statt ihn zu übermalen: das Blatt
-     liegt auf einem Verlauf, eine gedeckte Fläche zöge quer darüber eine
-     Kante. */
+     Der Streifen deckt ab, was unter ihm durchläuft — nachgebaut, nicht
+     verwischt. Ein `backdrop-filter` stand hier zuerst, aber ein klebender
+     Milchglasstreifen über die ganze Breite ist alles andere als dezent: man
+     sieht den Text darunter zerlaufen und damit erst recht, wie breit der
+     Streifen ist. Eine schlicht gedeckte Fläche geht auch nicht, das Blatt
+     liegt auf einem Verlauf und sie zöge quer eine Kante.
+
+     Also der Verlauf selbst, waagrecht nachgezeichnet. Das geht, weil er über
+     die 28px des Streifens senkrecht praktisch stillsteht (eine Einheit) und
+     seitlich nur von x/Breite abhängt — dieselben Stops passen darum auf jede
+     Blattbreite. Fünf Stützstellen aus dem Rundverlauf des Blattes, dazwischen
+     linear: höchstens 1,4 Einheiten daneben. Wer oben in `.fly-blatt` die
+     Farben ändert, muss sie hier mitziehen. */
   .fly-griff {
     display: none; position: sticky; top: 0; z-index: 3;
     box-sizing: border-box; width: calc(100% + 32px); margin: 0 -16px;
-    padding: 13px 0 11px; border: none; background: none; cursor: pointer;
-    -webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px);
+    padding: 13px 0 11px; border: none; cursor: pointer;
+    background: linear-gradient(90deg,
+      #303738 0%, #343d3c 25%, #2e3536 50%, #262c2e 75%, #212628 100%);
     /* Vom Griff aus gehört die Bewegung uns, und zwar von der ersten
        Berührung an: sonst hat iOS den Finger schon dem Gummiband des Blattes
        versprochen, ehe unser `preventDefault` nach acht Pixeln kommt — dann
