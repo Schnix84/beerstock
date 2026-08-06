@@ -140,6 +140,19 @@ gemeinte Karte rückt ins Bild und blitzt auf. Die Marke erscheint nur, wo die
 Einrückung es nicht schon sagt, also bei einer Antwort auf eine Antwort. Tiefer
 eingerückt wird dafür nicht: bei Stufe drei ist die Spalte auf dem Handy vierzig
 Pixel breit.
+**Ein Link im Text ist ein Link**: er wird angeklickt, nicht abgetippt, und
+angeschrieben steht nur Host und Pfad — eine YouTube-Adresse mit Parametern sprengt
+sonst auf dem Handy die Karte. Zum ersten Link eines Kommentars klappt kurz darauf
+eine **Vorschaukarte** auf: Titel, Anriss, Bild und Herkunft der verlinkten Seite,
+so wie Teams und WhatsApp es zeigen. Geholt wird das im Worker und erst *nach* dem
+Abschicken — der Kommentar steht sofort da, die Karte kommt über dieselbe Leitung
+nach, über die auch fremde Reaktionen hereinkommen. Zwei Gründe, warum nicht der
+Browser das holt: fremdes HTML darf er gar nicht lesen, und er würde jedem *Leser*
+eine Verbindung zur verlinkten Seite verschaffen — wer einen Link postet, erführe
+damit, wer den Faden gelesen hat. Das Vorschaubild liegt danach im eigenen Bucket,
+nicht bei der Gegenseite. Nur der erste Link bekommt eine Karte; drei Karten unter
+einem Zweizeiler sind keine Hilfe mehr.
+
 Wer beim Schreiben schon Sterne vergeben hat, trägt sie über seinem Text —
 so liest man, worauf sich das Lob bezieht. Es ist der Stand von damals, nicht der von
 heute: hebt jemand später seine Note, bleibt die alte Karte, wie sie war. Gelöscht
@@ -328,6 +341,7 @@ flowchart LR
     Mail["AgentMail<br/>HTTP-API"]
     OSM["tile.openstreetmap.org"]
     HA["Home Assistant<br/>privates Repo"]
+    Web["verlinkte Seiten<br/>beliebige Adressen"]
 
     Tafel -- "REST + WebSocket /api/strom" --> Worker
     Kontor -- "REST" --> Worker
@@ -344,6 +358,7 @@ flowchart LR
     Cron -- "scheduled()" --> Worker
     Worker -- "POST Mail senden" --> Mail
     Worker -- "GET Kachel, Proxy" --> OSM
+    Worker -- "GET Seite + Vorschaubild<br/>nur durch das SSRF-Gatter" --> Web
     HA -- "POST /api/report, /api/los/antwort · Bearer" --> Worker
 ```
 
@@ -353,6 +368,15 @@ Grafiken. Fotos aus R2 liest der Browser **direkt** über die öffentliche
 `r2.dev`-Adresse, am Worker vorbei — nur das Hochladen läuft über ihn. Und die
 Wohnung ruft **an**, statt erreichbar zu sein: Home Assistant meldet sich beim
 Worker wie jeder andere Melder, nicht umgekehrt.
+
+Der Pfeil nach *verlinkte Seiten* ist der einzige, an dessen Ende keine feste
+Adresse steht. Giphy, Imgflip und OpenStreetMap baut der Worker sich selbst
+zusammen; für die Link-Vorschau ruft er eine Adresse ab, die ein Angemeldeter
+getippt hat. Deshalb steht davor ein Gatter: nur `http`/`https`, keine
+Zugangsdaten in der Adresse, keine Namen aus dem lokalen Netz, keine privaten
+IP-Bereiche, und **jede** Weiterleitung wird einzeln neu geprüft, statt sie dem
+`fetch` zu überlassen — sonst wäre eine harmlose Adresse, die auf `10.0.0.1`
+umleitet, der Weg daran vorbei.
 
 In „Bestand je Melder" und „Temperatur je Melder" laufen **stumme Tage
 fortgeschrieben** weiter: wer nichts meldet, hat deshalb nicht weniger im

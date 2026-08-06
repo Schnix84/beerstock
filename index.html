@@ -1085,6 +1085,14 @@
     overflow-wrap: anywhere; white-space: pre-wrap;
   }
   .ko-text.weg { color: var(--kreide-weg); font-style: italic; }
+  /* Ein Link ist angeschrieben wie alles hier, nur unterstrichen: Blau gibt es
+     auf dieser Tafel nicht, und die gelbe Kreide gehört dem Ersten. */
+  .ko-link-in {
+    color: var(--kreide); text-decoration: underline;
+    text-decoration-color: #ffffff59; text-underline-offset: 2px;
+    overflow-wrap: anywhere;
+  }
+  .ko-link-in:hover, .ko-link-in:focus-visible { text-decoration-color: var(--gelb); }
   /* Die Marke „an Basti" am Kopf einer Antwort. Sie steht in der Kopfzeile
      neben der Uhrzeit und nicht über dem Text: dort kostet sie keine Zeile,
      und sie gehört zur Herkunft der Karte, nicht zu dem, was gesagt wurde. */
@@ -1112,6 +1120,39 @@
     cursor: zoom-in;
   }
   .ko-antw .ko-bild { height: 130px; }
+  /* Die Vorschaukarte zum ersten Link. Angelehnt (nicht angeklebt) an
+     `.ko-bild`: dieselbe Rundung wie die Schreibzeile, damit der Faden eine
+     Formsprache hat. */
+  /* `align-items: center` trägt beide Fälle: eine Seite ohne Beschreibung
+     hätte sonst zwei Zeilen oben am 76-px-Bild kleben und darunter Luft. */
+  .ko-vor {
+    display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px;
+    border: 1px solid #ffffff26; border-radius: 12px; background: #00000033;
+    color: inherit; text-decoration: none; overflow: hidden;
+  }
+  .ko-vor:hover, .ko-vor:focus-visible { border-color: var(--gelb); background: #00000042; }
+  .ko-vor img {
+    width: 76px; height: 76px; flex: none; border-radius: 8px;
+    object-fit: cover; background: #0006;
+  }
+  .ko-vor-text { min-width: 0; }
+  .ko-vor-titel {
+    font-family: var(--hand); font-size: 14px; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; overflow-wrap: anywhere;
+  }
+  .ko-vor-sagt {
+    font-size: 10.5px; color: var(--kreide-weg); line-height: 1.45; margin-top: 3px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .ko-vor-host {
+    font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--kreide-weg); margin-top: 4px;
+  }
+  /* In einer Antwort ist die Spalte schmal — dort nur noch Titel und Herkunft. */
+  .ko-antw .ko-vor img { width: 54px; height: 54px; }
+  .ko-antw .ko-vor-sagt { display: none; }
   .ko-fuss { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 7px; }
   /* Seit "Antworten" aus dem Fuß weg ist, bleibt er an einer fremden Karte
      ohne Reaktionen ganz leer — dann soll er auch keine 7 px kosten. */
@@ -3229,9 +3270,15 @@
       /* Ein Foto allein ist ein gültiger Kommentar — dann steht hier keine
          leere Textzeile, die im Kreidebild wie ein Fehler aussähe. */
       if (k.geloescht || k.text) {
-        z.appendChild(el('div', 'ko-text' + (k.geloescht ? ' weg' : ''),
-          k.geloescht ? 'gelöscht' : k.text));
+        const t = el('div', 'ko-text' + (k.geloescht ? ' weg' : ''));
+        if (k.geloescht) t.textContent = 'gelöscht';
+        else t.appendChild(mitLinks(k.text));
+        z.appendChild(t);
       }
+
+      /* Nach dem Text, vor dem Foto: die Karte gehört zu dem, was gesagt
+         wurde — das Foto ist eine eigene Sache daneben. */
+      if (k.vorschau) z.appendChild(vorschauKarte(k.vorschau));
 
       if (k.bild) {
         const b = el('img', 'ko-bild');
@@ -3847,6 +3894,93 @@
     s.appendChild(s_el('path', { d: 'M3.5 13h9.5a7 7 0 0 1 7 7v.5' }));
     return s;
   };
+
+  /* --- Links im Kommentartext ----------------------------------------------
+     EINE ERKENNUNG, NICHT ZWEI. Der Worker muss aus demselben Text dieselbe
+     Adresse ziehen wie diese Seite — sonst zeigt die Vorschaukarte auf
+     `https://x.de/y.` (mit Punkt), während der Link daneben auf
+     `https://x.de/y` zeigt, und `url_hash` trifft die vorhandene Zeile nie.
+     Regexp UND das Abschneiden der Satzzeichen stehen deshalb im Worker
+     (`LINK_RE` / `linkPutzen`, worker/src/index.js) wörtlich genauso; wer eines
+     von beiden anfasst, fasst beide an. Zwei Sprachen, eine Regel — ein
+     gemeinsames Modul geht hier nicht, diese Datei ist eine geschlossene.
+     --------------------------------------------------------------------- */
+  const LINK_RE = /\bhttps?:\/\/[^\s<>"']+/gi;
+
+  /* Satzzeichen am Ende gehören dem Satz, nicht der Adresse. Steht WÖRTLICH
+     auch im Worker (`linkPutzen`) — siehe den Kasten oben. */
+  function linkPutzen(roh) {
+    while (/[.,;:!?»"']$/.test(roh)) roh = roh.slice(0, -1);
+    if (roh.endsWith(')') && !roh.includes('(')) roh = roh.slice(0, -1);
+    return roh;
+  }
+
+  /* Angezeigt wird nicht die volle Adresse: eine YouTube-URL mit Parametern
+     sprengt auf dem Handy die Karte. Host plus Pfad reicht zum Erkennen, das
+     Ziel steht im `href`. */
+  function kurzeAdresse(u) {
+    try {
+      const url = new URL(u);
+      const kurz = url.host.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+      return kurz.length > 42 ? kurz.slice(0, 40) + '…' : kurz;
+    } catch { return u; }
+  }
+
+  /* Aus Text wird eine Folge von Knoten: Textstücke und <a> dazwischen. NIE
+     `innerHTML` — der Text kommt von einem Nutzer, und die einzige Stelle, an
+     der er je in HTML verwandelt würde, wäre genau hier. `textContent` und
+     `createElement` können nicht ausbrechen, ein Ersetzen im String kann es. */
+  function mitLinks(text) {
+    const frag = document.createDocumentFragment();
+    let zuletzt = 0;
+    for (const t of text.matchAll(LINK_RE)) {
+      const roh = linkPutzen(t[0]);
+      if (!roh) continue;
+      if (t.index > zuletzt) {
+        frag.appendChild(document.createTextNode(text.slice(zuletzt, t.index)));
+      }
+      const a = el('a', 'ko-link-in', kurzeAdresse(roh));
+      a.href = roh;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer nofollow';
+      frag.appendChild(a);
+      zuletzt = t.index + roh.length;
+    }
+    if (zuletzt < text.length) frag.appendChild(document.createTextNode(text.slice(zuletzt)));
+    return frag;
+  }
+
+  /* Die Vorschaukarte zum ersten Link im Text — Titel, Anriss, Bild, Herkunft.
+     Geholt hat sie der Worker (siehe Migration 0022); hier wird nur gezeichnet,
+     was dasteht, und jedes Stück einzeln: eine Seite ohne og:image bekommt eine
+     Karte ohne Bild und keine leere Fläche.
+
+     Ein `<a>`, kein `<div>` mit Klick-Handler — sie soll sich anfühlen wie ein
+     Link, mit Mittelklick, Kontextmenü und allem. */
+  function vorschauKarte(v) {
+    const a = el('a', 'ko-vor');
+    a.href = v.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer nofollow';
+
+    if (v.bild) {
+      const b = el('img');
+      b.src = v.bild;
+      b.loading = 'lazy';
+      b.alt = '';
+      /* Ein Vorschaubild, das nicht lädt, hinterlässt sonst ein graues Feld
+         neben dem Titel — dann lieber gar keins. */
+      b.addEventListener('error', () => b.remove());
+      a.appendChild(b);
+    }
+
+    const t = el('div', 'ko-vor-text');
+    t.appendChild(el('div', 'ko-vor-titel', v.titel || v.host || v.url));
+    if (v.text) t.appendChild(el('div', 'ko-vor-sagt', v.text));
+    if (v.host) t.appendChild(el('div', 'ko-vor-host', v.host));
+    a.appendChild(t);
+    return a;
+  }
 
   /* Alter eines Kommentars. Feiner als `standText`: in einem Thread ist der
      Unterschied zwischen "gerade" und "vor zwei Stunden" die halbe Information. */

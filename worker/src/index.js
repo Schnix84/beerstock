@@ -254,6 +254,22 @@ const BILDER_TAG   = 30;               // je Nutzer und Tag, wie KOMMENTARE_TAG
 const WAISENFRIST  = '-1 day';
 const WAISEN_PRO_LAUF = 200;
 
+/* Die Link-Vorschau (siehe ideas/plan-link-vorschau.md und Migration 0022).
+   Alle vier Zahlen sind Deckel gegen eine fremde Seite, die sich nicht benimmt
+   - langsam antwortet, endlos umleitet, oder ein Gigabyte HTML schickt. Fuer
+   das Vorschaubild gilt BILD_MAX weiter, es ist ein Bild wie jedes andere. */
+const VORSCHAU_ZEIT     = 5000;               // ms, hartes Ende via AbortSignal
+/* 2 MB und nicht die 512 kB aus dem Plan: bei YouTube steht `og:title` an
+   Byte 686.975 (gemessen 2026-08-06 an einem gewoehnlichen /watch), der kleine
+   Deckel schnitt also ausgerechnet den Hauptfall ab. Das ist billiger, als es
+   aussieht - gelesen wird streamend und weggeworfen, es wird nichts behalten,
+   und `ogLesen` bricht ohnehin ab, sobald der Kopf durch ist oder alle drei
+   Felder stehen. Diese Zahl ist der Notnagel gegen eine Seite ohne Ende, nicht
+   die Stelle, an der normalerweise aufgehoert wird. */
+const VORSCHAU_HTML_MAX = 2 * 1024 * 1024;    // Bytes HTML, danach abgebrochen
+const VORSCHAU_HOPS     = 3;                  // Weiterleitungen, von Hand gezaehlt
+const VORSCHAU_TEXT_MAX = 300;                // Zeichen og:description
+
 /* GIFs und Memes an Kommentaren (siehe ideas/gifs-und-memes.md). Ein GIF wird
    wie ein Foto ein `bild_key` - dieselbe Sperre, dasselbe Tagesbudget, kein
    eigener Weg. Giphys Deckel ist 100 Abrufe die Stunde; der Cache haelt eine
@@ -1077,6 +1093,357 @@ async function pruefeBild(env, roh) {
   return { key };
 }
 
+// ---------------------------------------------------------------------------
+// Die Link-Vorschau (Migration 0022, ideas/plan-link-vorschau.md)
+// ---------------------------------------------------------------------------
+
+/* EINE ERKENNUNG, NICHT ZWEI. Der Worker muss aus demselben Text dieselbe
+   Adresse ziehen wie die Seite - sonst zeigt die Karte auf `https://x.de/y.`
+   (mit Punkt), waehrend der Link daneben auf `https://x.de/y` zeigt, und
+   `url_hash` trifft die vorhandene Zeile nie. Regexp UND `linkPutzen` stehen
+   deshalb in `index.html` woertlich genauso; wer eines von beiden anfasst,
+   fasst beide an. Zwei Sprachen, eine Regel - ein gemeinsames Modul geht nicht,
+   die Seite ist eine geschlossene Datei. */
+const LINK_RE = /\bhttps?:\/\/[^\s<>"']+/gi;
+
+/* Satzzeichen am Ende gehoeren dem Satz. Steht WOERTLICH auch in `index.html`. */
+function linkPutzen(roh) {
+  while (/[.,;:!?»"']$/.test(roh)) roh = roh.slice(0, -1);
+  if (roh.endsWith(')') && !roh.includes('(')) roh = roh.slice(0, -1);
+  return roh;
+}
+
+/* Der ERSTE Link im Text, mehr nicht - ein Kommentar bekommt hoechstens eine
+   Karte. `matchAll` und nicht `exec`: das klont die Regexp, waehrend `exec` auf
+   einem `/g`-Muster `lastIndex` behaelt. Der bliebe im Isolat zwischen zwei
+   Anfragen stehen, und dann faende der zweite Kommentar seinen Link nicht. */
+function linkAusText(text) {
+  for (const t of String(text || '').matchAll(LINK_RE)) {
+    const roh = linkPutzen(t[0]);
+    if (roh) return roh;
+  }
+  return null;
+}
+
+/* Darf der Worker diese Adresse abrufen? Das Gegenstueck zu der Regel an
+   /api/gif/holen, wo der Worker die Adresse selbst baut. Hier kommt sie vom
+   Nutzer, also muss sie durch ein Gatter. WER HIER KUERZT, BAUT DEN OFFENEN
+   PROXY.
+
+   Workers erreichen das lokale Netz der Edge nicht und auch keinen
+   Metadatendienst - das ist aber Cloudflares Zusage, nicht unsere Pruefung.
+   Was wir selbst ausschliessen: alles, was nach innen zeigt, und alles, was
+   kein Web ist.
+
+   Gibt die NORMALISIERTE Adresse zurueck (URL-Objekt, Fragment ab) oder null.
+   Genau diese Form wird gehasht - siehe den Kopf von 0022. */
+function darfGeholtWerden(roh) {
+  let u;
+  try { u = new URL(roh); } catch { return null; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  if (u.username || u.password) return null;         // http://user@evil/
+  const h = u.hostname.toLowerCase();
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local')) return null;
+  if (h.endsWith('.internal') || h.endsWith('.home.arpa')) return null;
+  if (!h.includes('.')) return null;                 // nackte Namen aus dem LAN
+  if (h.includes(':') || h.startsWith('[')) return null;  // IPv6-Literale gar nicht
+  /* IP-Literale: nur oeffentliche durchlassen. Namen, die auf eine private
+     Adresse zeigen, faengt diese Pruefung NICHT - dagegen steht, dass ein
+     Worker ohnehin nicht in ein privates Netz kommt. */
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) {
+    const [a, b] = h.split('.').map(Number);
+    if (a === 10 || a === 127 || a === 0 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) ||
+        (a === 169 && b === 254) ||
+        a >= 224) return null;
+  }
+  u.hash = '';
+  return u;
+}
+
+/* Weiterleitungen VON HAND, weil `redirect: 'follow'` das Gatter umgeht - eine
+   harmlose Adresse, die auf `http://10.0.0.1/` umleitet, waere sonst frei.
+   Gibt { r, u } zurueck: die Antwort und die Adresse, unter der sie kam (die
+   braucht das Aufloesen relativer Bildadressen). */
+async function holeMitGatter(start) {
+  let u = start;
+  for (let i = 0; i <= VORSCHAU_HOPS; i++) {
+    const r = await fetch(u.href, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(VORSCHAU_ZEIT),
+      headers: {
+        /* Ehrlich sagen, wer klopft. Manche Seiten liefern OG-Daten nur an
+           bekannte Boten, und ein Bot, der sich als Browser ausgibt, ist die
+           Art Trick, die man spaeter bereut. */
+        'User-Agent': 'BeerstockBot/1.0 (+https://schnix84.github.io/beerstock/)',
+        'Accept': 'text/html;q=0.9,*/*;q=0.1',
+        'Accept-Language': 'de,en;q=0.8',
+      },
+    });
+    if (r.status >= 300 && r.status < 400) {
+      const ort = r.headers.get('Location');
+      if (!ort) return null;
+      await r.body?.cancel().catch(() => {});
+      const naechste = darfGeholtWerden(new URL(ort, u).href);   // JEDER Sprung neu
+      if (!naechste) return null;
+      u = naechste;
+      continue;
+    }
+    return { r, u };
+  }
+  return null;      // im Kreis
+}
+
+/* Liest og:title/og:description/og:image und faellt auf <title> zurueck.
+   Twitter-Karten als zweite Quelle: manche Seiten pflegen nur die.
+
+   `HTMLRewriter` ist Cloudflares eigener, streamender Parser: kein Regex auf
+   HTML, keine Abhaengigkeit. Der Rumpf laeuft durch einen mitzaehlenden
+   `TransformStream`, der abbricht, sobald `genug` steht (Kopf durch oder alle
+   drei Felder da) - und spaetestens bei VORSCHAU_HTML_MAX. Behalten wird
+   nichts: der Leser unten wirft jedes Stueck weg, er treibt nur die Haken an. */
+async function ogLesen(antwort, basis) {
+  const d = { titel: null, text: null, bild: null };
+  let imTitel = false;
+  let rohTitel = '';
+  /* Woran das Lesen endet, im Regelfall: alle drei Felder stehen, oder der
+     Kopf ist durch. Was danach kommt, ist der Rumpf - dort steht nichts mehr,
+     was diese Karte braucht. Bei einer gewoehnlichen Seite sind das die ersten
+     paar Kilobyte, VORSCHAU_HTML_MAX kommt gar nicht erst vor. */
+  let genug = false;
+
+  const nimm = (feld, wert) => {
+    const w = (wert || '').trim();
+    if (w && !d[feld]) d[feld] = w;
+    if (d.titel && d.text && d.bild) genug = true;
+  };
+
+  const rw = new HTMLRewriter()
+    .on('meta', { element(e) {
+      const n = (e.getAttribute('property') || e.getAttribute('name') || '').toLowerCase();
+      const c = e.getAttribute('content');
+      if (n === 'og:title' || n === 'twitter:title') nimm('titel', c);
+      else if (n === 'og:description' || n === 'twitter:description' || n === 'description') nimm('text', c);
+      else if (n === 'og:image' || n === 'og:image:url' || n === 'twitter:image') nimm('bild', c);
+    } })
+    /* `head > title`, NICHT `title`: ein Inline-SVG bringt eigene `<title>`
+       mit (Barrierefreiheit), und die traf der nackte Selektor mit. Die
+       Beerstock-Seite selbst war der Beweis - aus `<title>Kaltes Bier</title>`
+       plus dem `<title>` im Bierglas-SVG wurde ein zusammengeklebtes
+       "Kaltes BierBierglas: Fuellstand nach Bestand …". Der Dokumenttitel ist
+       immer ein direktes Kind von `<head>`, ein SVG-Titel nie. */
+    .on('head > title', {
+      element(e) {
+        imTitel = true;
+        // Zu Ende gelesen ist zu Ende gelesen: ein zweites `<title>` im Kopf
+        // (kommt vor, etwa nach einem Fehler im Vorlagenwerk) haengt sonst an.
+        e.onEndTag(() => { imTitel = false; });
+      },
+      /* `<title>` kommt in Stuecken. Gesammelt wird in `rohTitel` und nicht in
+         `d.titel`, damit `nimm()` weiter gilt: og:title schlaegt den Titel des
+         Dokuments, egal welches von beidem zuerst durchlaeuft. */
+      text(t) { if (imTitel) rohTitel += t.text; },
+    })
+    .on('head', { element(e) { e.onEndTag(() => { genug = true; }); } });
+
+  let gelesen = 0;
+  const zaehlend = new TransformStream({
+    transform(stueck, steuerung) {
+      // `genug` setzen die Haken oben, waehrend die Stuecke durchlaufen - die
+      // Bremse greift also ein Stueck spaeter, und das reicht.
+      if (genug) { steuerung.terminate(); return; }
+      gelesen += stueck.byteLength;
+      if (gelesen > VORSCHAU_HTML_MAX) { steuerung.terminate(); return; }
+      steuerung.enqueue(stueck);
+    },
+  });
+
+  try {
+    const durch = rw.transform(new Response(antwort.body.pipeThrough(zaehlend), {
+      // Die Kopfzeilen mitgeben: an ihnen haengt der Zeichensatz.
+      headers: antwort.headers,
+    }));
+    const leser = durch.body.getReader();
+    // Treiben, nicht sammeln: die Haken oben laufen beim Lesen, die Bytes
+    // selbst braucht niemand.
+    for (;;) { const { done } = await leser.read(); if (done) break; }
+  } catch {
+    /* Ein abgeschnittener Rumpf endet mitten im Dokument - das ist der
+       gewollte Fall, kein Fehler. Was bis dahin im Kopf stand, steht in `d`. */
+  }
+
+  nimm('titel', rohTitel);
+  if (d.text && d.text.length > VORSCHAU_TEXT_MAX) {
+    d.text = d.text.slice(0, VORSCHAU_TEXT_MAX - 1) + '…';
+  }
+  if (d.titel && d.titel.length > 200) d.titel = d.titel.slice(0, 199) + '…';
+  // Relative Bildadressen kommen vor. Und sie muessen dasselbe Gatter passieren.
+  if (d.bild) {
+    let abs = null;
+    try { abs = darfGeholtWerden(new URL(d.bild, basis).href); } catch {}
+    d.bild = abs ? abs.href : null;
+  }
+  return d;
+}
+
+/* Das Vorschaubild nach R2 - dieselbe Strecke, die /api/gif/holen schon
+   faehrt: holen, `bildTyp()` auf die BYTES (nicht auf den Content-Type, den
+   setzt die Gegenseite), UUID plus Endung, `immutable` ablegen.
+
+   KEIN Eintrag in `bild_uploads`. Das ist die Waisen-Liste fuer Bilder, die ein
+   NUTZER hochgeladen hat und die ohne Kommentar liegenbleiben koennten. Ein
+   Vorschaubild haengt an einer `vorschauen`-Zeile, die es immer gibt - es ist
+   nie Waise. Umgekehrt heisst das: der bestehende Aufraeumer fasst diese
+   Objekte nicht an, und das ist gewollt (siehe ideas/todo.md). */
+async function vorschauBild(env, adresse) {
+  if (!env.BILDER) return null;
+  const ziel = darfGeholtWerden(adresse);
+  if (!ziel) return null;
+  const hol = await holeMitGatter(ziel).catch(() => null);
+  if (!hol || !hol.r.ok) { await hol?.r.body?.cancel().catch(() => {}); return null; }
+
+  const angesagt = Number(hol.r.headers.get('Content-Length') || 0);
+  if (angesagt > BILD_MAX) { await hol.r.body?.cancel().catch(() => {}); return null; }
+  const bytes = await hol.r.arrayBuffer();
+  if (bytes.byteLength > BILD_MAX) return null;
+
+  const typ = bildTyp(bytes);
+  if (!typ) return null;
+
+  const key = `${crypto.randomUUID()}.${typ[1]}`;
+  await env.BILDER.put(key, bytes, {
+    httpMetadata: { contentType: typ[0], cacheControl: 'public, max-age=31536000, immutable' },
+  });
+  return key;
+}
+
+/* Die Zeile zu einer Adresse - vorhanden oder frisch geholt. Gibt die `id`
+   zurueck, wenn eine Karte daran haengt, sonst null.
+
+   Erst nachschlagen: der zweite Poster desselben Links loest gar keinen Abruf
+   mehr aus. Eine Zeile mit `fehler` gilt dabei als Antwort - ein toter Link
+   bleibt tot, und ohne diese Sperre versuchte es der Worker bei jedem neuen
+   Kommentar wieder. */
+async function vorschauBesorgen(env, ziel) {
+  const schluessel = await hash(ziel.href);
+
+  const schon = await env.DB.prepare('SELECT id, fehler FROM vorschauen WHERE url_hash = ?')
+    .bind(schluessel).first();
+  if (schon) return schon.fehler ? null : schon.id;
+
+  let daten = null, fehlerText = null, bildKey = null;
+  /* Was unter der Karte steht, ist der Host am ENDE der Umleitungskette, nicht
+     der getippte: bei `youtu.be/…` oder einem Kuerzel sagt der getippte dem
+     Leser nichts. Die `url` bleibt trotzdem die getippte - der Klick soll dort
+     landen, wo auch der Link im Text hinzeigt. */
+  let endHost = ziel.hostname;
+  try {
+    const hol = await holeMitGatter(ziel);
+    if (hol) endHost = hol.u.hostname;
+    if (!hol) fehlerText = 'nicht erreichbar';
+    else if (!hol.r.ok) {
+      await hol.r.body?.cancel().catch(() => {});
+      fehlerText = `HTTP ${hol.r.status}`;
+    } else {
+      /* Nur HTML wird geparst. Ohne diese Schranke liefe ein verlinktes Video
+         durch den Rewriter - fuenf Sekunden Leitung fuer nichts. */
+      const typ = (hol.r.headers.get('Content-Type') || '').toLowerCase();
+      if (!/^\s*(text\/html|application\/xhtml\+xml)/.test(typ)) {
+        await hol.r.body?.cancel().catch(() => {});
+        fehlerText = 'kein HTML';
+      } else {
+        daten = await ogLesen(hol.r, hol.u);
+        if (!daten.titel && !daten.text) fehlerText = 'nichts zu zeigen';
+        else if (daten.bild) bildKey = await vorschauBild(env, daten.bild);
+      }
+    }
+  } catch (e) {
+    fehlerText = String(e && e.message || e).slice(0, 120);
+  }
+
+  /* ON CONFLICT, weil derselbe Link im Freundeskreis gleichzeitig zweimal
+     gepostet werden kann - genau der Fall, fuer den die Tabelle gebaut ist.
+     Beide verfehlen dann oben das SELECT und landen hier. Der zweite bekommt
+     ueber RETURNING die Zeile des ersten, statt am UNIQUE stumm zu sterben.
+     Ein Fehlversuch ueberschreibt dabei NIE eine gelungene Zeile (DO NOTHING);
+     dann liefert RETURNING nichts, und der Nachschlag darunter holt sie. */
+  const zeile = fehlerText
+    ? await env.DB.prepare(`
+        INSERT INTO vorschauen (url_hash, url, fehler) VALUES (?, ?, ?)
+        ON CONFLICT(url_hash) DO NOTHING
+        RETURNING id, fehler, bild_key
+      `).bind(schluessel, ziel.href, fehlerText).first()
+    : await env.DB.prepare(`
+        INSERT INTO vorschauen (url_hash, url, titel, text, host, bild_key)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(url_hash) DO UPDATE SET url = excluded.url
+        RETURNING id, fehler, bild_key
+      `).bind(schluessel, ziel.href, daten.titel, daten.text,
+              endHost.replace(/^www\./, ''), bildKey).first();
+
+  const fertig = zeile
+    || await env.DB.prepare('SELECT id, fehler, bild_key FROM vorschauen WHERE url_hash = ?')
+      .bind(schluessel).first();
+  if (!fertig) return null;
+
+  /* Hat das Rennen ein anderer gewonnen, liegt unser frisch abgelegtes Bild
+     ohne Zeile im Bucket. Es kommt weg - sonst waere es genau die Waise, die
+     der Aufraeumer nie sieht. */
+  if (bildKey && fertig.bild_key !== bildKey && env.BILDER) {
+    await env.BILDER.delete(bildKey).catch(() => {});
+  }
+  return fertig.fehler ? null : fertig.id;
+}
+
+/* Nach der Antwort, nie davor: das Abschicken bleibt eine schnelle
+   JSON-Anfrage. Ist die Karte da, schiebt der Verteiler sie nach - der
+   Kommentar steht sofort, die Karte klappt eine Sekunde spaeter auf, genau wie
+   bei Teams.
+
+   Stumm wie `benachrichtige()`: ein Kommentar darf nicht daran scheitern, dass
+   eine fremde Seite gerade nicht mag.
+
+   Gemeldet wird hier von Hand statt ueber `anstoss()` - der ruft selbst
+   `ctx.waitUntil()`, und das eine `waitUntil` im anderen zu verschachteln,
+   nachdem die Antwort laengst raus ist, ist nirgends sonst im Worker gebaut.
+   `stub.melden(...)` liegt so im selben Auftrag. */
+function vorschauHolen(request, env, ctx, kommentarId, text, ziel) {
+  if (!ctx || !env.DB) return;
+  const roh = linkAusText(text);
+  if (!roh) return;
+  const adresse = darfGeholtWerden(roh);
+  if (!adresse) return;
+
+  ctx.waitUntil((async () => {
+    try {
+      const id = await vorschauBesorgen(env, adresse);
+      if (!id) return;
+      /* Nur, wenn an der Karte noch GENAU DER TEXT steht, aus dem dieser Link
+         kam. Wer zweimal schnell hintereinander aendert, hat sonst zwei Abrufe
+         unterwegs, und der langsamere haengt seine Karte unter den neuen Satz.
+         `geloescht_am` faengt denselben Fall fuer die Loeschung. */
+      const auf = await env.DB.prepare(`
+        UPDATE kommentare SET vorschau_id = ?
+        WHERE id = ? AND text = ? AND vorschau_id IS NULL AND geloescht_am IS NULL
+      `).bind(id, kommentarId, text).run();
+      if (!auf.meta.changes) return;
+      if (!env.TAFEL) return;
+      /* `von` bleibt NULL - und das ist der eine Ruf im ganzen Worker, bei dem
+         das so sein muss. Sonst reicht `anstoss()` die Tab-Kennung des
+         Schreibers durch, und die Seite verwirft die eigene Meldung
+         (`index.html`, `d.von === TAB`) - richtig ueberall dort, wo der
+         Schreiber die Antwort seines POSTs schon hat. Hier hat er sie eben
+         NICHT: die Karte entsteht lange nach der Antwort, und der Poster waere
+         als einziger der, der sie nicht zu sehen bekommt. */
+      const stub = env.TAFEL.get(env.TAFEL.idFromName('tafel'));
+      await stub.melden([`${ziel.art}:${ziel.id}`], null);
+    } catch (e) {
+      console.log('vorschau:', e && e.message || e);
+    }
+  })());
+}
+
 /* Die ROHE Imgflip-Liste, einmal am Tag geholt und in caches.default
    vorgehalten - `id`, `name`, `width`, `height` UND `url`. Beide Meme-Routen
    brauchen sie: die eine zeigt sie abgespeckt (ohne `url`, die bleibt intern),
@@ -1141,11 +1508,14 @@ const baumStmts = (env, ziel) => [
     SELECT k.id, k.autor_id, k.antwort_auf, k.an_id, k.text, k.erstellt, k.geaendert,
            k.geloescht_am, k.bild_key, k.sterne,
            coalesce(u.name, 'Ehemaliger') AS autor,
-           au.name AS an_autor
+           au.name AS an_autor,
+           v.url AS v_url, v.titel AS v_titel, v.text AS v_text,
+           v.host AS v_host, v.bild_key AS v_bild, v.fehler AS v_fehler
     FROM kommentare k
     JOIN users u ON u.id = k.autor_id
     LEFT JOIN kommentare ak ON ak.id = k.an_id
     LEFT JOIN users au ON au.id = ak.autor_id
+    LEFT JOIN vorschauen v ON v.id = k.vorschau_id
     WHERE k.ziel_art = ? AND k.ziel_id = ?
     ORDER BY k.id DESC
     LIMIT ?
@@ -1186,6 +1556,18 @@ function baumBauen(zeilen, reaktionen, ichId, env) {
       // Dasselbe fuer das Foto - und im Bucket liegt es dann auch nicht mehr,
       // darum kuemmert sich POST /api/kommentar/aendern.
       bild: weg ? null : bildUrl(env, z.bild_key),
+      /* Die Vorschaukarte zum ersten Link im Text. Dieselbe Bedingung wie
+         oben - was an einer geloeschten Karte nicht mehr steht, steht auch
+         hier nicht mehr; sonst haenge unter "gelöscht" noch der Link. Und
+         `v_fehler` heisst: die Zeile gibt es nur, damit nicht dauernd neu
+         versucht wird, zu zeigen ist daran nichts. */
+      vorschau: (weg || !z.v_url || z.v_fehler) ? null : {
+        url: z.v_url,
+        titel: z.v_titel,
+        text: z.v_text,
+        host: z.v_host,
+        bild: bildUrl(env, z.v_bild),
+      },
       geloescht: weg,
       erstellt: utc(z.erstellt),
       geaendert: utc(z.geaendert),
@@ -3432,10 +3814,13 @@ const ROUTEN = {
        laengst die naechste Note, und die Karte truege eine, die zu ihrem Text
        nie gehoert hat. */
     if (text || bi.key) {
-      await env.DB.prepare(`
+      const neu = await env.DB.prepare(`
         INSERT INTO kommentare (ziel_art, ziel_id, autor_id, bewertung_id, text, bild_key, sterne)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(ziel.art, ziel.id, ich.id, b.id, text, bi.key, JSON.stringify(s.sterne)).run();
+        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
+      `).bind(ziel.art, ziel.id, ich.id, b.id, text, bi.key, JSON.stringify(s.sterne)).first();
+      // Auch hier, nicht nur an /api/kommentar: "5 Sterne und ein Link dazu"
+      // kommt als EINE Anfrage genau hier an.
+      vorschauHolen(request, env, ctx, neu.id, text, ziel);
     }
 
     /* Der Bezug haengt an der Bewertung, nicht am Zeitpunkt: der UPSERT gibt
@@ -3585,7 +3970,13 @@ const ROUTEN = {
      /api/bild, damit das Frontend keinen zweiten Weg braucht. Der Worker
      baut die Adresse SELBST aus der `id`, ruft also nie eine vom Browser
      geschickte Adresse ab - sonst waere die Route ein offener Bildproxy.
-     `200.gif` ist Giphys Fassung mit 200 px Hoehe, typisch 200-800 kB. */
+     `200.gif` ist Giphys Fassung mit 200 px Hoehe, typisch 200-800 kB.
+
+     NACHTRAG (Migration 0022, Link-Vorschau): dieser Satz gilt fuer DIESE
+     Route, nicht mehr fuer den ganzen Worker. `vorschauBesorgen()` ruft sehr
+     wohl eine Adresse ab, die ein Nutzer getippt hat - das war eine bewusste
+     Ausnahme, und ihr Ersatz ist `darfGeholtWerden()` samt Weiterleitungen von
+     Hand. Wer eine dritte solche Stelle baut, geht durch dasselbe Gatter. */
   'POST /api/gif/holen': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
@@ -3773,6 +4164,10 @@ const ROUTEN = {
       }, `kommentar:${neu.id}`);
     }
 
+    // Steht ein Link im Text, holt der Worker im Nachgang die Vorschaukarte
+    // und schiebt sie ueber den Verteiler nach. Die Antwort wartet nicht.
+    vorschauHolen(request, env, ctx, neu.id, text, ziel);
+
     // 'tafel' wegen des Zaehlers an der Zeile, das Ziel wegen des Threads.
     anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
     return antwort(request, { ok: true, id: neu.id, antwort_auf: wurzel }, 201);
@@ -3809,10 +4204,15 @@ const ROUTEN = {
       /* Auch die Sterne der Karte gehen weg: die Antwort zeigt sie ohnehin
          nicht mehr, und was nicht mehr gezeigt wird, soll auch nicht mehr
          herumliegen. Die BEWERTUNG selbst bleibt - sie zaehlt weiter auf den
-         Schnitt, geloescht wurde ein Kommentar, keine Note. */
+         Schnitt, geloescht wurde ein Kommentar, keine Note.
+
+         Die Vorschau wird nur ABGEHAENGT, nicht geloescht: die Zeile in
+         `vorschauen` gehoert keinem Kommentar, sie gehoert einer Adresse - und
+         die kann unter drei anderen Karten noch stehen. */
       await env.DB.prepare(`
         UPDATE kommentare
-        SET geloescht_am = datetime('now'), text = '', bild_key = NULL, sterne = NULL
+        SET geloescht_am = datetime('now'), text = '', bild_key = NULL, sterne = NULL,
+            vorschau_id = NULL
         WHERE id = ?
       `).bind(k.id).run();
       // Ein geloeschter Kommentar zaehlt nicht mehr mit - also auch 'tafel'.
@@ -3825,8 +4225,17 @@ const ROUTEN = {
     if (!text && !k.bild_key) return fehler(request, 'Ohne Text kein Kommentar');
     if (text.length > KOMMENTAR_MAX) return fehler(request, `Höchstens ${KOMMENTAR_MAX} Zeichen`);
 
-    await env.DB.prepare("UPDATE kommentare SET text = ?, geaendert = datetime('now') WHERE id = ?")
-      .bind(text, k.id).run();
+    /* `vorschau_id` faellt mit dem Text. Steht danach ein anderer Link darin,
+       waere die alte Karte falsch - und schlimmer: "aendern" waere sonst der
+       Weg, eine beliebige Vorschaukarte unter einen beliebigen Text zu haengen.
+       Also erst abhaengen, dann neu holen (`vorschauHolen` schreibt nur in ein
+       leeres Feld und nur zu genau diesem Text). Steht kein Link mehr da,
+       bleibt es leer, und das ist die richtige Antwort. */
+    await env.DB.prepare(`
+      UPDATE kommentare SET text = ?, geaendert = datetime('now'), vorschau_id = NULL
+      WHERE id = ?
+    `).bind(text, k.id).run();
+    vorschauHolen(request, env, ctx, k.id, text, { art: k.ziel_art, id: k.ziel_id });
     // Nur der Thread: an der Zahl der Kommentare aendert ein neuer Text nichts.
     anstoss(request, env, ctx, `${k.ziel_art}:${k.ziel_id}`);
     return antwort(request, { ok: true });
