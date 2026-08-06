@@ -1016,6 +1016,13 @@
      Karten untereinander, Antworten eingerückt und nur eine Ebene tief — bei
      Stufe drei ist die Spalte auf dem Handy vierzig Pixel breit.
      --------------------------------------------------------------------- */
+  /* Quer wird geklemmt: eine gewischte Karte steht um bis zu 78 px über den
+     rechten Rand, und `.fly-blatt` scrollt schon senkrecht — es nähme das
+     dankbar auch waagerecht an (gemessen: 446 statt 390 px Inhaltsbreite
+     mitten in der Geste). `clip` und nicht `hidden`: `hidden` machte aus dem
+     Thread eine zweite Scrollfläche, und die Schwebeleiste am Rechner hängt
+     über seinem oberen Rand. Senkrecht bleibt also sichtbar. */
+  #fly-thread { overflow-x: clip; }
   .ko-titel {
     font-family: var(--hand); font-size: 12px; letter-spacing: .14em;
     text-transform: uppercase; color: var(--kreide-weg);
@@ -1079,16 +1086,15 @@
   .ko-re.offen { border-color: #ffffff55; color: var(--kreide); }
 
   /* --- Die Reaktionsleiste, nach Art von Teams ------------------------------
-     Vier Zeichen zum Sofortdrücken, der Wähler für den Rest, das Antworten. Am
+     Fünf Zeichen zum Sofortdrücken, der Wähler für den Rest, das Antworten. Am
      Rechner schwebt sie oben rechts über der Karte und erscheint erst beim
      Überfahren — dort ist Platz, den nichts anderes braucht, und eine Leiste,
      die immer dasteht, wäre an jeder Karte dreimal soviel Bedienung wie Text.
 
-     Auf dem Handy gibt es kein Überfahren. Dort ist sie keine Schwebe, sondern
-     eine Zeile im Fluss unter der Karte — das ist dieselbe Überlegung, die
-     hier schon für den Wähler stand: über einer scrollenden Liste ist ein
-     Menü, das mitfährt, ein Ärgernis. Beides ist derselbe Baum, nur anders
-     gesetzt.
+     Auf dem Handy gibt es kein Überfahren. Dort stand sie lange als Zeile im
+     Fluss unter JEDER Karte — sichtbar, ohne dass jemand danach gefragt hätte.
+     Jetzt liegt sie hinter dem langen Druck (siehe `.ko-auf` weiter unten):
+     derselbe Baum, nur ein anderer Auslöser.
      --------------------------------------------------------------------- */
   .ko-bar {
     display: flex; align-items: center; gap: 2px; margin-top: 7px;
@@ -1108,17 +1114,57 @@
      Kommentar, das andere macht einen neuen. */
   .ko-bar .ko-re-auf { border-right: 1px solid #ffffff1f; border-radius: 999px 0 0 999px; }
 
-  /* Auf dem Handy bleibt von der Leiste nur der Wähler und der Antwortpfeil.
-     Dort gibt es kein Überfahren, die Leiste steht also unter JEDER Karte
-     dauerhaft da — mit fünf ausgefahrenen Zeichen wäre das unter einem
-     Zweizeiler mehr Knopf als Kommentar. Wer reagieren will, tippt den
-     Wähler an und hat dann alle fünfzig statt fünf.
+  /* Auf dem Handy liegt gar nichts frei: keine Leiste, kein Wähler, kein
+     Antwortpfeil. Dort gibt es kein Überfahren, und was ohne Überfahren
+     dasteht, steht immer da — unter einem Zweizeiler war das mehr Knopf als
+     Kommentar. Die Bedienung kommt jetzt aus der Hand statt aus dem Blick, so
+     wie man es vom Messenger kennt:
 
-     Nur eine Frage des Stylesheets: `koLeiste` baut die Schnellreaktionen
-     weiter, und ein Fenster, das breiter wird, hat sie sofort wieder. */
+       langer Druck auf eine Karte  →  die Leiste, fünf Zeichen und das „+"
+       Wisch von links nach rechts  →  antworten
+
+     Beides steht in `tippAn`/`tippZieht`; die offene Karte trägt `.ko-auf`.
+
+     Der Antwortpfeil IN der Leiste entfällt hier: der Wisch tut dasselbe, und
+     das Letzte in der Reihe soll der Wähler sein. Gebaut wird der Pfeil
+     trotzdem (siehe `koLeiste`) — ein Fenster, das breiter wird, hat ihn
+     samt Schwebeleiste sofort wieder. */
   @media (hover: none), (pointer: coarse) {
-    .ko-bar .ko-pick { display: none; }
+    .ko-bar { display: none; }
+    .ko.ko-auf > .ko-bar {
+      display: flex; background: #303738; box-shadow: 0 3px 12px #0008;
+    }
+    .ko.ko-auf > .ko-bar [data-antwort] { display: none; }
+    /* Der lange Druck gehört uns, nicht dem Textmarker und nicht dem
+       Bildmenü. Der Preis steht dazu: aus einem Kommentar lässt sich auf dem
+       Handy nichts mehr herauskopieren. */
+    .ko { -webkit-touch-callout: none; user-select: none; }
+    /* Hoch scrollt der Browser, quer ziehen wir. Ohne `pan-y` entscheidet er
+       das beim ersten Millimeter selbst, und der Wisch ist dann nicht mehr
+       abzufangen. */
+    .ko { touch-action: pan-y; }
+    /* Die Rückfahrt läuft über `transition`, das Ziehen selbst nicht — dort
+       setzt jeder Fingerbreit den Wert neu, eine Überblendung machte daraus
+       ein Nachhinken. */
+    .ko, .ko-antw { transition: transform .2s ease-out; }
+    .ko.ko-zieht, .ko.ko-zieht > .ko-antw { transition: none; }
   }
+
+  /* Der Pfeil, der beim Wischen hinter der Karte hervorkommt. Er ist ein Kind
+     der Karte und wird gegenläufig verschoben — so bleibt er stehen, während
+     die Karte an ihm vorbeizieht, und ragt trotzdem nie über den Rand des
+     Blattes hinaus (`.fly-blatt` scrollt sonst quer). `bereit` heißt: jetzt
+     loslassen genügt. */
+  .ko-wisch {
+    position: absolute; left: 3px; top: 11px; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    width: 27px; height: 27px; border-radius: 999px;
+    background: #ffffff14; color: var(--kreide-weg);
+    opacity: 0; pointer-events: none;
+    transition: color .12s, background .12s;
+  }
+  .ko-wisch.bereit { color: var(--gelb); background: #e8c76626; }
+  .ko-wisch svg { display: block; }
 
   @media (hover: hover) and (pointer: fine) {
     /* Schwebend, und nur für die Karte UNTER dem Zeiger: ohne das `:has` trägt
@@ -1137,6 +1183,9 @@
        weg, sobald der Zeiger in den Wähler wandert, und der Knopf, mit dem man
        wieder zuklappt, mit ihr. */
     .ko:has(> .ko-repick) > .ko-bar { opacity: 1; pointer-events: auto; }
+    /* Ein Gerät mit Zeiger UND Schirm zum Anfassen kommt hier ebenfalls
+       vorbei: wer dort lange drückt, soll nicht ins Leere greifen. */
+    .ko.ko-auf > .ko-bar { opacity: 1; pointer-events: auto; }
     /* Platz für die Leiste freihalten. Sie schwebt über der Kopfzeile, und dort
        steht rechts die Marke „an Basti" — ohne diesen Rand läge sie bei einem
        langen Namen darauf, sichtbar erst beim Überfahren. Reserviert wird nur,
@@ -1617,6 +1666,9 @@
     .t-marken .jetzt { animation: none; }
     /* Emoji-Auswahl und Namenszeile sind sofort da, statt aufzugehen. */
     .ko-repick, .ko-wer { animation: none; }
+    /* Die gewischte Karte springt zurück, statt zurückzugleiten. Das Ziehen
+       selbst bleibt — es ist keine Animation, sondern der Finger. */
+    .ko, .ko-antw { transition: none; }
   }
   [hidden] { display: none !important; }
 </style>
@@ -2884,7 +2936,7 @@
        ruft ohne. Daran entscheidet sich, ob die Marke „an Basti" nötig ist:
        eine Antwort auf die Wurzel sagt das schon durch ihre Einrückung. */
     kommentar(k, kategorien, wurzelId) {
-      const z = el('div', 'ko');
+      const z = el('div', 'ko' + (koAuf === k.id ? ' ko-auf' : ''));
       z.dataset.id = k.id;
 
       const kopf = el('div', 'ko-kopf');
@@ -2946,9 +2998,9 @@
           fuss.appendChild(b);
         });
 
-        /* Kein Wort "Antworten" mehr im Fuß: der Pfeil in der Leiste tut
-           dasselbe, hängt an derselben Marke (`data-antwort`) und steht an
-           jeder Karte — zwei Knöpfe für einen Weg waren einer zu viel. */
+        /* Kein Wort "Antworten" mehr im Fuß: am Rechner tut es der Pfeil in
+           der Schwebeleiste, auf dem Handy der Wisch nach rechts — zwei
+           Knöpfe für einen Weg waren einer zu viel. */
         if (k.meins) {
           const ae = el('button', 'ko-tat', 'ändern');
           ae.type = 'button'; ae.dataset.aendern = k.id;
@@ -3277,8 +3329,8 @@
      Mehr wären eine Tastatur an jeder Karte, alles Weitere liegt einen Griff
      entfernt hinter dem Wähler.
 
-     Nur am Rechner: auf dem Handy blendet das Stylesheet sie aus, dort stehen
-     unter der Karte allein der Wähler und der Antwortpfeil. */
+     Am Rechner erscheinen sie beim Überfahren, auf dem Handy nach langem
+     Druck — dieselben fünf, nur ein anderer Auslöser. */
   const SCHNELL = ['❤️', '👍', '🍺', '🍻', '😆'];
 
   // Für einen Chip, dessen Zeichen aus einer älteren Runde stammt: lieber das
@@ -3326,13 +3378,16 @@
     return s;
   };
 
-  /* Zwei Klappen am Thread, beide je Karte und höchstens eine offen: `rePick`
+  /* Drei Klappen am Thread, alle je Karte und höchstens eine offen: `rePick`
      ist die Id der Karte mit aufgeschlagener Emoji-Auswahl, `reWer` die Karte
-     samt Art, deren Namen darunterstehen. Sie liegen HIER und nicht am
-     Knoten, weil der Thread bei jedem Nachfassen neu gebaut wird — am Knoten
-     wäre das Aufgeklappte nach der nächsten Antwort von selbst wieder zu. */
+     samt Art, deren Namen darunterstehen, `koAuf` die Karte, deren Leiste ein
+     langer Druck offengelegt hat (nur am Handy — am Rechner erledigt das der
+     Zeiger). Sie liegen HIER und nicht am Knoten, weil der Thread bei jedem
+     Nachfassen neu gebaut wird — am Knoten wäre das Aufgeklappte nach der
+     nächsten Antwort von selbst wieder zu. */
   let rePick = null;
   let reWer = null;
+  let koAuf = null;
 
   /* Die Chips einer Karte in eine feste Reihenfolge bringen: die vier schnellen
      zuerst und immer an derselben Stelle, alles Weitere dahinter, so wie es der
@@ -3362,8 +3417,9 @@
      Karte im Baum — auch an einem Foto, denn ein Foto IST hier ein Kommentar.
 
      Am Rechner erscheint sie beim Überfahren der Karte und schwebt oben rechts;
-     auf dem Handy gibt es kein Überfahren, dort steht sie einfach da. Das ist
-     eine Sache des Stylesheets, nicht dieser Funktion — gebaut wird sie immer. */
+     auf dem Handy legt der lange Druck sie frei, und der Antwortpfeil bleibt
+     dort verborgen, weil der Wisch ihn ersetzt. Beides ist eine Sache des
+     Stylesheets, nicht dieser Funktion — gebaut wird immer alles. */
   function koLeiste(k) {
     const bar = el('div', 'ko-bar');
     bar.setAttribute('role', 'group');
@@ -4435,7 +4491,8 @@
     flyZiel = ziel;
     flyMeins = {};
     flyDaten = null;
-    rePick = null; reWer = null;   // aufgeklappt bleibt nichts über ein Ziel hinweg
+    // aufgeklappt bleibt nichts über ein Ziel hinweg
+    rePick = null; reWer = null; koAuf = null;
     letzterThread = '';       // anderes Ziel, anderer Vergleichsstand
     $('fly-titel').textContent = titel;
     $('fly-gesamt').textContent = '';
@@ -5091,7 +5148,7 @@
   function flyFinden(id) {
     for (const k of (flyDaten && flyDaten.kommentare) || []) {
       if (k.id === id) return k;
-      for (const a of k.antworten) if (a.id === id) return a;
+      for (const a of k.antworten || []) if (a.id === id) return a;
     }
     return null;
   }
@@ -5842,9 +5899,196 @@
     formular();
   });
 
-  /* Alles am Thread hängt an einem Zuhörer: der Baum wird bei jeder Antwort
-     neu gebaut, ein Zuhörer je Karte ginge dabei verloren. */
+  /* --- Die Hand am Thread: langer Druck und Wisch ---------------------------
+     Auf dem Handy liegt nichts mehr frei (siehe das Stylesheet bei `.ko-bar`).
+     Stattdessen zwei Griffe, die jeder aus seinem Messenger kennt:
+
+       lange gedrückt halten   →  die Reaktionsleiste an dieser Karte
+       von links nach rechts   →  auf diese Karte antworten
+
+     Alles hängt wie der Klick an EINEM Zuhörer am Thread — der Baum wird bei
+     jeder Antwort neu gebaut, ein Zuhörer je Karte ginge dabei verloren.
+
+     Der lange Druck baut den Thread ausdrücklich NICHT neu: er fällt, während
+     der Finger noch aufliegt, und ein `flyThread()` löste dabei genau die
+     Karte aus dem Baum, von der die folgenden `touchmove`/`touchend` noch
+     kommen. Sie liefen dann ins Leere und ließen den Zustand halb stehen.
+     Also wird die Klasse von Hand gesetzt — derselbe Grund, aus dem der
+     Klick-Zuhörer weiter unten die Auswahl am Knoten zuklappt statt über
+     einen Neubau. Gemerkt wird der Zustand trotzdem (`koAuf`), damit ein
+     Neubau von außen — eine fremde Reaktion, ein neuer Kommentar — die
+     offene Leiste nicht wegräumt.
+     --------------------------------------------------------------------- */
+  const LANG = 480;        // ms, bis aus dem Tippen ein Drücken wird
+  const SCHLUPF = 10;      // px, ab denen aus dem Druck eine Bewegung wird
+  const WISCH_AUF = 38;    // gezogene px, ab denen das Loslassen antwortet
+  const WISCH_MAX = 78;    // weiter geht die Karte nicht
+
+  let druck = null;        // { karte, uhr } — der laufende lange Druck
+  let druckGefallen = false;   // der lange Druck hat gegriffen, der Finger liegt noch
+  let wisch = null;        // die laufende Querbewegung samt ihrer Knoten
+  let klickWeg = 0;        // Zeitstempel: der Klick NACH einer Geste zählt nicht
+
+  /* Der lange Druck ist gefallen. Was sonst offen war, macht er zu: eine
+     zweite Leiste an einer zweiten Karte wäre ein Menü, das stehen blieb. */
+  function langerDruck(karte, id) {
+    druck = null;
+    wisch = null;          // eine Geste, eine Bedeutung
+    /* Gestempelt wird nicht HIER, sondern beim Loslassen: der Klick kommt vom
+       gehobenen Finger, und wer die Leiste erst eine Sekunde lang ansieht,
+       hebt ihn lange nach dem halben Schlag, mit dem der Druck fällt. Ein
+       Zeitstempel von jetzt wäre dann längst abgelaufen — die Leiste ginge im
+       Moment des Loslassens wieder zu, und über einem Foto stünde obendrein
+       die Lupe auf. */
+    druckGefallen = true;
+    if (navigator.vibrate) navigator.vibrate(14);
+    koAuf = id;
+    rePick = null;
+    const t = $('fly-thread');
+    t.querySelectorAll('.ko-repick').forEach(n => n.remove());
+    t.querySelectorAll('.ko-re-auf.an').forEach(n => {
+      n.classList.remove('an');
+      n.setAttribute('aria-expanded', 'false');
+    });
+    t.querySelectorAll('.ko-auf').forEach(n => n.classList.remove('ko-auf'));
+    karte.classList.add('ko-auf');
+  }
+
+  const druckAus = () => {
+    if (!druck) return;
+    clearTimeout(druck.uhr);
+    druck = null;
+  };
+
+  /* Die Karte zieht, ihr Pfeil und ihre Antworten halten dagegen: beide sind
+     Kinder der Karte und würden sonst mitfahren. Der Pfeil soll stehen
+     bleiben, während die Karte an ihm vorbeizieht, und die eingerückten
+     Antworten sind eigene Karten — sie gehen nur mit, wenn man sie selbst
+     anfasst. */
+  function wischZeichnen() {
+    const zug = wisch.zug;
+    if (!wisch.pfeil) {
+      wisch.pfeil = el('div', 'ko-wisch');
+      wisch.pfeil.appendChild(antwortIkon());
+      wisch.karte.appendChild(wisch.pfeil);
+      wisch.antw = wisch.karte.querySelector(':scope > .ko-antw');
+      wisch.karte.classList.add('ko-zieht');
+    }
+    const gegen = 'translateX(' + -zug + 'px)';
+    wisch.karte.style.transform = 'translateX(' + zug + 'px)';
+    if (wisch.antw) wisch.antw.style.transform = gegen;
+    const teil = Math.min(1, zug / WISCH_AUF);
+    wisch.pfeil.style.transform = gegen + ' scale(' + (0.55 + 0.45 * teil) + ')';
+    wisch.pfeil.style.opacity = String(teil);
+    wisch.pfeil.classList.toggle('bereit', zug >= WISCH_AUF);
+  }
+
+  /* Zurück auf null. `transform = ''` statt `translateX(0)`: eine stehen
+     gebliebene Transformation macht aus jeder Karte einen eigenen Bezugsrahmen
+     samt eigener Ebene im Zeichenwerk. */
+  function wischAus() {
+    if (!wisch) return;
+    if (wisch.pfeil) wisch.pfeil.remove();
+    if (wisch.karte) {
+      wisch.karte.classList.remove('ko-zieht');
+      wisch.karte.style.transform = '';
+    }
+    if (wisch.antw) wisch.antw.style.transform = '';
+    wisch = null;
+  }
+
+  const thread = $('fly-thread');
+
+  thread.addEventListener('touchstart', ev => {
+    druckAus();
+    wischAus();
+    if (ev.touches.length !== 1) return;
+    /* Knöpfe behalten ihre eigene Bedeutung: wer ein Emoji zu lange hält,
+       soll trotzdem das Emoji drücken und nicht die Leiste neu aufklappen. */
+    if (ev.target.closest('.ko-bar, .ko-repick, .ko-fuss, button, a')) return;
+    const karte = ev.target.closest('.ko');
+    if (!karte) return;
+    const id = Number(karte.dataset.id);
+    const k = flyFinden(id);
+    if (!k || k.geloescht) return;   // an einer gelöschten Karte gibt es nichts zu tun
+    const t = ev.touches[0];
+    druck = { karte, uhr: setTimeout(() => langerDruck(karte, id), LANG) };
+    wisch = { karte, id, wer: k.autor, x: t.clientX, y: t.clientY, achse: null, zug: 0 };
+  }, { passive: true });
+
+  /* `passive: false`, weil wir das Scrollen abfangen müssen, sobald die
+     Bewegung quer geht. Vorher NICHT: solange die Achse nicht feststeht,
+     gehört die Bewegung noch dem Browser. */
+  thread.addEventListener('touchmove', ev => {
+    if (!wisch) { druckAus(); return; }
+    const t = ev.touches[0];
+    const dx = t.clientX - wisch.x, dy = t.clientY - wisch.y;
+    if (Math.abs(dx) > SCHLUPF || Math.abs(dy) > SCHLUPF) druckAus();
+    if (wisch.achse === null) {
+      if (Math.abs(dy) > SCHLUPF && Math.abs(dy) >= Math.abs(dx)) wisch.achse = 'hoch';
+      else if (dx > SCHLUPF && dx > Math.abs(dy)) wisch.achse = 'quer';
+      else return;
+    }
+    if (wisch.achse !== 'quer') return;
+    ev.preventDefault();
+    // Nur nach rechts, und mit Widerstand: die Karte folgt langsamer als der
+    // Finger und bleibt bei `WISCH_MAX` stehen. Sonst wäre es ein Wegschieben.
+    wisch.zug = Math.max(0, Math.min(dx * 0.6, WISCH_MAX));
+    wischZeichnen();
+  }, { passive: false });
+
+  thread.addEventListener('touchend', () => {
+    druckAus();
+    // Erst jetzt zählt der lange Druck ab — siehe `langerDruck`.
+    if (druckGefallen) { klickWeg = Date.now(); druckGefallen = false; }
+    const los = wisch && wisch.achse === 'quer' && wisch.zug >= WISCH_AUF;
+    const id = wisch && wisch.id, wer = wisch && wisch.wer;
+    wischAus();
+    if (!los) return;
+    klickWeg = Date.now();
+    if (navigator.vibrate) navigator.vibrate(12);
+    koAntworten(id, wer);
+  }, { passive: true });
+
+  thread.addEventListener('touchcancel', () => {
+    druckAus(); wischAus(); druckGefallen = false;
+  }, { passive: true });
+
+  /* Ein Blatt, das unter dem liegenden Finger wegscrollt, ist kein Drücken.
+     Der Schlupf allein fängt das nicht: ein langsam anrollender Schub bleibt
+     eine halbe Sekunde unter zehn Pixeln. */
+  const blatt = thread.closest('.fly-blatt');
+  if (blatt) blatt.addEventListener('scroll', druckAus, { passive: true });
+
+  /* Das Auswahlmenü des Systems will denselben langen Druck. Auf dem Handy
+     bekommt es ihn nicht — Android hebt es an einem Bild sonst trotz
+     `-webkit-touch-callout` an. Am Rechner bleibt die rechte Maustaste, was
+     sie ist. */
+  thread.addEventListener('contextmenu', ev => {
+    if (matchMedia('(pointer: coarse)').matches) ev.preventDefault();
+  });
+
+  /* Antworten — der eine Weg, den der Pfeil in der Leiste und der Wisch sich
+     teilen. Das Feld bleibt LEER: wer antwortet, schreibt seinen eigenen Satz;
+     wem die Antwort gilt, steht danach am Kopf der Karte und muss nicht in
+     ihrem Text stehen. */
+  function koAntworten(id, wer) {
+    flyModus = { art: 'antwort', id, wer };
+    $('fly-feld').value = '';
+    flyAnZeigen();
+    $('fly-feld').focus();
+  }
+
   $('fly-thread').addEventListener('click', async ev => {
+    /* Der Klick, den ein Handy nach jeder Geste hinterherschickt, meint
+       nichts mehr: die Geste hat ihre Sache schon getan. Ohne diesen Riegel
+       schlösse er die eben aufgeklappte Leiste im selben Atemzug wieder — oder
+       träfe ein Emoji, das gerade erst unter den Finger gewachsen ist. */
+    if (klickWeg && Date.now() - klickWeg < 700) {
+      klickWeg = 0;
+      return;
+    }
+
     /* Ein Griff irgendwo anders schließt die Emoji-Auswahl — sie ist ein Menü,
        und ein Menü bleibt nicht offen stehen. Zugeklappt wird am Knoten selbst
        statt über `flyThread()`: der Rest dieses Zuhörers arbeitet noch mit dem
@@ -5859,6 +6103,14 @@
       });
     }
 
+    /* Dasselbe für die Leiste, die ein langer Druck aufgemacht hat: ein Tipp
+       daneben legt sie wieder weg. Am Rechner läuft das über den Zeiger und
+       diese Zeilen tun nichts. */
+    if (koAuf !== null && !ev.target.closest('.ko-bar, .ko-repick')) {
+      koAuf = null;
+      $('fly-thread').querySelectorAll('.ko-auf').forEach(n => n.classList.remove('ko-auf'));
+    }
+
     const foto = ev.target.closest('.ko-bild');
     if (foto) { lupeAuf(foto.dataset.gross); return; }
 
@@ -5867,6 +6119,7 @@
     const pick = ev.target.closest('.ko-pick');
     if (pick) {
       rePick = null;
+      koAuf = null;          // gedrückt ist gedrückt, die Leiste hat ihr Werk getan
       flyReagieren(Number(pick.dataset.id), pick.dataset.pick);
       return;
     }
@@ -5894,17 +6147,12 @@
       return;
     }
 
-    /* Antworten: der Pfeil in der Leiste ist seit dem Wegfall des Wortes im
-       Fuß der einzige Weg hierher, die Marke `data-antwort` bleibt dieselbe.
-       Das Feld bleibt LEER — wer antwortet, schreibt seinen eigenen Satz; wem
-       die Antwort gilt, steht danach am Kopf der Karte und muss nicht in
-       ihrem Text stehen. */
+    /* Antworten: der Pfeil in der Leiste, am Rechner. Auf dem Handy liegt er
+       hinter dem Stylesheet, dort führt der Wisch hierher — beide durch
+       dieselbe Tür (`koAntworten`). */
     const ant = ev.target.closest('[data-antwort]');
     if (ant) {
-      flyModus = { art: 'antwort', id: Number(ant.dataset.antwort), wer: ant.dataset.wer };
-      $('fly-feld').value = '';
-      flyAnZeigen();
-      $('fly-feld').focus();
+      koAntworten(Number(ant.dataset.antwort), ant.dataset.wer);
       return;
     }
 
