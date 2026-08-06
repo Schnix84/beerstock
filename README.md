@@ -580,7 +580,7 @@ zum 500er.
 ```bash
 cd worker
 npx wrangler d1 migrations apply beerstock --remote  # Schema
-npx wrangler deploy --var GIT_SHA:$(git rev-parse --short HEAD)$([ -n "$(git status --porcelain -- worker/src)" ] && echo '+') --var DEPLOYED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)  # Worker
+npx wrangler deploy --var GIT_SHA:$(git rev-parse --short HEAD)$([ -n "$(git status --porcelain -- src)" ] && echo '+') --var DEPLOYED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)  # Worker
 ```
 
 Einmalig dazu die Secrets, sonst geht keine Mail raus und keine Meldung ein:

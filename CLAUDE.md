@@ -45,7 +45,7 @@ Die Befehle dazu — Wrangler läuft hier ohne `node_modules` über `npx`:
 
 ```
 cd worker && npx wrangler d1 migrations apply beerstock --remote
-cd worker && npx wrangler deploy --var GIT_SHA:$(git rev-parse --short HEAD)$([ -n "$(git status --porcelain -- worker/src)" ] && echo '+') --var DEPLOYED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)
+cd worker && npx wrangler deploy --var GIT_SHA:$(git rev-parse --short HEAD)$([ -n "$(git status --porcelain -- src)" ] && echo '+') --var DEPLOYED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
 
 Die beiden `--var` stehen absichtlich nicht in `wrangler.jsonc` — sie ändern sich bei jedem
