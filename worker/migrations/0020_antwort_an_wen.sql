@@ -1,0 +1,24 @@
+-- Wem eine Antwort gilt
+--
+-- `antwort_auf` zeigt seit 0007 immer auf die WURZEL: der Worker flacht ab,
+-- damit der Baum eine Ebene tief bleibt (auf dem Handy ist bei Stufe drei die
+-- Spalte vierzig Pixel breit). Was dabei verlorenging, ist der Adressat -- wer
+-- auf eine Antwort antwortete, dessen Karte stand danach flach unter der
+-- Wurzel, und nach dem Neuladen sah es aus, als habe er dem Wurzelautor
+-- geantwortet. Der Worker WUSSTE es im Moment des Einfuegens (er zieht daraus
+-- die Echo-Mail), er schrieb es nur nirgends hin.
+--
+-- Genau das tut diese Spalte. Sie aendert am Baum nichts: `antwort_auf` bleibt
+-- die Wurzel und bleibt die Ordnung. `an_id` ist die Karte, auf die wirklich
+-- geantwortet wurde -- bei einer Antwort auf die Wurzel ist das die Wurzel
+-- selbst, bei einer Antwort auf eine Antwort deren Id. Die Seite zeigt die
+-- Marke "an Basti" nur im zweiten Fall; im ersten sagt es die Einrueckung.
+--
+-- KEIN Backfill. Fuer die Antworten von vorher steht der Adressat nirgends,
+-- und ihn auf `antwort_auf` zu setzen hiesse zu behaupten, sie haetten alle
+-- der Wurzel gegolten. NULL heisst hier ehrlich "nicht ueberliefert", und die
+-- Seite bleibt bei solchen Karten stumm.
+--
+-- Kein Index: nach dieser Spalte wird nie gesucht, sie wird nur mitgelesen.
+
+ALTER TABLE kommentare ADD COLUMN an_id INTEGER REFERENCES kommentare(id);

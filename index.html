@@ -1013,9 +1013,11 @@
     text-transform: uppercase; color: var(--kreide-weg);
     margin: 20px 0 2px; opacity: .85;
   }
-  .ko { padding: 10px 0 8px; border-bottom: 1px dashed #ffffff16; }
+  /* `relative`, weil die Reaktionsleiste am Rechner oben rechts in der Karte
+     schwebt (siehe `.ko-bar`) — und der Emoji-Wähler unter ihr. */
+  .ko { position: relative; padding: 10px 0 8px; border-bottom: 1px dashed #ffffff16; }
   .ko:last-child { border-bottom: none; }
-  .ko-kopf { display: flex; align-items: baseline; gap: 8px; }
+  .ko-kopf { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
   .ko-autor { font-family: var(--hand); font-size: 14px; }
   .ko-zeit { font-size: 10px; color: var(--kreide-weg); }
   .ko-noten {
@@ -1027,6 +1029,24 @@
     overflow-wrap: anywhere; white-space: pre-wrap;
   }
   .ko-text.weg { color: var(--kreide-weg); font-style: italic; }
+  /* Die Marke „an Basti" am Kopf einer Antwort. Sie steht in der Kopfzeile
+     neben der Uhrzeit und nicht über dem Text: dort kostet sie keine Zeile,
+     und sie gehört zur Herkunft der Karte, nicht zu dem, was gesagt wurde. */
+  .ko-an-wen {
+    display: inline-flex; align-items: center; gap: 3px;
+    border: none; background: none; padding: 0; cursor: pointer;
+    font: inherit; font-size: 10px; color: var(--kreide-weg);
+    text-decoration: underline; text-underline-offset: 2px;
+  }
+  .ko-an-wen svg { display: block; opacity: .8; }
+  .ko-an-wen:hover, .ko-an-wen:focus-visible { color: var(--gelb); }
+  /* Angesprungen: die gemeinte Karte blitzt einmal auf. Ohne das sieht ein
+     Sprung, dessen Ziel schon im Bild lag, nach gar nichts aus. */
+  .ko.blitz { animation: ko-blitz 1.4s ease-out; }
+  @keyframes ko-blitz {
+    0%, 100% { background: transparent; }
+    12%      { background: #e8c76626; }
+  }
   /* Feste Höhe und `cover`: sonst springt der Thread beim Nachladen der Bilder,
      und zwar genau dann, wenn jemand darunter gerade etwas antippen wollte.
      Der ganze Ausschnitt steht in der Lupe. */
@@ -1046,24 +1066,83 @@
   .ko-re .zahl { margin-left: 4px; font-variant-numeric: tabular-nums; }
   /* Der aufgeschlagene Chip: sein „wer" steht darunter, das soll man sehen. */
   .ko-re.offen { border-color: #ffffff55; color: var(--kreide); }
-  /* Der Knopf, hinter dem die vier liegen. Vier offene Emojis an jeder Karte
-     waren vier Angebote, wo eines reicht — und sie standen dem im Weg, was
-     wirklich an der Karte hängt: den Reaktionen, die es schon gibt. Er trägt
-     ein Strichgesicht statt eines fünften bunten Emojis: bunt sähe aus wie
-     eine Reaktion, die schon da ist, und darum geht es hier gerade nicht. */
-  .ko-re-auf { display: inline-flex; align-items: center; padding: 3px 9px; }
-  .ko-re-auf svg { display: block; }
-  /* Die Auswahl in einer eigenen Zeile, nicht schwebend: über einer
-     scrollenden Liste ist ein Menü, das mitfährt, auf dem Handy ein Ärgernis. */
+
+  /* --- Die Reaktionsleiste, nach Art von Teams ------------------------------
+     Vier Zeichen zum Sofortdrücken, der Wähler für den Rest, das Antworten. Am
+     Rechner schwebt sie oben rechts über der Karte und erscheint erst beim
+     Überfahren — dort ist Platz, den nichts anderes braucht, und eine Leiste,
+     die immer dasteht, wäre an jeder Karte dreimal soviel Bedienung wie Text.
+
+     Auf dem Handy gibt es kein Überfahren. Dort ist sie keine Schwebe, sondern
+     eine Zeile im Fluss unter der Karte — das ist dieselbe Überlegung, die
+     hier schon für den Wähler stand: über einer scrollenden Liste ist ein
+     Menü, das mitfährt, ein Ärgernis. Beides ist derselbe Baum, nur anders
+     gesetzt.
+     --------------------------------------------------------------------- */
+  .ko-bar {
+    display: flex; align-items: center; gap: 2px; margin-top: 7px;
+    padding: 2px 3px; border: 1px solid #ffffff22; border-radius: 999px;
+    background: #ffffff0d; width: max-content; max-width: 100%;
+  }
+  .ko-bar-k {
+    display: inline-flex; align-items: center; padding: 4px 7px;
+    border: none; border-radius: 999px; background: none;
+    color: var(--kreide-weg); cursor: pointer;
+  }
+  .ko-bar-k svg { display: block; }
+  .ko-bar-k:hover, .ko-bar-k:focus-visible { color: var(--kreide); }
+  /* Offener Wähler: der Knopf bleibt gelb, solange darunter etwas aufsteht. */
+  .ko-bar-k.an { color: var(--gelb); }
+  /* Ein Trennstrich zwischen Reagieren und Zitieren — das eine klebt am
+     Kommentar, das andere macht einen neuen. */
+  .ko-bar .ko-re-auf { border-right: 1px solid #ffffff1f; border-radius: 999px 0 0 999px; }
+
+  @media (hover: hover) and (pointer: fine) {
+    /* Schwebend, und nur für die Karte UNTER dem Zeiger: ohne das `:has` trägt
+       auch die Wurzel ihre Leiste, wenn man über einer Antwort steht — der
+       Zeiger ist dann in beiden Karten. */
+    .ko-bar {
+      position: absolute; top: 4px; right: 0; z-index: 2; margin: 0;
+      background: #303738; box-shadow: 0 3px 12px #0008;
+      opacity: 0; pointer-events: none; transition: opacity .12s ease-out;
+    }
+    .ko:hover:not(:has(.ko:hover)) > .ko-bar,
+    .ko:focus-within:not(:has(.ko:focus-within)) > .ko-bar {
+      opacity: 1; pointer-events: auto;
+    }
+    /* Solange der Wähler offen ist, bleibt die Leiste stehen — sonst wäre sie
+       weg, sobald der Zeiger in den Wähler wandert, und der Knopf, mit dem man
+       wieder zuklappt, mit ihr. */
+    .ko:has(> .ko-repick) > .ko-bar { opacity: 1; pointer-events: auto; }
+    /* Platz für die Leiste freihalten. Sie schwebt über der Kopfzeile, und dort
+       steht rechts die Marke „an Basti" — ohne diesen Rand läge sie bei einem
+       langen Namen darauf, sichtbar erst beim Überfahren. Reserviert wird nur,
+       gerückt wird nichts: die Kopfzeile ist linksbündig. */
+    .ko > .ko-kopf { padding-right: 170px; }
+  }
+
+  /* Der Wähler: die ganze Tafel, ein Raster. Am Rechner hängt er unter der
+     schwebenden Leiste, auf dem Handy steht er im Fluss darunter. Die Höhe ist
+     gedeckelt und er scrollt — fünfzig Zeichen sind sonst eine halbe Seite. */
   .ko-repick {
-    flex-basis: 100%; display: flex; gap: 6px; margin-top: 3px;
-    animation: re-auf .14s ease-out;
+    display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;
+    max-height: 168px; overflow-y: auto; animation: re-auf .14s ease-out;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .ko-repick {
+      position: absolute; top: 38px; right: 0; z-index: 3;
+      width: min(258px, 100%); padding: 7px; border-radius: 8px;
+      border: 1px solid #ffffff26; background: #2b3234; box-shadow: 0 6px 22px #000a;
+    }
   }
   .ko-pick {
-    border: 1px solid #ffffff22; border-radius: 999px; background: #ffffff0d;
-    padding: 3px 10px 4px; font-size: 15px; line-height: 1.2; cursor: pointer;
+    border: 1px solid transparent; border-radius: 999px; background: none;
+    padding: 2px 5px 3px; font-size: 16px; line-height: 1.2; cursor: pointer;
   }
+  .ko-pick:hover, .ko-pick:focus-visible { background: #ffffff1a; }
   .ko-pick.an { border-color: #e8c76688; background: #e8c7661a; }
+  /* In der Leiste eine Spur kleiner: sie steht neben Text, nicht im Raster. */
+  .ko-bar .ko-pick { padding: 2px 4px 3px; font-size: 14px; }
   @keyframes re-auf { from { opacity: 0; transform: translateY(-3px); } }
   /* Wer wie reagiert hat. Eine Zeile, kein Blatt: es sind selten mehr als eine
      Handvoll Namen, und ein Overlay dafür wäre ein zweiter Weg zurück. */
@@ -2617,8 +2696,12 @@
     /* Eine Kommentarkarte — für die Wurzel wie für die Antwort dieselbe. Sie
        unterschieden sich nur noch darin, wo sie hängt: der Rahmen `.ko-antw`
        rückt die Antworten ein, und tiefer als eine Ebene geht es nicht (dafür
-       sorgt der Worker, nicht diese Funktion). */
-    kommentar(k, kategorien) {
+       sorgt der Worker, nicht diese Funktion).
+
+       `wurzelId` ist die Karte, unter der diese hier hängt — nur die Wurzel
+       ruft ohne. Daran entscheidet sich, ob die Marke „an Basti" nötig ist:
+       eine Antwort auf die Wurzel sagt das schon durch ihre Einrückung. */
+    kommentar(k, kategorien, wurzelId) {
       const z = el('div', 'ko');
       z.dataset.id = k.id;
 
@@ -2626,6 +2709,8 @@
       kopf.appendChild(el('span', 'ko-autor kr', k.autor));
       kopf.appendChild(el('span', 'ko-zeit',
         kurzZeit(k.erstellt) + (k.geaendert ? ' · geändert' : '')));
+      const anWen = koAnWen(k, wurzelId);
+      if (anWen) kopf.appendChild(anWen);
       z.appendChild(kopf);
 
       /* Hing eine Bewertung am selben Absenden, steht sie über dem Text —
@@ -2659,31 +2744,25 @@
       if (!k.geloescht) {
         /* Nur was wirklich drangeklebt wurde, steht auch da. Ein Chip ist
            kein Schalter mehr, sondern die Frage „wer?" — ein Tap klappt die
-           Namen darunter auf. Gesetzt und zurückgenommen wird hinter dem
-           Knopf daneben, wie überall sonst im Netz. */
-        REAKTIONSARTEN.forEach(([art, bild, wort]) => {
-          const vor = k.reaktionen.find(r => r.art === art);
-          if (!vor || !vor.anzahl) return;
-          const offen = reWer && reWer.id === k.id && reWer.art === art;
+           Namen darunter auf. Gesetzt und zurückgenommen wird in der Leiste,
+           die beim Überfahren der Karte erscheint.
+
+           Gezählt wird über das, was da IST, nicht über eine feste Liste: seit
+           der Wähler offen ist, kann an einer Karte jedes Zeichen der Tafel
+           hängen — und auch eines, das später einmal aus ihr verschwindet. */
+        reReihe(k.reaktionen).forEach(vor => {
+          if (!vor.anzahl) return;
+          const offen = reWer && reWer.id === k.id && reWer.art === vor.art;
           const b = el('button', 'ko-re' + (vor.meins ? ' an' : '') + (offen ? ' offen' : ''));
           b.type = 'button';
-          b.dataset.art = art;
+          b.dataset.art = vor.art;
           b.dataset.id = k.id;
-          b.title = wort + ' — wer?';
+          b.title = emojiWort(vor.art) + ' — wer?';
           b.setAttribute('aria-expanded', offen ? 'true' : 'false');
-          b.appendChild(el('span', null, bild));
+          b.appendChild(el('span', null, vor.art));
           b.appendChild(el('span', 'zahl', String(vor.anzahl)));
           fuss.appendChild(b);
         });
-
-        const auf = el('button', 'ko-re ko-re-auf' + (rePick === k.id ? ' an' : ''));
-        auf.type = 'button';
-        auf.dataset.auf = k.id;
-        auf.title = 'Reagieren';
-        auf.setAttribute('aria-label', 'Reagieren');
-        auf.setAttribute('aria-expanded', rePick === k.id ? 'true' : 'false');
-        auf.appendChild(reIkon());
-        fuss.appendChild(auf);
 
         /* Antworten steht unter JEDER Karte, auch unter einer Antwort — vorher
            war unter einer Antwort Schluss, und wer auf sie eingehen wollte,
@@ -2706,32 +2785,12 @@
           fuss.append(ae, we);
         }
 
-        /* Die vier, aufgeschlagen. Was man selbst schon gedrückt hat, steht
-           hier hervorgehoben — derselbe Druck nimmt es zurück, das ist der
-           einzige Weg dorthin, seit der Chip die Namen zeigt. */
-        if (rePick === k.id) {
-          const w = el('div', 'ko-repick');
-          REAKTIONSARTEN.forEach(([art, bild, wort]) => {
-            const vor = k.reaktionen.find(r => r.art === art);
-            const p = el('button', 'ko-pick' + (vor && vor.meins ? ' an' : ''), bild);
-            p.type = 'button';
-            p.dataset.pick = art;
-            p.dataset.id = k.id;
-            p.title = wort;
-            p.setAttribute('aria-label', wort);
-            p.setAttribute('aria-pressed', vor && vor.meins ? 'true' : 'false');
-            w.appendChild(p);
-          });
-          fuss.appendChild(w);
-        }
-
         // Wer wie reagiert hat, zum aufgeschlagenen Chip.
         if (reWer && reWer.id === k.id) {
           const g = k.reaktionen.find(r => r.art === reWer.art);
-          const bild = (REAKTIONSARTEN.find(a => a[0] === reWer.art) || [])[1];
           if (g) {
             const w = el('div', 'ko-wer');
-            w.appendChild(el('span', null, bild));
+            w.appendChild(el('span', null, reWer.art));
             w.appendChild(el('span', null, (g.namen || []).join(', ')
               || g.anzahl + (g.anzahl === 1 ? ' Reaktion' : ' Reaktionen')));
             fuss.appendChild(w);
@@ -2740,9 +2799,17 @@
       }
       z.appendChild(fuss);
 
+      /* Die Leiste und der aufgeschlagene Wähler stehen NACH dem Fuß im
+         Baum — auf dem Handy ist das ihre Reihenfolge auf dem Schirm, am
+         Rechner schwebt die Leiste ohnehin oben rechts. */
+      if (!k.geloescht) {
+        z.appendChild(koLeiste(k));
+        if (rePick === k.id) z.appendChild(koWaehler(k));
+      }
+
       if (k.antworten && k.antworten.length) {
         const unten = el('div', 'ko-antw');
-        k.antworten.forEach(a => unten.appendChild(VARIANTE.kommentar(a, kategorien)));
+        k.antworten.forEach(a => unten.appendChild(VARIANTE.kommentar(a, kategorien, k.id)));
         z.appendChild(unten);
       }
       return z;
@@ -3005,17 +3072,46 @@
 
   const grad = t => Number.isFinite(t) ? t.toFixed(1).replace('.', ',') + ' °C' : '–';
 
-  /* Die vier Reaktionen, wie bei WhatsApp. Mehr wären eine Tastatur, weniger
-     ließen "nein, aber lieb gemeint" nicht ausdrücken. Das Wort dahinter ist
-     das, was ein Screenreader vorliest — ein Emoji allein sagt ihm nichts. */
-  const REAKTIONSARTEN = [
-    ['daumen_hoch', '👍', 'Daumen hoch'], ['daumen_runter', '👎', 'Daumen runter'],
-    ['herz', '❤️', 'Herz'], ['bier', '🍺', 'Bier'],
-  ];
+  /* Die Emoji-Tafel. Der Schlüssel IST das Zeichen — seit Migration 0019 steht
+     genau das auch in der Datenbank, es gibt keine Namen wie 'daumen_hoch' mehr.
+     Das Wort dahinter ist das, was ein Screenreader vorliest; ein Emoji allein
+     sagt ihm nichts.
 
-  /* Der Knopf, hinter dem die vier liegen: ein Gesicht mit Plus, gestrichelt
+     Diese Liste muss mit REAKTIONEN im Worker übereinstimmen — sie prüft
+     dagegen, und was hier steht, aber dort fehlt, ist ein toter Knopf mit
+     Fehlerzeile. Beim Erweitern also beide.
+
+     Die Reihenfolge ist die des Wählers: die vier schnellen zuerst, dann
+     Gesichter, Gesten, Zeichen, Getränke und Essen, zuletzt der Rest. */
+  const EMOJI_WORT = new Map([
+    ['❤️', 'Herz'], ['👍', 'Daumen hoch'], ['🍺', 'Bier'], ['🍻', 'Prost'],
+    ['👎', 'Daumen runter'], ['😂', 'Tränen gelacht'], ['🤣', 'Wälzt sich'],
+    ['😮', 'Überrascht'], ['😢', 'Traurig'], ['😡', 'Wütend'], ['🥳', 'Feiert'],
+    ['😍', 'Verliebt'], ['😎', 'Cool'], ['🤔', 'Nachdenklich'],
+    ['🙈', 'Nichts gesehen'], ['🫡', 'Salutiert'], ['🤷', 'Keine Ahnung'],
+    ['😴', 'Schläft'], ['🥴', 'Angeheitert'], ['🤢', 'Übel'],
+    ['🎉', 'Party'], ['🔥', 'Feuer'], ['👏', 'Applaus'], ['🙏', 'Danke'],
+    ['💪', 'Stark'], ['🤝', 'Abgemacht'], ['👀', 'Augen'], ['💯', 'Hundert'],
+    ['⭐', 'Stern'], ['⚡', 'Blitz'], ['🚀', 'Rakete'], ['✅', 'Haken'],
+    ['❌', 'Kreuz'], ['🏆', 'Pokal'], ['💸', 'Geld'], ['🧊', 'Eiswürfel'],
+    ['🥂', 'Anstoßen'], ['🍾', 'Sekt'], ['🍷', 'Wein'], ['🥃', 'Kurzer'],
+    ['☕', 'Kaffee'], ['🍕', 'Pizza'], ['🍔', 'Burger'], ['🌭', 'Wurst'],
+    ['🥨', 'Brezel'], ['🍟', 'Pommes'],
+    ['⚽', 'Fußball'], ['🎵', 'Musik'], ['📸', 'Foto'], ['🚲', 'Rad'],
+  ]);
+
+  /* Die vier, die ohne Umweg dastehen — wie die Schnellreaktionen bei Teams.
+     Mehr wären eine Tastatur an jeder Karte, alles Weitere liegt einen Griff
+     entfernt hinter dem Wähler. */
+  const SCHNELL = ['❤️', '👍', '🍺', '🍻'];
+
+  // Für einen Chip, dessen Zeichen aus einer älteren Runde stammt: lieber das
+  // Emoji selbst vorlesen als gar nichts.
+  const emojiWort = e => EMOJI_WORT.get(e) || e;
+
+  /* Der Knopf, hinter dem der Rest liegt: ein Gesicht mit Plus, gestrichelt
      wie alles hier — ein fünftes buntes Emoji sähe aus wie eine fünfte
-     Reaktion, und genau das ist es nicht. Er trägt die Farbe des Fußes
+     Schnellreaktion, und genau das ist es nicht. Er trägt die Farbe der Leiste
      (`currentColor`), steht also grau da und wird gelb, wenn er offen ist —
      dieselbe Zurückhaltung, mit der Facebook sein "Gefällt mir" hinschreibt,
      bloß als Zeichen statt als Wort. */
@@ -3034,6 +3130,26 @@
     return s;
   };
 
+  /* Antworten aus der Leiste: der Pfeil, der nach links unten umknickt. Er tut
+     dasselbe wie der Wortknopf im Fuß und trägt deshalb auch dessen Bedeutung —
+     ein zweites Zeichen dafür gibt es nicht.
+
+     Hier stand einmal ein Zitatsymbol, das den Text des Kommentars in das Feld
+     kopierte. Das ist wieder ausgebaut: dass eine Antwort eine Antwort ist,
+     trägt die Einrückung, und WEM sie gilt, sagt jetzt die Marke am Kopf der
+     Karte (`ko-an-wen`) — dafür muss niemandem sein eigener Text in den Mund
+     gelegt werden. */
+  const antwortIkon = () => {
+    const s = s_el('svg', {
+      width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none',
+      stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round',
+      'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false',
+    });
+    s.appendChild(s_el('path', { d: 'M9 7.5 3.5 13 9 18.5' }));
+    s.appendChild(s_el('path', { d: 'M3.5 13h9.5a7 7 0 0 1 7 7v.5' }));
+    return s;
+  };
+
   /* Zwei Klappen am Thread, beide je Karte und höchstens eine offen: `rePick`
      ist die Id der Karte mit aufgeschlagener Emoji-Auswahl, `reWer` die Karte
      samt Art, deren Namen darunterstehen. Sie liegen HIER und nicht am
@@ -3041,6 +3157,109 @@
      wäre das Aufgeklappte nach der nächsten Antwort von selbst wieder zu. */
   let rePick = null;
   let reWer = null;
+
+  /* Die Chips einer Karte in eine feste Reihenfolge bringen: die vier schnellen
+     zuerst und immer an derselben Stelle, alles Weitere dahinter, so wie es der
+     Worker geliefert hat. Ohne das springen die Chips beim Nachfassen umher —
+     die Reihenfolge käme sonst daher, wer zuerst gedrückt hat. */
+  const reRang = e => { const i = SCHNELL.indexOf(e); return i < 0 ? 99 : i; };
+  const reReihe = liste => [...(liste || [])].sort((a, b) => reRang(a.art) - reRang(b.art));
+
+  /* Ein Emoji-Knopf, wie er in der Leiste und im Wähler gleichermaßen steht.
+     Eine Klasse trägt das Verhalten (`ko-pick`, der Zuhörer greift danach),
+     das Aussehen kommt vom Ort — die Leiste ist eng, der Wähler ist ein Raster. */
+  function koPick(k, e) {
+    const vor = k.reaktionen.find(r => r.art === e);
+    const wort = emojiWort(e);
+    const p = el('button', 'ko-pick' + (vor && vor.meins ? ' an' : ''), e);
+    p.type = 'button';
+    p.dataset.pick = e;
+    p.dataset.id = k.id;
+    p.title = wort;
+    p.setAttribute('aria-label', wort);
+    p.setAttribute('aria-pressed', vor && vor.meins ? 'true' : 'false');
+    return p;
+  }
+
+  /* Die Leiste, wie Teams sie über der Nachricht zeigt: vier Zeichen zum
+     Sofortdrücken, der Wähler für den Rest, der Antwortpfeil. Sie hängt an JEDER
+     Karte im Baum — auch an einem Foto, denn ein Foto IST hier ein Kommentar.
+
+     Am Rechner erscheint sie beim Überfahren der Karte und schwebt oben rechts;
+     auf dem Handy gibt es kein Überfahren, dort steht sie einfach da. Das ist
+     eine Sache des Stylesheets, nicht dieser Funktion — gebaut wird sie immer. */
+  function koLeiste(k) {
+    const bar = el('div', 'ko-bar');
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', 'Reagieren oder zitieren');
+    SCHNELL.forEach(e => bar.appendChild(koPick(k, e)));
+
+    const auf = el('button', 'ko-bar-k ko-re-auf' + (rePick === k.id ? ' an' : ''));
+    auf.type = 'button';
+    auf.dataset.auf = k.id;
+    auf.title = 'Weitere Emojis';
+    auf.setAttribute('aria-label', 'Weitere Emojis');
+    auf.setAttribute('aria-expanded', rePick === k.id ? 'true' : 'false');
+    auf.appendChild(reIkon());
+    bar.appendChild(auf);
+
+    const zu = el('button', 'ko-bar-k');
+    zu.type = 'button';
+    zu.dataset.antwort = k.id;
+    zu.dataset.wer = k.autor;
+    zu.title = 'Antworten';
+    zu.setAttribute('aria-label', 'Auf diesen Kommentar antworten');
+    zu.appendChild(antwortIkon());
+    bar.appendChild(zu);
+    return bar;
+  }
+
+  /* Der aufgeschlagene Wähler: die ganze Tafel, die vier schnellen darin
+     eingeschlossen. Was man selbst schon gedrückt hat, steht hervorgehoben —
+     derselbe Druck nimmt es zurück, das ist der einzige Weg dorthin, seit der
+     Chip im Fuß die Namen zeigt statt zu schalten. */
+  function koWaehler(k) {
+    const w = el('div', 'ko-repick');
+    w.setAttribute('role', 'group');
+    w.setAttribute('aria-label', 'Emoji wählen');
+    for (const e of EMOJI_WORT.keys()) w.appendChild(koPick(k, e));
+    return w;
+  }
+
+  /* Die Marke am Kopf einer Antwort: „an Basti". Sie steht NUR da, wo die
+     Einrückung nicht schon alles sagt — also wenn die Antwort einer anderen
+     Antwort gilt und nicht der Wurzel, unter der sie hängt.
+
+     Der Worker flacht ab (eine Ebene, siehe 0007), das bleibt so: jede weitere
+     Stufe frisst auf dem Handy die Spalte. Statt tiefer zu rücken, nennt die
+     Karte ihren Adressaten und zeigt auf ihn.
+
+     Antworten von VOR Migration 0020 haben kein `an_id` — sie bleiben stumm.
+     Das ist kein Fehler: für sie steht der Bezug nirgends, und ein geratener
+     wäre schlechter als keiner. */
+  function koAnWen(k, wurzelId) {
+    if (!k.an_id || !wurzelId || k.an_id === wurzelId) return null;
+    const b = el('button', 'ko-an-wen');
+    b.type = 'button';
+    b.dataset.hin = k.an_id;
+    b.title = 'Zur angesprochenen Karte';
+    b.appendChild(pfeilIkon());
+    b.appendChild(el('span', null, 'an ' + (k.an_autor || 'Ehemaliger')));
+    return b;
+  }
+
+  // Der kleine Knick, der die Marke als Bezug lesbar macht — dasselbe Zeichen
+  // wie am Antwortknopf, nur in Schriftgröße.
+  const pfeilIkon = () => {
+    const s = s_el('svg', {
+      width: 11, height: 11, viewBox: '0 0 24 24', fill: 'none',
+      stroke: 'currentColor', 'stroke-width': 2.4, 'stroke-linecap': 'round',
+      'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false',
+    });
+    s.appendChild(s_el('path', { d: 'M9 7.5 3.5 13 9 18.5' }));
+    s.appendChild(s_el('path', { d: 'M3.5 13h9.5a7 7 0 0 1 7 7v.5' }));
+    return s;
+  };
 
   /* Alter eines Kommentars. Feiner als `standText`: in einem Thread ist der
      Unterschied zwischen "gerade" und "vor zwei Stunden" die halbe Information. */
@@ -4686,6 +4905,21 @@
     }
   }
 
+  /* Zur angesprochenen Karte springen. Die Marke am Kopf einer Antwort nennt
+     einen Namen; hier wird daraus ein Ort. Das Aufblitzen ist der eigentliche
+     Zweck — im flachen Faden liegt die gemeinte Karte oft schon im Bild, und
+     ein Sprung ohne sichtbares Ziel sähe aus, als sei nichts passiert. */
+  function koHinspringen(id) {
+    const karte = $('fly-thread').querySelector(`.ko[data-id="${id}"]`);
+    if (!karte) return;
+    const sparsam = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    karte.scrollIntoView({ block: 'center', behavior: sparsam ? 'auto' : 'smooth' });
+    karte.classList.remove('blitz');
+    void karte.offsetWidth;          // Neustart der Animation erzwingen
+    karte.classList.add('blitz');
+    setTimeout(() => karte.classList.remove('blitz'), 1400);
+  }
+
   /* Reagieren wird SOFORT gezeichnet, bevor die Antwort da ist — ein Daumen,
      der eine halbe Sekunde überlegt, fühlt sich kaputt an. Scheitert der Ruf,
      springt er zurück und die Fehlerzeile erscheint. */
@@ -5386,7 +5620,8 @@
     const foto = ev.target.closest('.ko-bild');
     if (foto) { lupeAuf(foto.dataset.gross); return; }
 
-    // Ein Emoji aus der Auswahl: setzen oder zurücknehmen, dann zuklappen.
+    /* Ein Emoji: setzen oder zurücknehmen, dann zuklappen. Derselbe Zweig für
+       die Leiste und für den Wähler — beide tragen `.ko-pick`. */
     const pick = ev.target.closest('.ko-pick');
     if (pick) {
       rePick = null;
@@ -5394,29 +5629,46 @@
       return;
     }
 
+    // Der Knopf mit dem Gesicht klappt den Wähler auf.
+    const auf = ev.target.closest('.ko-re-auf');
+    if (auf) {
+      const id = Number(auf.dataset.auf);
+      rePick = rePick === id ? null : id;
+      flyThread();
+      return;
+    }
+
+    /* Die Marke am Kopf einer Antwort: sie zeigt hin, statt es zu behaupten —
+       die angesprochene Karte rückt ins Bild und blitzt einmal auf. */
+    const hin = ev.target.closest('[data-hin]');
+    if (hin) { koHinspringen(Number(hin.dataset.hin)); return; }
+
+    // Ein Chip fragt „wer?" und klappt die Namen darunter auf.
     const re = ev.target.closest('.ko-re');
     if (re) {
-      // Der Knopf mit dem Gesicht klappt die vier auf, ein Chip die Namen.
-      if (re.dataset.auf) {
-        const id = Number(re.dataset.auf);
-        rePick = rePick === id ? null : id;
-      } else {
-        const id = Number(re.dataset.id), art = re.dataset.art;
-        reWer = (reWer && reWer.id === id && reWer.art === art) ? null : { id, art };
-      }
+      const id = Number(re.dataset.id), art = re.dataset.art;
+      reWer = (reWer && reWer.id === id && reWer.art === art) ? null : { id, art };
       flyThread();
+      return;
+    }
+
+    /* Antworten: der Pfeil in der Leiste und das Wort im Fuß tun dasselbe und
+       hängen deshalb an derselben Marke. Das Feld bleibt LEER — wer antwortet,
+       schreibt seinen eigenen Satz; wem die Antwort gilt, steht danach am Kopf
+       der Karte und muss nicht in ihrem Text stehen. */
+    const ant = ev.target.closest('[data-antwort]');
+    if (ant) {
+      flyModus = { art: 'antwort', id: Number(ant.dataset.antwort), wer: ant.dataset.wer };
+      $('fly-feld').value = '';
+      flyAnZeigen();
+      $('fly-feld').focus();
       return;
     }
 
     const tat = ev.target.closest('.ko-tat');
     if (!tat) return;
 
-    if (tat.dataset.antwort) {
-      flyModus = { art: 'antwort', id: Number(tat.dataset.antwort), wer: tat.dataset.wer };
-      $('fly-feld').value = '';
-      flyAnZeigen();
-      $('fly-feld').focus();
-    } else if (tat.dataset.aendern) {
+    if (tat.dataset.aendern) {
       const k = flyFinden(Number(tat.dataset.aendern));
       flyModus = { art: 'aendern', id: Number(tat.dataset.aendern), wer: null };
       $('fly-feld').value = (k && k.text) || '';

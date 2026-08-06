@@ -99,11 +99,19 @@ Zahlen, die auseinanderdriften, sind schlechter als eine. Termin-Noten zählen n
 auf den Gastgeber ein, sonst zählte ein einziger Abend doppelt. Sich selbst bewertet
 niemand.
 
-Dazu **Kommentare** mit einer Antwortebene und Reaktionen (👍 👎 ❤️ 🍺) wie bei
-WhatsApp. Die vier liegen hinter einem Knopf und kommen erst auf Tippen heraus; an
-der Karte steht nur, was wirklich drangeklebt wurde. Ein Tap auf so eine Reaktion
-fragt nicht „auch?", sondern „wer?" — darunter klappen die Namen auf, die sie
-gesetzt haben. Zurückgenommen wird über denselben Knopf, mit dem sie kam.
+Dazu **Kommentare** mit einer Antwortebene und Reaktionen wie bei Teams: Wer mit der
+Maus über eine Karte fährt, bekommt oben rechts eine Leiste — vier Zeichen zum
+Sofortdrücken (❤️ 👍 🍺 🍻), daneben der Wähler mit den übrigen fünfzig, und der
+Antwortpfeil. Auf dem Handy gibt es kein Überfahren, dort steht die Leiste unter der
+Karte. An der Karte selbst steht nur, was wirklich drangeklebt wurde. Ein Tap auf so
+eine Reaktion fragt nicht „auch?", sondern „wer?" — darunter klappen die Namen auf,
+die sie gesetzt haben. Zurückgenommen wird über denselben Knopf, mit dem sie kam.
+
+**Wem eine Antwort gilt**, steht an ihrem Kopf: „↩ an Basti", anklickbar — die
+gemeinte Karte rückt ins Bild und blitzt auf. Die Marke erscheint nur, wo die
+Einrückung es nicht schon sagt, also bei einer Antwort auf eine Antwort. Tiefer
+eingerückt wird dafür nicht: bei Stufe drei ist die Spalte auf dem Handy vierzig
+Pixel breit.
 Wer beim Schreiben schon Sterne vergeben hat, trägt sie über seinem Text —
 so liest man, worauf sich das Lob bezieht. Es ist der Stand von damals, nicht der von
 heute: hebt jemand später seine Note, bleibt die alte Karte, wie sie war. Gelöscht
@@ -403,9 +411,9 @@ Drei Dinge, die dazugehören:
 | `POST /api/gif/holen` 🔒 | `{id}` holt das gewählte GIF nach R2 → `{key, bild}`, dieselbe Form wie `/api/bild` |
 | `GET /api/meme/vorlagen` 🔒 | die Imgflip-Vorlagen, abgespeckt: `[{id, name, breite, hoehe}]`, 24 Stunden im Cache |
 | `GET /api/meme/vorlage` | `?id=…` — ein Vorlagenbild durch den Worker (Grund wie bei `/api/kachel`: kein `Authorization`-Kopf im `<img>`), `id` muss in der gerade gecachten Vorlagenliste stehen, sonst 404 |
-| `POST /api/kommentar` | `{ziel_art, ziel_id, text?, bild?, antwort_auf?}` — eins von beiden muss da sein |
+| `POST /api/kommentar` | `{ziel_art, ziel_id, text?, bild?, antwort_auf?}` — Text oder Bild muss da sein; `antwort_auf` darf auf eine Antwort zeigen, sie hängt dann an deren Wurzel, und der Adressat bleibt als `an_id` stehen |
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
-| `POST /api/reaktion` | `{kommentar_id, art}` — Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
+| `POST /api/reaktion` | `{kommentar_id, art}` — `art` ist das Emoji selbst und muss in `REAKTIONEN` stehen (die Liste im Worker, nicht im Schema); Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
 | `POST /api/notruf` 🔒 | `{art:'bier'\|'kamerad', lat, lon, genau?}` — gilt 90 Minuten, ein erneuter Ruf ersetzt den eigenen |
 | `POST /api/notruf/standort` 🔒 | `{lat, lon, genau?}` — trägt nur den Standort am laufenden Notruf nach, ohne neue Mail |
 | `POST /api/notruf/weg` 🔒 | nimmt den eigenen zurück; zweimal gerufen ist kein Fehler |

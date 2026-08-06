@@ -32,6 +32,13 @@ const ERLAUBTE_HERKUNFT = new Set([
 const MAX_BIERE    = 999;
 const MIN_GRAD     = -30;
 const MAX_GRAD     = 30;
+/* BLEIBT bei 60, waehrend Kommentar-, Bild- und Bewertsperre 2026-08-06 auf 3
+   heruntergingen. Der Unterschied ist nicht die Bedienung, sondern was dahinter
+   steht: hinter Kommentaren und Fotos liegt mit KOMMENTARE_TAG/BILDER_TAG eine
+   Tagesgrenze, die Flut wirklich abfaengt - hinter `reports` liegt KEINE. Jede
+   Meldung ist eine neue Zeile (der Verlauf lebt davon), und diese Minute ist
+   das einzige Netz, das es dort gibt. Wer sie senkt, braucht vorher ein
+   Tagesbudget fuer Meldungen. */
 const MELDESPERRE  = 60;    // Sekunden zwischen zwei Meldungen desselben Nutzers
 const VERLAUF_TAGE = 30;
 
@@ -136,9 +143,45 @@ const BEWERTSPERRE = 3;    // Sekunden, bis das naechste ANDERE Ziel drankommt
    die Spalte vierzig Pixel breit. Genau wie WhatsApp. */
 const KOMMENTAR_MAX    = 400;  // Zeichen
 const KOMMENTARE_TAG   = 30;   // je Nutzer und Tag
-const KOMMENTARSPERRE  = 10;   // Sekunden zwischen zweien desselben Nutzers
+/* 3 Sekunden, nicht 10 (geaendert 2026-08-06). Zehn war gegen Flut gedacht und
+   traf den Normalfall: zwei Saetze hintereinander, oder der Nachtrag "ach, und
+   Kohle bringe ich mit". Genau dieser Fehler steckte schon einmal in der
+   BEWERTSPERRE - dort steht die Geschichte dazu. Das Netz gegen echte Flut ist
+   KOMMENTARE_TAG, nicht diese Sekundenzahl; die bremst nur den Doppeltipp und
+   die Maschine. */
+const KOMMENTARSPERRE  = 3;    // Sekunden zwischen zweien desselben Nutzers
 const KOMMENTARE_ZIEL  = 200;  // je Ziel; aeltere fallen weg, sonst waechst es unbegrenzt
-const REAKTIONEN = new Set(['daumen_hoch', 'daumen_runter', 'herz', 'bier']);
+/* Reaktionen: das Emoji selbst ist der Schluessel, seit Migration 0019. Die
+   Liste steht hier und nicht mehr im CHECK der Tabelle - eine weitere Reaktion
+   ist damit eine Zeile Code statt eines Schemaschritts.
+
+   Sie ist eine ALLOWLIST und kein Muster: was gespeichert wird, ist immer das
+   Zeichen aus DIESER Liste, nie das vom Client geschickte. Damit ist die
+   Normalisierung geschenkt - '❤' (ohne U+FE0F) und '❤️' (mit) waeren sonst zwei
+   verschiedene Zeilen im Primaerschluessel, und ein Herz koennte sich nicht
+   mehr zuruecknehmen lassen, weil es unter dem anderen Namen laege.
+
+   Die Reihenfolge ist die des Waehlers auf der Seite; index.html haelt
+   dieselbe Liste (EMOJI_WORT). Weichen die beiden voneinander ab, ist das ein
+   400er auf einen Knopf, den die Seite anbietet - beim Erweitern also BEIDE. */
+const REAKTIONEN = new Set([
+  '❤️', '👍', '🍺', '🍻',
+  '👎', '😂', '🤣', '😮', '😢', '😡', '🥳', '😍', '😎', '🤔',
+  '🙈', '🫡', '🤷', '😴', '🥴', '🤢',
+  '🎉', '🔥', '👏', '🙏', '💪', '🤝', '👀', '💯', '⭐', '⚡',
+  '🚀', '✅', '❌', '🏆', '💸', '🧊',
+  '🥂', '🍾', '🍷', '🥃', '☕', '🍕', '🍔', '🌭', '🥨', '🍟',
+  '⚽', '🎵', '📸', '🚲',
+]);
+
+/* Was eine Seite schickt, die noch im Cache des Browsers liegt: sie kennt die
+   vier alten Namen und nicht die Zeichen. Ein 400er waere hier eine Reaktion,
+   die "einfach nicht geht", bis jemand neu laedt - billiger ist, sie zu
+   uebersetzen. Kann weg, wenn lange genug niemand mehr mit einer alten Fassung
+   unterwegs ist. */
+const REAKTIONEN_ALT = {
+  daumen_hoch: '👍', daumen_runter: '👎', herz: '❤️', bier: '🍺',
+};
 
 /* Der Notruf. Zwei Noete, ein Ort, eine Frist.
    ---------------------------------------------------------------------------
@@ -181,7 +224,9 @@ const KACHEL_TTL = 7 * 24 * 3600;   // Sekunden
    grossen Ruempfe. Der Deckel steht trotzdem, denn der Worker redet nicht nur
    mit unserem Browser. */
 const BILD_MAX     = 2 * 1024 * 1024;  // Bytes
-const BILDSPERRE   = 10;               // Sekunden zwischen zwei Uploads desselben Nutzers
+// 3 wie ueberall in der Schreibstrecke (2026-08-06, siehe KOMMENTARSPERRE).
+// Der Deckel gegen echte Flut ist BILDER_TAG und BILD_MAX, nicht die Sekunde.
+const BILDSPERRE   = 3;                // Sekunden zwischen zwei Uploads desselben Nutzers
 const BILDER_TAG   = 30;               // je Nutzer und Tag, wie KOMMENTARE_TAG
 
 /* Die Schonfrist der Waisen. Hochgeladen wird VOR dem Abschicken, dazwischen
@@ -939,12 +984,20 @@ const baumStmts = (env, ziel) => [
      geholt wird: wer entfernt wurde, hat keinen mehr (weiche Loeschung, siehe
      0011), seine Beitraege bleiben aber stehen - sonst risse ein Austritt die
      halbe Chronik mit. Ein Kommentar von `null` saehe wie ein Fehler aus. */
+  /* `an_id` samt Namen: wem die Antwort galt (siehe 0020). Der Join geht ueber
+     die angesprochene KARTE auf deren Autor - der Name kommt also auch dann
+     noch, wenn diese Karte inzwischen weich geloescht ist. Ihr Text nicht, der
+     wird hier gar nicht geholt: die Marke nennt einen Namen, sie zitiert
+     nicht. */
   env.DB.prepare(`
-    SELECT k.id, k.autor_id, k.antwort_auf, k.text, k.erstellt, k.geaendert,
+    SELECT k.id, k.autor_id, k.antwort_auf, k.an_id, k.text, k.erstellt, k.geaendert,
            k.geloescht_am, k.bild_key, k.sterne,
-           coalesce(u.name, 'Ehemaliger') AS autor
+           coalesce(u.name, 'Ehemaliger') AS autor,
+           au.name AS an_autor
     FROM kommentare k
     JOIN users u ON u.id = k.autor_id
+    LEFT JOIN kommentare ak ON ak.id = k.an_id
+    LEFT JOIN users au ON au.id = ak.autor_id
     WHERE k.ziel_art = ? AND k.ziel_id = ?
     ORDER BY k.id DESC
     LIMIT ?
@@ -988,6 +1041,10 @@ function baumBauen(zeilen, reaktionen, ichId, env) {
       geloescht: weg,
       erstellt: utc(z.erstellt),
       geaendert: utc(z.geaendert),
+      /* Wem sie galt. Ohne `an_id` gibt es hier nichts zu sagen - das ist bei
+         jeder Antwort von vor 0020 so, und die Seite bleibt dann stumm. */
+      an_id: z.an_id || null,
+      an_autor: z.an_id ? (z.an_autor || 'Ehemaliger') : null,
       meins: z.autor_id === ichId,
       sterne: weg ? null : sterne,
       reaktionen: [...(proKommentar.get(z.id) || new Map()).values()],
@@ -3425,7 +3482,7 @@ const ROUTEN = {
 
     /* Genau eine Antwortebene: zeigt `antwort_auf` auf eine Antwort, haengt
        der Kommentar an DEREN Wurzel. Der Absender muss davon nichts wissen. */
-    let wurzel = null, angesprochen = null;
+    let wurzel = null, angesprochen = null, anId = null;
     if (daten.antwort_auf != null) {
       const auf = await env.DB.prepare(`
         SELECT id, antwort_auf, ziel_art, ziel_id, autor_id FROM kommentare WHERE id = ?
@@ -3439,15 +3496,21 @@ const ROUTEN = {
          Wurzelautor. Wer einen Faden aufgemacht hat, will nicht jede Antwort
          darunter erfahren, sondern die auf das, was er gesagt hat. */
       angesprochen = auf.autor_id;
+      /* Und dasselbe bleibt jetzt stehen (0020): der Baum flacht ab, der
+         Adressat nicht. Bei einer Antwort auf die Wurzel ist `an_id` die
+         Wurzel - dann sagt es die Einrueckung und die Seite laesst die Marke
+         weg. Der Unterschied zwischen den beiden Faellen ist genau das, was
+         hier festgehalten wird. */
+      anId = auf.id;
     }
 
     const grenze = await kommentarGrenze(env, ich.id);
     if (grenze) return fehler(request, grenze.fehler, grenze.status);
 
     const neu = await env.DB.prepare(`
-      INSERT INTO kommentare (ziel_art, ziel_id, autor_id, antwort_auf, text, bild_key)
-      VALUES (?, ?, ?, ?, ?, ?) RETURNING id
-    `).bind(ziel.art, ziel.id, ich.id, wurzel, text, b.key).first();
+      INSERT INTO kommentare (ziel_art, ziel_id, autor_id, antwort_auf, an_id, text, bild_key)
+      VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
+    `).bind(ziel.art, ziel.id, ich.id, wurzel, anId, text, b.key).first();
 
     if (angesprochen && angesprochen !== ich.id) {
       mailEcho(env, ctx, angesprochen, ich.name, {
@@ -3527,7 +3590,10 @@ const ROUTEN = {
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
-    const art = String(daten.art || '');
+    const roh = String(daten.art || '');
+    // Erst die alten Namen uebersetzen, dann pruefen - und gespeichert wird das
+    // Zeichen aus der Liste, nicht das geschickte (siehe REAKTIONEN).
+    const art = REAKTIONEN_ALT[roh] || roh;
     if (!REAKTIONEN.has(art)) return fehler(request, 'Diese Reaktion gibt es nicht');
 
     const id = Number(daten.kommentar_id);
