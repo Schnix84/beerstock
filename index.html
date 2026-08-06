@@ -4132,10 +4132,58 @@
     } catch { return u; }
   }
 
+  /* ---------------------------------------------------------------------
+     Getippte Gesichter werden echte: aus „:-)" wird 🙂.
+
+     Beim ANZEIGEN, nicht beim Speichern. In der Datenbank steht weiter, was
+     jemand getippt hat, und das aus drei Gründen: alte Kommentare bekommen
+     es rückwirkend, das Bearbeiten legt wieder „:-)" ins Feld statt eines
+     Zeichens, das dort niemand hingeschrieben hat, und der Worker braucht
+     keine Zeile dafür. Der Preis: in Mail und Push steht weiter „:-)".
+
+     Die Regel ist mit Absicht eng. Kein „:/" und kein „:|" — das eine steht
+     in jedem „http://", das andere in keiner Unterhaltung. Nach rechts
+     grenzt ein Buchstabe ab, sonst würde aus „Titel:Der Abend" ein Grinsen;
+     nach links steht nichts im Weg, denn „Prost;-)" ohne Leerzeichen ist der
+     Normalfall. Kein „8-)", weil „das war 18-)" es zu Fall brächte und ein
+     Blick nach links (`lookbehind`) auf alten Handys die ganze Datei
+     zerreißt — eine geschlossene Datei hat keinen zweiten Versuch.
+     --------------------------------------------------------------------- */
+  const EMOJI_RE =
+    /(?::'-?\(+|:-?\)+|:-?\(+|;-?\)+|:-?[DdPp]|:-[Oo]|:O|:-?\*|[xX][Dd]|<3)(?![\p{L}\p{N}])/gu;
+
+  const EMOJI_TAFEL = new Map([
+    [':)', '🙂'], [':(', '🙁'], [';)', '😉'], [':d', '😀'], [':p', '😛'],
+    [':o', '😮'], [":'(", '😢'], [':*', '😘'], ['xd', '😆'], ['<3', '❤️'],
+  ]);
+
+  /* String zu String, das Ergebnis geht in einen Textknoten — die Regel von
+     unten („nie `innerHTML`") gilt hier genauso. */
+  function mitEmojis(text) {
+    return text.replace(EMOJI_RE, (z, stelle) => {
+      // Nase weg, Klammern zusammen: „:-))))" ist dasselbe Gesicht wie „:)".
+      const schluessel = z.replace('-', '').replace(/([()])[()]*$/, '$1').toLowerCase();
+      const zeichen = EMOJI_TAFEL.get(schluessel);
+      if (!zeichen) return z;
+      /* „(so :-))" — die letzte Klammer gehört dem Satz und nicht dem
+         Gesicht. Nur dann zurückgeben, wenn links wirklich eine offen ist:
+         „sehr gut :-))" meint zwei Klammern und keinen Rahmen. Gezählt wird
+         nur im Stück, das `mitLinks` gerade reicht — liegt eine Adresse
+         zwischen Klammer und Gesicht, kommt keine zurück. Kosmetik. */
+      const davor = text.slice(0, stelle);
+      const offen = (davor.match(/\(/g) || []).length > (davor.match(/\)/g) || []).length;
+      return z.endsWith('))') && offen ? zeichen + ')' : zeichen;
+    });
+  }
+
   /* Aus Text wird eine Folge von Knoten: Textstücke und <a> dazwischen. NIE
      `innerHTML` — der Text kommt von einem Nutzer, und die einzige Stelle, an
      der er je in HTML verwandelt würde, wäre genau hier. `textContent` und
-     `createElement` können nicht ausbrechen, ein Ersetzen im String kann es. */
+     `createElement` können nicht ausbrechen, ein Ersetzen im String kann es.
+
+     Die Gesichter werden NUR auf den Stücken zwischen den Links gesetzt: in
+     einer Adresse hat ein „:D" nichts zu suchen, und weil die Adressen hier
+     ohnehin schon herausgeschnitten sind, kostet das keine zweite Regel. */
   function mitLinks(text) {
     const frag = document.createDocumentFragment();
     let zuletzt = 0;
@@ -4143,7 +4191,7 @@
       const roh = linkPutzen(t[0]);
       if (!roh) continue;
       if (t.index > zuletzt) {
-        frag.appendChild(document.createTextNode(text.slice(zuletzt, t.index)));
+        frag.appendChild(document.createTextNode(mitEmojis(text.slice(zuletzt, t.index))));
       }
       /* `roh` zählt, `ziel` zeigt: `roh` ist ein Präfix des Treffers und misst
          damit, wie viel Text verbraucht ist. `ziel` kann länger sein (`www.x.de`
@@ -4157,7 +4205,9 @@
       frag.appendChild(a);
       zuletzt = t.index + roh.length;
     }
-    if (zuletzt < text.length) frag.appendChild(document.createTextNode(text.slice(zuletzt)));
+    if (zuletzt < text.length) {
+      frag.appendChild(document.createTextNode(mitEmojis(text.slice(zuletzt))));
+    }
     return frag;
   }
 
@@ -6146,12 +6196,15 @@
      stünde sonst da wie ein Fehler.
 
      `textContent`, nicht `innerHTML`: hier landet fremder Text, und Links
-     werden im Zitat nicht angeklickt — es ist ein Beleg, kein Beitrag. */
+     werden im Zitat nicht angeklickt — es ist ein Beleg, kein Beitrag.
+
+     Die Gesichter aber schon (`mitEmojis`): stünde im Zitat „:-)" und in der
+     Karte darunter 🙂, sähe der Beleg aus wie ein anderer Kommentar. */
   function flyZitatZeigen() {
     const z = $('fly-zitat');
     if (flyModus.art !== 'antwort') { z.hidden = true; return; }
     const k = flyFinden(flyModus.id);
-    let satz = k && !k.geloescht ? (k.text || '').trim() : '';
+    let satz = k && !k.geloescht ? mitEmojis((k.text || '').trim()) : '';
     let leer = false;
     if (!satz) {
       leer = true;
