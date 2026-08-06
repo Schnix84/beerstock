@@ -4169,6 +4169,69 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
+  /* Die Vorschaukarte SCHON BEIM TIPPEN - was WhatsApp ueber dem Feld zeigt,
+     sobald ein Link im Satz steht, statt erst nach dem Abschicken.
+
+     Dieselbe Strecke wie der Weg danach, nur synchron: dasselbe Gatter
+     (`darfGeholtWerden`), dieselbe Tabelle, derselbe Cache. Kein zweites
+     Datenmodell, und vor allem kein zweiter Abruf - was hier geholt wurde,
+     findet `vorschauHolen()` beim Abschicken als Zeile vor und haengt sie
+     ohne eine einzige fremde Verbindung an den Kommentar.
+
+     ANGEMELDET, und mit derselben Herkunftspruefung wie /api/gif/holen: diese
+     Route ruft eine vom Nutzer getippte Adresse ab, und anders als der Weg
+     nach dem Abschicken tut sie das, ohne dass je ein Kommentar entsteht. Die
+     Bremse dagegen steht bei VORSCHAU_TAKT.
+
+     Antwortet IMMER mit 200 und `vorschau: null`, wenn es nichts zu zeigen
+     gibt - eine halb getippte Adresse, ein toter Link, eine Seite ohne OG und
+     die gezogene Bremse sind fuer das Feld alle dasselbe: noch keine Karte.
+     Ein Fehler waere hier eine rote Zeile beim Schreiben, und das ist keiner. */
+  'POST /api/vorschau': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+
+    const ref = request.headers.get('Referer');
+    if (ref) {
+      let fremd = true;
+      try { fremd = !ERLAUBTE_HERKUNFT.has(new URL(ref).origin); } catch {}
+      if (fremd) return fehler(request, 'Nicht von hier', 403);
+    }
+
+    const daten = await json(request);
+    /* KEIN `linkPutzen` mehr hier, so verlockend es aussieht: die Seite hat es
+       schon getan (`ersterLink`), und die Funktion ist NICHT idempotent. Aus
+       "…/a?)" macht der erste Lauf "…/a?" und der zweite "…/a" - eine Adresse,
+       die beim Abschicken niemand mehr trifft, denn dort laeuft `linkAusText`
+       genau einmal. Die Folge waeren ein zweiter Abruf, eine zweite Zeile und
+       ein Cache, der daneben greift. Was hier ankommt, ist wortwoertlich das,
+       was `ersterLink()` gefunden hat; geprueft wird es von
+       `darfGeholtWerden()` und sonst nichts. */
+    const roh = String(daten?.url ?? '').trim().slice(0, 2048);
+    const adresse = darfGeholtWerden(roh);
+    if (!adresse) return antwort(request, { fuer: roh, vorschau: null });
+
+    const frisch = await env.DB.prepare(
+      "SELECT count(*) AS n FROM vorschauen WHERE geholt > datetime('now', ?)"
+    ).bind(`-${VORSCHAU_FENSTER} seconds`).first();
+
+    const id = await vorschauBesorgen(env, adresse, frisch.n >= VORSCHAU_TAKT);
+    if (!id) return antwort(request, { fuer: roh, vorschau: null });
+
+    const z = await env.DB.prepare(
+      'SELECT url, titel, text, host, bild_key FROM vorschauen WHERE id = ?'
+    ).bind(id).first();
+    if (!z) return antwort(request, { fuer: roh, vorschau: null });
+
+    // Dieselben Felder wie an der Karte im Faden (siehe `hole`) - die Seite
+    // zeichnet beide mit demselben Stueck Code.
+    return antwort(request, { fuer: roh, vorschau: {
+      url: z.url, titel: z.titel, text: z.text, host: z.host, bild: bildUrl(env, z.bild_key),
+    } });
+  },
+
+  // -------------------------------------------------------------------------
   /* Schreiben. Auf SICH SELBST ausdruecklich erlaubt - sonst kann der
      Gastgeber im eigenen Thread nicht antworten. Auf einen Termin jederzeit,
      auch vorher ("bring Chips mit"); nur bewertet wird erst hinterher. */
@@ -4249,69 +4312,6 @@ const ROUTEN = {
     // 'tafel' wegen des Zaehlers an der Zeile, das Ziel wegen des Threads.
     anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
     return antwort(request, { ok: true, id: neu.id, antwort_auf: wurzel }, 201);
-  },
-
-  // -------------------------------------------------------------------------
-  /* Die Vorschaukarte SCHON BEIM TIPPEN - was WhatsApp ueber dem Feld zeigt,
-     sobald ein Link im Satz steht, statt erst nach dem Abschicken.
-
-     Dieselbe Strecke wie der Weg danach, nur synchron: dasselbe Gatter
-     (`darfGeholtWerden`), dieselbe Tabelle, derselbe Cache. Kein zweites
-     Datenmodell, und vor allem kein zweiter Abruf - was hier geholt wurde,
-     findet `vorschauHolen()` beim Abschicken als Zeile vor und haengt sie
-     ohne eine einzige fremde Verbindung an den Kommentar.
-
-     ANGEMELDET, und mit derselben Herkunftspruefung wie /api/gif/holen: diese
-     Route ruft eine vom Nutzer getippte Adresse ab, und anders als der Weg
-     nach dem Abschicken tut sie das, ohne dass je ein Kommentar entsteht. Die
-     Bremse dagegen steht bei VORSCHAU_TAKT.
-
-     Antwortet IMMER mit 200 und `vorschau: null`, wenn es nichts zu zeigen
-     gibt - eine halb getippte Adresse, ein toter Link, eine Seite ohne OG und
-     die gezogene Bremse sind fuer das Feld alle dasselbe: noch keine Karte.
-     Ein Fehler waere hier eine rote Zeile beim Schreiben, und das ist keiner. */
-  'POST /api/vorschau': async (request, env, ctx) => {
-    const ich = await nutzer(request, env);
-    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
-
-    const ref = request.headers.get('Referer');
-    if (ref) {
-      let fremd = true;
-      try { fremd = !ERLAUBTE_HERKUNFT.has(new URL(ref).origin); } catch {}
-      if (fremd) return fehler(request, 'Nicht von hier', 403);
-    }
-
-    const daten = await json(request);
-    /* KEIN `linkPutzen` mehr hier, so verlockend es aussieht: die Seite hat es
-       schon getan (`ersterLink`), und die Funktion ist NICHT idempotent. Aus
-       "…/a?)" macht der erste Lauf "…/a?" und der zweite "…/a" - eine Adresse,
-       die beim Abschicken niemand mehr trifft, denn dort laeuft `linkAusText`
-       genau einmal. Die Folge waeren ein zweiter Abruf, eine zweite Zeile und
-       ein Cache, der daneben greift. Was hier ankommt, ist wortwoertlich das,
-       was `ersterLink()` gefunden hat; geprueft wird es von
-       `darfGeholtWerden()` und sonst nichts. */
-    const roh = String(daten?.url ?? '').trim().slice(0, 2048);
-    const adresse = darfGeholtWerden(roh);
-    if (!adresse) return antwort(request, { fuer: roh, vorschau: null });
-
-    const frisch = await env.DB.prepare(
-      "SELECT count(*) AS n FROM vorschauen WHERE geholt > datetime('now', ?)"
-    ).bind(`-${VORSCHAU_FENSTER} seconds`).first();
-
-    const id = await vorschauBesorgen(env, adresse, frisch.n >= VORSCHAU_TAKT);
-    if (!id) return antwort(request, { fuer: roh, vorschau: null });
-
-    const z = await env.DB.prepare(
-      'SELECT url, titel, text, host, bild_key FROM vorschauen WHERE id = ?'
-    ).bind(id).first();
-    if (!z) return antwort(request, { fuer: roh, vorschau: null });
-
-    // Dieselben Felder wie an der Karte im Faden (siehe `hole`) - die Seite
-    // zeichnet beide mit demselben Stueck Code.
-    return antwort(request, { fuer: roh, vorschau: {
-      url: z.url, titel: z.titel, text: z.text, host: z.host, bild: bildUrl(env, z.bild_key),
-    } });
   },
 
   // -------------------------------------------------------------------------
