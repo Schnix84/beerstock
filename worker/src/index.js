@@ -1118,13 +1118,29 @@ async function pruefeBild(env, roh) {
    deshalb in `index.html` woertlich genauso; wer eines von beiden anfasst,
    fasst beide an. Zwei Sprachen, eine Regel - ein gemeinsames Modul geht nicht,
    die Seite ist eine geschlossene Datei. */
-const LINK_RE = /\bhttps?:\/\/[^\s<>"']+/gi;
+const LINK_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
 
 /* Satzzeichen am Ende gehoeren dem Satz. Steht WOERTLICH auch in `index.html`. */
 function linkPutzen(roh) {
   while (/[.,;:!?»"']$/.test(roh)) roh = roh.slice(0, -1);
   if (roh.endsWith(')') && !roh.includes('(')) roh = roh.slice(0, -1);
   return roh;
+}
+
+/* Aus der gefundenen Rohform die abrufbare Adresse: `www.x.de` bekommt sein
+   Schema, alles andere bringt es mit. GETRENNT von `linkPutzen`, und das ist
+   kein Geschmack — `linkPutzen` KUERZT nur, sein Ergebnis bleibt damit ein
+   Praefix des Treffers. Die Seite rechnet genau damit, wenn sie im Fliesstext
+   weiterzaehlt (`zuletzt = t.index + roh.length`). Haenge man das Schema dort
+   an, waere die Rohform acht Zeichen laenger als der Treffer, und der Zaehler
+   naehme acht Zeichen des folgenden Satzes mit weg.
+
+   Nur `www.` und keine nackte Domain: ein Muster auf Punkt-plus-Buchstaben
+   traefe „z.B.", „ca.5" und jede Abkuerzung im Text — und dann stuende eine
+   Vorschaukarte ueber einem Satz ohne Link. Steht WOERTLICH auch in
+   `index.html`. */
+function linkZiel(roh) {
+  return /^www\./i.test(roh) ? 'https://' + roh : roh;
 }
 
 /* Der ERSTE Link im Text, mehr nicht - ein Kommentar bekommt hoechstens eine
@@ -1134,7 +1150,7 @@ function linkPutzen(roh) {
 function linkAusText(text) {
   for (const t of String(text || '').matchAll(LINK_RE)) {
     const roh = linkPutzen(t[0]);
-    if (roh) return roh;
+    if (roh) return linkZiel(roh);
   }
   return null;
 }

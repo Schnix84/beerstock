@@ -3376,11 +3376,22 @@
          Gelöscht kann hier nicht mitlaufen: der Worker räumt bei der Löschung
          Text UND Bild weg (`text = ''`, `bild_key = NULL`), das „gelöscht"
          bleibt also der freistehende Textblock darunter. */
-      const beschriftet = !k.geloescht && !!k.text && !!k.bild;
+      /* Steht im Kommentar NICHTS als der Link, und ist die Karte dazu da,
+         dann spricht die Karte für sich — die nackte Adresse darüber sagt
+         nichts, was nicht darunter schon steht, nur schlechter. Wer etwas dazu
+         geschrieben hat, sieht seinen Satz weiter, davor wie dahinter.
+
+         Die Karte MUSS dafür da sein. Ist die Vorschau fehlgeschlagen
+         (`vorschau: null` — eine tote Adresse, eine Seite ohne og), bleibt die
+         Adresse stehen: sonst wäre der Kommentar leer, und zwar genau der, der
+         am meisten erklären müsste. */
+      const nurLink = !k.geloescht && !!k.vorschau && nurEinLink(k.text);
+
+      const beschriftet = !k.geloescht && !!k.text && !!k.bild && !nurLink;
 
       /* Ein Foto allein ist ein gültiger Kommentar — dann steht hier keine
          leere Textzeile, die im Kreidebild wie ein Fehler aussähe. */
-      if (!beschriftet && (k.geloescht || k.text)) {
+      if (!beschriftet && !nurLink && (k.geloescht || k.text)) {
         const t = el('div', 'ko-text' + (k.geloescht ? ' weg' : ''));
         if (k.geloescht) t.textContent = 'gelöscht';
         else t.appendChild(mitLinks(k.text));
@@ -4030,7 +4041,7 @@
      von beiden anfasst, fasst beide an. Zwei Sprachen, eine Regel — ein
      gemeinsames Modul geht hier nicht, diese Datei ist eine geschlossene.
      --------------------------------------------------------------------- */
-  const LINK_RE = /\bhttps?:\/\/[^\s<>"']+/gi;
+  const LINK_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
 
   /* Satzzeichen am Ende gehören dem Satz, nicht der Adresse. Steht WÖRTLICH
      auch im Worker (`linkPutzen`) — siehe den Kasten oben. */
@@ -4038,6 +4049,21 @@
     while (/[.,;:!?»"']$/.test(roh)) roh = roh.slice(0, -1);
     if (roh.endsWith(')') && !roh.includes('(')) roh = roh.slice(0, -1);
     return roh;
+  }
+
+  /* Aus der gefundenen Rohform die abrufbare Adresse: `www.x.de` bekommt sein
+     Schema, alles andere bringt es mit. GETRENNT von `linkPutzen`, und das ist
+     kein Geschmack — `linkPutzen` KÜRZT nur, sein Ergebnis bleibt damit ein
+     Präfix des Treffers. `mitLinks` rechnet unten genau damit, wenn es im
+     Fließtext weiterzählt (`zuletzt = t.index + roh.length`). Hinge das Schema
+     schon dran, wäre die Rohform acht Zeichen länger als der Treffer, und der
+     Zähler nähme acht Zeichen des folgenden Satzes mit weg.
+
+     Nur `www.` und keine nackte Domain: ein Muster auf Punkt-plus-Buchstaben
+     träfe „z.B.", „ca.5" und jede Abkürzung im Text — und dann stünde eine
+     Vorschaukarte über einem Satz ohne Link. Steht WÖRTLICH auch im Worker. */
+  function linkZiel(roh) {
+    return /^www\./i.test(roh) ? 'https://' + roh : roh;
   }
 
   /* Der ERSTE Link im Text, mehr nicht — ein Kommentar bekommt höchstens eine
@@ -4050,9 +4076,27 @@
   function ersterLink(text) {
     for (const t of String(text || '').matchAll(LINK_RE)) {
       const roh = linkPutzen(t[0]);
-      if (roh) return roh;
+      if (roh) return linkZiel(roh);
     }
     return null;
+  }
+
+  /* Besteht der Text aus NICHTS als einem Link? Dann trägt die Vorschaukarte
+     den Kommentar allein (siehe `VARIANTE.kommentar`).
+
+     Gemessen wird am Rest: Link raus, und was übrig bleibt, muss Leerraum sein.
+     Ein nachgestellter Punkt zählt damit als Satz — „www.bild.de." behält seine
+     Adresse im Text. Das ist Absicht: wer einen Punkt setzt, schreibt einen
+     Satz, und die Regel bleibt so eine, die man beim Lesen sieht. */
+  function nurEinLink(text) {
+    const bloss = String(text || '').trim();
+    if (!bloss) return false;
+    for (const t of bloss.matchAll(LINK_RE)) {
+      const roh = linkPutzen(t[0]);
+      if (!roh) continue;
+      return t.index === 0 && roh.length === bloss.length;
+    }
+    return false;
   }
 
   /* Angezeigt wird nicht die volle Adresse: eine YouTube-URL mit Parametern
@@ -4079,8 +4123,13 @@
       if (t.index > zuletzt) {
         frag.appendChild(document.createTextNode(text.slice(zuletzt, t.index)));
       }
-      const a = el('a', 'ko-link-in', kurzeAdresse(roh));
-      a.href = roh;
+      /* `roh` zählt, `ziel` zeigt: `roh` ist ein Präfix des Treffers und misst
+         damit, wie viel Text verbraucht ist. `ziel` kann länger sein (`www.x.de`
+         bekommt sein Schema) — mit ihm zu zählen risse acht Zeichen aus dem
+         Satz dahinter. */
+      const ziel = linkZiel(roh);
+      const a = el('a', 'ko-link-in', kurzeAdresse(ziel));
+      a.href = ziel;
       a.target = '_blank';
       a.rel = 'noopener noreferrer nofollow';
       frag.appendChild(a);
@@ -5429,7 +5478,37 @@
 
   /* Der eine Ort, der `#fly-vor` anfasst. `v` ist die Karte vom Server, `null`
      räumt weg, ein String ist die Adresse, die gerade geholt wird. */
+  /* Was über dem Schreibfeld wächst, schiebt das Feld nach unten — und wer
+     gerade unten stand und tippt, verliert genau das Feld aus dem Bild, in dem
+     er schreibt. Gemessen am 2026-08-06: die Linkkarte machte das Blatt um
+     59 px länger, `scrollTop` blieb stehen, und das Feld hing 31 px unter der
+     Kante. Es kam erst zurück, wenn der nächste Tastendruck den Browser dazu
+     brachte, das fokussierte Feld wieder hereinzuholen — daher das Bild „erst
+     mit der Leertaste sehe ich meinen Text wieder".
+
+     Also: stand das Blatt vorher am Ende, steht es hinterher wieder am Ende.
+     Wer weiter oben liest, bleibt, wo er ist — eine Karte, die aufklappt, darf
+     niemanden vom Nachlesen wegreißen.
+
+     Die Toleranz ist nötig: `scrollTop` ist gebrochen, `scrollHeight` gerundet,
+     und ein Blatt am Anschlag misst sich gern als 886,4 gegen 887. */
+  function amEndeHalten(tun) {
+    const blatt = $('fly-thread').closest('.fly-blatt');
+    if (!blatt) { tun(); return; }
+    const warUnten = blatt.scrollHeight - blatt.scrollTop - blatt.clientHeight <= 4;
+    tun();
+    if (warUnten) blatt.scrollTop = blatt.scrollHeight;
+  }
+
+  /* Der Wickel liegt HIER und nicht an den Aufrufstellen: gezeichnet wird
+     dreimal je Link — leer, „wird geholt", fertige Karte —, und jedes Mal
+     ändert sich die Höhe. Eine davon zu vergessen hieße, den Sprung an genau
+     einer Stelle stehen zu lassen. */
   function flyVorZeichnen(v) {
+    amEndeHalten(() => flyVorMalen(v));
+  }
+
+  function flyVorMalen(v) {
     const kasten = $('fly-vor');
     kasten.textContent = '';
     kasten.hidden = !v;
@@ -6010,8 +6089,14 @@
     flyThread();
   }
 
-  /* Der Thread. Wurzeln untereinander, Antworten eingerückt darunter — beides
-     aufsteigend, ein Gespräch liest man von oben nach unten. */
+  /* Der Thread. Wurzeln untereinander, Antworten eingerückt darunter — gelesen
+     wird von oben nach unten.
+
+     Die Antworten stehen aufsteigend, die Wurzeln NICHT mehr: sie kommen vom
+     Worker nach der letzten Aktivität in ihrem Faden sortiert, ein alter Faden
+     rückt also nach unten, sobald jemand ihm antwortet (siehe `baumBauen`).
+     Die Seite ordnet dabei nichts selbst — sie hängt die Reihenfolge an, die
+     ankommt. */
   function flyThread() {
     const d = flyDaten;
     const ziel = $('fly-thread');
