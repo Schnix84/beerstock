@@ -144,9 +144,12 @@ Pixel breit.
 angeschrieben steht nur Host und Pfad — eine YouTube-Adresse mit Parametern sprengt
 sonst auf dem Handy die Karte. Zum ersten Link eines Kommentars klappt kurz darauf
 eine **Vorschaukarte** auf: Titel, Anriss, Bild und Herkunft der verlinkten Seite,
-so wie Teams und WhatsApp es zeigen. Geholt wird das im Worker und erst *nach* dem
-Abschicken — der Kommentar steht sofort da, die Karte kommt über dieselbe Leitung
-nach, über die auch fremde Reaktionen hereinkommen. Zwei Gründe, warum nicht der
+so wie Teams und WhatsApp es zeigen. **Sie steht schon beim Schreiben da**, über dem
+Feld, sobald ein Link im Satz erkannt wird — mit einem „×", das sie wirklich weglässt
+und nicht nur wegräumt. Was dabei geholt wurde, liegt beim Abschicken schon bereit;
+der Kommentar bekommt seine Karte dann ohne einen zweiten Griff nach draußen. Wer
+einen Link einfügt und sofort abschickt, sieht sie kurz danach nachrücken — über
+dieselbe Leitung, über die auch fremde Reaktionen hereinkommen. Zwei Gründe, warum nicht der
 Browser das holt: fremdes HTML darf er gar nicht lesen, und er würde jedem *Leser*
 eine Verbindung zur verlinkten Seite verschaffen — wer einen Link postet, erführe
 damit, wer den Faden gelesen hat. Das Vorschaubild liegt danach im eigenen Bucket,
@@ -372,7 +375,8 @@ Worker wie jeder andere Melder, nicht umgekehrt.
 Der Pfeil nach *verlinkte Seiten* ist der einzige, an dessen Ende keine feste
 Adresse steht. Giphy, Imgflip und OpenStreetMap baut der Worker sich selbst
 zusammen; für die Link-Vorschau ruft er eine Adresse ab, die ein Angemeldeter
-getippt hat. Deshalb steht davor ein Gatter: nur `http`/`https`, keine
+getippt hat — seit sie schon beim Schreiben erscheint, sogar eine, aus der nie ein
+Kommentar werden muss. Deshalb steht davor ein Gatter: nur `http`/`https`, keine
 Zugangsdaten in der Adresse, keine Namen aus dem lokalen Netz, keine privaten
 IP-Bereiche, und **jede** Weiterleitung wird einzeln neu geprüft, statt sie dem
 `fetch` zu überlassen — sonst wäre eine harmlose Adresse, die auf `10.0.0.1`
@@ -456,15 +460,16 @@ Drei Dinge, die dazugehören:
 | `POST /api/los/antwort` | `{antwort:'ja'\|'nein', grund?, beginnt_am?, endet_am?}` — nur der Gezogene, per Token **oder** mit `{los, t}` aus der Gewinner-Mail |
 | `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand |
 | `POST /api/termin/aendern` | verschieben, umbenennen, absagen; ohne `endet_am` wandert das Ende beim Verschieben mit |
-| `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?, bild?}` — überschreibt |
+| `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?, bild?, ohne_vorschau?}` — überschreibt |
 | `GET /api/bewertungen` 🔒 | `?ziel=user:5` — Schnitte, eigene Abgabe, Kommentarbaum |
 | `POST /api/bild` | rohe Bytes im Rumpf, kein JSON → `{key, bild}`; der `key` gehört an den nächsten Kommentar |
 | `GET /api/gif` 🔒 | `?q=…&weiter=…` — GIF-Suche über Giphy, ohne `q` das Angesagte; `[{id, vorschau, breite, hoehe, titel}]` |
 | `POST /api/gif/holen` 🔒 | `{id}` holt das gewählte GIF nach R2 → `{key, bild}`, dieselbe Form wie `/api/bild` |
 | `GET /api/meme/vorlagen` 🔒 | die Imgflip-Vorlagen, abgespeckt: `[{id, name, breite, hoehe}]`, 24 Stunden im Cache |
 | `GET /api/meme/vorlage` | `?id=…` — ein Vorlagenbild durch den Worker (Grund wie bei `/api/kachel`: kein `Authorization`-Kopf im `<img>`), `id` muss in der gerade gecachten Vorlagenliste stehen, sonst 404 |
-| `POST /api/kommentar` | `{ziel_art, ziel_id, text?, bild?, antwort_auf?}` — Text oder Bild muss da sein; `antwort_auf` darf auf eine Antwort zeigen, sie hängt dann an deren Wurzel, und der Adressat bleibt als `an_id` stehen |
-| `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
+| `POST /api/vorschau` 🔒 | `{url}` — die Vorschaukarte schon beim Tippen → `{fuer, vorschau}`; `vorschau` ist `null`, wenn es (noch) nichts zu zeigen gibt, nie ein Fehler. Dasselbe SSRF-Gatter und dieselbe Tabelle wie der Weg nach dem Abschicken, und damit auch dessen Cache |
+| `POST /api/kommentar` | `{ziel_art, ziel_id, text?, bild?, antwort_auf?, ohne_vorschau?}` — Text oder Bild muss da sein; `antwort_auf` darf auf eine Antwort zeigen, sie hängt dann an deren Wurzel, und der Adressat bleibt als `an_id` stehen; `ohne_vorschau` ist das „×" an der Karte über dem Schreibfeld |
+| `POST /api/kommentar/aendern` | `{id, text, ohne_vorschau?}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — `art` ist das Emoji selbst und muss in `REAKTIONEN` stehen (die Liste im Worker, nicht im Schema); Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
 | `POST /api/notruf` 🔒 | `{art:'bier'\|'kamerad', lat, lon, genau?, live?, kreis?}` — gilt 90 Minuten, ein erneuter Ruf ersetzt den eigenen. `kreis` fehlend oder `null` heißt an alle, eine Liste von Nutzer-Ids heißt nur an diese; `[]` ist ein Fehler und kein „an niemanden" |
 | `POST /api/notruf/standort` 🔒 | `{lat, lon, genau?}` — trägt nur den Standort am laufenden Notruf nach, ohne neue Mail |

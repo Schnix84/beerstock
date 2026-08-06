@@ -1358,6 +1358,27 @@
     position: absolute; inset: auto 0 0 0; padding: 4px 8px 5px;
     background: #05080799; font-size: 10.5px; color: var(--kreide-weg);
   }
+
+  /* Die Linkvorschau über dem Schreibfeld — dieselbe Karte, die der Kommentar
+     später trägt, nur schon beim Tippen sichtbar (nach Art von WhatsApp).
+     Sie steht ÜBER dem Feld und nicht darunter, weil unter dem Feld die
+     Schreibzeile mit ihren Knöpfen sitzt und eine Karte dazwischen die Hand
+     vom Absenden wegschöbe.
+
+     Ein eigener Wrapper und nicht `.ko-vor` selbst: die Klasse gehört der
+     Karte im Faden, samt ihrer schmalen Fassung in Antworten
+     (`.ko-antw .ko-vor`). Hier ist die Spalte breit, und das "x" braucht einen
+     Bezugsrahmen. Der Wrapper nimmt der Karte darum nur den oberen Abstand ab
+     — den bringt seit dem Umbau die Schreibzeile selbst mit. */
+  .ko-vorlink { position: relative; }
+  .ko-vorlink .ko-vor { margin-top: 0; }
+  /* Das "x" liegt auf der Karte, nicht daneben: eine zweite Spalte dafür
+     nähme dem Titel die Breite, und die Karte ist ohnehin nur 76 px hoch. */
+  .ko-vorlink .ko-vorschau-weg { width: 22px; height: 22px; font-size: 13px; }
+  /* Solange geholt wird, steht die getippte Adresse da und darunter, dass
+     etwas läuft. Ein leerer Platzhalter, der später zuklappt, ließe die Zeile
+     zweimal springen; so springt sie einmal. */
+  .ko-vorlink .laedt .ko-vor-titel { color: var(--kreide-weg); }
   /* Schreibfeld, "+" und Absenden sind EIN Bauteil, nicht drei nebeneinander.
      Den Rahmen trägt die Zeile; das Feld und die beiden Knöpfe wohnen darin
      und haben keinen eigenen mehr. Vorher standen hier drei Kästen mit drei
@@ -2299,6 +2320,10 @@
                   aria-label="Foto verwerfen">×</button>
           <div class="ko-vorschau-sagt" id="fly-bild-sagt" hidden></div>
         </div>
+        <!-- Die Karte zum ersten Link im Feld. Steht unter dem Foto und über
+             der Schreibzeile; gefüllt wird sie von `flyVorZeichnen`, das "x"
+             darin entsteht mit ihr. -->
+        <div class="ko-vorlink" id="fly-vor" hidden></div>
         <!-- Feld, "+" und Absenden in EINER Zeile: die beiden Knöpfe nehmen
              ihr Quadrat, der ganze Rest der Breite gehört dem Schreibfeld. -->
         <div class="ko-knoepfe">
@@ -3915,6 +3940,21 @@
     return roh;
   }
 
+  /* Der ERSTE Link im Text, mehr nicht — ein Kommentar bekommt höchstens eine
+     Karte. Das Gegenstück zu `linkAusText()` im Worker, und aus demselben
+     Grund wörtlich dieselbe Regel: was hier gefunden wird, muss dort dieselbe
+     Adresse sein, sonst holt die Tippvorschau eine andere Zeile als die, die
+     nachher am Kommentar hängt.
+     `matchAll` und nicht `exec`: das klont die Regexp, während `exec` auf
+     einem `/g`-Muster `lastIndex` behielte — und `LINK_RE` ist geteilt. */
+  function ersterLink(text) {
+    for (const t of String(text || '').matchAll(LINK_RE)) {
+      const roh = linkPutzen(t[0]);
+      if (roh) return roh;
+    }
+    return null;
+  }
+
   /* Angezeigt wird nicht die volle Adresse: eine YouTube-URL mit Parametern
      sprengt auf dem Handy die Karte. Host plus Pfad reicht zum Erkennen, das
      Ziel steht im `href`. */
@@ -5144,6 +5184,10 @@
   let flyDaten = null;      // die letzte Antwort des Servers
   let flyBild = null;       // { key } des schon hochgeladenen Fotos am Schreibfeld
   let flyBildLauf = 0;      // gegen zwei Uploads, die sich überholen
+  let flyVorUrl = null;     // die Adresse, deren Karte gerade steht oder geholt wird
+  let flyVorAus = null;     // eine per "x" verworfene Adresse — sie kommt nicht wieder
+  let flyVorLauf = 0;       // wie flyBildLauf: gegen zwei Abrufe, die sich überholen
+  let flyVorTimer = null;   // der Nachlauf beim Tippen
 
   function flySagt(text, schlecht) {
     const p = $('fly-sagt');
@@ -5268,6 +5312,113 @@
     // Liegt das Blatt zu, misst der Browser 0 - dann die eigene Zahl wieder
     // wegnehmen und dem CSS die Höhe überlassen, statt 0 px festzuschreiben.
     if (f.scrollHeight) f.style.height = f.scrollHeight + 'px';
+  }
+
+  /* --- Die Linkvorschau am Schreibfeld -------------------------------------
+     WhatsApp zeigt die Karte, sobald ein Link im Feld steht — nicht erst,
+     wenn die Nachricht draußen ist. Genau das steht hier: nach einem kurzen
+     Nachlauf geht die getippte Adresse an `POST /api/vorschau`, und was
+     zurückkommt, steht über dem Feld.
+
+     Der Nebeneffekt ist der eigentliche Gewinn. Die Zeile in `vorschauen` ist
+     damit schon geholt, wenn der Kommentar abgeschickt wird; `vorschauHolen()`
+     im Worker findet sie vor und hängt sie an, ohne eine fremde Seite noch
+     einmal anzufassen. Die Karte im Faden steht dann praktisch sofort statt
+     eine Sekunde später.
+     --------------------------------------------------------------------- */
+
+  /* Der eine Ort, der `#fly-vor` anfasst. `v` ist die Karte vom Server, `null`
+     räumt weg, ein String ist die Adresse, die gerade geholt wird. */
+  function flyVorZeichnen(v) {
+    const kasten = $('fly-vor');
+    kasten.textContent = '';
+    kasten.hidden = !v;
+    if (!v) return;
+
+    if (typeof v === 'string') {
+      /* Solange geholt wird, steht die Adresse da. Nichts zu zeigen wäre
+         ehrlicher, ließe die Zeile aber zweimal springen — einmal beim
+         Aufklappen, einmal beim Eintreffen. */
+      const k = el('div', 'ko-vor laedt');
+      const t = el('div', 'ko-vor-text');
+      t.appendChild(el('div', 'ko-vor-titel', kurzeAdresse(v)));
+      t.appendChild(el('div', 'ko-vor-host', 'Vorschau wird geholt …'));
+      k.appendChild(t);
+      kasten.appendChild(k);
+    } else {
+      /* Dieselbe Funktion wie im Faden: die Karte beim Schreiben soll nicht
+         ähnlich aussehen, sie soll dieselbe sein. Nur der Klick fällt weg —
+         wer schreibt, will nicht aus Versehen die Seite verlassen. */
+      const k = vorschauKarte(v);
+      k.removeAttribute('href');
+      k.removeAttribute('target');
+      kasten.appendChild(k);
+    }
+
+    /* Das "x" wirkt wirklich: `flyAbschicken` schickt danach `ohne_vorschau`
+       mit, und der Worker lässt die Karte weg. Ein "x", das nur die Ansicht
+       räumt, wäre eine Lüge gegenüber dem, der es drückt. */
+    const weg = el('button', 'ko-vorschau-weg', '×');
+    weg.type = 'button';
+    weg.setAttribute('aria-label', 'Vorschau verwerfen');
+    weg.addEventListener('click', () => {
+      flyVorAus = flyVorUrl;
+      flyVorLauf++;                  // ein laufender Abruf gilt nicht mehr
+      flyVorZeichnen(null);
+    });
+    kasten.appendChild(weg);
+  }
+
+  /* Was steht im Feld? Läuft beim Tippen und bei jedem Moduswechsel — und
+     damit auch überall dort, wo `.value` von Hand gesetzt wird, denn die drei
+     Stellen laufen alle durch `flyAnZeigen`.
+
+     `neu` heißt: der Inhalt kommt nicht vom Tippen, sondern von außen, und was
+     bisher galt, gilt nicht mehr. Ohne das bliebe eine weggeklickte Karte
+     weggeklickt, wenn danach ein Kommentar mit DEMSELBEN Link zum Ändern
+     geöffnet wird — der Vergleich unten fände „nichts Neues", und über einem
+     Text mit Link stünde dann nichts. */
+  function flyVorPruefen(neu) {
+    const roh = ersterLink($('fly-feld').value);
+    if (!neu && roh === flyVorUrl) return;    // nichts Neues, Karte bleibt stehen
+    flyVorUrl = roh;
+    flyVorLauf++;                             // was unterwegs ist, gilt nicht mehr
+    clearTimeout(flyVorTimer);
+    flyVorZeichnen(null);
+    if (!roh || roh === flyVorAus) return;
+    /* Der Nachlauf: ohne ihn ginge mitten in `https://exa…` schon ein Abruf
+       raus, und die halbe Adresse bekäme eine eigene Fehlerzeile in
+       `vorschauen`. Ganz vermeiden lässt sich das nicht — wer langsam tippt,
+       erzeugt trotzdem eine —, aber es bleiben wenige. */
+    const lauf = flyVorLauf;
+    flyVorTimer = setTimeout(() => flyVorHolen(roh, lauf), 600);
+  }
+
+  /* NICHT über `ruf`, obwohl es ein POST mit JSON ist: `ruf` zählt `laeuft`
+     hoch, und daran hängt der Riegel, der stille Nachladungen aufschiebt,
+     solange etwas Eigenes unterwegs ist. Ein Vorschauabruf darf bis zu fünf
+     Sekunden dauern — so lange sollen fremde Beiträge nicht warten. Er ist
+     auch kein Schreibvorgang: es entsteht nichts, was der Faden zeigen müsste. */
+  async function flyVorHolen(roh, lauf) {
+    flyVorZeichnen(roh);
+    let d;
+    try {
+      const r = await fetch(API + '/api/vorschau', {
+        method: 'POST',
+        headers: mitToken({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ url: roh }),
+      });
+      if (!r.ok) throw new Error('Fehler ' + r.status);
+      d = await r.json();
+    } catch {
+      /* Still. Eine Vorschau, die nicht kommt, ist kein Fehler des
+         Schreibens — die rote Zeile gehört dem Abschicken. */
+      if (lauf === flyVorLauf) flyVorZeichnen(null);
+      return;
+    }
+    if (lauf !== flyVorLauf) return;          // ein neuerer Abruf hat übernommen
+    if (d.fuer !== roh) return;               // Antwort zu einer anderen Adresse
+    flyVorZeichnen(d.vorschau || null);
   }
 
   /* --- Das Foto am Schreibfeld --------------------------------------------
@@ -5810,6 +5961,15 @@
        (Zurücksetzen, Antworten, Ändern): sie laufen alle hier durch, und ein
        gesetztes `.value` löst kein `input` aus. */
     flyFeldWachsen();
+    /* Aus demselben Grund auch die Linkvorschau: nach dem Abschicken muss die
+       Karte weg sein, und beim Ändern eines Kommentars mit Link muss sie über
+       dem vorgefüllten Text stehen. Eine Karte über einem leeren Feld ist der
+       Fehler, den man sofort sieht.
+       Ein verworfener Link gehört dabei zum vorigen Satz — mit dem Moduswechsel
+       fängt auch das "x" von vorn an. `flyAbschicken` hat seine Fahne da längst
+       gelesen, es rechnet sie vor dem ersten `await` aus. */
+    flyVorAus = null;
+    flyVorPruefen(true);
   }
 
   function flyModusZurueck() {
@@ -5839,6 +5999,11 @@
         ? 'Ohne Text kein Kommentar.' : 'Ohne Text oder Foto kein Kommentar.', true);
       return;
     }
+    /* Das "x" an der Vorschaukarte. Es zählt nur, wenn der verworfene Link
+       auch der ist, der jetzt rausgeht — wer danach einen anderen einfügt,
+       bekommt dessen Karte. `undefined` fällt beim Verpacken weg, die drei
+       Routen sehen das Feld also nur, wenn es etwas zu sagen hat. */
+    const ohneVor = (!!flyVorAus && ersterLink(text) === flyVorAus) || undefined;
     const [art, id] = flyZiel.split(':');
     $('fly-ab').disabled = true;
     flySagt('');
@@ -5852,7 +6017,7 @@
         Object.values(flyMeins).some(v => Number.isFinite(v));
 
       if (flyModus.art === 'aendern') {
-        await ruf('/api/kommentar/aendern', { id: flyModus.id, text });
+        await ruf('/api/kommentar/aendern', { id: flyModus.id, text, ohne_vorschau: ohneVor });
       } else if (mitSternen) {
         /* Dieser Ruf schreibt dieselben Sterne, die der Debounce noch schuldet —
            er wird hier nicht abgeschickt, sondern verworfen, sonst ginge die
@@ -5862,12 +6027,14 @@
         await ruf('/api/bewerten', {
           ziel_art: art, ziel_id: Number(id), sterne: flyMeins, text,
           bild: bild ? bild.key : undefined,
+          ohne_vorschau: ohneVor,
         });
       } else {
         await ruf('/api/kommentar', {
           ziel_art: art, ziel_id: Number(id), text,
           bild: bild ? bild.key : undefined,
           antwort_auf: flyModus.art === 'antwort' ? flyModus.id : undefined,
+          ohne_vorschau: ohneVor,
         });
       }
       flyModusZurueck();
@@ -7515,7 +7682,9 @@
      einem mehrzeiligen Feld erwartet das jeder so. */
   // Bei jedem Tastendruck: aus dem ersten Zeichen wird der Knopf grün, mit
   // dem letzten gelöschten wieder grau.
-  $('fly-feld').addEventListener('input', () => { flyAbPruefen(); flyFeldWachsen(); });
+  $('fly-feld').addEventListener('input', () => {
+    flyAbPruefen(); flyFeldWachsen(); flyVorPruefen();
+  });
   $('fly-feld').addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); flyAbschicken(); }
   });

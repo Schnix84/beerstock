@@ -270,6 +270,20 @@ const VORSCHAU_HTML_MAX = 2 * 1024 * 1024;    // Bytes HTML, danach abgebrochen
 const VORSCHAU_HOPS     = 3;                  // Weiterleitungen, von Hand gezaehlt
 const VORSCHAU_TEXT_MAX = 300;                // Zeichen og:description
 
+/* Die Bremse fuer POST /api/vorschau - die Karte SCHON BEIM TIPPEN, nach Art
+   von WhatsApp. Nur diese Route wird gebremst, nie der Weg nach dem
+   Abschicken: ein abgeschickter Kommentar bekommt seine Karte immer.
+
+   Gezaehlt werden frisch geholte Zeilen im Fenster, ueber `vorschauen.geholt`
+   - ein Treffer im Cache schreibt keine Zeile und zaehlt darum nicht mit. Die
+   Zahl ist global und nicht je Nutzer, weil `vorschauen` keinen Autor kennt
+   und eine Spalte dafuer eine Migration waere, die diese Sache nicht wert ist.
+   Damit ein schneller Tipper nicht allen anderen die Karte nimmt, ist das
+   Ueberschreiten KEIN Fehler: die Route schlaegt dann nur noch nach und holt
+   nicht mehr. Wer wartet, bekommt sie beim Abschicken. */
+const VORSCHAU_TAKT     = 20;                 // frische Abrufe je Fenster
+const VORSCHAU_FENSTER  = 60;                 // Sekunden
+
 /* GIFs und Memes an Kommentaren (siehe ideas/gifs-und-memes.md). Ein GIF wird
    wie ein Foto ein `bild_key` - dieselbe Sperre, dasselbe Tagesbudget, kein
    eigener Weg. Giphys Deckel ist 100 Abrufe die Stunde; der Cache haelt eine
@@ -1324,13 +1338,17 @@ async function vorschauBild(env, adresse) {
    Erst nachschlagen: der zweite Poster desselben Links loest gar keinen Abruf
    mehr aus. Eine Zeile mit `fehler` gilt dabei als Antwort - ein toter Link
    bleibt tot, und ohne diese Sperre versuchte es der Worker bei jedem neuen
-   Kommentar wieder. */
-async function vorschauBesorgen(env, ziel) {
+   Kommentar wieder.
+
+   `nurCache` ist der Weg der gebremsten Tippvorschau: nachschlagen ja, fremde
+   Seite abrufen nein. Siehe VORSCHAU_TAKT. */
+async function vorschauBesorgen(env, ziel, nurCache = false) {
   const schluessel = await hash(ziel.href);
 
   const schon = await env.DB.prepare('SELECT id, fehler FROM vorschauen WHERE url_hash = ?')
     .bind(schluessel).first();
   if (schon) return schon.fehler ? null : schon.id;
+  if (nurCache) return null;
 
   let daten = null, fehlerText = null, bildKey = null;
   /* Was unter der Karte steht, ist der Host am ENDE der Umleitungskette, nicht
@@ -1398,8 +1416,13 @@ async function vorschauBesorgen(env, ziel) {
 
 /* Nach der Antwort, nie davor: das Abschicken bleibt eine schnelle
    JSON-Anfrage. Ist die Karte da, schiebt der Verteiler sie nach - der
-   Kommentar steht sofort, die Karte klappt eine Sekunde spaeter auf, genau wie
-   bei Teams.
+   Kommentar steht sofort, die Karte klappt kurz darauf auf, genau wie bei
+   Teams.
+
+   Meist ist das inzwischen keine Sekunde mehr, sondern ein Wimpernschlag: die
+   Tippvorschau (POST /api/vorschau) hat die Zeile schon geholt, waehrend der
+   Satz noch geschrieben wurde, und hier bleibt nur das Nachschlagen. Die
+   Sekunde gilt noch fuer den, der einen Link einfuegt und sofort abschickt.
 
    Stumm wie `benachrichtige()`: ein Kommentar darf nicht daran scheitern, dass
    eine fremde Seite gerade nicht mag.
@@ -3819,8 +3842,8 @@ const ROUTEN = {
         VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
       `).bind(ziel.art, ziel.id, ich.id, b.id, text, bi.key, JSON.stringify(s.sterne)).first();
       // Auch hier, nicht nur an /api/kommentar: "5 Sterne und ein Link dazu"
-      // kommt als EINE Anfrage genau hier an.
-      vorschauHolen(request, env, ctx, neu.id, text, ziel);
+      // kommt als EINE Anfrage genau hier an - samt dem "x" am Schreibfeld.
+      if (!daten.ohne_vorschau) vorschauHolen(request, env, ctx, neu.id, text, ziel);
     }
 
     /* Der Bezug haengt an der Bewertung, nicht am Zeitpunkt: der UPSERT gibt
@@ -4164,13 +4187,82 @@ const ROUTEN = {
       }, `kommentar:${neu.id}`);
     }
 
-    // Steht ein Link im Text, holt der Worker im Nachgang die Vorschaukarte
-    // und schiebt sie ueber den Verteiler nach. Die Antwort wartet nicht.
-    vorschauHolen(request, env, ctx, neu.id, text, ziel);
+    /* Steht ein Link im Text, holt der Worker im Nachgang die Vorschaukarte
+       und schiebt sie ueber den Verteiler nach. Die Antwort wartet nicht.
+
+       `ohne_vorschau` kommt vom "x" an der Karte ueber dem Schreibfeld. Wer
+       sie dort wegklickt, will sie nicht haben - und ein "x", das nur die
+       Ansicht raeumt und den Kommentar dann doch mit Karte abschickt, waere
+       eine Luege. Es steht NICHT in der Datenbank: was auf dem Schreibfeld
+       liegt, geht raus, und beim Aendern entscheidet das Feld erneut. */
+    if (!daten.ohne_vorschau) vorschauHolen(request, env, ctx, neu.id, text, ziel);
 
     // 'tafel' wegen des Zaehlers an der Zeile, das Ziel wegen des Threads.
     anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
     return antwort(request, { ok: true, id: neu.id, antwort_auf: wurzel }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Die Vorschaukarte SCHON BEIM TIPPEN - was WhatsApp ueber dem Feld zeigt,
+     sobald ein Link im Satz steht, statt erst nach dem Abschicken.
+
+     Dieselbe Strecke wie der Weg danach, nur synchron: dasselbe Gatter
+     (`darfGeholtWerden`), dieselbe Tabelle, derselbe Cache. Kein zweites
+     Datenmodell, und vor allem kein zweiter Abruf - was hier geholt wurde,
+     findet `vorschauHolen()` beim Abschicken als Zeile vor und haengt sie
+     ohne eine einzige fremde Verbindung an den Kommentar.
+
+     ANGEMELDET, und mit derselben Herkunftspruefung wie /api/gif/holen: diese
+     Route ruft eine vom Nutzer getippte Adresse ab, und anders als der Weg
+     nach dem Abschicken tut sie das, ohne dass je ein Kommentar entsteht. Die
+     Bremse dagegen steht bei VORSCHAU_TAKT.
+
+     Antwortet IMMER mit 200 und `vorschau: null`, wenn es nichts zu zeigen
+     gibt - eine halb getippte Adresse, ein toter Link, eine Seite ohne OG und
+     die gezogene Bremse sind fuer das Feld alle dasselbe: noch keine Karte.
+     Ein Fehler waere hier eine rote Zeile beim Schreiben, und das ist keiner. */
+  'POST /api/vorschau': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+
+    const ref = request.headers.get('Referer');
+    if (ref) {
+      let fremd = true;
+      try { fremd = !ERLAUBTE_HERKUNFT.has(new URL(ref).origin); } catch {}
+      if (fremd) return fehler(request, 'Nicht von hier', 403);
+    }
+
+    const daten = await json(request);
+    /* KEIN `linkPutzen` mehr hier, so verlockend es aussieht: die Seite hat es
+       schon getan (`ersterLink`), und die Funktion ist NICHT idempotent. Aus
+       "…/a?)" macht der erste Lauf "…/a?" und der zweite "…/a" - eine Adresse,
+       die beim Abschicken niemand mehr trifft, denn dort laeuft `linkAusText`
+       genau einmal. Die Folge waeren ein zweiter Abruf, eine zweite Zeile und
+       ein Cache, der daneben greift. Was hier ankommt, ist wortwoertlich das,
+       was `ersterLink()` gefunden hat; geprueft wird es von
+       `darfGeholtWerden()` und sonst nichts. */
+    const roh = String(daten?.url ?? '').trim().slice(0, 2048);
+    const adresse = darfGeholtWerden(roh);
+    if (!adresse) return antwort(request, { fuer: roh, vorschau: null });
+
+    const frisch = await env.DB.prepare(
+      "SELECT count(*) AS n FROM vorschauen WHERE geholt > datetime('now', ?)"
+    ).bind(`-${VORSCHAU_FENSTER} seconds`).first();
+
+    const id = await vorschauBesorgen(env, adresse, frisch.n >= VORSCHAU_TAKT);
+    if (!id) return antwort(request, { fuer: roh, vorschau: null });
+
+    const z = await env.DB.prepare(
+      'SELECT url, titel, text, host, bild_key FROM vorschauen WHERE id = ?'
+    ).bind(id).first();
+    if (!z) return antwort(request, { fuer: roh, vorschau: null });
+
+    // Dieselben Felder wie an der Karte im Faden (siehe `hole`) - die Seite
+    // zeichnet beide mit demselben Stueck Code.
+    return antwort(request, { fuer: roh, vorschau: {
+      url: z.url, titel: z.titel, text: z.text, host: z.host, bild: bildUrl(env, z.bild_key),
+    } });
   },
 
   // -------------------------------------------------------------------------
@@ -4230,12 +4322,17 @@ const ROUTEN = {
        Weg, eine beliebige Vorschaukarte unter einen beliebigen Text zu haengen.
        Also erst abhaengen, dann neu holen (`vorschauHolen` schreibt nur in ein
        leeres Feld und nur zu genau diesem Text). Steht kein Link mehr da,
-       bleibt es leer, und das ist die richtige Antwort. */
+       bleibt es leer, und das ist die richtige Antwort.
+
+       `ohne_vorschau` haengt sie hier also ab, ohne neue zu holen - das "x" am
+       Schreibfeld nimmt eine Karte auch nachtraeglich wieder weg. */
     await env.DB.prepare(`
       UPDATE kommentare SET text = ?, geaendert = datetime('now'), vorschau_id = NULL
       WHERE id = ?
     `).bind(text, k.id).run();
-    vorschauHolen(request, env, ctx, k.id, text, { art: k.ziel_art, id: k.ziel_id });
+    if (!daten.ohne_vorschau) {
+      vorschauHolen(request, env, ctx, k.id, text, { art: k.ziel_art, id: k.ziel_id });
+    }
     // Nur der Thread: an der Zahl der Kommentare aendert ein neuer Text nichts.
     anstoss(request, env, ctx, `${k.ziel_art}:${k.ziel_id}`);
     return antwort(request, { ok: true });
