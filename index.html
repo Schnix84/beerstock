@@ -443,9 +443,28 @@
      Sebastian-Alexander"), und ein `nowrap` darauf schöbe die Zeile im Zweifel
      aus der Tafel statt sie umzubrechen. */
   .t-unter > span:first-child { white-space: nowrap; }
-  .t-weg {
-    border: none; background: none; padding: 0; font: inherit; font-size: 10.5px;
-    color: var(--kreide-weg); text-decoration: underline; cursor: pointer;
+
+  /* Die Notenspalte, rechts in der dritten Rasterspalte — dort, wo bis eben
+     „absagen" stand. Sie sagt auf einen Blick, woran ein Abend ist:
+
+       gewesen und bewertet   fünf Sterne, gefüllt bis zum Schnitt, darunter
+                              klein die Zahl und wie viele mitgestimmt haben
+       gewesen, keine Note    fünf blasse Umrisse: hier steht noch keine
+       kommend oder abgesagt  gar nichts
+
+     Fünf Sterne statt des einen aus der Melderliste, weil hier Platz dafür
+     ist: die Spalte war für den Absageknopf ohnehin so breit, und ein Abend
+     wird EINMAL bewertet — das ist eine Note zum Ansehen, kein Nebenwert. */
+  .t-note { align-self: center; text-align: right; white-space: nowrap; }
+  .t-sterne { display: inline-flex; gap: 1.5px; }
+  .t-sterne svg { width: 12px; height: 12px; display: block; }
+  .t-sterne .st-voll { fill: var(--gelb); }
+  .t-sterne .st-leer { fill: transparent; stroke: #ffffff55; stroke-width: 1.6; }
+  /* Noch niemand hat: die Reihe tritt zurück, ohne zu verschwinden. */
+  .t-sterne.ohne { opacity: .55; }
+  .t-note .t-note-zahl {
+    font-size: 10px; color: var(--kreide-weg); margin-top: 2px;
+    font-variant-numeric: tabular-nums;
   }
   /* Gewesen: blasser, aber lesbar — daran hängen später die Bewertungen. */
   .t-zeile.vorbei { opacity: .62; }
@@ -897,21 +916,22 @@
      Abend einmalig. Es fährt von unten ein, weil es auf dem Handy gelesen und
      mit dem Daumen bedient wird — oben wäre beides schlechter.
      --------------------------------------------------------------------- */
+  /* Der Sternschnitt in der Unterzeile — reine Auskunft, kein Knopf mehr:
+     angetippt wird die ganze Zeile (siehe `button.zeile`). Ohne Bewertung
+     bleibt der Umriss allein stehen, ohne das frühere „noch keine": das war
+     die Beschriftung eines Knopfes, den es nicht mehr gibt, und als bloße
+     Auskunft sagt der blasse Stern dasselbe kürzer. */
   .stern-kurz {
     display: inline-flex; align-items: center; gap: 3px; vertical-align: 1px;
     font-size: 11px; color: var(--kreide-weg); white-space: nowrap;
   }
   .stern-kurz svg { width: 11px; height: 11px; display: block; }
   .stern-kurz .st-voll { fill: var(--gelb); }
+  /* Kreide, kein Gold: leer ist der Umriss, gesetzt die Füllung — dieselbe
+     Regel wie an den Sternknöpfen im Blatt. */
+  .stern-kurz .st-leer { fill: transparent; stroke: #ffffff55; stroke-width: 1.6; }
   .stern-kurz.hat { color: var(--gelb); }
-  /* Der Knopf ist unsichtbar — angetippt wird der Sternschnitt selbst.
-     Kein "· " davor wie bei den Geschwistern: die Zeile bricht um, und der
-     Trennpunkt stünde dann allein am Anfang der neuen. Der Abstand der
-     Flex-Lücke trennt hier genauso gut. */
-  .z-bewerten {
-    border: none; background: none; padding: 0; margin: 0 0 0 .25em; font: inherit;
-    cursor: pointer; line-height: inherit;
-  }
+  .stern-kurz.ohne { opacity: .75; }
 
   .flyout { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; }
   .fly-schirm { position: absolute; inset: 0; background: #05080799; }
@@ -963,6 +983,26 @@
   .fly-hinweis {
     font-size: 11px; color: var(--kreide-weg); line-height: 1.5; margin: 12px 0 0;
   }
+
+  /* „Absagen" wohnt jetzt hier statt in der Terminzeile — seit die Zeile
+     selbst ein Knopf ist, kann in ihr keiner mehr stehen. Der Umzug tut ihr
+     gut: an der Zeile war es ein unterstrichenes Wort neben der Uhrzeit,
+     einen Daumenbreit neben dem, was das Blatt öffnet. Hier steht es hinter
+     einem Griff, den man bewusst tut, und trägt die Farbe des Notrufs — es
+     ist dieselbe Sorte Handlung. */
+  .fly-absagen {
+    border: 1px solid #e0745c66; border-radius: 3px; background: none;
+    padding: 7px 13px; font: inherit; font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--rot); cursor: pointer; margin-top: 14px;
+  }
+  .fly-absagen:disabled { opacity: .5; cursor: default; }
+  /* Die Antwort auf den Knopf, an seiner Stelle. `.schlecht` ist der
+     Fehlerfall — dann steht der Knopf noch daneben und darf es nochmal. */
+  .fly-absagt {
+    margin: 14px 0 0; font-size: 12px; color: var(--kreide-weg);
+    font-family: var(--hand); letter-spacing: .04em;
+  }
+  .fly-absagt.schlecht { color: var(--rot); }
 
   /* --- Der Thread ----------------------------------------------------------
      Karten untereinander, Antworten eingerückt und nur eine Ebene tief — bei
@@ -1169,6 +1209,37 @@
     border-bottom: 1px dashed #ffffff1f;
   }
   .zeile:last-child { border-bottom: none; }
+
+  /* --- Die ganze Zeile ist der Knopf ---------------------------------------
+     Bei den Meldern wie bei den Terminen: früher hing das Blatt an einem
+     kleinen unsichtbaren Knopf am Sternschnitt, und der war auf dem Handy
+     das schmalste Ziel der Seite. Jetzt öffnet ein Griff irgendwo auf die
+     Zeile. Ein <button> braucht dafür die Rücksetzung — Schrift, Farbe,
+     Rahmen und Ausrichtung kommen sonst vom Browser, und das Kreidebild
+     wäre hin.
+
+     Die 6 px Polster und der ausgleichende negative Rand sind die einzige
+     Maßänderung: der Wisch beim Drüberfahren soll den Text umfassen und
+     nicht an ihm kleben. Die Rasterspalten selbst bleiben, wo sie waren.
+
+     Warum kein `role="button"` auf dem alten <div>: dann wäre die Tastatur
+     Handarbeit (Enter UND Leertaste, samt Scrollsperre) — ein <button> kann
+     das von sich aus. Der Preis ist, dass in einer Zeile kein zweiter Knopf
+     mehr wohnen darf; deshalb ist „absagen" ins Blatt gezogen. */
+  button.zeile, button.t-zeile {
+    width: calc(100% + 12px); margin: 0 -6px; padding: 10px 6px 9px;
+    border: 0; border-bottom: 1px dashed #ffffff1f; border-radius: 3px;
+    background: none; font: inherit; color: inherit; text-align: left;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  button.zeile:last-child, button.t-zeile:last-child { border-bottom: none; }
+  button.zeile:hover, button.t-zeile:hover { background: #ffffff08; }
+  button.zeile:active, button.t-zeile:active { background: #ffffff12; }
+  /* Sichtbar für die Tastatur, unsichtbar für die Maus: `:focus-visible`
+     zeigt den Rahmen nur, wenn wirklich getabbt wurde. */
+  button.zeile:focus-visible, button.t-zeile:focus-visible {
+    outline: 1px dashed var(--kreide-weg); outline-offset: -2px; background: #ffffff08;
+  }
   .z-rang {
     font-family: var(--hand); font-size: 14px; color: var(--kreide-weg);
     text-align: right; font-variant-numeric: tabular-nums;
@@ -1712,6 +1783,18 @@
       <div id="fly-sterne"></div>
       <p class="fly-hinweis" id="fly-hinweis"></p>
 
+      <!-- Absagen, aus der Terminzeile hierher gezogen: seit die Zeile selbst
+           ein Knopf ist, kann in ihr kein zweiter mehr wohnen. Steht unter den
+           Sternen und über dem Gesagten — es beendet den Abend, es kommentiert
+           ihn nicht. -->
+      <button class="fly-absagen" id="fly-absagen" type="button" hidden>Abend absagen</button>
+      <!-- Gemeldet wird HIER und nicht in `#fly-sagt`: das steht ganz unten,
+           hinter Thread und Schreibfeld, und bei einem Abend mit ein paar
+           Beiträgen liegen mehrere Bildschirmhöhen dazwischen. Wer oben
+           absagt, sähe von seiner Bestätigung nichts als einen Knopf, der
+           verschwindet. Die Meldung nimmt seinen Platz ein. -->
+      <p class="fly-absagt" id="fly-absagt" hidden></p>
+
       <div class="ko-titel" id="fly-thread-kopf" hidden>Gesagt</div>
       <div id="fly-thread"></div>
 
@@ -2118,14 +2201,30 @@
   // Immer eine Kommastelle: "4" neben "3,8" liest sich wie eine andere Skala.
   const notenText = n => n == null ? '–' : n.toFixed(1).replace('.', ',');
 
+  /* Ausgeschrieben statt Sprechblase. Ein 💬 muss man deuten, "2 Beiträge"
+     liest man — und der Platz dafür ist da, seit der Zähler in einer Zeile
+     steht, die ohnehin über die volle Breite läuft. */
+  const beitragText = n => n + (n === 1 ? ' Beitrag' : ' Beiträge');
+
+  /* Fünf Sterne nebeneinander, gefüllt bis `voll` — die Notenspalte am Abend.
+     Gerundet wird auf ganze Sterne; die genaue Zahl steht darunter. */
+  function sterneFuenf(voll) {
+    const s = el('span', 't-sterne' + (voll ? '' : ' ohne'));
+    for (let i = 1; i <= 5; i++) s.appendChild(sternSvg(i <= voll ? 'st-voll' : 'st-leer'));
+    return s;
+  }
+
   function sternKurz(b, kommentare) {
     const n = b && b.anzahl ? b : null;
-    const s = el('span', 'stern-kurz' + (n ? ' hat' : ''));
-    s.appendChild(sternSvg(n ? 'st-voll' : ''));
-    s.appendChild(el('span', null, n ? notenText(n.schnitt) + ' · ' + n.anzahl : 'noch keine'));
+    const s = el('span', 'stern-kurz' + (n ? ' hat' : ' ohne'));
+    s.appendChild(sternSvg(n ? 'st-voll' : 'st-leer'));
+    /* Ohne Note steht der blasse Umriss allein: dass niemand bewertet hat,
+       sagt er selbst, und "noch keine" war die Beschriftung eines Knopfes,
+       den es seit dem Umbau auf die klickbare Zeile nicht mehr gibt. */
+    if (n) s.appendChild(el('span', null, notenText(n.schnitt) + ' · ' + n.anzahl));
     // Der Kommentarzähler reitet mit, damit man sieht, ob sich das Antippen
     // lohnt — ohne dass die Seite dafür jeden Thread laden müsste.
-    if (kommentare) s.appendChild(el('span', null, '· 💬 ' + kommentare));
+    if (kommentare) s.appendChild(el('span', null, '· ' + beitragText(kommentare)));
     return s;
   }
 
@@ -2280,8 +2379,26 @@
     },
 
     zeile(p, i, s, ich, heute) {
-      const z = el('div', 'zeile' + (ich ? ' ich' : '') + (i === 0 ? ' erster' : '') +
-                          (heute ? ' heute' : ''));
+      /* Die ganze Zeile öffnet das Blatt — aber nur, wenn es dorthin auch
+         etwas zu öffnen gibt. Ein Melder ohne `id` ist ein Eintrag ohne
+         Konto dahinter (die beschnittene Auskunft für Ausgesperrte liefert
+         keine); für den bleibt die Zeile ein stilles <div>, statt einen
+         Knopf zu zeigen, der nichts tut. */
+      const klickbar = !!p.id;
+      const z = el(klickbar ? 'button' : 'div',
+        'zeile' + (ich ? ' ich' : '') + (i === 0 ? ' erster' : '') +
+        (heute ? ' heute' : ''));
+      if (klickbar) {
+        z.type = 'button';
+        z.dataset.ziel = 'user:' + p.id;
+        z.dataset.name = p.name;
+        /* KEIN `aria-label` hier, so verlockend ein knappes „Basti bewerten"
+           auch wäre: bei einem Knopf ist der Inhalt sein Name, und ein Label
+           überschreibt ihn. Der Vorleser bekäme dann nur noch den Namen und
+           verlöre Bestand, Temperatur und Stand — also alles, wofür die Zeile
+           da ist. `aria-haspopup` sagt, dass ein Blatt aufgeht; das genügt. */
+        z.setAttribute('aria-haspopup', 'dialog');
+      }
       z.appendChild(el('div', 'z-rang kr', String(i + 1)));
 
       const mitte = el('div', 'z-mitte');
@@ -2311,15 +2428,9 @@
       unter.appendChild(el('span', null, '· ' + grad(p.temperatur) + ' · ' + standText(p.gemeldet)));
       /* Der Sternschnitt steht hinter dem Wetterbericht, nicht davor: wie kalt
          einer hat, ist die Frage der Seite; wie er als Gastgeber ist, die
-         Zugabe. Ein Tap öffnet das Flyout. */
-      if (p.id) {
-        const b = el('button', 'z-bewerten');
-        b.type = 'button';
-        b.dataset.ziel = 'user:' + p.id;
-        b.dataset.name = p.name;
-        b.appendChild(sternKurz(p.bewertung, p.kommentare));
-        unter.appendChild(b);
-      }
+         Zugabe. Angetippt wird er nicht mehr selbst — das tut die ganze
+         Zeile —, er ist reine Auskunft geworden. */
+      if (klickbar) unter.appendChild(sternKurz(p.bewertung, p.kommentare));
       z.appendChild(mitte);
 
       const rechts = el('div', 'z-rechts');
@@ -2331,9 +2442,9 @@
       /* Der Untertitel hängt NICHT in der Mitte, sondern ist eine eigene Zeile
          des Rasters über die volle Breite (siehe `.z-unter`). Neben Sparkline
          und Zahl steht ohnehin nur Luft; in der schmalen Mittelspalte brach
-         „noch keine" dagegen schon bei „vor 1 Tag" in die zweite Zeile um.
-         Deshalb steht er hier zuletzt: die automatische Platzierung braucht
-         die erste Reihe erst voll, bevor sie ihn darunter setzt. */
+         der Sternschnitt dahinter schon bei „vor 1 Tag" in die zweite Zeile
+         um. Deshalb steht er hier zuletzt: die automatische Platzierung
+         braucht die erste Reihe erst voll, bevor sie ihn darunter setzt. */
       z.appendChild(unter);
       return z;
     },
@@ -2344,9 +2455,10 @@
     },
 
     /* Ein Abend. Das Datum links, damit man die Liste am Rand entlangliest;
-       der Titel ist frei, sonst heißt er nach dem Gastgeber. Absagen darf, wer
-       ihn ausrichtet oder eingetragen hat — und nur, solange er nicht läuft. */
-    termin(t, darfWeg) {
+       der Titel ist frei, sonst heißt er nach dem Gastgeber. Die ganze Zeile
+       öffnet das Blatt; abgesagt wird von dort aus (siehe `.fly-absagen`),
+       nicht mehr hier — in einem Knopf wohnt kein zweiter. */
+    termin(t) {
       const d = new Date(t.beginnt_am);
       const e = t.endet_am ? new Date(t.endet_am) : null;
       const jetzt = Date.now();
@@ -2357,8 +2469,13 @@
       const angefangen = d.getTime() <= jetzt;
       const vorbei = (e ? e.getTime() : d.getTime()) <= jetzt;
       const laeuft = angefangen && !vorbei;
-      const z = el('div', 't-zeile' + (vorbei ? ' vorbei' : '') + (laeuft ? ' jetzt' : '')
+      const z = el('button', 't-zeile' + (vorbei ? ' vorbei' : '') + (laeuft ? ' jetzt' : '')
         + (t.abgesagt ? ' ab' : ''));
+      z.type = 'button';
+      z.dataset.ziel = 'termin:' + t.id;
+      z.dataset.name = t.titel || 'Bierabend bei ' + t.gastgeber;
+      // Kein `aria-label` — siehe `zeile`: es überschriebe Datum, Zeit und Note.
+      z.setAttribute('aria-haspopup', 'dialog');
 
       const tag = el('div', 't-tag kr');
       tag.textContent = d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
@@ -2396,38 +2513,35 @@
         unter.appendChild(el('span', null, '· eingetragen von ' + t.von));
       }
       if (t.abgesagt) unter.appendChild(el('span', null, '· abgesagt'));
-      /* Der Weg ins Blatt. Er hängt NICHT daran, ob der Abend bewertbar ist:
-         reden lässt sich über jeden, auch über einen abgesagten ("schade") und
-         einen kommenden ("bring Chips mit") — die Kommentarroute erlaubt beides
-         von jeher, nur führte hier kein Knopf hin, und die Kommentare unter
-         einer abgesagten Zeile waren damit unerreichbar. Was das Bewerten
-         angeht, sagt das Blatt selbst Bescheid (`darf_nicht`).
-
-         Gezeigt wird trotzdem Verschiedenes: bei einem gewesenen Abend die
-         Note, bei einem kommenden nur die Sprechblase — dort stünde sonst an
-         jeder Zeile ein „noch keine“, das bis zum Abend niemand füllen kann. */
-      const b = el('button', 'z-bewerten');
-      b.type = 'button';
-      b.dataset.ziel = 'termin:' + t.id;
-      b.dataset.name = t.titel || 'Bierabend bei ' + t.gastgeber;
-      b.appendChild(angefangen
-        ? sternKurz(t.bewertung, t.kommentare)
-        : el('span', 'stern-kurz' + (t.kommentare ? ' hat' : ''),
-             t.kommentare ? '💬 ' + t.kommentare : '💬'));
-      unter.appendChild(b);
+      /* Wie viel schon geredet wurde — ausgeschrieben, nicht als Sprechblase,
+         und an JEDER Zeile: reden lässt sich über jeden Abend, auch über
+         einen abgesagten („schade") und einen kommenden („bring Chips mit").
+         Steht nichts da, ist auch nichts gesagt worden; ein „0 Beiträge" an
+         jeder frischen Zeile wäre Buchhaltung. */
+      if (t.kommentare) unter.appendChild(el('span', null, '· ' + beitragText(t.kommentare)));
       z.appendChild(mitte);
 
-      const rechts = el('div', 't-rechts');
-      /* Am ANFANG, nicht am Ende: der Worker sperrt das Ändern ab `beginnt_am`
-         (409 „Der Abend hat schon angefangen"). Stünde der Knopf bis zum Ende
-         da, führte er mitten im Abend in eine Fehlermeldung. */
-      if (darfWeg && !t.abgesagt && !angefangen) {
-        const weg = el('button', 't-weg', 'absagen');
-        weg.type = 'button';
-        weg.dataset.termin = t.id;
-        rechts.appendChild(weg);
+      /* Die Notenspalte rechts — dort, wo bis eben „absagen" stand.
+
+         Drei Fälle. Gibt es eine Note, steht sie da. Gibt es keine, stehen
+         fünf blasse Umrisse — aber nur an einem Abend, an dem überhaupt eine
+         entstehen KANN: angefangen muss er haben, abgesagt darf er nicht
+         sein. An einem kommenden stünde sonst ein Sternschnitt, den bis zum
+         Abend niemand füllen kann.
+
+         Die Umrisse sagen „hier steht noch keine Note" — nicht „bewerte du".
+         Ob der Leser das selbst darf, weiß nur der Worker (`darf_nicht`, am
+         eigenen Abend etwa nicht), und das sagt ihm das Blatt, wenn er es
+         aufschlägt. Die Zeile beschreibt den Abend, nicht den Leser. */
+      const note = el('div', 't-note');
+      if (t.bewertung && t.bewertung.anzahl) {
+        note.appendChild(sterneFuenf(Math.round(t.bewertung.schnitt)));
+        note.appendChild(el('div', 't-note-zahl',
+          notenText(t.bewertung.schnitt) + ' · ' + t.bewertung.anzahl));
+      } else if (angefangen && !t.abgesagt) {
+        note.appendChild(sterneFuenf(0));
       }
-      z.appendChild(rechts);
+      z.appendChild(note);
       // Wie in der Liste: eigene Rasterzeile über die volle Breite, sonst
       // drängt die Marke „ausgelost" die Uhrzeit in eine zweite Zeile.
       z.appendChild(unter);
@@ -2500,9 +2614,11 @@
       return new Promise(fertig => setTimeout(fertig, sparsam ? 60 : 4300));
     },
 
-    /* Eine Kommentarkarte. `tief` ist true für eine Antwort — die bekommt
-       keinen eigenen Antworten-Knopf, es gibt nur eine Ebene. */
-    kommentar(k, kategorien, tief) {
+    /* Eine Kommentarkarte — für die Wurzel wie für die Antwort dieselbe. Sie
+       unterschieden sich nur noch darin, wo sie hängt: der Rahmen `.ko-antw`
+       rückt die Antworten ein, und tiefer als eine Ebene geht es nicht (dafür
+       sorgt der Worker, nicht diese Funktion). */
+    kommentar(k, kategorien) {
       const z = el('div', 'ko');
       z.dataset.id = k.id;
 
@@ -2569,11 +2685,19 @@
         auf.appendChild(reIkon());
         fuss.appendChild(auf);
 
-        if (!tief) {
-          const a = el('button', 'ko-tat', 'Antworten');
-          a.type = 'button'; a.dataset.antwort = k.id; a.dataset.wer = k.autor;
-          fuss.appendChild(a);
-        }
+        /* Antworten steht unter JEDER Karte, auch unter einer Antwort — vorher
+           war unter einer Antwort Schluss, und wer auf sie eingehen wollte,
+           musste die Wurzel ansprechen und den Namen selbst dazuschreiben.
+
+           Am Baum ändert das nichts: der Worker hängt eine Antwort auf eine
+           Antwort an DEREN Wurzel (`wurzel = auf.antwort_auf || auf.id`,
+           worker/src/index.js), es bleibt bei einer Einrückungsebene. Was er
+           daraus zieht, ist die Meldung — die geht an den, auf dessen Karte
+           geantwortet wurde, nicht an den Wurzelautor. Der Knopf gibt also
+           genau das, was der Worker ohnehin schon konnte. */
+        const a = el('button', 'ko-tat', 'Antworten');
+        a.type = 'button'; a.dataset.antwort = k.id; a.dataset.wer = k.autor;
+        fuss.appendChild(a);
         if (k.meins) {
           const ae = el('button', 'ko-tat', 'ändern');
           ae.type = 'button'; ae.dataset.aendern = k.id;
@@ -2618,7 +2742,7 @@
 
       if (k.antworten && k.antworten.length) {
         const unten = el('div', 'ko-antw');
-        k.antworten.forEach(a => unten.appendChild(VARIANTE.kommentar(a, kategorien, true)));
+        k.antworten.forEach(a => unten.appendChild(VARIANTE.kommentar(a, kategorien)));
         z.appendChild(unten);
       }
       return z;
@@ -3518,6 +3642,28 @@
      Sektion ueberhaupt erscheint: nach zwei stillen Wochen ist die Terminliste
      leer, das Archiv aber nicht, und dann waere der Weg dahin verbaut. */
   function zeichneTermine(termine, wieViel) {
+    /* Schnitt und Beitragszahl herüberretten, wo die neue Liste sie nicht
+       mitbringt.
+
+       Der Worker rechnet beides nur für die Tafel mit: `terminAntwort` hängt
+       `bewertung` und `kommentare` an, WENN es eine Notenkarte bekommt, und
+       die Termin-Routen (`/api/termin`, `/api/termin/aendern`) geben ihre
+       Liste ohne (worker/src/index.js, „dort interessiert sie niemanden").
+       Wer also einen Abend einträgt oder absagt, bekam eine Liste zurück, in
+       der an JEDER Zeile die Note fehlte — bis zum nächsten Nachfassen.
+
+       Vorher fiel das kaum auf: an der Stelle stand dann „noch keine". Seit
+       dort fünf leere Sterne stehen, liest es sich als Aufforderung zu
+       bewerten, was längst bewertet ist. Was die Tafel zuletzt wusste, gilt
+       deshalb weiter, bis sie es besser weiß. */
+    if (termine !== letzteTermine) {
+      const vorher = new Map(letzteTermine.map(t => [t.id, t]));
+      termine = termine.map(t => {
+        if ('bewertung' in t) return t;
+        const alt = vorher.get(t.id);
+        return alt ? { ...t, bewertung: alt.bewertung, kommentare: alt.kommentare } : t;
+      });
+    }
     letzteTermine = termine;
     if (Number.isFinite(wieViel)) chronikZahl = wieViel;
     /* Welchen Stand der Uhr dieses Bild zeigt, und wann der naechste faellig
@@ -3544,40 +3690,40 @@
     // Rückwärts: der letzte Abend steht oben, nicht der älteste.
     const gewesen = termine.filter(vorbei).reverse();
 
-    const darfWeg = t => darf && (t.gastgeber === meinName || t.von === meinName);
+    /* Ohne kommenden Abend steht hier nichts mehr.
 
-    /* Der leere Horizont bietet nur an, was von hier aus auch geht. „Das Rad
-       drehen" unter einem Knopf, den es gerade nicht gibt, schickt den Leser
-       nach oben und lässt ihn dort suchen — und während eine Ziehung auf ihre
-       Antwort wartet, ist es schlicht falsch: gedreht IST. Woran das hängt,
-       steht in `letztesLos`; `zeichneRad` schreibt es unmittelbar vor diesem
-       Aufruf (siehe `hole`), und wo die Termine allein neu gezeichnet werden,
-       gilt weiter der zuletzt bestätigte Stand. */
-    if (!kommend.length) {
-      const los = letztesLos || {};
-      // Dieselbe Lesart wie am Rad selbst: `offen` ist die ältere Schreibweise.
-      const genug = los.darf_drehen !== undefined ? los.darf_drehen : los.offen;
-      const wartet = !!los.gewinner && los.status === 'offen';
-      ziel.appendChild(el('div', 'leer-hinweis kr',
-        wartet
-          ? (los.gewinner === meinName
-              ? 'Noch kein Abend — die Flasche zeigt auf dich.'
-              : 'Noch kein Abend — die Flasche wartet auf ' + los.gewinner + '.')
-          : (genug && darf) ? 'Kein Abend in Sicht. Die Flasche drehen oder einen eintragen.'
-          : darf            ? 'Kein Abend in Sicht. Trag einen ein.'
-                            : 'Kein Abend in Sicht.'));
-    }
+       Bis eben stand ein Satz da („Kein Abend in Sicht. Die Flasche drehen
+       oder einen eintragen."), und er kostete eine ganze Zeilenhöhe dafür,
+       dass er die Leere beschrieb, die man ohnehin sieht. Beide Wege, die er
+       nannte, stehen als Knöpfe unmittelbar daneben — das Rad darüber,
+       „eintragen" im Kopf dieser Sektion. Und die Auskunft, auf wen die
+       Flasche wartet, steht am Rad selbst, samt der Frage an den Gezogenen.
+       Der Hinweis war also dreimal dasselbe an vierter Stelle. */
+
     /* Nur zwei Zeilen in der Hauptansicht — der Rest liegt in der Chronik.
        Reicht das Kommende allein nicht, füllt das Gewesene die Lücke auf. */
     const ANGEZEIGT = 2;
     const kommendGezeigt = kommend.slice(0, ANGEZEIGT);
-    kommendGezeigt.forEach(t => ziel.appendChild(VARIANTE.termin(t, darfWeg(t))));
+    kommendGezeigt.forEach(t => ziel.appendChild(VARIANTE.termin(t)));
 
     const gewesenGezeigt = gewesen.slice(0, ANGEZEIGT - kommendGezeigt.length);
     if (gewesenGezeigt.length) {
       ziel.appendChild(el('div', 't-trenner', 'gewesen'));
-      gewesenGezeigt.forEach(t => ziel.appendChild(VARIANTE.termin(t, false)));
+      gewesenGezeigt.forEach(t => ziel.appendChild(VARIANTE.termin(t)));
     }
+  }
+
+  /* Wer einen Abend absagen darf: sein Gastgeber oder wer ihn eingetragen
+     hat — und nur, solange er nicht angefangen hat. Der Worker sperrt das
+     Ändern ab `beginnt_am` (409 „Der Abend hat schon angefangen"), also
+     zeigt die Seite den Knopf auch nur bis dahin.
+
+     Steht hier und nicht mehr in `zeichneTermine`, weil der Knopf ins Blatt
+     gezogen ist und das Blatt von überall aufgeht — auch aus der Chronik. */
+  function darfAbsagen(t) {
+    if (!t || t.abgesagt || !merke() || !meinName) return false;
+    if (new Date(t.beginnt_am).getTime() <= Date.now()) return false;
+    return t.gastgeber === meinName || t.von === meinName;
   }
 
   /* --- Das Uhrwerk ---------------------------------------------------------
@@ -3904,11 +4050,41 @@
     $('fly-thread').textContent = '';
     $('fly-thread-kopf').hidden = true;
     $('fly-schreib').hidden = true;
+    flyAbsagenZeigen();
+    absagenSagt('');          // was am vorigen Abend stand, gilt hier nicht
     flyModusZurueck();
     flySagt('');
     $('flyout').hidden = false;
     koerperSperren();
     await flyLaden();
+  }
+
+  /* Den Absageknopf für das offene Ziel stellen. Der Abend dazu steht in dem,
+     was die Tafel zuletzt geschickt hat — die Chronik führt nur Gewesenes,
+     also findet `letzteTermine` alles, was überhaupt noch absagbar wäre.
+
+     Wird bei jedem Öffnen gerufen UND nach jedem Absagen: der Knopf muss
+     verschwinden, sobald er getan hat, wozu er da war. */
+  function flyAbsagenZeigen() {
+    const k = $('fly-absagen');
+    const t = flyTermin();
+    k.hidden = !darfAbsagen(t);
+    k.disabled = false;
+  }
+
+  // Was der Absageknopf zu sagen hat, an seiner Stelle. Ohne Text: weg.
+  function absagenSagt(text, schlecht) {
+    const p = $('fly-absagt');
+    p.textContent = text || '';
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  // Der Abend zum offenen Blatt, oder null — auch für ein Nutzerziel.
+  function flyTermin() {
+    if (!flyZiel || !flyZiel.startsWith('termin:')) return null;
+    const id = Number(flyZiel.split(':')[1]);
+    return letzteTermine.find(t => t.id === id) || null;
   }
 
   function flyZu() {
@@ -4415,7 +4591,7 @@
     const kommentare = (d && d.kommentare) || [];
     ziel.textContent = '';
     $('fly-thread-kopf').hidden = !kommentare.length;
-    kommentare.forEach(k => ziel.appendChild(VARIANTE.kommentar(k, d.kategorien, false)));
+    kommentare.forEach(k => ziel.appendChild(VARIANTE.kommentar(k, d.kategorien)));
 
     $('fly-schreib').hidden = !(d && d.darf_schreiben);
     flyAnZeigen();
@@ -4725,8 +4901,9 @@
       const m = new Date(t.beginnt_am)
         .toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
       if (m !== monat) { monat = m; ziel.appendChild(el('div', 'ch-monat', m)); }
-      // Absagen kann man im Archiv nichts mehr — der Abend ist vorbei.
-      ziel.appendChild(VARIANTE.termin(t, false));
+      // Absagen kann man im Archiv nichts mehr — der Abend ist vorbei, und
+      // `darfAbsagen` sagt das im Blatt von selbst.
+      ziel.appendChild(VARIANTE.termin(t));
     });
     $('ch-mehr').hidden = !chronikWeiter;
   }
@@ -5034,10 +5211,14 @@
 
   /* Das Flyout hängt an den Listen, nicht an der einzelnen Zeile: alle drei
      werden neu gebaut (die Chronik beim Blättern), ein Zuhörer je Zeile ginge
-     dabei verloren. */
+     dabei verloren.
+
+     Gegriffen wird die Zeile selbst — `[data-ziel]` trifft beide Sorten, die
+     Melderzeile und die Terminzeile, und lässt die stillen <div>-Zeilen ohne
+     Konto dahinter in Ruhe. */
   ['rangliste', 'termin-liste', 'ch-liste'].forEach(id => {
     $(id).addEventListener('click', ev => {
-      const b = ev.target.closest('.z-bewerten');
+      const b = ev.target.closest('[data-ziel]');
       if (b) flyAuf(b.dataset.ziel, b.dataset.name);
     });
   });
@@ -5374,23 +5555,36 @@
     }
   });
 
-  /* Absagen hängt an der Liste, nicht am einzelnen Knopf: die Liste wird bei
-     jedem Nachfassen neu gebaut, ein Zuhörer je Zeile ginge dabei verloren. */
-  $('termin-liste').addEventListener('click', async ev => {
-    const knopf = ev.target.closest('.t-weg');
-    if (!knopf) return;
+  /* Absagen — der Knopf steht im Blatt, nicht mehr an der Zeile. Er hängt
+     deshalb auch am festen Gerüst des Blattes und braucht keinen Zuhörer, der
+     jeden Neubau überlebt.
+
+     Gemeldet wird an der Stelle des Knopfes (`absagenSagt`), nicht unten an
+     der Terminliste — die sieht der Nutzer in diesem Moment gar nicht — und
+     auch nicht in `#fly-sagt`, das hinter Thread und Schreibfeld liegt und
+     bei einem Abend mit ein paar Beiträgen weit außerhalb des Bildes.
+     Zugemacht wird nicht: wer gerade absagt, will oft noch dazuschreiben,
+     warum. */
+  $('fly-absagen').addEventListener('click', async () => {
+    const t = flyTermin();
+    if (!t) return;
+    const knopf = $('fly-absagen');
     knopf.disabled = true;
-    terminSagt('');
+    absagenSagt('');
     try {
-      const d = await ruf('/api/termin/aendern', { id: Number(knopf.dataset.termin), absagen: true });
+      const d = await ruf('/api/termin/aendern', { id: t.id, absagen: true });
       zeichneTermine(d.termine || letzteTermine);
-      terminSagt('Abgesagt.');
+      flyAbsagenZeigen();          // abgesagt ist abgesagt: der Knopf geht weg
+      absagenSagt('Abgesagt.');
       // Hing eine Zusage daran, ist der Tag wieder frei - dann muss auch das
       // Rad zurück auf Anfang, samt Bühne für den, der zuletzt gedreht hat.
       if (d.los_frei) { selbstGedreht = false; await hole(); }
+      // Das Blatt selbst neu laden: ob noch bewertet werden darf, hat sich
+      // mit der Absage geändert, und das entscheidet der Worker.
+      await flyLaden();
     } catch (e) {
       knopf.disabled = false;
-      terminSagt(e.message, true);
+      absagenSagt(e.message, true);
     }
   });
 
