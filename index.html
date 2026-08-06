@@ -572,6 +572,13 @@
     box-shadow: 0 0 10px #e8c76640;
   }
   .nr-marke-steht { color: var(--kreide-weg); border: 1px solid #ffffff26; }
+  /* Die Reichweite, wenn sie nicht die ganze Runde ist. Umrandet und grau wie
+     „steht": es ist eine Auskunft, kein Alarm — und bewusst NICHT rot, rot
+     heißt auf dieser Tafel Warnung. Sie steht auch beim EMPFÄNGER, nicht nur
+     beim Absender: wer als einer von dreien gerufen wird, soll nicht annehmen,
+     dass ohnehin schon jemand hinfährt. Wer sonst noch gerufen wurde, sagt sie
+     nicht — das ist Sache dessen, der ruft. */
+  .nr-marke-kreis { color: var(--kreide-weg); border: 1px solid #ffffff33; }
   /* Der Punkt vor „live" atmet im selben Takt wie die Ringe an der Nadel auf
      der Karte — zwei Stellen, ein Puls, damit das Auge sie als dieselbe
      Aussage liest. Er erbt die dunkle Schriftfarbe der gefüllten Marke. */
@@ -796,9 +803,36 @@
     border-radius: 999px; background: var(--gelb);
     transition: transform .18s ease;
   }
-  #nr-modus-live:checked ~ .nr-modus-schieber { transform: translateX(100%); }
-  #nr-modus-einmalig:checked ~ label[for="nr-modus-einmalig"],
-  #nr-modus-live:checked ~ label[for="nr-modus-live"] { color: var(--schiefer-t); font-weight: 600; }
+  /* Über die Stellung statt über die Id: seit der Empfängerkreis dieselbe
+     Bauform trägt, steht dasselbe Ding zweimal im Blatt, und zwei Sätze
+     Selektoren für einen Schalter laufen auseinander. `:last-of-type` ist
+     dabei das rechte der beiden Radios, egal wie es heißt. */
+  .nr-modus input:last-of-type:checked ~ .nr-modus-schieber { transform: translateX(100%); }
+  .nr-modus input:checked + label { color: var(--schiefer-t); font-weight: 600; }
+
+  /* --- Wer den Notruf sieht -------------------------------------------------
+     Die Namen als Kreidestücke, und zwar nur, wenn sie gebraucht werden: unter
+     „An alle" klappen sie weg, dann ist das Blatt so kurz wie vorher. Gewählt
+     heißt gefüllt — dieselbe Aussage wie bei der Live-Marke: gefüllt ist „gilt
+     jetzt", umrandet ist „gibt es".
+     --------------------------------------------------------------------- */
+  .nr-kreis { margin: 0 0 12px; }
+  .nr-kreis .nr-modus { margin: 0; }
+  .nr-leute { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 0; }
+  .nr-chip {
+    border: 1px solid #ffffff33; border-radius: 999px; background: none;
+    padding: 6px 12px; font: inherit; font-size: 13px;
+    color: var(--kreide-matt); cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .nr-chip:hover { border-color: var(--gelb); }
+  .nr-chip[aria-pressed="true"] {
+    background: var(--gelb); border-color: var(--gelb);
+    color: var(--schiefer-t); font-weight: 600;
+  }
+  /* Solange die Namen noch unterwegs sind, steht da eine Zeile und kein
+     Springen: die Liste kommt aus einem eigenen Ruf und ist gleich da. */
+  .nr-leute-warten { font-size: 12px; color: var(--kreide-weg); padding: 3px 1px; }
 
   /* Die zwei Nöte im Blatt. Große Flächen, weil danach gegriffen wird und
      nicht gezielt. */
@@ -2470,6 +2504,22 @@
         <span class="nr-modus-schieber" aria-hidden="true"></span>
       </div>
 
+      <!-- Wer ihn sieht. Steht wie der Schieberegler über BEIDEN Zuständen des
+           Blatts: am laufenden Notruf ändert dasselbe Bedienteil den Kreis
+           nachträglich, in beide Richtungen (siehe `kreisAendern`). Bewusst
+           dieselbe Bauform wie „Einmalig / Live" — zwei Sprachen für dieselbe
+           Sorte Entscheidung wäre eine zu viel. -->
+      <div class="nr-kreis" id="nr-kreis">
+        <div class="nr-modus" role="radiogroup" aria-label="Wer den Notruf sieht">
+          <input type="radio" name="nr-kreis-wahl" id="nr-kreis-alle" value="alle" checked>
+          <label for="nr-kreis-alle">An alle</label>
+          <input type="radio" name="nr-kreis-wahl" id="nr-kreis-auswahl" value="auswahl">
+          <label for="nr-kreis-auswahl">Nur an ausgewählte</label>
+          <span class="nr-modus-schieber" aria-hidden="true"></span>
+        </div>
+        <div class="nr-leute" id="nr-leute" hidden></div>
+      </div>
+
       <div class="nr-wahl" id="nr-wahl">
         <button class="knopf" id="nr-bier" type="button">Bier</button>
         <button class="knopf" id="nr-kamerad" type="button">Trinkkameraden</button>
@@ -2770,6 +2820,34 @@
   const weite = m => m < 1000 ? Math.round(m) + ' m'
     : (Math.round(m / 100) / 10).toString().replace('.', ',') + ' km';
 
+  /* Wie weit die Nadel vom Rand wegbleiben muss, damit die Karte beim Nachrücken
+     stehen bleiben darf. Darunter wird sie neu gebaut und neu zentriert.
+
+     34 Pixel sind nicht gegriffen: die Nadel misst 15 Pixel, dazu vier Ringe
+     Kontaktschatten und ein Rest Luft — bei weniger klebte sie an der Kante,
+     und die halbe Aussage („da drüben geht es weiter") fiele mit ab. */
+  const KARTE_RAND = 34;
+
+  /* Der Zoom, gerechnet aus der Streuung: eine Ortung auf 20 m verträgt die
+     Straßenansicht, eine auf 5 km zeigt sonst einen Kreis, der über alle Ränder
+     läuft. Gerechnet gegen die halbe Feldbreite, damit der Kreis hineinpasst
+     statt es zu behaupten.
+
+     Eigene Funktion, seit die Karte nachrücken kann: das Rücken muss dieselbe
+     Zahl bekommen wie das Bauen, sonst schiebt es die Nadel in ein Kachelnetz,
+     das für einen anderen Zoom geholt wurde. */
+  const karteStreu = n => Number.isFinite(n.genau) ? Math.max(n.genau, 20) : 60;
+  function karteZoom(lat, streu) {
+    let z = KACHEL_ZOOM_MAX;
+    while (z > KACHEL_ZOOM_MIN && streu / meterJePixel(lat, z) > 62) z--;
+    return z;
+  }
+  /* Der Durchmesser des Streukreises in Bildpunkten. Nach oben gedeckelt, damit
+     eine sehr grobe Ortung das Feld nicht komplett zumalt — dass es dann nur
+     noch "irgendwo hier" heißt, sagt schon die Zeile darüber. */
+  const karteStreuGross = (streu, lat, z, b, h) =>
+    Math.min(Math.min(b, h) * 1.6, Math.max(16, streu / meterJePixel(lat, z) * 2));
+
   /* Die Kacheln einhängen, sobald das Feld im Dokument steht und eine Breite
      hat. Getrennt vom Zeichnen, weil `clientWidth` vorher 0 ist und das Raster
      dann aus einer einzigen Kachel bestünde.
@@ -2789,6 +2867,10 @@
     const px = mx * KACHEL, py = my * KACHEL;
     // Die linke obere Ecke des Sichtfensters, in denselben Weltpunkten.
     const l = px - b / 2, o = py - h / 2;
+    /* Der Ursprung bleibt am Feld hängen. Daran rechnet `karteRuecken` später
+       die neue Nadelstelle aus — ohne ihn wüsste es nicht, welchen Ausschnitt
+       der Welt die geladenen Kacheln zeigen. */
+    a._ursprung = { l, o, b, h };
 
     const kante = 2 ** z;
     for (let x = Math.floor(l / KACHEL); x <= Math.floor((l + b) / KACHEL); x++) {
@@ -2810,12 +2892,8 @@
     }
 
     if (streu) {
-      /* Durchmesser, nicht Radius: der Kreis wird über `width`/`height`
-         gesetzt. Nach oben gedeckelt, damit eine sehr grobe Ortung das Feld
-         nicht komplett zumalt — dass es dann nur noch "irgendwo hier" heißt,
-         sagt schon die Zeile darüber. */
-      const gross = Math.min(Math.min(b, h) * 1.6,
-        Math.max(16, streu / meterJePixel(lage.lat, z) * 2));
+      // Durchmesser, nicht Radius: der Kreis wird über `width`/`height` gesetzt.
+      const gross = karteStreuGross(streu, lage.lat, z, b, h);
       const kreis = el('span', 'karte-streu');
       kreis.style.width = kreis.style.height = gross + 'px';
       kreis.style.left = (b / 2) + 'px';
@@ -3295,20 +3373,32 @@
        direkt. Warum, steht dort ausführlich: eine Kachel-URL IST der Standort.
        Geholt wird ausschließlich, was hier sichtbar ist — kein Vorrat, das
        verlangen die Nutzungsbedingungen ausdrücklich. */
-    karte(n) {
-      const a = el('a', 'karte');
-      a.href = mapsLink(n.lat, n.lon);
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.setAttribute('aria-label', 'Route dorthin öffnen');
+    /* `meiner` dreht die Karte von einem Weg dorthin in einen Weg ins Blatt.
+       Zum eigenen Notruf zu navigieren ist sinnlos — man steht schon da —, und
+       solange einer läuft, ist der Knopf „Notruf absetzen" versteckt: ohne
+       diesen Weg käme man an Kreis, Schieberegler und Karte gar nicht mehr
+       heran, sobald das Blatt einmal zu war.
 
-      /* Der Zoom richtet sich nach der Streuung: eine Ortung auf 20 m verträgt
-         die Straßenansicht, eine auf 5 km zeigt sonst einen Kreis, der über
-         alle Ränder läuft. Gerechnet wird gegen die halbe Feldbreite, damit
-         der Kreis hineinpasst statt es zu behaupten. */
-      const streu = Number.isFinite(n.genau) ? Math.max(n.genau, 20) : 60;
-      let z = KACHEL_ZOOM_MAX;
-      while (z > KACHEL_ZOOM_MIN && streu / meterJePixel(n.lat, z) > 62) z--;
+       Ein `div` mit `role="button"` statt eines echten Knopfes: in der Karte
+       hängt die Lizenznennung von OpenStreetMap, und die ist ein Link. Ein
+       Link IN einem Knopf ist ungültig, und die Lizenz muss anklickbar
+       bleiben. Die Tastatur bekommt ihren Weg über `tabindex` und den
+       Tastendruck an der Liste. */
+    karte(n, meiner) {
+      const a = el(meiner ? 'div' : 'a', 'karte');
+      if (meiner) {
+        a.setAttribute('role', 'button');
+        a.tabIndex = 0;
+        a.setAttribute('aria-label', 'Deinen Notruf ansehen');
+      } else {
+        a.href = mapsLink(n.lat, n.lon);
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.setAttribute('aria-label', 'Route dorthin öffnen');
+      }
+
+      const streu = karteStreu(n);
+      const z = karteZoom(n.lat, streu);
 
       // Die Kachelnummer mit Nachkomma: der Bruch ist der Punkt IN der Kachel.
       const mx = kachelX(n.lon, z), my = kachelY(n.lat, z);
@@ -3319,7 +3409,72 @@
         '© <a href="https://www.openstreetmap.org/copyright" target="_blank" ' +
         'rel="noopener">OpenStreetMap</a>-Mitwirkende';
       a._lage = { z, mx, my, streu, lat: n.lat };
+      a._nid = n.id;
+      a._meiner = !!meiner;
       return a;
+    },
+
+    /* Die Karte einem gewanderten Standort nachziehen, ohne sie neu zu bauen.
+       -------------------------------------------------------------------------
+       Ein Live-Notruf trägt alle zwanzig Sekunden nach, und jeder Nachtrag
+       stößt jede offene Seite an. Wurde die Karte dabei jedes Mal neu gebaut,
+       hing sie zwanzig Kacheln neu ein — für eine Nadel, die drei Meter weiter
+       steht. Also: Nadel und Streukreis verschieben, Kacheln stehen lassen.
+
+       DAS GEHT NUR INNERHALB DES GELADENEN AUSSCHNITTS. Geholt wird genau das
+       Sichtfenster und keine Kachel mehr (so verlangen es die Nutzungs-
+       bedingungen), dahinter ist schlicht nichts. Kommt die Nadel dem Rand
+       näher als `KARTE_RAND`, sagt diese Funktion nein, und die Karte wird neu
+       gebaut und neu zentriert — also genau dann, wenn wirklich jemand fährt.
+
+       Ein anderer Zoom sagt ebenfalls nein: die Kacheln im Feld gehören zu dem
+       Zoom, mit dem sie geholt wurden. Der ändert sich, wenn die Ortung deutlich
+       genauer oder gröber wird. */
+    karteRuecken(a, n) {
+      const u = a._ursprung, lage = a._lage;
+      // Noch nie gefüllt (im versteckten Blatt gebaut): da gibt es nichts zu
+      // rücken, das Füllen zentriert ohnehin auf den neuen Punkt.
+      if (!u || !lage || !a._voll) return false;
+      if (a._nid !== n.id) return false;
+      /* Ein gedrehtes Telefon hat ein anderes Feld, und die Kacheln darin sind
+         für die alte Breite geholt. Dann hilft Rücken nicht — dann muss neu
+         gerastert werden.
+
+         `_masse` kommt von der Stelle, die diese Karte gerettet hat, gemessen
+         als sie noch im Dokument hing (siehe `zeichneNotrufe`). Im Blatt hängt
+         sie durchgehend, dort tut es das Feld selbst. */
+      const masse = a._masse || { b: a.clientWidth, h: a.clientHeight };
+      if (masse.b !== u.b || masse.h !== u.h) return false;
+
+      const streu = karteStreu(n);
+      if (karteZoom(n.lat, streu) !== lage.z) return false;
+
+      const mx = kachelX(n.lon, lage.z), my = kachelY(n.lat, lage.z);
+      const x = mx * KACHEL - u.l, y = my * KACHEL - u.o;
+      if (x < KARTE_RAND || y < KARTE_RAND
+          || x > u.b - KARTE_RAND || y > u.h - KARTE_RAND) return false;
+
+      const nadel = a.querySelector('.karte-nadel');
+      if (!nadel) return false;
+      nadel.style.left = x + 'px';
+      nadel.style.top = y + 'px';
+
+      /* Der Streukreis wandert mit UND ändert seine Größe: jede Ortung bringt
+         ihre eigene Genauigkeit mit, und ein Kreis von vorhin behauptete sonst
+         eine Schärfe, die diese Messung nicht hat. */
+      const kreis = a.querySelector('.karte-streu');
+      if (kreis) {
+        const gross = karteStreuGross(streu, n.lat, lage.z, u.b, u.h);
+        kreis.style.width = kreis.style.height = gross + 'px';
+        kreis.style.left = x + 'px';
+        kreis.style.top = y + 'px';
+      }
+
+      // Zum eigenen Notruf führt kein Weg dorthin — dort ist die Karte der Weg
+      // ins Blatt und trägt gar keine Adresse.
+      if (!a._meiner) a.href = mapsLink(n.lat, n.lon);
+      a._lage = { z: lage.z, mx, my, streu, lat: n.lat };
+      return true;
     },
 
     /* Eine Zeile im Notrufblock. Der Name, was fehlt, seit wann — und die
@@ -3329,7 +3484,7 @@
        Nadel), steht NICHT hier, sondern in `notrufStand` — das läuft alle
        zwanzig Sekunden noch einmal über dieselbe Zeile, ohne die Karte neu
        zu bauen. Sonst holte jede Aktualisierung die Kacheln neu. */
-    notruf(n, meiner) {
+    notruf(n, meiner, alteKarte) {
       const z = el('div', 'nr-zeile' + (meiner ? ' meiner' : ''));
       const satz = meiner
         ? (n.art === 'bier' ? 'Du brauchst Bier'
@@ -3340,6 +3495,11 @@
            : ' braucht Bier und Gesellschaft');
       const wer = el('div', 'nr-wer', satz);
       wer.appendChild(el('span', 'nr-marke'));
+      /* Die Marke für den beschnittenen Kreis. Steht NACH der Live-Marke, und
+         das ist keine Kosmetik: `notrufStand` greift die Zeitmarke über
+         `querySelector('.nr-marke')` ab, und das ist die erste im Dokument.
+         Sie wandert nicht mit der Uhr, also steht sie hier und nicht dort. */
+      if (n.kreis) wer.appendChild(el('span', 'nr-marke nr-marke-kreis', 'nur an ' + n.kreis));
       z.appendChild(wer);
 
       /* Zum eigenen Notruf führt kein „hin" — man ist schon da. Stattdessen
@@ -3359,7 +3519,12 @@
 
       z.appendChild(el('div', 'nr-unter'));
 
-      const k = VARIANTE.karte(n);
+      /* Die Karte von eben weiterverwenden, wenn der Standort nur ein Stück
+         gewandert ist: die Zeile wird bei jedem Nachladen neu gebaut, die
+         Kacheln darin müssen es nicht (siehe `karteRuecken`). */
+      const k = alteKarte && alteKarte._meiner === !!meiner
+        && VARIANTE.karteRuecken(alteKarte, n)
+        ? alteKarte : VARIANTE.karte(n, meiner);
       k.style.gridColumn = '1 / -1';
       z.appendChild(k);
 
@@ -3935,6 +4100,19 @@
   function zeichneNotrufe(notrufe) {
     meineNot = null;
     const block = $('notruf-block'), liste = $('notruf-liste');
+    /* Die Karten der letzten Zeichnung retten, bevor die Zeilen fallen. Sie
+       tragen geladene Kacheln, und ein Live-Notruf käme sonst alle zwanzig
+       Sekunden mit einem frischen Kachelnetz wieder — siehe `karteRuecken`. */
+    const alteKarten = new Map();
+    for (const k of liste.querySelectorAll('.karte')) {
+      if (k._nid == null) continue;
+      /* JETZT messen, solange sie noch hängen: gleich darauf sind sie
+         abgehängt, und ein abgehängtes Feld meldet Breite 0 — die Prüfung auf
+         ein gedrehtes Telefon in `karteRuecken` schlüge dann immer an, und die
+         Kacheln kämen doch bei jedem Nachladen neu. */
+      k._masse = { b: k.clientWidth, h: k.clientHeight };
+      alteKarten.set(k._nid, k);
+    }
     liste.textContent = '';
     // Draussen gibt es den Knopf nicht: die Routen dahinter sind zu, und ein
     // Knopf, der nur 401 sagen kann, ist eine Einladung ins Leere.
@@ -3946,7 +4124,7 @@
     for (const n of notrufe) {
       const meiner = n.name === meinName;
       if (meiner) meineNot = n;
-      liste.appendChild(VARIANTE.notruf(n, meiner));
+      liste.appendChild(VARIANTE.notruf(n, meiner, alteKarten.get(n.id)));
     }
     // Erst jetzt, wo die Zeilen hängen und eine Breite haben.
     for (const k of liste.querySelectorAll('.karte')) karteFuellen(k);
@@ -3954,6 +4132,22 @@
     $('notruf-kopf').classList.toggle('notruf-kopf-aktiv', !!meineNot);
     $('notruf-auf').hidden = !!meineNot;
     $('notruf-tafel-aktionen').hidden = !meineNot;
+
+    /* Der Kreis im offenen Blatt geht mit. `meineNot` ist eben ersetzt worden,
+       und ohne das zeigte das Blatt den Kreis von vorhin — geändert am Handy,
+       nachgesehen am Rechner, und beide sagen etwas anderes.
+
+       Zwei Riegel davor, beide nötig: NUR bei laufendem Notruf, denn ohne einen
+       ist die Auswahl im Blatt die des Nutzers und noch nirgends abgelegt — der
+       Minutentakt darf sie nicht wegwischen. Und nicht, solange eine eigene
+       Änderung in der Sammelfrist hängt, sonst überholt die Antwort von gestern
+       den Griff von gerade. */
+    if (meineNot && !$('notruf').hidden && !kreisUhr) kreisLage(meineNot);
+    /* Und die Karte im offenen Blatt geht mit. Das ging vorher nicht, ohne bei
+       jedem Nachladen die Kacheln neu zu holen — seit `karteRuecken` kostet es
+       eine verschobene Nadel. Der Wandel wird dort sichtbar, wo derselbe Mensch
+       an zwei Geräten hängt: das Handy trägt nach, der Rechner zeigt es. */
+    if (meineNot && !$('notruf').hidden) notrufLage(meineNot);
     // Der eigene Notruf ist von selbst erloschen oder abgelaufen - dann gibt
     // es nichts mehr, wohin ein Live-Standort nachtragen könnte.
     if (!meineNot) notrufLiveStoppen();
@@ -4014,6 +4208,7 @@
     koerperSperren();
     // Läuft schon einer, ist das Blatt der Rückweg und keine neue Wahl.
     notrufLage(meineNot);
+    kreisLage(meineNot);
   }
 
   function notrufZu() {
@@ -4032,9 +4227,19 @@
          : 'du brauchst Bier und Gesellschaft')
       : 'was fehlt dir?';
     const feld = $('nr-karte');
-    feld.textContent = '';
-    if (!n) return;
-    const k = VARIANTE.karte(n);
+    if (!n) { feld.textContent = ''; return; }
+
+    /* Die Karte von eben behalten, wenn der Standort nur ein Stück gewandert
+       ist. Das ist der Grund, warum diese Funktion jetzt auch aus
+       `zeichneNotrufe` gerufen werden darf: sie kostet dann eine verschobene
+       Nadel und kein neues Kachelnetz. */
+    const alt = feld.querySelector('.karte');
+    let k = alt && VARIANTE.karteRuecken(alt, n) ? alt : null;
+    if (!k) {
+      feld.textContent = '';
+      k = VARIANTE.karte(n);
+      feld.appendChild(k);
+    }
     /* Dieselbe Aussage wie auf der Tafel, damit man im Blatt sieht, was die
        anderen sehen: pulst die Nadel hier, wandert der Standort auch dort mit.
        Der Zustand kommt aus denselben zwei Feldern — nicht aus
@@ -4044,8 +4249,147 @@
       !!n.live && Date.now() - new Date(n.standort_am || n.erstellt) <= NOTRUF_LIVE_FRIST);
     k.classList.toggle('karte-steht',
       !!n.live && Date.now() - new Date(n.standort_am || n.erstellt) > NOTRUF_LIVE_FRIST);
-    feld.appendChild(k);
     karteFuellen(k);
+  }
+
+  /* --- Wer den Notruf sieht -------------------------------------------------
+     Der Kreis ist eine Liste von Nutzer-Ids, oder null für „an alle" (siehe
+     worker/migrations/0021). Er gilt für BEIDES — die Post und die Karte:
+     wer nicht drinsteht, bekommt keine Mail und sieht die Zeile auf seiner
+     Tafel gar nicht erst. Das Ausblenden macht der Worker, nicht diese Seite;
+     hier steht nur die Wahl.
+
+     Die Vorauswahl ist der Kreis vom letzten Notruf, im Browser gemerkt wie
+     `notrufLiveModus` — ein Wunsch dieses Geräts, keine Tatsache am Datensatz.
+     Beim allerersten Mal steht dort nichts, und die drei Knöpfe bleiben
+     gesperrt, bis ein Name steht: das ist der einzige Fall, in dem gesperrte
+     Knöpfe richtig sind, es gibt schlicht noch keinen Kreis.
+     --------------------------------------------------------------------- */
+  const KREIS_SPEICHER = 'beerstock-notruf-kreis';
+  let kreisModus = 'alle';          // 'alle' oder 'auswahl'
+  const kreisGewaehlt = new Set();  // Ids, nur im Modus 'auswahl' von Belang
+  let kreisLeute = null;            // die wählbaren Namen, erst bei Bedarf geholt
+  let kreisUhr = null;              // Sammelfrist für Änderungen am laufenden Notruf
+
+  const kreisGemerkt = () => {
+    try { return JSON.parse(localStorage.getItem(KREIS_SPEICHER) || '[]'); }
+    catch { return []; }
+  };
+  /* Nur eine echte Auswahl wird gemerkt. Ein Notruf an alle sagt nichts
+     darüber, wen man beim nächsten Mal meint — er würde die Vorauswahl
+     löschen, ohne dass jemand das wollte. */
+  const kreisMerken = () => {
+    if (kreisModus !== 'auswahl') return;
+    try { localStorage.setItem(KREIS_SPEICHER, JSON.stringify([...kreisGewaehlt])); } catch {}
+  };
+
+  /* Die Namen. Eigener Ruf, erst beim ersten Umlegen auf „Nur an ausgewählte" —
+     wer immer an alle ruft, holt sie nie. Sie kommen NICHT aus `feld`: das
+     kennt nur, wer schon einmal gemeldet hat, und wer angemeldet ist und nie
+     gemeldet hat, fiele aus der Auswahl still heraus. */
+  async function kreisLeuteHolen() {
+    try {
+      const r = await fetch(API + '/api/kreis', { headers: mitToken(), cache: 'no-store' });
+      if (!r.ok) throw new Error('Fehler ' + r.status);
+      const d = await r.json();
+      kreisLeute = d.leute || [];
+      /* Wer nicht mehr wählbar ist (entfernt, gesperrt, umbenannt), fliegt aus
+         der gemerkten Auswahl — sonst schickte die Seite Ids, die der Worker
+         ohnehin wegwirft, und der Zähler der Knöpfe stimmte nicht. */
+      const gibt = new Set(kreisLeute.map(p => p.id));
+      for (const id of [...kreisGewaehlt]) if (!gibt.has(id)) kreisGewaehlt.delete(id);
+    } catch {
+      kreisLeute = [];
+    }
+    kreisZeichnen();
+  }
+
+  function kreisZeichnen() {
+    const feld = $('nr-leute');
+    feld.hidden = kreisModus === 'alle';
+    feld.textContent = '';
+    if (!feld.hidden) {
+      if (!kreisLeute) {
+        feld.appendChild(el('div', 'nr-leute-warten', 'Namen werden geholt …'));
+      } else if (!kreisLeute.length) {
+        feld.appendChild(el('div', 'nr-leute-warten', 'Außer dir schreibt hier noch niemand mit.'));
+      } else {
+        for (const p of kreisLeute) {
+          const b = el('button', 'nr-chip', p.name);
+          b.type = 'button';
+          b.setAttribute('aria-pressed', String(kreisGewaehlt.has(p.id)));
+          b.addEventListener('click', () => kreisTippen(p.id));
+          feld.appendChild(b);
+        }
+      }
+    }
+    // Ein Notruf an niemanden ist keiner.
+    const zu = kreisModus === 'auswahl' && kreisGewaehlt.size === 0;
+    for (const id of ['nr-bier', 'nr-kamerad', 'nr-alles']) $(id).disabled = zu;
+  }
+
+  function kreisTippen(id) {
+    if (kreisGewaehlt.has(id)) kreisGewaehlt.delete(id); else kreisGewaehlt.add(id);
+    kreisZeichnen();
+    kreisAendern();
+  }
+
+  function kreisModusSetzen(modus) {
+    kreisModus = modus;
+    kreisZeichnen();
+    if (modus === 'auswahl' && !kreisLeute) kreisLeuteHolen();
+    kreisAendern();
+  }
+
+  /* Am LAUFENDEN Notruf wirkt jeder Griff sofort — dazunehmen schreibt an,
+     wegnehmen nimmt dem anderen die Karte von der Tafel. Ohne laufenden Notruf
+     passiert hier nichts: die Wahl geht dann beim Absetzen mit.
+
+     Die halbe Sekunde Sammelfrist ist kein Sparen an Anfragen, sondern eine
+     Frage der Mails: wer drei Namen hintereinander antippt, meint eine
+     Änderung und nicht drei, und jede einzelne davon schriebe an. */
+  function kreisAendern() {
+    if (!meineNot) return;
+    if (kreisModus === 'auswahl' && kreisGewaehlt.size === 0) {
+      notrufSagt('Mindestens einer — oder nimm den Notruf ganz zurück.', true);
+      return;
+    }
+    notrufSagt('');
+    clearTimeout(kreisUhr);
+    kreisUhr = setTimeout(async () => {
+      try {
+        const d = await ruf('/api/notruf/kreis', {
+          kreis: kreisModus === 'alle' ? null : [...kreisGewaehlt],
+        });
+        meineNot = d.notruf;
+        kreisMerken();
+        hole(true);
+      } catch (e) {
+        notrufSagt(e.message, true);
+      } finally {
+        /* Zurücksetzen, nicht stehen lassen: an dieser Kennung hängt drüben in
+           `zeichneNotrufe` die Frage, ob gerade eine eigene Änderung unterwegs
+           ist — und eine abgelaufene Frist ist keine. */
+        kreisUhr = null;
+      }
+    }, 500);
+  }
+
+  /* Was das Blatt beim Aufmachen zeigt. Läuft einer, gilt SEIN Kreis und nicht
+     der gemerkte — dieselbe Regel wie beim Schieberegler: das Blatt zeigt, was
+     am Notruf steht, nicht, was dieser Tab zuletzt vorhatte. */
+  function kreisLage(n) {
+    kreisGewaehlt.clear();
+    if (n) {
+      kreisModus = n.kreis ? 'auswahl' : 'alle';
+      for (const id of n.kreis_wer || []) kreisGewaehlt.add(id);
+    } else {
+      kreisModus = 'alle';
+      for (const id of kreisGemerkt()) kreisGewaehlt.add(id);
+    }
+    $(kreisModus === 'auswahl' ? 'nr-kreis-auswahl' : 'nr-kreis-alle').checked = true;
+    kreisZeichnen();
+    if (kreisModus === 'auswahl' && !kreisLeute) kreisLeuteHolen();
   }
 
   /* Den Standort holen. `enableHighAccuracy` kostet Sekunden und Akku und ist
@@ -4092,8 +4436,11 @@
            Notruf für die anderen bis zum ersten Nachtrag als einmaliger da,
            und die Marke poppte zwanzig Sekunden später auf. */
         live: notrufLiveModus,
+        // null heißt an alle; eine Liste heißt genau diese und sonst niemand.
+        kreis: kreisModus === 'alle' ? null : [...kreisGewaehlt],
       });
       meineNot = d.notruf;
+      kreisMerken();
       notrufSagt('');
       notrufLage(d.notruf);
       hole(true);
@@ -6532,6 +6879,8 @@
   $('nr-schirm').addEventListener('click', notrufZu);
   $('nr-modus-einmalig').addEventListener('change', () => notrufModusSetzen(false));
   $('nr-modus-live').addEventListener('change', () => notrufModusSetzen(true));
+  $('nr-kreis-alle').addEventListener('change', () => kreisModusSetzen('alle'));
+  $('nr-kreis-auswahl').addEventListener('change', () => kreisModusSetzen('auswahl'));
   $('nr-bier').addEventListener('click', () => notrufSenden('bier'));
   $('nr-kamerad').addEventListener('click', () => notrufSenden('kamerad'));
   $('nr-alles').addEventListener('click', () => notrufSenden('alles'));
@@ -6543,7 +6892,24 @@
      gehört und nicht an die Zeile geheftet: die Zeilen werden bei jedem
      Zeichnen neu gebaut, ein Hörer daran wäre nach dem ersten Anstoss weg. */
   $('notruf-liste').addEventListener('click', ev => {
-    if (ev.target.id === 'nr-weg-zeile') notrufWeg();
+    if (ev.target.id === 'nr-weg-zeile') return notrufWeg();
+    /* Und der Weg zurück ins Blatt: die eigene Zeile UND die eigene Karte
+       öffnen es. Solange der eigene Notruf läuft, ist „Notruf absetzen"
+       versteckt — ohne das käme man an Kreis und Schieberegler nicht mehr
+       heran, sobald das Blatt einmal zu war.
+
+       Links bleiben Links: die Lizenznennung in der Karte und das „hin" an
+       fremden Zeilen führen nach draußen und nicht ins Blatt. */
+    if (ev.target.closest('a')) return;
+    if (ev.target.closest('.nr-zeile.meiner')) notrufAuf();
+  });
+  /* Dieselbe Handlung für die Tastatur: die eigene Karte ist ein `div` mit
+     `role="button"`, und die Laufzeit macht daraus von sich aus keinen Druck. */
+  $('notruf-liste').addEventListener('keydown', ev => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    if (!ev.target.classList || !ev.target.classList.contains('karte')) return;
+    ev.preventDefault();
+    if (ev.target.closest('.nr-zeile.meiner')) notrufAuf();
   });
   $('dk-kontor').addEventListener('click', () => { location.href = 'admin.html'; });
   $('ch-zu').addEventListener('click', chronikZu);

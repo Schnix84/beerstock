@@ -698,17 +698,40 @@ const terminAntwort = (t, noten, wieViele) => ({
 
    Ehemalige stehen NICHT drin (`u.name IS NOT NULL`, nicht `coalesce`): ein
    Notruf ohne Namen waere ein Punkt auf der Karte, zu dem niemand mehr sagen
-   kann, wer da steht. */
-const notrufeStmt = env => env.DB.prepare(`
+   kann, wer da steht.
+
+   DER KREIS ENTSCHEIDET MIT, ob eine Zeile ueberhaupt herausgegeben wird
+   (siehe migrations/0021). Drei Faelle, und die Reihenfolge ist die des
+   Aufwands: der eigene Notruf immer, ein Notruf ohne Kreis fuer alle, sonst
+   nur fuer die Eingetragenen. Der Filter steht HIER und nicht in der Seite -
+   was der Worker herausgibt, ist das Einzige, was zaehlt; ein Ausblenden im
+   Browser waere ein Vorhang vor offenen Daten. */
+const notrufeStmt = (env, ichId) => env.DB.prepare(`
   SELECT n.id, n.user_id, n.art, n.lat, n.lon, n.genau, n.erstellt, n.bis,
-         n.live, n.standort_am, u.name
+         n.live, n.standort_am, u.name,
+         (SELECT count(*) FROM notruf_kreis k WHERE k.notruf_id = n.id) AS kreis_gross,
+         (SELECT group_concat(k.user_id) FROM notruf_kreis k WHERE k.notruf_id = n.id) AS kreis_ids
   FROM notrufe n
   JOIN users u ON u.id = n.user_id
   WHERE n.weg_am IS NULL AND n.bis > datetime('now') AND u.name IS NOT NULL
+    AND (n.user_id = ?1
+         OR NOT EXISTS (SELECT 1 FROM notruf_kreis k WHERE k.notruf_id = n.id)
+         OR EXISTS (SELECT 1 FROM notruf_kreis k
+                    WHERE k.notruf_id = n.id AND k.user_id = ?1))
   ORDER BY n.erstellt DESC
-`);
+`).bind(ichId);
 
-const notrufAntwort = n => ({
+/* `ichId` ist der BETRACHTER, nicht der Absender. Daran haengt genau eine
+   Entscheidung: die Namensliste des Kreises (`kreis_ids`) bekommt nur, wer den
+   Notruf selbst abgesetzt hat - sie ist die Vorlage fuer seine eigene Auswahl.
+   Ein Empfaenger erfaehrt die GROESSE des Kreises (dafuer traegt die Zeile auf
+   der Tafel die Marke "nur an 3"), aber nicht, wer sonst noch darin steht: wen
+   jemand um Hilfe bittet, ist seine Sache und keine Runde.
+
+   Fehlt das zweite Argument, gibt es keine Liste. Das ist der sichere Weg
+   herum - ein Aufrufer, der den Betrachter vergisst, verliert eine Bequem-
+   lichkeit, statt eine Empfaengerliste auszuplaudern. */
+const notrufAntwort = (n, ichId = null) => ({
   id: n.id,
   wer: n.user_id,
   name: n.name,
@@ -725,6 +748,13 @@ const notrufAntwort = n => ({
      die beiden Tatsachen heraus und behauptet nichts. */
   live: !!n.live,
   standort_am: utc(n.standort_am),
+  /* null heisst "an alle" - dieselbe Aussage wie die fehlende Zeile in
+     `notruf_kreis`, nur eine Schicht weiter oben. Die Tafel malt die Marke
+     genau dann, wenn hier eine Zahl steht. */
+  kreis: n.kreis_gross ? n.kreis_gross : null,
+  ...(ichId != null && n.user_id === ichId && n.kreis_ids
+    ? { kreis_wer: String(n.kreis_ids).split(',').map(Number) }
+    : {}),
 });
 
 /* Der Weg dorthin. Steht im Worker und nicht in der Seite, weil ihn beide
@@ -742,6 +772,112 @@ const mapsLink = (lat, lon) =>
    das Nachtragen des Standorts an einem laufenden. Ein Fehlerstring statt
    Wurf: beide Aufrufer geben ihn unveraendert an `fehler()` weiter, und ein
    `throw` haette hier nur eine zweite Fehlerform in den Code gebracht. */
+/* Wer waehlbar ist. Dieselben vier Bedingungen wie der Mailkreis in
+   `benachrichtige()` - wer keine Post bekommen kann, hat in einer Auswahl
+   nichts verloren, sonst haekelt jemand einen Namen an, der nie erfaehrt,
+   dass er gemeint war. Der Absender selbst faellt heraus (`id <> ?`): sich
+   selbst zu rufen ist keine Auswahl, es ist ein Tippfehler.
+
+   NACH NAMEN sortiert und nicht nach Bestand: das hier ist ein Adressbuch,
+   keine Bestenliste, und wer jemanden sucht, sucht ihn alphabetisch. */
+const kreisWaehlbarStmt = (env, ichId) => env.DB.prepare(`
+  SELECT id, name FROM users
+  WHERE id <> ? AND name IS NOT NULL
+    AND gesperrt_am IS NULL AND entfernt_am IS NULL
+  ORDER BY name COLLATE NOCASE
+`).bind(ichId);
+
+/* Den gewuenschten Kreis aus dem Rumpf lesen. Gibt `{ fehler }` oder
+   `{ ids }`, wobei `ids === null` "an alle" heisst.
+
+   DREI EINGABEN, DREI BEDEUTUNGEN, und die Asymmetrie ist Absicht:
+
+     kein `kreis` / null   an alle - so wie jeder Notruf vor dieser Migration
+     [1, 7, 12]            nur an diese
+     []                    Fehler, kein "an niemanden"
+
+   Die leere Liste ist der gefaehrliche Fall: ein Fehler in der Seite, der ein
+   leeres Feld schickt, wuerde sonst einen Notruf anlegen, den NIEMAND sieht -
+   ein Hilferuf ins Leere, der auf der eigenen Tafel trotzdem so aussieht, als
+   waere er raus. Also 400 statt Stille.
+
+   Geprueft wird gegen `kreisWaehlbarStmt`, nicht nur auf "ist eine Zahl":
+   sonst legte ein erfundener Wert Zeilen an, die auf niemanden zeigen, und
+   der Absender saehe einen Kreis von vier, von denen drei nie existiert
+   haben. */
+async function notrufKreis(daten, env, ichId) {
+  const roh = daten.kreis;
+  if (roh === undefined || roh === null) return { ids: null };
+  if (!Array.isArray(roh)) return { fehler: 'kreis: eine Liste von Ids oder null' };
+  if (!roh.length) return { fehler: 'kreis: mindestens einer - sonst sieht ihn niemand' };
+
+  const gewuenscht = new Set();
+  for (const w of roh) {
+    const id = Number(w);
+    if (!Number.isInteger(id)) return { fehler: 'kreis: nur Ids' };
+    if (id !== ichId) gewuenscht.add(id);
+  }
+
+  const waehlbar = await kreisWaehlbarStmt(env, ichId).all();
+  const ids = waehlbar.results.filter(u => gewuenscht.has(u.id)).map(u => u.id);
+  if (!ids.length) return { fehler: 'kreis: niemand davon ist wählbar' };
+  return { ids };
+}
+
+/* Den Kreis EINES Notrufs nachlesen, in der Form, die `notrufAntwort` erwartet.
+   Braucht jede Route, die eine Zeile per `RETURNING` zurueckbekommt: SQLite
+   laesst in `RETURNING` keine Unterabfragen zu, der Kreis kann dort also nicht
+   mitreisen. Eine Zeile ueber den Primaerschluessel - das ist billiger als die
+   Ueberlegung, ob man es sich sparen kann. */
+const kreisLesen = (env, notrufId) => env.DB.prepare(`
+  SELECT count(*) AS kreis_gross, group_concat(user_id) AS kreis_ids
+  FROM notruf_kreis WHERE notruf_id = ?
+`).bind(notrufId).first();
+
+/* Den Kreis schreiben. Immer ersetzend, nie ergaenzend: die Seite schickt den
+   Zustand, den sie zeigt, und nicht die Aenderung dazu - dann kann ein
+   verlorener Ruf hoechstens eine alte Wahrheit stehen lassen, aber nie zwei
+   Aenderungen halb ausfuehren. `ids === null` raeumt den Kreis ab und macht
+   daraus wieder einen Notruf an alle. */
+function kreisSetzen(env, notrufId, ids) {
+  const schritte = [env.DB.prepare('DELETE FROM notruf_kreis WHERE notruf_id = ?').bind(notrufId)];
+  if (ids) {
+    for (const id of ids) {
+      schritte.push(env.DB.prepare(
+        'INSERT INTO notruf_kreis (notruf_id, user_id) VALUES (?, ?)').bind(notrufId, id));
+    }
+  }
+  return env.DB.batch(schritte);
+}
+
+/* Die Post zum Notruf. Steht hier und nicht in der Route, weil sie zweimal
+   gebraucht wird: beim Absetzen und beim spaeteren Dazunehmen.
+
+   Beim Dazunehmen wird BEWUSST wieder der ganze Kreis angeschrieben und nicht
+   die Differenz - `mail_einmal` (UNIQUE ueber user_id, art, bezug) laesst nur
+   die durch, die diese Mail noch nicht haben. Damit ist die Doppelmail eine
+   Frage des Schemas und nicht eine Rechnung, die jemand richtig hinbekommen
+   muss. Nebenwirkung, die richtig ist: wer weggenommen und wieder dazugenommen
+   wird, bekommt keine zweite Mail - er bekommt die Karte zurueck, und die ist
+   der lebende Teil der Auskunft. */
+function notrufPost(env, ctx, ich, notrufId, art, lat, lon, empfaenger) {
+  const wohin = mapsLink(lat, lon);
+  const was = art === 'bier' ? `${ich.name} braucht Bier`
+    : art === 'kamerad' ? `${ich.name} sucht Gesellschaft`
+    : `${ich.name} braucht Bier und Gesellschaft`;
+  benachrichtige(env, ctx, 'notruf', empfaenger, {
+    bezug: `notruf:${notrufId}`,
+    betreff: was,
+    text: `${was}.\n\nHin geht es hier: ${wohin}`
+      + `\n\nAuf der Tafel steht der Notruf ${NOTRUF_MINUTEN} Minuten lang: ${env.SEITE}`,
+    html: `<p><strong>${nurText(was)}.</strong></p>`
+      + mailKnopf(wohin, 'Route öffnen')
+      + `<p style="font-size:13px;color:#6f6653">Auf der Tafel steht der Notruf `
+      + `${NOTRUF_MINUTEN} Minuten lang.</p>`
+      + mailKnopf(env.SEITE, 'Zur Tafel'),
+  });
+}
+
 function notrufKoordinaten(daten) {
   const lat = Number(daten.lat), lon = Number(daten.lon);
   if (!Number.isFinite(lat) || lat < -90 || lat > 90
@@ -2518,6 +2654,12 @@ const ROUTEN = {
     if (koord.fehler) return fehler(request, koord.fehler);
     const { lat, lon, genau } = koord;
 
+    /* Wer ihn sehen soll. `null` heisst an alle - siehe `notrufKreis` und
+       migrations/0021. Geprueft VOR dem Anlegen: ein Notruf, dessen Kreis
+       nicht steht, ist keiner, den man kurz mal stehen lassen kann. */
+    const kreis = await notrufKreis(daten, env, ich.id);
+    if (kreis.fehler) return fehler(request, kreis.fehler);
+
     /* Ob der Standort mitwandern soll. Fehlt das Feld, ist es ein einmaliger
        Notruf - so wie jeder, der vor Migration 0018 abgesetzt wurde. Ein
        Versprechen, mehr nicht: geliefert wird es erst von den Nachtraegen an
@@ -2551,32 +2693,33 @@ const ROUTEN = {
     ]);
     const zeile = neu.results[0];
 
+    /* Der Kreis erst NACH dem Anlegen: er braucht die Id, die die Zeile oben
+       gerade bekommen hat. Bis dahin steht der Notruf einen Wimpernschlag lang
+       ohne Kreis da, gilt also fuer alle - das ist die richtige Richtung des
+       Fehlers, falls hier etwas abbricht: ein Hilferuf, der zu weit geht, ist
+       besser als einer, der niemanden erreicht. */
+    if (kreis.ids) await kreisSetzen(env, zeile.id, kreis.ids);
+
     /* Die Post. Ein Notruf MELDET nur, er liefert nichts mit - also gilt die
        alte Regel und der Ausloeser bleibt draussen (siehe `benachrichtige`).
        Der Kartenlink steht in der Mail selbst: wer sie im Bett liest, soll
-       nicht erst die Seite aufmachen muessen, um zu wissen, wohin. */
-    const kreis = await env.DB.prepare(
-      'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL').bind(ich.id).all();
-    const wohin = mapsLink(lat, lon);
-    const was = art === 'bier' ? `${ich.name} braucht Bier`
-      : art === 'kamerad' ? `${ich.name} sucht Gesellschaft`
-      : `${ich.name} braucht Bier und Gesellschaft`;
-    benachrichtige(env, ctx, 'notruf', kreis.results.map(r => r.id), {
-      bezug: `notruf:${zeile.id}`,
-      betreff: was,
-      text: `${was}.\n\nHin geht es hier: ${wohin}`
-        + `\n\nAuf der Tafel steht der Notruf ${NOTRUF_MINUTEN} Minuten lang: ${env.SEITE}`,
-      html: `<p><strong>${nurText(was)}.</strong></p>`
-        + mailKnopf(wohin, 'Route öffnen')
-        + `<p style="font-size:13px;color:#6f6653">Auf der Tafel steht der Notruf `
-        + `${NOTRUF_MINUTEN} Minuten lang.</p>`
-        + mailKnopf(env.SEITE, 'Zur Tafel'),
-    });
+       nicht erst die Seite aufmachen muessen, um zu wissen, wohin.
+
+       Ohne Kreis geht sie an alle mit Namen - dieselbe Runde wie vor
+       Migration 0021. */
+    const anWen = kreis.ids ?? (await env.DB.prepare(
+      'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
+      .bind(ich.id).all()).results.map(r => r.id);
+    notrufPost(env, ctx, ich, zeile.id, art, lat, lon, anWen);
 
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
       ok: true,
-      notruf: notrufAntwort({ ...zeile, art, lat, lon, genau, name: ich.name, user_id: ich.id }),
+      notruf: notrufAntwort({
+        ...zeile, art, lat, lon, genau, name: ich.name, user_id: ich.id,
+        kreis_gross: kreis.ids ? kreis.ids.length : 0,
+        kreis_ids: kreis.ids ? kreis.ids.join(',') : null,
+      }, ich.id),
     }, 201);
   },
 
@@ -2614,10 +2757,12 @@ const ROUTEN = {
     `).bind(lat, lon, genau, ich.id).first();
     if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
 
+    const kreis = await kreisLesen(env, zeile.id);
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
       ok: true,
-      notruf: notrufAntwort({ ...zeile, lat, lon, genau, name: ich.name, user_id: ich.id }),
+      notruf: notrufAntwort(
+        { ...zeile, ...kreis, lat, lon, genau, name: ich.name, user_id: ich.id }, ich.id),
     });
   },
 
@@ -2645,11 +2790,79 @@ const ROUTEN = {
     `).bind(daten.live ? 1 : 0, ich.id).first();
     if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
 
+    const kreis = await kreisLesen(env, zeile.id);
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
       ok: true,
-      notruf: notrufAntwort({ ...zeile, name: ich.name, user_id: ich.id }),
+      notruf: notrufAntwort({ ...zeile, ...kreis, name: ich.name, user_id: ich.id }, ich.id),
     });
+  },
+
+  /* Den Kreis am LAUFENDEN Notruf aendern - in beide Richtungen (entschieden
+     am 2026-08-06, siehe ideas/mocks/mock-h-notruf-empfaengerkreis.html).
+     -------------------------------------------------------------------------
+     Dazunehmen schreibt die Neuen an (die schon Angeschriebenen bremst
+     `mail_einmal`, siehe `notrufPost`). Wegnehmen nimmt dem anderen die Karte
+     von der Tafel und beendet das Nachwandern des Live-Standorts - die Mail
+     von vorhin bleibt draussen, die holt niemand zurueck.
+
+     Dass das Wegnehmen ueberhaupt geht, ist die eigentliche Entscheidung: die
+     Fracht dieses Notrufs ist der eigene Aufenthaltsort, und wer ihn hergibt,
+     muss ihn auch wieder einsammeln koennen. Dagegen stand der eine Fall, dass
+     jemand schon losgefahren ist und ihm die Karte unterwegs ausgeht - ein
+     soziales Problem, gegen das man anrufen kann; ein Standort, den man nicht
+     zurueckziehen kann, ist keines.
+
+     Kein neues `bis`, keine Sperre: die Frist gehoert dem Notruf, nicht der
+     Empfaengerliste. */
+  'POST /api/notruf/kreis': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const kreis = await notrufKreis(daten, env, ich.id);
+    if (kreis.fehler) return fehler(request, kreis.fehler);
+
+    const zeile = await env.DB.prepare(`
+      SELECT id, art, lat, lon, genau, erstellt, bis, live, standort_am
+      FROM notrufe
+      WHERE user_id = ? AND weg_am IS NULL AND bis > datetime('now')
+    `).bind(ich.id).first();
+    if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
+
+    await kreisSetzen(env, zeile.id, kreis.ids);
+
+    /* Angeschrieben wird der ganze neue Kreis, nicht die Differenz - warum,
+       steht an `notrufPost`. Ohne Kreis ist das die ganze Runde: wer von
+       "nur an drei" auf "an alle" umlegt, erreicht damit auch die uebrigen. */
+    const anWen = kreis.ids ?? (await env.DB.prepare(
+      'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
+      .bind(ich.id).all()).results.map(r => r.id);
+    notrufPost(env, ctx, ich, zeile.id, zeile.art, zeile.lat, zeile.lon, anWen);
+
+    anstoss(request, env, ctx, 'tafel');
+    return antwort(request, {
+      ok: true,
+      notruf: notrufAntwort({
+        ...zeile, name: ich.name, user_id: ich.id,
+        kreis_gross: kreis.ids ? kreis.ids.length : 0,
+        kreis_ids: kreis.ids ? kreis.ids.join(',') : null,
+      }, ich.id),
+    });
+  },
+
+  /* Wer sich anwaehlen laesst. Eine eigene, sehr schmale Route statt eines
+     Anhaengsels an der Bestenliste: die Namen aendern sich im Monatstakt, die
+     Bestenliste wird im Minutentakt geholt. Und sie kaeme aus dem falschen
+     Topf - `feld` dort ist ein JOIN auf `reports` und kennt nur, wer schon
+     einmal gemeldet hat. Wer angemeldet ist und nie gemeldet hat, bekommt die
+     Notruf-Mail und fiele aus einer Auswahl aus `feld` still heraus. */
+  'GET /api/kreis': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const leute = await kreisWaehlbarStmt(env, ich.id).all();
+    return antwort(request, { leute: leute.results }, 200, KEIN_FREMDER_CACHE);
   },
 
   /* Zurueckgenommen. Kein Loeschen: die Zeile bleibt bis zum Aufraeumen stehen,
@@ -4965,7 +5178,7 @@ const ROUTEN = {
          Vorbeikommende oben enthaelt keine Zeile davon, und das ist keine
          Sparsamkeit, sondern die Bedingung. Ein Ort geht niemanden etwas an,
          der kein Token hat. */
-      notrufeStmt(env),
+      notrufeStmt(env, ich.id),
     ]);
 
     const bestmarke = new Map(best.results.map(r => [r.user_id, r.best]));
@@ -5008,7 +5221,7 @@ const ROUTEN = {
       los: losAntwort(tag, lage, losTopf(losFeld.results, lage), termine.results),
       termine: termine.results.map(t => terminAntwort(t, noten, wieViele)),
       chronik: chronik.results[0].n,
-      notrufe: notrufe.results.map(notrufAntwort),
+      notrufe: notrufe.results.map(n => notrufAntwort(n, ich.id)),
     }, 200, KEIN_FREMDER_CACHE);
   },
 };
@@ -5093,6 +5306,13 @@ export default {
         WHERE bis < datetime('now', ?) OR weg_am < datetime('now', ?)
       `).bind(`-${NOTRUF_MUELL} days`, `-${NOTRUF_MUELL} days`).run();
       if (weg.meta.changes) console.log(`Notrufe weggeraeumt: ${weg.meta.changes}`);
+
+      /* Die Empfaengerkreise dazu. `ON DELETE CASCADE` steht am Fremdschluessel
+         (migrations/0021) und sollte das schon erledigt haben - dieser Kehr
+         ist der Guertel zum Hosentraeger, und er steht im SELBEN `try`: wenn
+         oben nichts geloescht wurde, gibt es hier auch nichts zu kehren. */
+      await env.DB.prepare(
+        'DELETE FROM notruf_kreis WHERE notruf_id NOT IN (SELECT id FROM notrufe)').run();
     } catch (e) {
       console.error('Notrufe:', e && e.stack || e);
     }

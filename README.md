@@ -51,9 +51,30 @@ schlicht nichts. Auf der Tafel steht der Notruf dann für alle Angemeldeten, mit
 einer Karte darunter; ein Druck darauf öffnet die Navigation in Google Maps.
 Auch per Mail geht er raus, den Kartenlink gleich darin.
 
+**An alle oder nur an ausgewählte.** Über dem Bier-Knopf steht ein zweiter
+Schalter: unter *An alle* geht der Notruf an die ganze Runde, unter *Nur an
+ausgewählte* klappen die Namen auf, und es gilt genau, wer angetippt ist. Die
+Auswahl gilt für **beides** — die Mail *und* die Karte: wer nicht drinsteht,
+bekommt keine Post und sieht die Zeile auf seiner Tafel gar nicht erst. Die
+Zeile trägt dann bei allen die Marke *nur an 3*, damit niemand annimmt, es sei
+ohnehin schon jemand unterwegs; wer sonst noch gerufen wurde, sagt sie nicht.
+Vorausgewählt ist der Kreis vom letzten Mal (im Browser gemerkt), beim ersten
+Mal steht dort nichts.
+
+Auch am **laufenden** Notruf lässt sich der Kreis noch ändern, in beide
+Richtungen. Dazunehmen schreibt die Neuen sofort an; wegnehmen nimmt dem anderen
+die Karte von der Tafel und beendet das Nachwandern des Live-Standorts — die
+Mail von vorhin bleibt draußen, die holt niemand zurück. Dass das Wegnehmen
+überhaupt geht, ist Absicht: die Fracht ist der eigene Aufenthaltsort, und wer
+ihn hergibt, muss ihn auch wieder einsammeln können.
+
 Wer sich bewegt, während der Notruf noch läuft, trägt den neuen Standort über
 **Standort aktualisieren** nach — das ändert nur die Koordinaten an derselben
 Zeile, ohne die Runde ein zweites Mal anzuschreiben.
+
+**Zurück ins Blatt** kommt man über die eigene Zeile oder die eigene Karte auf
+der Tafel: solange ein Notruf läuft, ist *Notruf absetzen* ja weg. Zur eigenen
+Karte führt kein „hin" — man steht schon da —, also führt sie ins Blatt.
 
 **Er erlischt von selbst, nach anderthalb Stunden.** Das ist der Kern und nicht
 die Kosmetik: ein Notruf, der stehen bleibt, ist keiner mehr, sondern ein
@@ -66,8 +87,15 @@ Ohne Token bekommt man davon nichts zu sehen: der Worker schickt die Notrufe nur
 im angemeldeten Teil der Antwort mit.
 
 Die Karte zeichnet die Seite selbst — ein Raster aus Kacheln, ein Punkt, ein
-Streukreis für die Ungenauigkeit der Ortung. Keine Kartenbibliothek, und die
-Kacheln kommen **über den eigenen Worker** statt direkt von OpenStreetMap. Der
+Streukreis für die Ungenauigkeit der Ortung. Wandert der Standort, wandert
+zuerst nur die Nadel; die Kacheln bleiben stehen. Erst wenn sie dem Rand zu nahe
+kommt, wird die Karte neu geholt und neu zentriert — bei einem Live-Notruf, der
+alle zwanzig Sekunden nachträgt, spart das den Löwenanteil der Kacheln. Geholt
+wird nämlich genau das Sichtfenster und keine Kachel mehr, so verlangen es die
+Nutzungsbedingungen; hinter dem Rand ist schlicht nichts.
+
+Keine Kartenbibliothek, und die Kacheln kommen **über den eigenen Worker** statt
+direkt von OpenStreetMap. Der
 Grund steht ausführlich im Code: eine Kachel-URL *ist* der Standort, und wer sie
 ausliefert, wüsste sonst minutengenau, wo jemand steht.
 
@@ -414,8 +442,11 @@ Drei Dinge, die dazugehören:
 | `POST /api/kommentar` | `{ziel_art, ziel_id, text?, bild?, antwort_auf?}` — Text oder Bild muss da sein; `antwort_auf` darf auf eine Antwort zeigen, sie hängt dann an deren Wurzel, und der Adressat bleibt als `an_id` stehen |
 | `POST /api/kommentar/aendern` | `{id, text}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — `art` ist das Emoji selbst und muss in `REAKTIONEN` stehen (die Liste im Worker, nicht im Schema); Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
-| `POST /api/notruf` 🔒 | `{art:'bier'\|'kamerad', lat, lon, genau?}` — gilt 90 Minuten, ein erneuter Ruf ersetzt den eigenen |
+| `POST /api/notruf` 🔒 | `{art:'bier'\|'kamerad', lat, lon, genau?, live?, kreis?}` — gilt 90 Minuten, ein erneuter Ruf ersetzt den eigenen. `kreis` fehlend oder `null` heißt an alle, eine Liste von Nutzer-Ids heißt nur an diese; `[]` ist ein Fehler und kein „an niemanden" |
 | `POST /api/notruf/standort` 🔒 | `{lat, lon, genau?}` — trägt nur den Standort am laufenden Notruf nach, ohne neue Mail |
+| `POST /api/notruf/live` 🔒 | `{live}` — legt den Schieberegler am laufenden Notruf um, ohne Koordinaten und ohne Mail |
+| `POST /api/notruf/kreis` 🔒 | `{kreis}` — ersetzt den Empfängerkreis am laufenden Notruf, in beide Richtungen. Dazugekommene werden angeschrieben (Doppelmails bremst `mail_einmal`), Weggenommenen verschwindet die Karte |
+| `GET /api/kreis` 🔒 | `{leute:[{id, name}]}` — wer sich anwählen lässt: alle Angemeldeten mit Namen außer einem selbst, ohne Gesperrte und Entfernte. Nicht aus `feld`, das kennt nur, wer schon einmal gemeldet hat |
 | `POST /api/notruf/weg` 🔒 | nimmt den eigenen zurück; zweimal gerufen ist kein Fehler |
 | `GET /api/kachel` | `?z=&x=&y=` — Kartenkachel über den Worker statt direkt von OSM; sieben Tage im Cache, fremder Referer → 403 |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
