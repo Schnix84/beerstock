@@ -139,6 +139,18 @@ const KATEGORIEN = {
    verschiedene Abende bewertet, braucht laenger, um das Blatt zu wechseln. */
 const BEWERTSPERRE = 3;    // Sekunden, bis das naechste ANDERE Ziel drankommt
 
+/* Wrapped: der Jahresrueckblick. "Tage auf Platz 1" (Eiskoenig) und die
+   Kalt-Serie tragen einen gemeldeten Bestand ueber den Kalender fort, bis
+   eine neue Meldung kommt (Tagesende-Stand). Ohne Grenze wuerde EINE einzige
+   fruehe Meldung (hoch gemeldet, dann Funkstille) den Rest des Jahres
+   dominieren - abgesichert per Opus-Unteragent an einer Testdatenbank
+   (ideas/PROJECT-MEMORY.md), mit dem Nutzer abgestimmt. Sieben Tage kosten
+   echte, regelmaessige Melder kaum etwas. */
+const WRAPPED_VERFALL_TAGE = 7;
+/* Dieselbe Grenze wie STUFEN[1] ("kalt") in index.html, dort steht die
+   Ampel - hier nur die Zahl. Zwei Fassungen liefen sonst auseinander. */
+const WRAPPED_KALT_GRAD = 6;
+
 /* Kommentare. Eine Antwortebene, mehr nicht - auf dem Handy ist bei Stufe drei
    die Spalte vierzig Pixel breit. Genau wie WhatsApp. */
 const KOMMENTAR_MAX    = 400;  // Zeichen
@@ -4165,6 +4177,428 @@ const ROUTEN = {
       aufrufe_je_nutzer: aufrufeJeNutzer.results,
       aufrufe_insgesamt: aufrufeInsgesamt.results[0].n,
     }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Der Jahresrueckblick. Wie die Bestenliste: nur fuer Angemeldete (401 ohne
+     Token, kein Schaufenster). Alles in EINEM batch - jede Abfrage, die auf
+     "Termine des Jahres" angewiesen ist (Abend des Jahres, dessen Kommentare),
+     JOINT direkt gegen `termine`, statt eine ID-Liste aus einer vorherigen
+     Antwort zu binden. Ein batch kennt seine eigenen Zwischenergebnisse nicht
+     - siehe `/api/chronik` fuer den Gegenentwurf mit zwei Rundfluegen zur
+     Datenbank. Hier reicht einer.
+
+     "Tage auf Platz 1" (Eiskoenig) und die Kalt-Serie tragen den
+     Tagesende-Stand per Carry-Forward fort (WRAPPED_VERFALL_TAGE bricht das
+     nach einer Weile Funkstille ab) - geprueft an einer Testdatenbank durch
+     einen Opus-Unteragenten, mit dem Nutzer abgestimmt (ideas/plan-wrapped.md,
+     ideas/PROJECT-MEMORY.md). */
+  'GET /api/wrapped': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const url = new URL(request.url);
+    const jahr = Number(url.searchParams.get('jahr'));
+    const heuteJahr = new Date().getUTCFullYear();
+    // `String(jahr).length` allein liesse ein negatives Jahr durch (das
+    // Minuszeichen zaehlt nicht mit) - deshalb zusaetzlich `jahr >= 1000`.
+    if (!Number.isInteger(jahr) || jahr < 1000 || String(jahr).length !== 4) {
+      return fehler(request, 'jahr: eine vierstellige Jahreszahl');
+    }
+    if (jahr > heuteJahr) return fehler(request, 'Dieses Jahr ist noch nicht dran');
+
+    /* Vor dem grossen Rundflug: gibt es die Runde in diesem Jahr ueberhaupt
+       schon? Billiger, hier abzubrechen, als erst den ganzen batch zu fahren
+       und danach wegzuwerfen. */
+    const erster = await env.DB.prepare('SELECT min(erstellt) AS erstellt FROM users').first();
+    const ersteJahr = erster && erster.erstellt ? Number(erster.erstellt.slice(0, 4)) : heuteJahr;
+    if (jahr < ersteJahr) return fehler(request, `Vor ${ersteJahr} gab es diese Runde noch nicht`);
+
+    /* Datumsgrenzen. `letzterTag` ist der letzte Kalendertag, der in die
+       Tagesserien eingeht - bei einem laufenden Jahr heute, sonst der 31.12.
+       `jahrEndeExkl` ist die exklusive obere Grenze fuer alle datetime-
+       Vergleiche (Reports, Kommentare, Bewertungen, ...), einen Tag NACH
+       `letzterTag` - beide Rechnungen gelten so demselben Stichtag. */
+    const jahrStart = `${jahr}-01-01`;
+    const heute = new Date().toISOString().slice(0, 10);
+    const silvester = `${jahr}-12-31`;
+    const letzterTag = jahr === heuteJahr && heute < silvester ? heute : silvester;
+    const naechsterTag = (() => {
+      const d = new Date(letzterTag + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString().slice(0, 10);
+    })();
+    const jahrStartVoll = `${jahrStart} 00:00:00`;
+    const jahrEndeExkl = `${naechsterTag} 00:00:00`;
+    const jahrPrefix = `${jahr}-%`;
+
+    const ergebnis = await env.DB.batch([
+      // 0 - alle Melder, Anmeldereihenfolge = Melderfarbe auf der Seite.
+      env.DB.prepare("SELECT id, coalesce(name,'Ehemaliger') AS name FROM users ORDER BY id"),
+
+      /* 1 - Eiskoenig: Tage auf Platz 1, Tagesende-Stand mit Carry-Forward.
+         `roh` schneidet die Historie auf das Jahr plus GENAU EINE Carry-in-
+         Zeile je Melder (statt der ganzen Vergangenheit) - das war der
+         Hebel, der die Laufzeit bei der Pruefung von 1,26s auf 0,03s brachte.
+         `tages` haelt je Melder und Kalendertag nur die letzte Meldung,
+         `intervall` spannt daraus Gueltigkeitsfenster, `stand` verbindet sie
+         mit dem Tageskalender - mit Verfallsfrist, sonst gewinnt eine
+         einzelne fruehe Meldung den Rest des Jahres. `rang` laesst Tage ohne
+         jede kalte Flasche (biere = 0) ohne Sieger. */
+      env.DB.prepare(`
+        WITH RECURSIVE tage(tag) AS (
+          SELECT date(?1) WHERE date(?1) <= ?2
+          UNION ALL
+          SELECT date(tag,'+1 day') FROM tage WHERE tag < ?2
+        ),
+        roh AS (
+          SELECT r.id, r.user_id, r.biere, r.gemeldet_am
+          FROM reports r
+          WHERE r.gemeldet_am < datetime(?2,'+1 day')
+            AND r.gemeldet_am >= coalesce(
+              (SELECT max(v.gemeldet_am) FROM reports v
+                WHERE v.user_id = r.user_id AND v.gemeldet_am < ?1), '')
+        ),
+        tages AS (
+          SELECT id, user_id, biere, gemeldet_am FROM (
+            SELECT id, user_id, biere, gemeldet_am,
+              ROW_NUMBER() OVER (PARTITION BY user_id, date(gemeldet_am)
+                                 ORDER BY gemeldet_am DESC, id DESC) AS rn
+            FROM roh
+          ) WHERE rn = 1
+        ),
+        intervall AS (
+          SELECT id, user_id, biere, gemeldet_am,
+            LEAD(gemeldet_am) OVER (PARTITION BY user_id ORDER BY gemeldet_am) AS bis
+          FROM tages
+        ),
+        stand AS (
+          SELECT t.tag, i.user_id, i.biere, i.gemeldet_am, i.id
+          FROM tage t JOIN intervall i
+            ON i.gemeldet_am < datetime(t.tag,'+1 day')
+           AND (i.bis IS NULL OR i.bis >= datetime(t.tag,'+1 day'))
+           AND julianday(t.tag) - julianday(date(i.gemeldet_am)) < ?3
+        ),
+        rang AS (
+          SELECT tag, user_id,
+            ROW_NUMBER() OVER (PARTITION BY tag
+                               ORDER BY biere DESC, gemeldet_am ASC, id ASC) AS r
+          FROM stand WHERE biere > 0
+        )
+        SELECT user_id, count(*) AS tage FROM rang WHERE r = 1
+        GROUP BY user_id ORDER BY tage DESC, user_id
+      `).bind(jahrStart, letzterTag, WRAPPED_VERFALL_TAGE),
+
+      // 2 - wie oft im Jahr gemeldet wurde, je Monat. Kein geschaetzter
+      // Verbrauch (LAG-Differenzen unterschaetzen bei Trinken-und-Nachlegen
+      // zwischen zwei Meldungen systematisch) - eine ehrliche Zahl statt
+      // einer geschoenten, mit dem Nutzer so abgestimmt.
+      env.DB.prepare(`
+        SELECT CAST(strftime('%m', gemeldet_am) AS INTEGER) AS monat, count(*) AS n
+        FROM reports WHERE gemeldet_am >= ?1 AND gemeldet_am < ?2
+        GROUP BY monat ORDER BY monat
+      `).bind(jahrStartVoll, jahrEndeExkl),
+
+      /* 3 - der kaelteste Moment. Die Grenze ist dieselbe wie in
+         POST /api/report (MIN_GRAD/MAX_GRAD) - dort haelt sie jeden neuen
+         Wert schon ein, hier faengt sie nur Ausreisser aus Altbestand oder
+         einem Handgriff direkt in D1 ab (siehe ideas/PROJECT-MEMORY.md). */
+      env.DB.prepare(`
+        SELECT r.temperatur AS grad, r.user_id, coalesce(u.name,'Ehemaliger') AS name,
+               u.quelle, r.gemeldet_am AS am
+        FROM reports r JOIN users u ON u.id = r.user_id
+        WHERE r.gemeldet_am >= ?1 AND r.gemeldet_am < ?2
+          AND r.temperatur BETWEEN ?3 AND ?4
+        ORDER BY r.temperatur ASC LIMIT 1
+      `).bind(jahrStartVoll, jahrEndeExkl, MIN_GRAD, MAX_GRAD),
+
+      // 4 - der waermste Moment, spiegelbildlich.
+      env.DB.prepare(`
+        SELECT r.temperatur AS grad, r.user_id, coalesce(u.name,'Ehemaliger') AS name,
+               u.quelle, r.gemeldet_am AS am
+        FROM reports r JOIN users u ON u.id = r.user_id
+        WHERE r.gemeldet_am >= ?1 AND r.gemeldet_am < ?2
+          AND r.temperatur BETWEEN ?3 AND ?4
+        ORDER BY r.temperatur DESC LIMIT 1
+      `).bind(jahrStartVoll, jahrEndeExkl, MIN_GRAD, MAX_GRAD),
+
+      // 5 - das Rad: Ausgang der Ziehungen des Jahres.
+      env.DB.prepare(`
+        SELECT status, count(*) AS n FROM los WHERE tag LIKE ?1 GROUP BY status
+      `).bind(jahrPrefix),
+
+      // 6 - gewonnene (zugesagte) Lose je Melder.
+      env.DB.prepare(`
+        SELECT user_id, count(*) AS n FROM los
+        WHERE tag LIKE ?1 AND status = 'zugesagt'
+        GROUP BY user_id ORDER BY n DESC
+      `).bind(jahrPrefix),
+
+      // 7 - Bewertungen der Termine des Jahres, ueber den JOIN statt einer
+      // ID-Liste - so bleibt alles in diesem einen batch.
+      env.DB.prepare(`
+        SELECT b.ziel_art, b.ziel_id, b.sterne
+        FROM bewertungen b JOIN termine t ON t.id = b.ziel_id AND b.ziel_art = 'termin'
+        WHERE t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
+      `).bind(jahrStartVoll, jahrEndeExkl),
+
+      // 8 - Kommentar- und Fotozahl je Termin des Jahres.
+      env.DB.prepare(`
+        SELECT k.ziel_id, count(*) AS kommentare, sum(k.bild_key IS NOT NULL) AS fotos
+        FROM kommentare k JOIN termine t ON t.id = k.ziel_id AND k.ziel_art = 'termin'
+        WHERE k.geloescht_am IS NULL
+          AND t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
+        GROUP BY k.ziel_id
+      `).bind(jahrStartVoll, jahrEndeExkl),
+
+      // 9 - die Termine des Jahres selbst: wann, bei wem.
+      env.DB.prepare(`
+        SELECT t.id, t.beginnt_am, t.gastgeber_id, coalesce(u.name,'Ehemaliger') AS gastgeber_name
+        FROM termine t JOIN users u ON u.id = t.gastgeber_id
+        WHERE t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
+      `).bind(jahrStartVoll, jahrEndeExkl),
+
+      // 10 - Bewertungen fuer "Gastgeber des Jahres": die Dauer-Bewertung,
+      // aber nur die Stimmen DIESES Jahres.
+      env.DB.prepare(`
+        SELECT ziel_id, sterne FROM bewertungen
+        WHERE ziel_art = 'user' AND erstellt >= ?1 AND erstellt < ?2
+      `).bind(jahrStartVoll, jahrEndeExkl),
+
+      // 11 - wie viele Abende je Gastgeber im Jahr stattfanden.
+      env.DB.prepare(`
+        SELECT gastgeber_id, count(*) AS abende FROM termine
+        WHERE beginnt_am >= ?1 AND beginnt_am < ?2 AND abgesagt_am IS NULL
+        GROUP BY gastgeber_id
+      `).bind(jahrStartVoll, jahrEndeExkl),
+
+      // 12 - wie viele Kommentare insgesamt.
+      env.DB.prepare(`
+        SELECT count(*) AS n FROM kommentare
+        WHERE geloescht_am IS NULL AND erstellt >= ?1 AND erstellt < ?2
+      `).bind(jahrStartVoll, jahrEndeExkl),
+
+      // 13 - die Reaktion des Jahres. `art` als zweiter Sortierschluessel
+      // macht einen Gleichstand deterministisch statt zufaellig.
+      env.DB.prepare(`
+        SELECT art, count(*) AS n FROM reaktionen
+        WHERE erstellt >= ?1 AND erstellt < ?2
+        GROUP BY art ORDER BY n DESC, art LIMIT 1
+      `).bind(jahrStartVoll, jahrEndeExkl),
+
+      /* 14 - Bilder und GIFs, aus den tatsaechlich abgeschickten Kommentaren
+         (nicht `bild_uploads`, die zaehlt auch Verwaistes mit). Fotos und
+         Memes sind serverseitig nicht zu unterscheiden - beide laufen als
+         image/jpeg ueber /api/bild, siehe ideas/gifs-und-memes.md. Deshalb
+         zwei Kacheln statt der im Plan skizzierten drei: Bilder und GIFs. */
+      env.DB.prepare(`
+        SELECT sum(bild_key LIKE '%.gif') AS gifs,
+               sum(bild_key NOT LIKE '%.gif') AS bilder
+        FROM kommentare
+        WHERE geloescht_am IS NULL AND bild_key IS NOT NULL
+          AND erstellt >= ?1 AND erstellt < ?2
+      `).bind(jahrStartVoll, jahrEndeExkl),
+
+      /* 15 - Ich: die Kalt-Serie. Dieselbe Tagesserie wie Eiskoenig, aber auf
+         den Abrufenden zugeschnitten - die Historie ist schon in `roh` auf
+         diesen einen Nutzer gefiltert statt erst danach, das haelt die
+         Pipeline auf einem Bruchteil der Zeilen (Empfehlung aus der
+         Pruefung). */
+      env.DB.prepare(`
+        WITH RECURSIVE tage(tag) AS (
+          SELECT date(?1) WHERE date(?1) <= ?2
+          UNION ALL
+          SELECT date(tag,'+1 day') FROM tage WHERE tag < ?2
+        ),
+        roh AS (
+          SELECT r.id, r.biere, r.temperatur, r.gemeldet_am
+          FROM reports r
+          WHERE r.user_id = ?3
+            AND r.gemeldet_am < datetime(?2,'+1 day')
+            AND r.gemeldet_am >= coalesce(
+              (SELECT max(v.gemeldet_am) FROM reports v
+                WHERE v.user_id = ?3 AND v.gemeldet_am < ?1), '')
+        ),
+        tages AS (
+          SELECT id, biere, temperatur, gemeldet_am FROM (
+            SELECT id, biere, temperatur, gemeldet_am,
+              ROW_NUMBER() OVER (PARTITION BY date(gemeldet_am)
+                                 ORDER BY gemeldet_am DESC, id DESC) AS rn
+            FROM roh
+          ) WHERE rn = 1
+        ),
+        intervall AS (
+          SELECT id, biere, temperatur, gemeldet_am,
+            LEAD(gemeldet_am) OVER (ORDER BY gemeldet_am) AS bis
+          FROM tages
+        ),
+        mein AS (
+          SELECT t.tag, i.biere, i.temperatur
+          FROM tage t JOIN intervall i
+            ON i.gemeldet_am < datetime(t.tag,'+1 day')
+           AND (i.bis IS NULL OR i.bis >= datetime(t.tag,'+1 day'))
+           AND julianday(t.tag) - julianday(date(i.gemeldet_am)) < ?4
+        ),
+        markiert AS (
+          SELECT tag, CASE WHEN biere > 0 AND temperatur < ?5 THEN 1 ELSE 0 END AS kalt
+          FROM mein
+        ),
+        inseln AS (
+          SELECT tag, kalt,
+            julianday(tag) - ROW_NUMBER() OVER (PARTITION BY kalt ORDER BY tag) AS grp
+          FROM markiert
+        )
+        SELECT min(tag) AS von, max(tag) AS bis, count(*) AS laenge
+        FROM inseln WHERE kalt = 1
+        GROUP BY grp ORDER BY laenge DESC, von ASC LIMIT 1
+      `).bind(jahrStart, letzterTag, ich.id, WRAPPED_VERFALL_TAGE, WRAPPED_KALT_GRAD),
+
+      // 16 - Ich: das eigene kaelteste Bier des Jahres.
+      env.DB.prepare(`
+        SELECT min(temperatur) AS grad FROM reports
+        WHERE user_id = ?1 AND gemeldet_am >= ?2 AND gemeldet_am < ?3
+      `).bind(ich.id, jahrStartVoll, jahrEndeExkl),
+
+      // 17 - Ich: die Sterne, die ich in diesem Jahr vergeben habe.
+      env.DB.prepare(`
+        SELECT sterne FROM bewertungen
+        WHERE autor_id = ?1 AND erstellt >= ?2 AND erstellt < ?3
+      `).bind(ich.id, jahrStartVoll, jahrEndeExkl),
+    ]);
+
+    const [
+      leute, eiskoenigZeilen, meldungenJeMonat, kaeltester, waermster,
+      radUebersicht, radGewonnen, abendBewertungen, abendKommentare, abendListe,
+      gastgeberBewertungen, gastgeberAbende, kommentareZahl, reaktionDesJahres,
+      bilderSplit, ichKaltSerie, ichKaeltestes, ichSterneVergeben,
+    ] = ergebnis;
+
+    const namen = new Map(leute.results.map(u => [u.id, u.name]));
+    const mitName = (zeilen, feld = 'user_id') =>
+      zeilen.map(z => ({ ...z, name: namen.get(z[feld]) || 'Ehemaliger' }));
+
+    // -- Eiskoenig ------------------------------------------------------------
+    const eiskoenig = mitName(eiskoenigZeilen.results)
+      .map(z => ({ id: z.user_id, name: z.name, tage: z.tage }));
+
+    // -- wie oft gemeldet wurde, je Monat --------------------------------------
+    const meldungMonat = Array(12).fill(0);
+    for (const z of meldungenJeMonat.results) meldungMonat[z.monat - 1] = z.n;
+    const meldungSumme = meldungMonat.reduce((a, c) => a + c, 0);
+
+    // -- kaeltester/waermster Moment -------------------------------------------
+    const momentAntwort = z => z ? {
+      grad: z.grad, userId: z.user_id, name: z.name,
+      gemessen: z.quelle === 'ha', am: utc(z.am),
+    } : null;
+
+    // -- das Rad ----------------------------------------------------------------
+    const radZeilen = new Map(radUebersicht.results.map(z => [z.status, z.n]));
+    const ziehungen = [...radZeilen.values()].reduce((a, c) => a + c, 0);
+    const zugesagt = radZeilen.get('zugesagt') || 0;
+    const quoteNenner = zugesagt + (radZeilen.get('abgelehnt') || 0) + (radZeilen.get('verfallen') || 0);
+    const rad = ziehungen ? {
+      ziehungen, zusagen: zugesagt,
+      quote: quoteNenner ? Math.round(zugesagt / quoteNenner * 100) : 0,
+      gewonnen: mitName(radGewonnen.results).map(z => ({ id: z.user_id, name: z.name, n: z.n })),
+    } : null;
+
+    // -- Abend des Jahres: bester Schnitt ab 2 Bewertungen, aelterer bei Gleichstand --
+    const abendNoten = schnitte(abendBewertungen.results);
+    const abendKommentareJe = new Map(
+      abendKommentare.results.map(z => [z.ziel_id, { kommentare: z.kommentare, fotos: z.fotos || 0 }]));
+    let abendGewinner = null;
+    for (const t of abendListe.results) {
+      const e = abendNoten.get(`termin:${t.id}`);
+      if (!e || e.anzahl < 2) continue;
+      const schnitt = note(e.summe, e.zahl);
+      // note() gibt null, wenn niemand eine Kategorie ausgefuellt hat (nur
+      // ein leerer Tap) - ohne diese Waeche wuerde .toFixed() weiter unten
+      // auf null aufschlagen und das ganze Blatt risse ab.
+      if (schnitt == null) continue;
+      if (!abendGewinner || schnitt > abendGewinner.schnitt
+          || (schnitt === abendGewinner.schnitt && t.beginnt_am < abendGewinner.t.beginnt_am)) {
+        abendGewinner = { t, schnitt, e };
+      }
+    }
+    const abend = abendGewinner ? (() => {
+      const { t, schnitt, e } = abendGewinner;
+      const k = abendKommentareJe.get(t.id) || { kommentare: 0, fotos: 0 };
+      return {
+        terminId: t.id, wann: utc(t.beginnt_am), gastgeberName: t.gastgeber_name, schnitt,
+        sterne: KATEGORIEN.termin.map(([feld, name]) => {
+          const j = e.je.get(feld);
+          return { feld, name, schnitt: j ? note(j.summe, j.zahl) : null };
+        }),
+        kommentare: k.kommentare, fotos: k.fotos,
+      };
+    })() : null;
+
+    // -- Gastgeber des Jahres: bester Schnitt ab 2 Bewerten --------------------
+    const gastgeberNoten = schnitte(
+      gastgeberBewertungen.results.map(z => ({ ziel_art: 'user', ziel_id: z.ziel_id, sterne: z.sterne })));
+    const abendeJeGastgeber = new Map(gastgeberAbende.results.map(z => [z.gastgeber_id, z.abende]));
+    let gastgeberGewinner = null;
+    for (const [schluessel, e] of gastgeberNoten) {
+      if (e.anzahl < 2) continue;
+      const id = Number(schluessel.split(':')[1]);
+      const schnitt = note(e.summe, e.zahl);
+      if (schnitt == null) continue;
+      // Bei Gleichstand die kleinere id - ohne Tie-Break haengt der Sieger
+      // an der Map-Reihenfolge, und die ist nicht garantiert stabil.
+      if (!gastgeberGewinner || schnitt > gastgeberGewinner.schnitt
+          || (schnitt === gastgeberGewinner.schnitt && id < gastgeberGewinner.id)) {
+        gastgeberGewinner = { id, schnitt };
+      }
+    }
+    const gastgeber = gastgeberGewinner ? {
+      id: gastgeberGewinner.id, name: namen.get(gastgeberGewinner.id) || 'Ehemaliger',
+      schnitt: gastgeberGewinner.schnitt, abende: abendeJeGastgeber.get(gastgeberGewinner.id) || 0,
+    } : null;
+
+    // -- was gesagt wurde ---------------------------------------------------------
+    const reaktion = reaktionDesJahres.results[0] || null;
+    const bilderZeile = bilderSplit.results[0] || {};
+    const gesagtes = {
+      kommentare: kommentareZahl.results[0].n,
+      reaktion: reaktion ? reaktion.art : null,
+      reaktionN: reaktion ? reaktion.n : 0,
+      bilder: bilderZeile.bilder || 0,
+      gifs: bilderZeile.gifs || 0,
+    };
+
+    // -- Ich -------------------------------------------------------------------
+    const serie = ichKaltSerie.results[0] || null;
+    let sterneVergeben = 0;
+    for (const z of ichSterneVergeben.results) {
+      let s; try { s = JSON.parse(z.sterne); } catch { continue; }
+      for (const wert of Object.values(s)) if (Number.isFinite(wert)) sterneVergeben++;
+    }
+    const meinPlatz1 = eiskoenigZeilen.results.find(z => z.user_id === ich.id);
+    const ichAntwort = {
+      serie: serie ? serie.laenge : 0,
+      serieVon: serie ? serie.von : null,
+      platz1: meinPlatz1 ? meinPlatz1.tage : 0,
+      kaeltestes: ichKaeltestes.results[0].grad,
+      sterneVergeben,
+      abendeAusgerichtet: abendeJeGastgeber.get(ich.id) || 0,
+    };
+
+    return antwort(request, {
+      jahr,
+      runde: {
+        eiskoenig,
+        meldungen: meldungSumme ? { summe: meldungSumme, monat: meldungMonat } : null,
+        kaeltester: momentAntwort(kaeltester.results[0]),
+        waermster: momentAntwort(waermster.results[0]),
+        rad, abend, gastgeber, gesagtes,
+      },
+      ich: ichAntwort,
+      // Ein abgeschlossenes Jahr aendert sich nie wieder - die Edge darf es
+      // laenger halten. Das laufende Jahr bleibt privat/kurz wie die Bestenliste.
+    }, 200, jahr < heuteJahr
+      ? { 'Cache-Control': 'private, max-age=86400', 'Vary': 'Origin, Authorization' }
+      : KEIN_FREMDER_CACHE);
   },
 
   // -------------------------------------------------------------------------

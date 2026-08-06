@@ -37,6 +37,13 @@
     --ampel:       var(--kreide-matt);
     --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
 
+    /* Nur fuer Wrapped: Serienfarben fuer liegende Balken (Eiskoenig, Rad).
+       Die validierte Kreidepalette auf --schiefer, alle Pflichtpruefungen
+       PASS - siehe ideas/plan-wrapped.md. Eigenstaendig statt aus bilder.js:
+       die Tafel laedt diese Datei nicht und darf es auch nicht (CLAUDE.md). */
+    --wr-s1: #399c69; --wr-s2: #b15041; --wr-s3: #b29126;
+    --wr-s4: #4c9bcb; --wr-s5: #994d96;
+
     /* Von der Temperatur gesetzt (die Spalten 4..8 von STUFEN) */
     --schaum:      1;      /* Kronenhoehe, 0..1                       */
     --sprudel:     4.2s;   /* Steigzeit einer Blase                   */
@@ -1671,6 +1678,159 @@
     .ko, .ko-antw { transition: none; }
   }
   [hidden] { display: none !important; }
+
+  /* ==========================================================================
+     WRAPPED — der Jahresrueckblick, ein Blatt DERSELBEN Tafel. Design
+     abgesegnet am Mock (ideas/mocks/mock-wrapped.html): Holzrahmen +
+     Schieferbrett + Handschrift wie die Live-Tafel, 390 px Story-Karte,
+     Fortschrittsstriche oben, Blaettern per Tipp. Eigene Ebene statt
+     `.flyout`: kein Bogen von unten, sondern eine Karte, mittig wie im Mock.
+     ========================================================================== */
+  .wr-ebene {
+    position: fixed; inset: 0; z-index: 55; display: flex;
+    align-items: center; justify-content: center;
+    padding: clamp(6px, 2vw, 18px);
+  }
+  .wr-schirm { position: absolute; inset: 0; background: #050807f0; }
+  .wr-rahmen {
+    position: relative; width: min(390px, 100%); border-radius: 6px;
+    padding: clamp(7px, 1.6vw, 12px);
+    background:
+      repeating-linear-gradient(97deg, #ffffff0a 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
+      linear-gradient(160deg, var(--holz), var(--holz-t) 60%, #2c1c0f);
+    box-shadow: 0 30px 60px -24px #000d, 0 1px 0 #ffffff22 inset, 0 -2px 0 #0008 inset;
+  }
+  .wr-brett {
+    position: relative; border-radius: 3px; overflow: hidden;
+    height: min(700px, calc(100dvh - 60px)); min-height: 420px;
+    display: flex; flex-direction: column; padding: 10px 16px 12px;
+    background: radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
+    box-shadow: 0 0 0 1px #0009 inset, 0 14px 30px -14px #000a inset;
+  }
+  .wr-brett::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+    background-image: radial-gradient(#ffffff0d 1px, transparent 1.4px), radial-gradient(#00000030 1px, transparent 1.6px);
+    background-size: 4px 4px, 6px 6px; background-position: 0 0, 2px 3px;
+  }
+  .wr-brett > * { position: relative; z-index: 1; }
+
+  .wr-fortschritt { display: flex; gap: 5px; padding: 2px 0 8px; }
+  .wr-fortschritt i { flex: 1; height: 3px; border-radius: 2px; background: #ffffff22; }
+  .wr-fortschritt i.wr-war   { background: #ffffff66; }
+  .wr-fortschritt i.wr-jetzt { background: var(--gelb); box-shadow: 0 0 6px #e8c76688; }
+
+  .wr-kopf { display: flex; align-items: baseline; gap: 8px; }
+  .wr-kopf h1 {
+    font-family: var(--hand); font-weight: 400; font-size: 16px; margin: 0;
+    transform: rotate(-.8deg); transform-origin: left;
+  }
+  .wr-jahr { color: var(--gelb); }
+  .wr-zu {
+    margin-left: auto; width: 30px; height: 30px; flex: none;
+    border: 1px solid #ffffff33; border-radius: 999px; background: #ffffff0d;
+    color: var(--kreide); font-size: 17px; line-height: 1; cursor: pointer;
+  }
+
+  .wr-buehne { flex: 1; min-height: 0; overflow-y: auto; display: flex; }
+  .wr-kachel { margin: auto 0; width: 100%; padding: 12px 0; animation: wr-kommt .35s ease-out; }
+  @keyframes wr-kommt { from { opacity: 0; transform: translateY(8px); } }
+  @media (prefers-reduced-motion: reduce) { .wr-kachel { animation: none; } }
+
+  .wr-oben {
+    font-family: var(--hand); font-size: 12.5px; letter-spacing: .12em;
+    color: var(--gelb); transform: rotate(-.7deg); margin-bottom: 12px;
+  }
+  .wr-hero {
+    font-family: var(--hand); font-weight: 400; font-size: 52px; line-height: 1.05;
+    color: var(--gelb); margin: 4px 0 2px;
+    text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055;
+  }
+  .wr-hero.wr-kleiner { font-size: 38px; }
+  .wr-hero .wr-einheit { font-size: 18px; color: var(--kreide-weg); }
+  .wr-held { font-family: var(--hand); font-weight: 400; font-size: 34px; line-height: 1.15; margin: 4px 0 2px; }
+  .wr-satz  { font-size: 13.5px; color: var(--kreide-matt); line-height: 1.5; margin: 6px 0 0; }
+  .wr-satz b { color: var(--kreide); font-weight: 600; }
+  .wr-neben { font-size: 11.5px; color: var(--kreide-weg); margin-top: 4px; }
+  .wr-wort  { font-family: var(--hand); }
+
+  .wr-trenn { border: 0; border-top: 1px dashed #ffffff26; margin: 16px 0 14px; }
+
+  .wr-bild { margin-top: 14px; }
+  .wr-bild svg { display: block; width: 100%; height: auto; }
+  .wr-bild-kopf { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .wr-bild-kopf h2 { font-family: var(--hand); font-weight: 400; font-size: 14.5px; margin: 0; letter-spacing: .04em; }
+  .wr-klein-knopf {
+    font: inherit; font-size: 11.5px; cursor: pointer; margin-left: auto;
+    color: var(--kreide-weg); background: none; border: 0; padding: 3px 6px;
+    text-decoration: underline; text-underline-offset: 3px; text-decoration-style: dotted;
+  }
+  .wr-klein-knopf:hover { color: var(--kreide-matt); }
+  .wr-klein-knopf[aria-pressed="true"] { color: var(--gelb); text-decoration-style: solid; }
+
+  .wr-zahlen { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+  .wr-zahlen td, .wr-zahlen th {
+    padding: 3px 6px; border-bottom: 1px dashed #ffffff1a; text-align: left;
+    color: var(--kreide-matt); font-weight: 400;
+  }
+  .wr-zahlen td:last-child, .wr-zahlen th:last-child {
+    text-align: right; font-variant-numeric: tabular-nums; color: var(--kreide);
+  }
+
+  .wr-paare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 14px; }
+  .wr-paar { border: 1px dashed #ffffff26; border-radius: 4px; padding: 10px 12px; background: #ffffff05; }
+  .wr-paar .wr-wert {
+    font-family: var(--hand); font-size: 26px; line-height: 1.1; color: var(--kreide);
+    text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055;
+  }
+  .wr-paar .wr-was { font-size: 11px; color: var(--kreide-weg); margin-top: 3px; }
+  .wr-paar.wr-breit { grid-column: 1 / -1; }
+
+  .wr-sterne { font-family: var(--hand); font-size: 15px; color: var(--gelb); letter-spacing: 2px; }
+  /* Halber Stern: U+2BE8 fehlt in den Handschrift-Fonts (Kaestchen). Statt-
+     dessen ein volles ★ mit linear-gradient-Fuellung per background-clip. */
+  .wr-sterne .wr-halb {
+    background: linear-gradient(90deg, var(--gelb) 50%, #ffffff30 50%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none;
+  }
+  .wr-stern-zeile { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--kreide-matt); margin-top: 5px; }
+  .wr-stern-zeile .wr-kat { width: 92px; }
+  .wr-stern-zeile .wr-zahl { margin-left: auto; color: var(--kreide); font-variant-numeric: tabular-nums; }
+
+  .wr-emoji-gross { font-size: 56px; line-height: 1; margin: 6px 0 2px; filter: drop-shadow(0 2px 3px #0008); }
+
+  .wr-fuss { display: flex; align-items: center; gap: 8px; padding-top: 8px; }
+  .wr-knopf {
+    font-family: var(--hand); font-size: 14px; cursor: pointer;
+    color: var(--kreide); background: #ffffff0d;
+    border: 1.5px solid #ffffff55; border-radius: 3px; padding: 8px 14px; min-height: 40px;
+  }
+  .wr-knopf:hover { background: #ffffff1a; border-color: var(--gelb); }
+  .wr-knopf:disabled { opacity: .35; cursor: default; }
+  .wr-wo { margin-left: auto; font-size: 11px; color: var(--kreide-weg); }
+  .wr-teilen { border-color: var(--gelb); color: var(--gelb); }
+  .wr-knopf:focus-visible, .wr-zu:focus-visible, .wr-klein-knopf:focus-visible, .ch-jahrgang:focus-visible {
+    outline: 2px solid var(--gelb); outline-offset: 3px; border-radius: 2px;
+  }
+
+  .wr-tip {
+    position: fixed; z-index: 56; pointer-events: none; max-width: 220px;
+    background: #10221bf2; border: 1px solid #ffffff2e; border-radius: 4px;
+    padding: 7px 10px; font-size: 12px; color: var(--kreide-matt);
+    box-shadow: 0 8px 20px -8px #000c;
+  }
+  .wr-tip .wr-t-titel { color: var(--kreide); font-weight: 600; margin-bottom: 2px; }
+  .wr-tip .wr-t-zeile { display: flex; align-items: center; gap: 6px; }
+  .wr-tip .wr-t-marke { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .wr-tip .wr-t-wert { font-weight: 650; color: var(--kreide); font-variant-numeric: tabular-nums; }
+  .wr-tip .wr-t-fuss { margin-top: 3px; font-size: 11px; color: var(--kreide-weg); }
+
+  /* Der Jahrgang-Knopf in der Chronik, je abgeschlossenem Jahr eine Zeile. */
+  .ch-jahrgang {
+    display: block; width: 100%; margin: 4px 0 10px; padding: 9px 12px;
+    font: inherit; font-family: var(--hand); font-size: 13px; text-align: left; cursor: pointer;
+    color: var(--gelb); background: #e8c76614; border: 1px dashed #e8c76655; border-radius: 4px;
+  }
+  .ch-jahrgang:hover { background: #e8c7661f; }
 </style>
 </head>
 <!-- `draussen` steht von Anfang an da und faellt erst weg, wenn ein Token
@@ -1907,6 +2067,7 @@
         <div class="block-kopf kr">
           <span class="titel">Termine</span>
           <span class="kopf-neben">
+            <button class="neben" id="wrapped-auf" type="button" hidden>Dein Jahr</button>
             <button class="neben" id="chronik-auf" type="button" hidden>Chronik</button>
             <button class="neben" id="termin-neu" type="button" hidden>eintragen</button>
           </span>
@@ -2397,6 +2558,35 @@
     <img id="lupe-bild" alt="Foto in voller Größe">
     <button class="lupe-zu" id="lupe-zu" type="button" aria-label="Schließen">×</button>
   </div>
+
+  <!-- ============ Wrapped: der Jahresrueckblick ==========================
+       Ein eigenes Blatt, kein `.flyout` - der Entwurf ist eine mittige
+       Story-Karte auf Schiefer, kein Bogen von unten. Erreichbar ab
+       1. Dezember (Knopf am Kopf der Termine-Sektion) oder jederzeit aus der
+       Chronik, je abgeschlossenem Jahr. Design abgesegnet an
+       ideas/mocks/mock-wrapped.html (?kachel=N springt dort zu einer Kachel).
+       ==================================================================== -->
+  <div class="wr-ebene" id="wrapped" hidden>
+    <div class="wr-schirm" id="wr-schirm"></div>
+    <div class="wr-rahmen">
+      <div class="wr-brett" id="wr-brett" role="dialog" aria-labelledby="wr-titel" aria-modal="true">
+        <div class="wr-fortschritt" id="wr-fortschritt" aria-hidden="true"></div>
+        <div class="wr-kopf">
+          <h1 class="kr" id="wr-titel">Dein Jahr am Kühlschrank <span class="wr-jahr" id="wr-jahrzahl"></span></h1>
+          <button class="wr-zu" id="wr-zu" type="button" aria-label="Schließen">×</button>
+        </div>
+        <main class="wr-buehne" id="wr-buehne"></main>
+        <p class="sagt" id="wr-sagt" hidden></p>
+        <div class="wr-fuss">
+          <button class="wr-knopf" id="wr-zurueck" type="button" aria-label="vorige Kachel">‹ zurück</button>
+          <button class="wr-knopf" id="wr-weiter" type="button" aria-label="nächste Kachel">weiter ›</button>
+          <button class="wr-knopf wr-teilen" id="wr-teilen" type="button" hidden>Kachel teilen</button>
+          <span class="wr-wo" id="wr-wo"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="wr-tip" id="wr-tip" role="status" hidden></div>
 
 <script>
   // ==========================================================================
@@ -4125,9 +4315,14 @@
     const darf = !!merke() && !!meinName;
 
     $('chronik-auf').hidden = !chronikZahl;
+    /* Ab 1. Dezember, und nur fuer Angemeldete - die Route dahinter antwortet
+       ohne Token mit 401 (Wrapped ist nichts fuers Schaufenster), ein Knopf
+       ins Leere waere schlechter als gar keiner. Lokale Zeit: das ist die
+       Kalenderfrage des Menschen davor, nicht des Servers. */
+    $('wrapped-auf').hidden = !drinnen() || new Date().getMonth() !== 11;
 
-    // Ohne Termine, ohne Archiv und ohne Anmeldung hat die Sektion nichts zu sagen.
-    block.hidden = !termine.length && !darf && !chronikZahl;
+    // Ohne Termine, ohne Archiv, ohne Anmeldung und ohne Wrapped-Knopf hat die Sektion nichts zu sagen.
+    block.hidden = !termine.length && !darf && !chronikZahl && $('wrapped-auf').hidden;
     $('termin-neu').hidden = !darf;
     if (block.hidden) return;
 
@@ -4483,7 +4678,7 @@
   function koerperSperren() {
     document.body.style.overflow =
       (!$('flyout').hidden || !$('chronik').hidden || !$('notruf').hidden
-        || !$('gifblatt').hidden || !$('memeblatt').hidden) ? 'hidden' : '';
+        || !$('gifblatt').hidden || !$('memeblatt').hidden || !$('wrapped').hidden) ? 'hidden' : '';
   }
 
   async function flyAuf(ziel, titel) {
@@ -5429,17 +5624,583 @@
     if (!chronikAbende.length) {
       ziel.appendChild(el('div', 'leer-hinweis kr', 'Noch ist kein Abend gewesen.'));
     }
-    let monat = '';
+    let monat = '', jahr = null;
+    const heuteJahr = new Date().getFullYear();
     chronikAbende.forEach(t => {
-      const m = new Date(t.beginnt_am)
-        .toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
-      if (m !== monat) { monat = m; ziel.appendChild(el('div', 'ch-monat', m)); }
+      const d = new Date(t.beginnt_am);
+      const m = d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+      if (m !== monat) {
+        monat = m;
+        /* Ein Jahrgang-Knopf, sobald die Liste ins naechste, ABGESCHLOSSENE
+           Jahr wechselt - "abgeschlossen" heisst: nicht das laufende. Steht
+           vor dem ersten Monat dieses Jahres, nicht danach - wer zurueck-
+           blaettert, soll den Knopf sehen, bevor er in den Abenden selbst
+           landet. */
+        if (d.getFullYear() !== jahr) {
+          jahr = d.getFullYear();
+          if (jahr < heuteJahr) {
+            const knopf = el('button', 'ch-jahrgang kr', `Dein Jahr ${jahr} am Kühlschrank ›`);
+            knopf.type = 'button';
+            knopf.addEventListener('click', () => wrappedAuf(jahr));
+            ziel.appendChild(knopf);
+          }
+        }
+        ziel.appendChild(el('div', 'ch-monat', m));
+      }
       // Absagen kann man im Archiv nichts mehr — der Abend ist vorbei, und
       // `darfAbsagen` sagt das im Blatt von selbst.
       ziel.appendChild(VARIANTE.termin(t));
     });
     $('ch-mehr').hidden = !chronikWeiter;
   }
+
+  /* --- Wrapped: der Jahresrückblick -----------------------------------------
+     Ein Blatt derselben Tafel, aber keine `.flyout` — eine mittige Story-
+     Karte, wie im Mock (`ideas/mocks/mock-wrapped.html`). Formen nach dem
+     dataviz-Verfahren: fast alles Hero-Zahlen und Stat-Kacheln, nur zwei
+     echte Grafiken — liegende Balken für Identität (Melderfarben, jede Zeile
+     direkt mit Name und Wert beschriftet), Monatssäulen für Größe (ein
+     Farbton, nur das Extrem beschriftet). Melderfarbe hängt am Menschen
+     (Anmeldereihenfolge unter den in DIESEM Jahr sichtbaren Meldern) — eine
+     eigene, an `ideas/plan-wrapped.md` validierte Palette, nicht die aus
+     `bilder.js`: die Tafel lädt diese Datei nicht und darf es auch nicht.
+     --------------------------------------------------------------------- */
+  const WR_MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  const WR_PALETTE = ['#399c69', '#b15041', '#b29126', '#4c9bcb', '#994d96'];
+  const wrZahl = n => n.toLocaleString('de-DE');
+  const wrTagMonat = iso => new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+  const wrWochentag = iso => new Date(iso).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
+
+  let wrJahr = null, wrKachelListe = [], wrWo = 0, wrFarbenKarte = new Map(), wrLauf = 0;
+  const wrFarbe = id => wrFarbenKarte.get(id) || '#93a09a';
+
+  function wrSagt(text, schlecht) {
+    const p = $('wr-sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  /* Melderfarbe nach Anmeldereihenfolge (id aufsteigend), aber nur unter den
+     Meldern, die in DIESEM Jahr in einer der beiden Balken-Grafiken
+     auftauchen — sonst hätte ein Melder ohne jede Zeile trotzdem eine Farbe
+     "verbraucht", und der erste sichtbare bekäme die zweite Farbe. */
+  function wrappedFarben(d) {
+    const ids = new Set();
+    (d.runde.eiskoenig || []).forEach(z => ids.add(z.id));
+    ((d.runde.rad && d.runde.rad.gewonnen) || []).forEach(z => ids.add(z.id));
+    const karte = new Map();
+    [...ids].sort((a, b) => a - b).forEach((id, i) => karte.set(id, WR_PALETTE[i % WR_PALETTE.length]));
+    return karte;
+  }
+
+  /* --- Tooltip: Wert führt, Name folgt, Marke daneben. textContent, nie HTML. */
+  function wrTipZeigen(ev, titel, zeilen, fuss) {
+    const tip = $('wr-tip');
+    tip.replaceChildren();
+    tip.appendChild(el('div', 'wr-t-titel', titel));
+    zeilen.forEach(z => {
+      const r = el('div', 'wr-t-zeile');
+      if (z.farbe) { const m = el('i', 'wr-t-marke'); m.style.background = z.farbe; r.appendChild(m); }
+      r.appendChild(el('span', 'wr-t-wert', z.wert));
+      r.appendChild(el('span', null, z.was));
+      tip.appendChild(r);
+    });
+    if (fuss) tip.appendChild(el('div', 'wr-t-fuss', fuss));
+    tip.hidden = false;
+    const b = tip.getBoundingClientRect();
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - b.width - 8) + 'px';
+    tip.style.top  = Math.max(8, Math.min(ev.clientY - b.height - 12, innerHeight - b.height - 8)) + 'px';
+  }
+  function wrTipWeg() { $('wr-tip').hidden = true; }
+
+  /* --- Grafik 1: liegende Balken, Identität. Jede Zeile: Marke, Name, Wert. */
+  function wrBalken(reihen, was) {
+    const breite = 330, hoch = 18, luft = 13, lx = 78, rx = 44;
+    const hoehe = reihen.length * (hoch + luft);
+    const max = Math.max(...reihen.map(r => r.wert), 1);
+    const svg = s_el('svg', { viewBox: `0 0 ${breite} ${hoehe}`, role: 'img', 'aria-label': was + ' je Melder' });
+    const voll = breite - lx - rx;
+    const balken = [];
+    reihen.forEach((r, i) => {
+      const y = i * (hoch + luft) + 2;
+      const b = Math.max((r.wert / max) * voll, 2);
+      const p = s_el('path', {
+        d: `M${lx},${y} h${b - 4} a4,4 0 0 1 4,4 v${hoch - 8} a4,4 0 0 1 -4,4 h${-(b - 4)} Z`,
+        fill: r.farbe,
+      });
+      svg.appendChild(p); balken.push(p);
+      const n = s_el('text', { x: lx - 9, y: y + hoch - 4.5, 'text-anchor': 'end', 'font-size': 12, fill: '#cfd6cd' });
+      n.textContent = r.name; svg.appendChild(n);
+      const w = s_el('text', {
+        x: lx + b + 8, y: y + hoch - 4.5, 'font-size': 12, 'font-weight': 650,
+        fill: '#eef1ea', style: 'font-variant-numeric:tabular-nums',
+      });
+      w.textContent = wrZahl(r.wert); svg.appendChild(w);
+      // Trefferfläche: die ganze Zeile, deutlich größer als der Balken.
+      const t = s_el('rect', { x: 0, y: y - luft / 2, width: breite, height: hoch + luft, fill: 'transparent' });
+      t.addEventListener('pointermove', ev => {
+        balken.forEach((bb, j) => bb.setAttribute('opacity', j === i ? 1 : .35));
+        wrTipZeigen(ev, r.name, [{ farbe: r.farbe, wert: wrZahl(r.wert), was }]);
+      });
+      t.addEventListener('pointerleave', () => { balken.forEach(bb => bb.setAttribute('opacity', 1)); wrTipWeg(); });
+      svg.appendChild(t);
+    });
+    return svg;
+  }
+
+  /* --- Grafik 2: Monatssäulen, Größe → EIN Farbton. Nur das Extrem trägt
+     seine Zahl, alle zwölf Werte stehen im Tooltip und hinter "Zahlen". */
+  function wrSaeulen(werte, was) {
+    const breite = 330, hoehe = 132, unten = 16, oben = 18;
+    const max = Math.max(...werte, 1);
+    const spitzeI = werte.indexOf(Math.max(...werte));
+    const slot = breite / werte.length, b = Math.min(slot - 4, 20);
+    const svg = s_el('svg', { viewBox: `0 0 ${breite} ${hoehe}`, role: 'img', 'aria-label': was + ' je Monat' });
+    const grundY = hoehe - unten;
+    svg.appendChild(s_el('line', { x1: 0, y1: grundY, x2: breite, y2: grundY, stroke: '#ffffff2e', 'stroke-width': 1 }));
+    const saeulen = [];
+    werte.forEach((w, i) => {
+      const h = Math.max((w / max) * (grundY - oben), 2);
+      const x = i * slot + (slot - b) / 2, y = grundY - h;
+      const p = s_el('path', {
+        d: `M${x},${grundY} v${-(h - 4)} a4,4 0 0 1 4,-4 h${b - 8} a4,4 0 0 1 4,4 v${h - 4} Z`, fill: '#e8c766',
+      });
+      svg.appendChild(p); saeulen.push(p);
+      const m = s_el('text', { x: x + b / 2, y: hoehe - 4, 'text-anchor': 'middle', 'font-size': 9, fill: '#93a09a' });
+      m.textContent = WR_MONATE[i][0]; svg.appendChild(m);
+      if (i === spitzeI && w > 0) {
+        const t = s_el('text', {
+          x: x + b / 2, y: y - 6, 'text-anchor': 'middle', 'font-size': 12, 'font-weight': 650, fill: '#eef1ea',
+        });
+        t.textContent = wrZahl(w); svg.appendChild(t);
+      }
+      const treffer = s_el('rect', { x: i * slot, y: 0, width: slot, height: hoehe, fill: 'transparent' });
+      treffer.addEventListener('pointermove', ev => {
+        saeulen.forEach((s, j) => s.setAttribute('opacity', j === i ? 1 : .45));
+        const summe = werte.reduce((a, c) => a + c, 0);
+        wrTipZeigen(ev, WR_MONATE[i], [{ farbe: '#e8c766', wert: wrZahl(w), was }],
+          summe ? Math.round(w / summe * 100) + ' % des Jahres' : undefined);
+      });
+      treffer.addEventListener('pointerleave', () => { saeulen.forEach(s => s.setAttribute('opacity', 1)); wrTipWeg(); });
+      svg.appendChild(treffer);
+    });
+    return svg;
+  }
+
+  function wrZahlenTabelle(paare) {
+    const t = el('table', 'wr-zahlen');
+    paare.forEach(([was, wert]) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', null, was));
+      tr.appendChild(el('td', null, wert));
+      t.appendChild(tr);
+    });
+    t.hidden = true;
+    return t;
+  }
+
+  function wrBildKarte(titel, svg, tabelle) {
+    const wrap = el('div', 'wr-bild');
+    const kopf = el('div', 'wr-bild-kopf');
+    kopf.appendChild(el('h2', 'kr', titel));
+    if (tabelle) {
+      const k = el('button', 'wr-klein-knopf', 'Zahlen');
+      k.type = 'button';
+      k.setAttribute('aria-pressed', 'false');
+      k.addEventListener('click', () => {
+        const zu = tabelle.hidden;
+        tabelle.hidden = !zu; svg.style.display = zu ? 'none' : '';
+        k.setAttribute('aria-pressed', String(zu));
+      });
+      kopf.appendChild(k);
+    }
+    wrap.appendChild(kopf);
+    wrap.appendChild(svg);
+    if (tabelle) wrap.appendChild(tabelle);
+    return wrap;
+  }
+
+  function wrSterneDom(wert) {
+    const s = el('span', 'wr-sterne');
+    const voll = Math.floor(wert + .25), halb = wert % 1 >= .25 && wert % 1 < .75;
+    s.append('★'.repeat(voll));
+    if (halb) s.appendChild(el('span', 'wr-halb', '★'));
+    return s;
+  }
+
+  /* Eine Momentaufnahme-Kachel (kältester/wärmster Moment) - dieselbe Form
+     für beide, nur mit anderem Text und anderer Sortierung der Abfrage. Das
+     Ampel-Wort kommt aus `stufe()` (siehe oben) - der Worker schickt nur den
+     Grad, die Regel steht nur hier, nicht doppelt. */
+  function wrMomentKachel(label, neben, mm) {
+    if (!mm) return null;
+    return { bau(k) {
+      k.appendChild(el('div', 'wr-oben', label));
+      const h = el('div', 'wr-hero');
+      h.append(mm.grad.toFixed(1).replace('.', ',') + ' ');
+      h.appendChild(el('span', 'wr-einheit', '°C'));
+      k.appendChild(h);
+      const [, wort, farbe] = stufe(mm.grad);
+      const dt = new Date(mm.am);
+      const s = el('p', 'wr-satz');
+      s.appendChild(el('b', null, mm.name));
+      s.append(mm.gemessen ? ' (gemessen), ' : ', ');
+      s.append(`${dt.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}, `
+        + `${dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr. `);
+      s.append('Die Ampel sagte: ');
+      const w = el('span', 'wr-wort', wort); w.style.color = farbe;
+      s.appendChild(w); s.append('.');
+      k.appendChild(s);
+      k.appendChild(el('p', 'wr-neben', neben));
+    } };
+  }
+
+  /* ==========================================================================
+     Die zehn Kacheln. Fehlende Daten lassen eine Kachel ganz weg (dünne
+     Jahre), statt eine Null-Aussage zu behaupten - siehe ideas/plan-wrapped.md.
+     ========================================================================== */
+  function wrappedKacheln(d) {
+    const K = [];
+
+    K.push({ bau(k) {
+      k.appendChild(el('div', 'wr-oben', 'BEERSTOCK WRAPPED'));
+      k.appendChild(el('div', 'wr-held kr', 'Dein Jahr'));
+      k.appendChild(el('div', 'wr-hero', String(d.jahr)));
+      k.appendChild(el('p', 'wr-satz', 'Zwölf Monate, ein Kühlschrank, ein Rad. Was davon übrig ist, steht auf den nächsten Tafeln.'));
+      k.appendChild(el('p', 'wr-neben', 'Rechts tippen: weiter. Links: zurück.'));
+    } });
+
+    if (d.runde.eiskoenig.length) {
+      const erster = d.runde.eiskoenig[0];
+      K.push({ bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'DER EISKÖNIG'));
+        k.appendChild(el('div', 'wr-held kr', erster.name));
+        const h = el('div', 'wr-hero wr-kleiner');
+        h.append(wrZahl(erster.tage) + ' ');
+        h.appendChild(el('span', 'wr-einheit', erster.tage === 1 ? 'Tag auf Platz 1' : 'Tage auf Platz 1'));
+        k.appendChild(h);
+        k.appendChild(el('p', 'wr-satz', `${erster.name} stand öfter oben an der Tafel als alle anderen.`));
+        const reihen = d.runde.eiskoenig.map(z => ({ name: z.name, farbe: wrFarbe(z.id), wert: z.tage }));
+        k.appendChild(wrBildKarte('Tage auf dem Siegerplatz', wrBalken(reihen, 'Tage auf Platz 1')));
+      } });
+    }
+
+    if (d.runde.meldungen) {
+      const m = d.runde.meldungen;
+      const spitzeI = m.monat.indexOf(Math.max(...m.monat));
+      K.push({ bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'WIE OFT GEMELDET WURDE'));
+        k.appendChild(el('div', 'wr-hero', wrZahl(m.summe)));
+        k.appendChild(el('p', 'wr-satz',
+          `Mal hat die Runde in diesem Jahr an die Tafel geschrieben. ${WR_MONATE[spitzeI]} war der fleißigste Monat.`));
+        const tab = wrZahlenTabelle(m.monat.map((w, i) => [WR_MONATE[i], wrZahl(w)]));
+        k.appendChild(wrBildKarte('Meldungen je Monat', wrSaeulen(m.monat, 'Meldungen'), tab));
+      } });
+    }
+
+    const kalt = wrMomentKachel('DER KÄLTESTE MOMENT',
+      'Knapp über dem Punkt, an dem Bier zu Eis wird und der Wirt zu weinen beginnt.', d.runde.kaeltester);
+    if (kalt) K.push(kalt);
+    const warm = wrMomentKachel('DER WÄRMSTE MOMENT',
+      'Der Moment, in dem niemand mehr "kalt" sagen wollte.', d.runde.waermster);
+    if (warm) K.push(warm);
+
+    if (d.runde.rad) {
+      const rad = d.runde.rad;
+      K.push({ bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'DAS RAD HAT ENTSCHIEDEN'));
+        const h = el('div', 'wr-hero wr-kleiner');
+        h.append(wrZahl(rad.ziehungen) + ' ');
+        h.appendChild(el('span', 'wr-einheit', rad.ziehungen === 1 ? 'Ziehung' : 'Ziehungen'));
+        k.appendChild(h);
+        const s = el('p', 'wr-satz');
+        s.appendChild(el('b', null, `${wrZahl(rad.zusagen)} ${rad.zusagen === 1 ? 'Abend' : 'Abende'}`));
+        s.append(' sind daraus geworden — eine Zusage-Quote von ');
+        s.appendChild(el('b', null, rad.quote + ' %'));
+        s.append('.');
+        k.appendChild(s);
+        if (rad.gewonnen.length) {
+          const reihen = rad.gewonnen.map(z => ({ name: z.name, farbe: wrFarbe(z.id), wert: z.n }));
+          k.appendChild(wrBildKarte('gewonnene Lose je Melder', wrBalken(reihen, 'gewonnene Lose')));
+        }
+      } });
+    }
+
+    if (d.runde.abend || d.runde.gastgeber) {
+      K.push({ bau(k) {
+        const a = d.runde.abend;
+        if (a) {
+          k.appendChild(el('div', 'wr-oben', 'DER ABEND DES JAHRES'));
+          k.appendChild(el('div', 'wr-held kr', `${wrWochentag(a.wann)} — bei ${a.gastgeberName}`));
+          const h = el('div', 'wr-hero wr-kleiner');
+          h.append(a.schnitt.toFixed(1).replace('.', ',') + ' ');
+          h.appendChild(el('span', 'wr-einheit', '★ im Schnitt'));
+          k.appendChild(h);
+          a.sterne.forEach(s => {
+            if (s.schnitt == null) return;
+            const z = el('div', 'wr-stern-zeile');
+            z.appendChild(el('span', 'wr-kat', s.name));
+            z.appendChild(wrSterneDom(s.schnitt));
+            z.appendChild(el('span', 'wr-zahl', s.schnitt.toFixed(1).replace('.', ',')));
+            k.appendChild(z);
+          });
+          k.appendChild(el('p', 'wr-neben',
+            `${wrZahl(a.kommentare)} Kommentare, ${wrZahl(a.fotos)} Fotos — und mindestens ein Ausklang, über den nicht geschrieben wurde.`));
+        }
+        const g = d.runde.gastgeber;
+        if (g) {
+          if (a) k.appendChild(el('hr', 'wr-trenn'));
+          else k.appendChild(el('div', 'wr-oben', 'GASTGEBER DES JAHRES'));
+          const s = el('p', 'wr-satz');
+          s.append('Gastgeber des Jahres: ');
+          s.appendChild(el('b', null, g.name));
+          s.append(` — ${g.schnitt.toFixed(1).replace('.', ',')} ★ über ${wrZahl(g.abende)} ${g.abende === 1 ? 'Abend' : 'Abende'}.`);
+          k.appendChild(s);
+        }
+      } });
+    }
+
+    const ges = d.runde.gesagtes;
+    if (ges.kommentare || ges.bilder || ges.gifs || ges.reaktion) {
+      K.push({ bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'WAS GESAGT WURDE'));
+        if (ges.reaktion) {
+          k.appendChild(el('div', 'wr-emoji-gross', ges.reaktion));
+          const s = el('p', 'wr-satz');
+          s.append('Die Reaktion des Jahres, ');
+          s.appendChild(el('b', null, wrZahl(ges.reaktionN) + ' Mal'));
+          s.append(' an Beiträge geklebt.');
+          k.appendChild(s);
+        }
+        const p = el('div', 'wr-paare');
+        [[wrZahl(ges.kommentare), 'Kommentare'], [wrZahl(ges.bilder), 'Bilder'], [wrZahl(ges.gifs), 'GIFs']]
+          .forEach(([wert, was]) => {
+            const q = el('div', 'wr-paar');
+            q.appendChild(el('div', 'wr-wert', wert));
+            q.appendChild(el('div', 'wr-was', was));
+            p.appendChild(q);
+          });
+        k.appendChild(p);
+      } });
+    }
+
+    K.push({ bau(k) {
+      const ich = d.ich;
+      k.appendChild(el('div', 'wr-oben', 'DEINE BILANZ'));
+      const h = el('div', 'wr-hero wr-kleiner');
+      h.append(wrZahl(ich.serie) + ' ');
+      h.appendChild(el('span', 'wr-einheit', ich.serie === 1 ? 'Tag Kalt-Serie' : 'Tage Kalt-Serie'));
+      k.appendChild(h);
+      k.appendChild(el('p', 'wr-satz', ich.serie
+        ? `Deine längste Folge von Tagen mit kaltem Bier im Haus${ich.serieVon ? ' — ab ' + wrTagMonat(ich.serieVon) : ''}, ohne einen einzigen warmen Tag.`
+        : 'Dieses Jahr war noch keine Serie dabei — nächstes Jahr wird kalt.'));
+      const p = el('div', 'wr-paare');
+      [
+        [wrZahl(ich.platz1), ich.platz1 === 1 ? 'Tag auf Platz 1' : 'Tage auf Platz 1'],
+        [ich.kaeltestes != null ? grad(ich.kaeltestes) : '–', 'dein kältestes Bier'],
+        [wrZahl(ich.sterneVergeben), 'Sterne vergeben'],
+        [wrZahl(ich.abendeAusgerichtet), ich.abendeAusgerichtet === 1 ? 'Abend ausgerichtet' : 'Abende ausgerichtet'],
+      ].forEach(([wert, was]) => {
+        const q = el('div', 'wr-paar');
+        q.appendChild(el('div', 'wr-wert', wert));
+        q.appendChild(el('div', 'wr-was', was));
+        p.appendChild(q);
+      });
+      k.appendChild(p);
+    } });
+
+    K.push({ bau(k) {
+      k.appendChild(el('div', 'wr-oben', `DAS WAR ${d.jahr}`));
+      k.appendChild(el('div', 'wr-emoji-gross', '🍻'));
+      k.appendChild(el('div', 'wr-held kr', `Prost auf ${d.jahr + 1}.`));
+      k.appendChild(el('p', 'wr-satz', 'Bleib kalt. Die Tafel schreibt schon wieder mit.'));
+    } });
+
+    return K;
+  }
+
+  /* --- Blättern: Fortschritt, Tipp-Zonen, Tasten, Wischen -------------------
+     Wie die Chronik ein eigenes Blatt, aber die Navigation ist die des Mocks:
+     Tippen auf die Kachel blättert (links 30 % zurück, rechts weiter),
+     außer auf Grafik, Knopf oder Tabelle - die gehören dem Tooltip bzw. sich
+     selbst. `prefers-reduced-motion` schaltet die Einblend-Animation ab
+     (siehe `.wr-kachel` im Stylesheet). */
+  function wrappedZeigen(i) {
+    // Ohne Kacheln (noch am Laden, oder der Fetch ist schiefgegangen) gibt es
+    // nichts zu zeigen - Tipp-, Wisch- und Tastenweg fragen nicht erst nach.
+    if (!wrKachelListe.length) return;
+    wrWo = Math.max(0, Math.min(wrKachelListe.length - 1, i));
+    wrTipWeg();
+    const buehne = $('wr-buehne');
+    buehne.replaceChildren();
+    const k = el('div', 'wr-kachel');
+    wrKachelListe[wrWo].bau(k);
+    buehne.appendChild(k);
+    [...$('wr-fortschritt').children].forEach((seg, j) => {
+      seg.className = j < wrWo ? 'wr-war' : (j === wrWo ? 'wr-jetzt' : '');
+    });
+    $('wr-zurueck').disabled = wrWo === 0;
+    $('wr-weiter').disabled = wrWo === wrKachelListe.length - 1;
+    $('wr-teilen').hidden = wrWo !== wrKachelListe.length - 1;
+    $('wr-wo').textContent = (wrWo + 1) + ' / ' + wrKachelListe.length;
+  }
+
+  async function wrappedAuf(jahr) {
+    // Ein Laufzaehler statt eines Jahresvergleichs: "dasselbe Jahr zweimal
+    // geoeffnet" (zu, dann gleich wieder auf) muss die veraltete Antwort
+    // genauso verwerfen wie ein Jahreswechsel waehrend des Ladens - sonst
+    // haengen doppelte Fortschrittsstriche an.
+    const lauf = ++wrLauf;
+    wrJahr = jahr;
+    wrKachelListe = [];
+    wrWo = 0;
+    $('wr-jahrzahl').textContent = jahr;
+    $('wr-buehne').textContent = '';
+    $('wr-fortschritt').textContent = '';
+    wrSagt('');
+    $('wr-zurueck').disabled = true;
+    $('wr-weiter').disabled = true;
+    $('wr-teilen').hidden = true;
+    $('wr-wo').textContent = '';
+    $('wrapped').hidden = false;
+    koerperSperren();
+    $('wr-zu').focus();
+    try {
+      const r = await fetch(`${API}/api/wrapped?jahr=${jahr}`, { headers: mitToken(), cache: 'no-store' });
+      let d = {};
+      try { d = await r.json(); } catch {}
+      if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
+      if (lauf !== wrLauf || $('wrapped').hidden) return;   // inzwischen geschlossen/erneut geoeffnet
+      wrFarbenKarte = wrappedFarben(d);
+      wrKachelListe = wrappedKacheln(d);
+      wrKachelListe.forEach(() => $('wr-fortschritt').appendChild(el('i')));
+      wrappedZeigen(0);
+    } catch (e) {
+      if (lauf !== wrLauf || $('wrapped').hidden) return;
+      wrSagt(e.message || 'Netz weg?', true);
+    }
+  }
+
+  function wrappedZu() {
+    $('wrapped').hidden = true;
+    wrTipWeg();
+    koerperSperren();
+  }
+
+  /* --- Kachel teilen: Canvas statt Screenshot --------------------------------
+     Wie beim Meme (`memeUebernehmen`): auf ein <canvas> malen, `toBlob`,
+     `navigator.share`. Nur die letzte Kachel trägt den Knopf (Prost), ihr
+     Text kommt direkt aus dem gerade gezeichneten DOM - was auf dem Schirm
+     steht, steht auch auf dem Bild. Kein Font-Preload nötig: die Handschrift
+     ist ein Systemfont-Stack ohne @font-face, genau wie überall sonst auf
+     der Tafel. */
+  function wrappedKachelZeichnen() {
+    return new Promise(resolve => {
+      const kachel = $('wr-buehne').querySelector('.wr-kachel');
+      if (!kachel) { resolve(null); return; }
+      const text = klasse => kachel.querySelector('.' + klasse)?.textContent || '';
+      const oben = text('wr-oben'), held = text('wr-held'), hero = text('wr-hero'),
+            emoji = text('wr-emoji-gross'), satz = text('wr-satz');
+
+      const b = 640, h = 800;
+      const leinwand = document.createElement('canvas');
+      leinwand.width = b; leinwand.height = h;
+      const ctx = leinwand.getContext('2d');
+
+      const grund = ctx.createRadialGradient(b * .22, h * .08, 40, b * .5, h * .5, b * .9);
+      grund.addColorStop(0, '#37403f'); grund.addColorStop(.45, '#262c2e'); grund.addColorStop(1, '#191d1f');
+      ctx.fillStyle = grund; ctx.fillRect(0, 0, b, h);
+
+      const hand = "'Chalkduster','Bradley Hand','Segoe Print','Comic Sans MS',cursive";
+      const zeilen = (t, breite) => {
+        const worte = t.split(/\s+/).filter(Boolean);
+        const z = []; let zeile = '';
+        worte.forEach(wort => {
+          const versuch = zeile ? zeile + ' ' + wort : wort;
+          if (zeile && ctx.measureText(versuch).width > breite) { z.push(zeile); zeile = wort; } else { zeile = versuch; }
+        });
+        if (zeile) z.push(zeile);
+        return z;
+      };
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e8c766';
+      ctx.font = `20px ${hand}`;
+      ctx.fillText(oben, b / 2, 110);
+
+      let y = 220;
+      if (emoji) { ctx.font = '96px sans-serif'; ctx.fillText(emoji, b / 2, y); y += 110; }
+      if (held)  { ctx.fillStyle = '#eef1ea'; ctx.font = `44px ${hand}`; ctx.fillText(held, b / 2, y); y += 90; }
+      if (hero)  { ctx.fillStyle = '#e8c766'; ctx.font = `80px ${hand}`; ctx.fillText(hero, b / 2, y); y += 90; }
+      if (satz) {
+        ctx.fillStyle = '#cfd6cd';
+        ctx.font = '22px system-ui, sans-serif';
+        zeilen(satz, b - 100).forEach(z => { ctx.fillText(z, b / 2, y); y += 32; });
+      }
+
+      ctx.fillStyle = '#93a09a';
+      ctx.font = '18px system-ui, sans-serif';
+      ctx.fillText('beerstock — Dein Jahr am Kühlschrank', b / 2, h - 40);
+
+      leinwand.toBlob(blob => resolve(blob), 'image/png');
+    });
+  }
+
+  async function wrappedTeilen() {
+    const knopf = $('wr-teilen');
+    knopf.disabled = true;
+    try {
+      const blob = await wrappedKachelZeichnen();
+      if (!blob) throw new Error('Das Bild ließ sich nicht bauen.');
+      const datei = new File([blob], `beerstock-wrapped-${wrJahr}.png`, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [datei] })) {
+        await navigator.share({ files: [datei], title: 'Beerstock Wrapped', text: `Dein Jahr ${wrJahr} am Kühlschrank` });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = datei.name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') wrSagt(e.message || 'Teilen ging nicht.', true);
+    } finally {
+      knopf.disabled = false;
+    }
+  }
+
+  $('wrapped-auf').addEventListener('click', () => wrappedAuf(new Date().getFullYear()));
+  $('wr-zu').addEventListener('click', wrappedZu);
+  $('wr-schirm').addEventListener('click', wrappedZu);
+  $('wr-zurueck').addEventListener('click', () => wrappedZeigen(wrWo - 1));
+  $('wr-weiter').addEventListener('click', () => wrappedZeigen(wrWo + 1));
+  $('wr-teilen').addEventListener('click', wrappedTeilen);
+
+  $('wr-buehne').addEventListener('click', ev => {
+    if (ev.target.closest('svg, button, a, table')) return;
+    const b = $('wr-buehne').getBoundingClientRect();
+    wrappedZeigen(ev.clientX - b.left < b.width * .3 ? wrWo - 1 : wrWo + 1);
+  });
+  let wrWischX = null;
+  $('wr-buehne').addEventListener('touchstart', ev => { wrWischX = ev.touches[0].clientX; }, { passive: true });
+  $('wr-buehne').addEventListener('touchend', ev => {
+    if (wrWischX == null) return;
+    const dx = ev.changedTouches[0].clientX - wrWischX; wrWischX = null;
+    if (Math.abs(dx) > 48) wrappedZeigen(dx < 0 ? wrWo + 1 : wrWo - 1);
+  }, { passive: true });
+  // Pfeiltasten nur, solange Wrapped offen ist - Escape läuft im gemeinsamen
+  // Zuhörer weiter unten mit, zusammen mit allen anderen Ebenen. Die
+  // Leertaste NUR, wenn kein Knopf den Fokus hält - sonst schluckt sie
+  // dessen eigene Aktivierung ("Zahlen" öffnet dann nie die Tabelle, und auf
+  // "zurück" blättert Space nach VORNE statt zu klicken).
+  document.addEventListener('keydown', ev => {
+    if ($('wrapped').hidden) return;
+    if (ev.key === ' ' && ev.target.closest('button')) return;
+    if (ev.key === 'ArrowRight' || ev.key === ' ') { ev.preventDefault(); wrappedZeigen(wrWo + 1); }
+    if (ev.key === 'ArrowLeft') { ev.preventDefault(); wrappedZeigen(wrWo - 1); }
+  });
 
   /* --- Mein Deckel ---------------------------------------------------------
      Die Selbstverwaltung. Sie holt sich ihren Stand jedes Mal frisch aus
@@ -6265,6 +7026,9 @@
      Liste zurück, nicht auf die Tafel. */
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
+    // Höchste Ebene im ganzen Bau (z-index 55) - kann mit keiner der
+    // folgenden gleichzeitig offen sein, steht aber trotzdem zuerst.
+    if (!$('wrapped').hidden) { wrappedZu(); return; }
     if (!$('lupe').hidden) { lupeZu(); return; }
     if (!$('gifblatt').hidden) { gifZu(); return; }
     if (!$('memeblatt').hidden) { memeZu(); return; }
