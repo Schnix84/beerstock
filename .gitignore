@@ -1,5 +1,9 @@
 # Lokaler wrangler-Cache (enthaelt u. a. die Account-ID) und Build-Kram.
-worker/.wrangler/
+# Ohne fuehrenden Pfad, also auf JEDER Ebene: wrangler legt den Cache relativ
+# zum Arbeitsverzeichnis an, und wer den Befehl aus dem Wurzelverzeichnis
+# statt aus worker/ aufruft, bekommt ihn hier oben. Genau so lag am
+# 2026-08-06 eine .wrangler/cache/wrangler-account.json unversioniert herum.
+.wrangler/
 worker/node_modules/
 node_modules/
 .DS_Store
