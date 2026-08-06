@@ -155,6 +155,12 @@ eine Verbindung zur verlinkten Seite verschaffen — wer einen Link postet, erf�
 damit, wer den Faden gelesen hat. Das Vorschaubild liegt danach im eigenen Bucket,
 nicht bei der Gegenseite. Nur der erste Link bekommt eine Karte; drei Karten unter
 einem Zweizeiler sind keine Hilfe mehr.
+**Steht die Adresse ganz vorn, verschwindet sie aus dem Text** — die Karte zeigt sie
+ja schon, und was dahinter noch geschrieben steht, hängt unter der Karte im selben
+Rahmen. Mittendrin oder am Ende bleibt sie stehen: dort trägt sie den Satz mit, und
+„guck mal auf example.com, da steht es" hätte ohne sie ein Loch. Gibt es keine Karte
+— tote Adresse, Seite ohne Kopfdaten —, bleibt der Link ebenfalls im Text; sonst
+stünde ausgerechnet der Kommentar leer da, der am meisten erklären müsste.
 
 Wer beim Schreiben schon Sterne vergeben hat, trägt sie über seinem Text —
 so liest man, worauf sich das Lob bezieht. Es ist der Stand von damals, nicht der von

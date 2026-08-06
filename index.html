@@ -1152,11 +1152,15 @@
      allein ein Satz. Deshalb hängen Rand und Ecke an DIESER Klasse und nicht
      an `.ko-bild` — sonst bekäme das Foto ohne Satz zwei Rahmen.
 
-     Die 3-px-Ecke ist die des nackten Fotos, nicht die 12 der Linkkarte: ein
-     Bild mit Satz soll nicht plötzlich rund sein, wo eines ohne Satz kantig
-     ist. `overflow: hidden` klemmt die Ecken des Bildes darin. */
+     Oben die 3-px-Ecke des nackten Fotos, unten die 12 der Linkkarte — und das
+     ist kein Kompromiss, sondern die Kante von zweierlei Sachen. Wo das Bild
+     sitzt, bleibt es kantig wie ein Foto ohne Satz; wo der Satz sitzt, ist der
+     Rahmen ein Textkasten und rundet wie jeder andere hier. Ein Bild mit
+     Beschriftung soll oben nicht plötzlich rund sein, unten aber auch nicht
+     eckiger als die Karte darunter. `overflow: hidden` klemmt die Ecken des
+     Bildes darin. */
   .ko-foto {
-    margin: 7px 0 0; border: 1px solid #ffffff26; border-radius: 3px;
+    margin: 7px 0 0; border: 1px solid #ffffff26; border-radius: 3px 3px 12px 12px;
     overflow: hidden; background: #00000033;
   }
   .ko-foto .ko-bild { margin: 0; border: none; border-radius: 0; }
@@ -3424,18 +3428,26 @@
          Gelöscht kann hier nicht mitlaufen: der Worker räumt bei der Löschung
          Text UND Bild weg (`text = ''`, `bild_key = NULL`), das „gelöscht"
          bleibt also der freistehende Textblock darunter. */
-      /* Steht im Kommentar NICHTS als der Link, und ist die Karte dazu da,
-         dann spricht die Karte für sich — die nackte Adresse darüber sagt
-         nichts, was nicht darunter schon steht, nur schlechter. Wer etwas dazu
-         geschrieben hat, sieht seinen Satz weiter, davor wie dahinter.
+      /* Was vom Satz übrig bleibt, wenn die Karte ihren Teil schon zeigt.
+         Steht die Adresse GANZ VORN, streicht `ohneVorderenLink` sie aus dem
+         Text — sie steht dann nur noch in der Karte. Mitten im Satz oder am
+         Ende bleibt sie, wo sie ist: dort trägt sie den Satz mit.
+
+         Bleibt gar nichts übrig, war der Kommentar nichts als der Link, und
+         die Karte spricht allein (`nurLink`).
 
          Die Karte MUSS dafür da sein. Ist die Vorschau fehlgeschlagen
          (`vorschau: null` — eine tote Adresse, eine Seite ohne og), bleibt die
          Adresse stehen: sonst wäre der Kommentar leer, und zwar genau der, der
-         am meisten erklären müsste. */
-      const nurLink = !k.geloescht && !!k.vorschau && nurEinLink(k.text);
+         am meisten erklären müsste. Deshalb hängt das Streichen an `k.vorschau`
+         und nicht am Text allein. */
+      const satz = k.geloescht ? ''
+                 : k.vorschau ? ohneVorderenLink(k.text)
+                 : (k.text || '');
 
-      const beschriftet = !k.geloescht && !!k.text && !!k.bild && !nurLink;
+      const nurLink = !k.geloescht && !!k.vorschau && !satz;
+
+      const beschriftet = !k.geloescht && !!satz && !!k.bild;
 
       /* Und dasselbe für den Link: Karte oben, Satz darunter, ein Rahmen um
          beides — genau wie beim Foto. Wer etwas zu einem Link schreibt, sagt
@@ -3446,15 +3458,14 @@
          weiter dem Bild (`beschriftet` oben) — er kann nur an einer Stelle
          stehen, und das Foto ist das Nähere. Die Karte hängt sich dann nackt
          darunter, wie bisher. */
-      const linkBeschriftet = !k.geloescht && !!k.text && !!k.vorschau
-                              && !k.bild && !nurLink;
+      const linkBeschriftet = !k.geloescht && !!satz && !!k.vorschau && !k.bild;
 
       /* Ein Foto allein ist ein gültiger Kommentar — dann steht hier keine
          leere Textzeile, die im Kreidebild wie ein Fehler aussähe. */
-      if (!beschriftet && !linkBeschriftet && !nurLink && (k.geloescht || k.text)) {
+      if (!beschriftet && !linkBeschriftet && !nurLink && (k.geloescht || satz)) {
         const t = el('div', 'ko-text' + (k.geloescht ? ' weg' : ''));
         if (k.geloescht) t.textContent = 'gelöscht';
-        else t.appendChild(mitLinks(k.text));
+        else t.appendChild(mitLinks(satz));
         z.appendChild(t);
       }
 
@@ -3473,7 +3484,7 @@
              Kommentar, samt Zeilenumbrüchen und Links darin. */
           const f = el('figure', 'ko-foto');
           const t = el('figcaption', 'ko-text');
-          t.appendChild(mitLinks(k.text));
+          t.appendChild(mitLinks(satz));
           f.append(b, t);
           z.appendChild(f);
         }
@@ -3493,7 +3504,7 @@
         else {
           const f = el('figure', 'ko-linkkarte');
           const t = el('figcaption', 'ko-text');
-          t.appendChild(mitLinks(k.text));
+          t.appendChild(mitLinks(satz));
           f.append(karte, t);
           z.appendChild(f);
         }
@@ -4155,22 +4166,40 @@
     return null;
   }
 
-  /* Besteht der Text aus NICHTS als einem Link? Dann trägt die Vorschaukarte
-     den Kommentar allein (siehe `VARIANTE.kommentar`).
+  /* Steht die Adresse GANZ VORN, trägt die Karte sie schon — ein zweites Mal
+     dieselbe Zeile darüber sagt nichts, was darunter nicht besser stünde.
+     Zurück kommt der Satz ohne sie; bleibt nichts übrig, war der Kommentar
+     nichts als der Link, und die Karte steht allein (`nurLink` beim Zeichnen).
 
-     Gemessen wird am Rest: Link raus, und was übrig bleibt, muss Leerraum sein.
-     Ein nachgestellter Punkt zählt damit als Satz — „www.bild.de." behält seine
-     Adresse im Text. Das ist Absicht: wer einen Punkt setzt, schreibt einen
-     Satz, und die Regel bleibt so eine, die man beim Lesen sieht. */
-  function nurEinLink(text) {
-    const bloss = String(text || '').trim();
-    if (!bloss) return false;
+     NUR VORN. Mitten im Satz oder am Ende ist die Adresse ein Stück von dem,
+     was jemand geschrieben hat — „guck mal auf www.x.de, da steht es" hätte
+     ohne sie ein Loch. Dann steht sie im Text UND in der Karte, und der
+     ganze Text kommt unverändert zurück.
+
+     Satzzeichen hinter der Adresse fallen mit: „www.bild.de. Guck mal" soll
+     „Guck mal" ergeben und nicht „. Guck mal" — der Punkt gehörte zu dem, was
+     gerade verschwunden ist. Das KEHRT EINE FRÜHERE ENTSCHEIDUNG UM. Vorher
+     zählte ein nachgestellter Punkt als Satz und ließ die Adresse im Text
+     stehen; jetzt ist ein vorangestellter Link ein vorangestellter Link, ob
+     mit Punkt oder ohne.
+
+     Ohne Schnitt kommt der ROHE Text zurück, nicht der getrimmte: `.ko-text`
+     steht auf `white-space: pre-wrap`, dort ist Leerraum sichtbar, und ein
+     `trim` auf Verdacht änderte jeden Kommentar mit.
+
+     Nur fürs Anzeigen. Gespeichert bleibt, was getippt wurde — das Bearbeiten
+     legt den vollen Satz zurück ins Feld, und in Mail und Push steht die
+     Adresse weiter. Dieselbe Arbeitsteilung wie bei den Emojis. */
+  function ohneVorderenLink(text) {
+    const roh = String(text || '');
+    const bloss = roh.trimStart();
     for (const t of bloss.matchAll(LINK_RE)) {
-      const roh = linkPutzen(t[0]);
-      if (!roh) continue;
-      return t.index === 0 && roh.length === bloss.length;
+      const adresse = linkPutzen(t[0]);
+      if (!adresse) continue;
+      if (t.index !== 0) return roh;
+      return bloss.slice(adresse.length).replace(/^[.,;:!?»"'\s]+/, '');
     }
-    return false;
+    return roh;
   }
 
   /* Angezeigt wird nicht die volle Adresse: eine YouTube-URL mit Parametern
