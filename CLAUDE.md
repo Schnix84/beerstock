@@ -45,8 +45,19 @@ Die Befehle dazu — Wrangler läuft hier ohne `node_modules` über `npx`:
 
 ```
 cd worker && npx wrangler d1 migrations apply beerstock --remote
-cd worker && npx wrangler deploy
+cd worker && npx wrangler deploy --var GIT_SHA:$(git rev-parse --short HEAD)$([ -n "$(git status --porcelain -- worker/src)" ] && echo '+') --var DEPLOYED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
+
+Die beiden `--var` stehen absichtlich nicht in `wrangler.jsonc` — sie ändern sich bei jedem
+Deploy, eine feste Eintragung wäre am nächsten Tag schon falsch. Sie landen in
+`GET /api/health` (`version`, `deployed_at`) und stehen im Kontor unter der Ampel. Ohne sie
+— zum Beispiel bei `wrangler dev` lokal — bleibt die Zeile dort einfach leer, kein Fehler.
+
+**`wrangler deploy` rollt den Arbeitsbaum aus, nicht `HEAD`** — bei ungestagten Änderungen
+in `worker/src` würde ein nackter `git rev-parse HEAD` einen sauberen Hash zeigen und lügen.
+Das `$([ -n ... ] && echo '+')` hängt darum ein `+` an den Hash, sobald `worker/src` schmutzig
+ist (Prüfung bewusst auf diesen Pfad beschränkt, sonst zeigt jede parallele Arbeit an
+`index.html` ständig „+", ohne dass der Worker selbst betroffen wäre).
 
 Der Agent führt sie aus, sobald er den Auftrag hat (siehe *Am Ende fragen*), und prüft danach
 gegen die Live-API. Ungefragt rollt er nicht aus.

@@ -2682,6 +2682,11 @@ const ROUTEN = {
       // GIFs an Kommentaren: ohne Schluessel bleibt /api/gif ein 503, siehe
       // ideas/gifs-und-memes.md.
       giphy: env.GIPHY_KEY ? 'ok' : 'aus (GIPHY_KEY fehlt)',
+      // Kommen als --var beim Deploy herein (siehe CLAUDE.md, Ausrollen),
+      // nicht aus wrangler.jsonc - sie aendern sich ja bei jedem Deploy.
+      // Lokal (wrangler dev) bleiben beide unbesetzt, das ist kein Fehler.
+      version: env.GIT_SHA || null,
+      deployed_at: env.DEPLOYED_AT || null,
     });
   },
 

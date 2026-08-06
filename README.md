@@ -497,7 +497,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/admin/rundmail/geplant` 🔒 | die noch anstehenden und die fehlgeschlagenen geplanten Rundmails — nur Admin |
 | `POST /api/admin/rundmail/geplant/aendern` 🔒 | `{id, ...Felder}` ändert eine geplante Rundmail, `{id, verwerfen:true}` löscht sie — geht nur, solange sie noch `geplant` ist |
 | `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
-| `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM`, `GIPHY_KEY` |
+| `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM`, `GIPHY_KEY`; dazu `version` und `deployed_at` vom letzten Deploy (Kontor zeigt sie unter der Ampel) |
 
 🔒 heißt: braucht den `Bearer`-Token, sonst 401. Für die `POST`-Routen gilt das
 ohnehin — sie schreiben; die beiden Ausnahmen sind `/api/anmelden` und
@@ -580,7 +580,7 @@ zum 500er.
 ```bash
 cd worker
 npx wrangler d1 migrations apply beerstock --remote  # Schema
-npx wrangler deploy                                  # Worker
+npx wrangler deploy --var GIT_SHA:$(git rev-parse --short HEAD)$([ -n "$(git status --porcelain -- worker/src)" ] && echo '+') --var DEPLOYED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)  # Worker
 ```
 
 Einmalig dazu die Secrets, sonst geht keine Mail raus und keine Meldung ein:

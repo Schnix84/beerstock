@@ -123,6 +123,10 @@
   .ampel span.aus { border-color: #b04a3855; background: #b04a380f; color: #7d3527; }
   .ampel span.aus::before { color: var(--rot); }
   .ampel span.egal::before { color: var(--tinte-weg); }
+  /* Der Stand darunter ist keine Ampel-Lampe - kein gut/schlecht, nur eine
+     Auskunft, wann und als was der Worker zuletzt aufgeschlagen wurde. Selber
+     Ton wie `.unter` gleich am Kopf, nur eine Nummer kleiner. */
+  .wurf { font-size: 11px; color: var(--tinte-weg); margin-top: 8px; }
 
   /* --- Die Runde -----------------------------------------------------------
      Eine Karte je Mensch, kein Tabellengitter. Zehn Spalten bekommt man auf
@@ -373,6 +377,7 @@
     <p class="unter" id="wer"></p>
     <div class="zahlen" id="zahlen"></div>
     <div class="ampel" id="ampel"></div>
+    <div class="wurf" id="wurf"></div>
   </div>
 
   <div class="blatt" id="runde-blatt" hidden>
@@ -605,6 +610,8 @@
        sähe von außen wie ein Fehler im Browser aus. */
     const a = $('ampel');
     a.textContent = '';
+    const st = $('wurf');
+    st.textContent = '';
     if (!health) {
       const s = el('span', 'egal', 'Zustand unbekannt');
       Bilder.tippAm(s, { titel: 'Zustand unbekannt', zeilen: [],
@@ -628,6 +635,28 @@
         });
         a.appendChild(s);
       });
+
+    /* Version und letzter Deploy, beide aus --var beim Deploy (CLAUDE.md,
+       Ausrollen) - kein Fehlerzustand, darum keine Pille, sondern eine
+       stille Zeile darunter. Bleibt sie leer, lief der letzte Wurf ohne
+       --var, zum Beispiel `wrangler dev` lokal. */
+    if (health.version) {
+      /* Ein frisches <span> je Durchlauf, aus demselben Grund wie bei den
+         Ampel-Pillen oben: `tippAm` haengt Listener an den Knoten, den man
+         ihm gibt. Am bleibenden `#wurf` selbst haengten sie sich bei jedem
+         `laden()` neu an und stapelten sich - irgendwann oeffnete Hovern
+         uebers leere Div einen Tooltip, der zu keinem Text mehr gehoerte. */
+      const z = el('span', null, 'Stand: ' + health.version
+        + (health.deployed_at ? ' · ' + datum(health.deployed_at) : ''));
+      Bilder.tippAm(z, {
+        titel: 'Stand',
+        zeilen: [
+          { was: 'Version', wert: health.version },
+          { was: 'Deployt', wert: datum(health.deployed_at) },
+        ],
+      });
+      st.appendChild(z);
+    }
   }
 
   /* Der Filter über der Runde. Er steht erst da, seit die Runde wächst: bei

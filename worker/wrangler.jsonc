@@ -7,7 +7,8 @@
   // Bestenliste. Die Home-Assistant-Instanz bleibt dabei von aussen
   // unerreichbar - sie ruft hier an, nicht umgekehrt.
   //
-  // Deployen aus diesem Verzeichnis:  npx wrangler deploy
+  // Deployen aus diesem Verzeichnis, mit Stand fuers Kontor (siehe CLAUDE.md,
+  // Ausrollen): npx wrangler deploy --var GIT_SHA:... --var DEPLOYED_AT:...
   // ==========================================================================
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "beerstock-api",
