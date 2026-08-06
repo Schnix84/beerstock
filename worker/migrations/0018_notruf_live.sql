@@ -1,0 +1,41 @@
+-- ===========================================================================
+-- Schema 18: Der Notruf sagt, ob sein Standort mitwandert.
+--
+-- Bis hierher wusste NUR der Browser des Absenders, ob der Schieberegler auf
+-- "Live" stand: `watchPosition` trug den Ort alle 20 Sekunden nach, und die
+-- Tafel bekam davon nichts als neue Koordinaten. Wer zusah, konnte einen
+-- mitwandernden Standort nicht von einem einmal abgesetzten unterscheiden -
+-- beide sahen gleich aus, und der eine behauptete damit eine Aktualitaet, die
+-- nur der andere hatte.
+--
+-- ZWEI Spalten, nicht eine, und das ist der ganze Witz:
+--
+--   `live`        was VERSPROCHEN wurde. Setzt der Absender beim Absetzen
+--                 oder ueber den Schieberegler am laufenden Notruf.
+--   `standort_am` was GELIEFERT wurde: wann der Ort zuletzt bestaetigt wurde.
+--                 NULL heisst "seit dem Absetzen kein Nachtrag".
+--
+-- Mit nur `live` wuerde die Tafel weiter "live" sagen, wenn der Absender den
+-- Tab zugemacht hat - eine 40 Minuten alte Position mit einem frischen
+-- Etikett, und das ist bei einem Notruf die falsche Sorte Fehler. Mit nur
+-- `standort_am` liessen sich "war nie live" und "war live, steht jetzt still"
+-- nicht auseinanderhalten - nach dem Verfall saehen beide gleich aus. Erst
+-- beide zusammen ergeben die drei Zustaende, die die Seite zeichnet:
+--
+--   live=0                         -> einmalig, eine Aufnahme von damals
+--   live=1, Nachtrag frisch        -> live, die Nadel pulst
+--   live=1, Nachtrag zu alt        -> live abgerissen, matte Nadel
+--
+-- Wo die Grenze zwischen "frisch" und "zu alt" liegt, entscheidet die SEITE
+-- (`NOTRUF_LIVE_FRIST` in `index.html`), nicht der Worker: sie haengt am
+-- Nachtragstakt des Browsers, und der steht auch dort.
+--
+-- DEFAULT 0 ist mit Bedacht gewaehlt: jeder Melder, der das Feld nicht
+-- mitschickt, setzt weiter einen einmaligen Notruf ab - genau wie bisher.
+-- (Home Assistant faellt hier ohnehin nicht ins Gewicht, die Wohnung setzt
+-- keine Notrufe ab; sie meldet ueber `/api/report` und antwortet ueber
+-- `/api/los/antwort`.)
+-- ===========================================================================
+
+ALTER TABLE notrufe ADD COLUMN live INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE notrufe ADD COLUMN standort_am TEXT;

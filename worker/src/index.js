@@ -644,7 +644,7 @@ const terminAntwort = (t, noten, wieViele) => ({
    kann, wer da steht. */
 const notrufeStmt = env => env.DB.prepare(`
   SELECT n.id, n.user_id, n.art, n.lat, n.lon, n.genau, n.erstellt, n.bis,
-         u.name
+         n.live, n.standort_am, u.name
   FROM notrufe n
   JOIN users u ON u.id = n.user_id
   WHERE n.weg_am IS NULL AND n.bis > datetime('now') AND u.name IS NOT NULL
@@ -661,6 +661,13 @@ const notrufAntwort = n => ({
   genau: n.genau ?? null,
   erstellt: utc(n.erstellt),
   bis: utc(n.bis),
+  /* Was versprochen wurde, und was zuletzt geliefert wurde - siehe
+     migrations/0018. Die Seite macht daraus drei Zustaende; wo die Grenze
+     zwischen "frisch" und "steht still" liegt, entscheidet SIE, weil das am
+     Nachtragstakt ihres eigenen `watchPosition` haengt. Der Worker gibt nur
+     die beiden Tatsachen heraus und behauptet nichts. */
+  live: !!n.live,
+  standort_am: utc(n.standort_am),
 });
 
 /* Der Weg dorthin. Steht im Worker und nicht in der Seite, weil ihn beide
@@ -2413,6 +2420,12 @@ const ROUTEN = {
     if (koord.fehler) return fehler(request, koord.fehler);
     const { lat, lon, genau } = koord;
 
+    /* Ob der Standort mitwandern soll. Fehlt das Feld, ist es ein einmaliger
+       Notruf - so wie jeder, der vor Migration 0018 abgesetzt wurde. Ein
+       Versprechen, mehr nicht: geliefert wird es erst von den Nachtraegen an
+       `POST /api/notruf/standort`, und `standort_am` bleibt bis dahin NULL. */
+    const live = daten.live === true ? 1 : 0;
+
     const letzte = await env.DB.prepare(`
       SELECT 1 FROM notrufe WHERE user_id = ? AND erstellt > datetime('now', ?) LIMIT 1
     `).bind(ich.id, `-${NOTRUFSPERRE} seconds`).first();
@@ -2425,10 +2438,10 @@ const ROUTEN = {
         WHERE user_id = ? AND weg_am IS NULL
       `).bind(ich.id),
       env.DB.prepare(`
-        INSERT INTO notrufe (user_id, art, lat, lon, genau, bis)
-        VALUES (?, ?, ?, ?, ?, datetime('now', ?))
-        RETURNING id, erstellt, bis
-      `).bind(ich.id, art, lat, lon, genau, `+${NOTRUF_MINUTEN} minutes`),
+        INSERT INTO notrufe (user_id, art, lat, lon, genau, bis, live)
+        VALUES (?, ?, ?, ?, ?, datetime('now', ?), ?)
+        RETURNING id, erstellt, bis, live, standort_am
+      `).bind(ich.id, art, lat, lon, genau, `+${NOTRUF_MINUTEN} minutes`, live),
       // Der Zaehler fuer die Statistik - siehe Migration 0017, warum nicht
       // aus `notrufe` selbst gezaehlt wird. Nur beim ABSETZEN, nicht beim
       // Standort-Nachtrag: der ersetzt keinen Notruf, er ergaenzt einen.
@@ -2490,10 +2503,16 @@ const ROUTEN = {
     if (koord.fehler) return fehler(request, koord.fehler);
     const { lat, lon, genau } = koord;
 
+    /* `standort_am` faellt hier an und NUR hier: es ist die Uhrzeit, zu der
+       dieser Ort zuletzt bestaetigt wurde. Daran haengt auf der Tafel die
+       Unterscheidung zwischen einem mitwandernden und einem stehengebliebenen
+       Live-Standort (migrations/0018). `live` bleibt unangetastet - ob der
+       Nachtrag von Hand kam oder von `watchPosition`, sagt nichts darueber,
+       was der Absender versprochen hat; das setzt `POST /api/notruf/live`. */
     const zeile = await env.DB.prepare(`
-      UPDATE notrufe SET lat = ?, lon = ?, genau = ?
+      UPDATE notrufe SET lat = ?, lon = ?, genau = ?, standort_am = datetime('now')
       WHERE user_id = ? AND weg_am IS NULL AND bis > datetime('now')
-      RETURNING id, art, erstellt, bis
+      RETURNING id, art, erstellt, bis, live, standort_am
     `).bind(lat, lon, genau, ich.id).first();
     if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
 
@@ -2501,6 +2520,37 @@ const ROUTEN = {
     return antwort(request, {
       ok: true,
       notruf: notrufAntwort({ ...zeile, lat, lon, genau, name: ich.name, user_id: ich.id }),
+    });
+  },
+
+  /* Der Schieberegler, nachgereicht. Braucht eine eigene Route, weil das
+     Umlegen auf "einmalig" KEINE Koordinaten hat - es hoert ja gerade damit
+     auf, welche zu schicken. Ohne diese Route bliebe ein abgewaehlter
+     Live-Standort auf der Tafel als "steht still" stehen, statt schlicht
+     wieder eine einmalige Aufnahme zu sein.
+
+     Kein Anschreiben, keine Sperre, kein neues `bis`: dasselbe wie beim
+     Standort-Nachtrag, aus demselben Grund - die teure Handlung ist die Mail
+     an die Runde, und die gibt es hier nicht. */
+  'POST /api/notruf/live': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    if (typeof daten.live !== 'boolean') return fehler(request, 'live: true oder false');
+
+    const zeile = await env.DB.prepare(`
+      UPDATE notrufe SET live = ?
+      WHERE user_id = ? AND weg_am IS NULL AND bis > datetime('now')
+      RETURNING id, art, lat, lon, genau, erstellt, bis, live, standort_am
+    `).bind(daten.live ? 1 : 0, ich.id).first();
+    if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
+
+    anstoss(request, env, ctx, 'tafel');
+    return antwort(request, {
+      ok: true,
+      notruf: notrufAntwort({ ...zeile, name: ich.name, user_id: ich.id }),
     });
   },
 

@@ -482,6 +482,33 @@
     text-decoration: none; white-space: nowrap;
   }
 
+  /* --- Live oder einmalig --------------------------------------------------
+     Die Marke sitzt hinter dem Namen wie die Marken in der Bestenliste
+     (`.z-marke`) — dieselbe Zeichensprache, damit man sie nicht erst lernen
+     muss. Nur zwei Marken, und keine für den Normalfall: ein einmaliger
+     Standort trägt NICHTS. Wer alles beschriftet, beschriftet nichts.
+
+     `steht` ist der ehrliche dritte Zustand: Live war versprochen, kommt aber
+     nicht mehr nach (Tab zu, Akku leer, Funkloch). Er wird bewusst NICHT
+     wieder zu „einmalig" — eine Position, die stehengeblieben ist, weil
+     niemand mehr sendet, ist etwas anderes als eine, die von Anfang an nur
+     ein Schnappschuss sein sollte. Deshalb auch grau statt gelb: die Marke
+     zieht keine Aufmerksamkeit mehr auf sich, sie nimmt sie zurück.
+     --------------------------------------------------------------------- */
+  .nr-marke {
+    font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .16em;
+    text-transform: uppercase; border-radius: 2px; padding: 1px 4px;
+    margin-left: 7px; vertical-align: 2px; white-space: nowrap;
+  }
+  .nr-marke-live { color: var(--gelb); border: 1px solid #e8c76655; }
+  .nr-marke-steht { color: var(--kreide-weg); border: 1px solid #ffffff26; }
+  /* Der Punkt vor „live" atmet im selben Takt wie die Nadel auf der Karte —
+     zwei Stellen, ein Puls, damit das Auge sie als dieselbe Aussage liest. */
+  .nr-marke-live::before {
+    content: '●'; font-size: 7px; margin-right: 4px; vertical-align: 1px;
+    animation: t-puls 2.2s ease-in-out infinite;
+  }
+
   /* --- Die Karte -----------------------------------------------------------
      Selbstgezeichnet, keine Bibliothek: ein Raster aus 256er-Kacheln, absolut
      gesetzt, darüber eine Nadel. Das ist alles, was diese Seite von einer
@@ -518,7 +545,39 @@
     transform: translate(-50%, -50%); pointer-events: none;
     box-shadow: 0 0 0 1px #e8c76688;
   }
-  .karte-nadel.puls { animation: t-puls 2.4s ease-in-out infinite; }
+  /* Der Puls der Nadel gehört seit dem Schieberegler dem LIVE-Standort, nicht
+     mehr der Frage, ob es der eigene Notruf ist (das sagt der Satz darüber
+     schon: „Du brauchst Bier" gegen „Jo braucht Bier"). Ein auslaufender
+     Ring statt eines Blinkens: Blinken heißt Alarm, ein Ring, der nach außen
+     verschwindet, heißt „hier kommt gerade etwas an" — und genau das ist die
+     Aussage. `box-shadow` statt eines zweiten Elements, damit die Nadel eine
+     Nadel bleibt und `karteFuellen` nichts davon wissen muss.
+
+     Der Zustand hängt am `.karte`-Feld und nicht an der Nadel: die Nadel
+     entsteht erst, wenn das Feld Maße hat (siehe `karteFuellen`), die Klasse
+     aber schon beim Zeichnen der Zeile — und sie wandert danach im
+     20-Sekunden-Takt weiter, ohne dass die Karte neu gebaut wird. */
+  /* Die Deckkraft hält bis weit in den Lauf hinein und fällt erst zum Schluss:
+     mit einer geraden Blende von 35 % auf 0 stand der Ring bei 16 px Radius
+     schon auf 8 % und war auf einer hellen Kachel schlicht nicht mehr da
+     (nachgemessen am 2026-08-06). Die mittlere Marke hält ihn sichtbar,
+     solange er wächst — sichtbar ist der ganze Zweck der Übung. */
+  @keyframes nr-radar {
+    0%   { box-shadow: 0 0 0 1px #e8c76688, 0 0 0 1px  #e8c766cc; }
+    55%  { box-shadow: 0 0 0 1px #e8c76688, 0 0 0 13px #e8c76666; }
+    100% { box-shadow: 0 0 0 1px #e8c76688, 0 0 0 24px #e8c76600; }
+  }
+  .karte-live .karte-nadel { animation: nr-radar 2.4s linear infinite; }
+  /* Steht der Live-Standort still, wird die Nadel matt und hohl: sie sagt
+     dann „hier war er zuletzt", nicht mehr „hier ist er". */
+  .karte-steht .karte-nadel {
+    background: #e8c76633; border-color: #1d2320;
+    box-shadow: 0 0 0 1px #e8c76655;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .karte-live .karte-nadel,
+    .nr-marke-live::before { animation: none; }
+  }
   /* Namensnennung. Lizenzpflicht bei OSM-Kacheln, und sie darf nicht unter
      der Oberfläche verschwinden — deshalb unten rechts auf der Karte, mit
      eigenem Grund, damit sie auf jeder Kachel lesbar bleibt. */
@@ -1967,7 +2026,7 @@
     if (!b || !h) return;
     a._voll = true;
 
-    const { z, mx, my, streu, pulsen } = lage;
+    const { z, mx, my, streu } = lage;
     // Die Bildpunktlage des Punktes, absolut in der Weltkarte dieses Zooms.
     const px = mx * KACHEL, py = my * KACHEL;
     // Die linke obere Ecke des Sichtfensters, in denselben Weltpunkten.
@@ -2005,7 +2064,10 @@
       kreis.style.top = (h / 2) + 'px';
       a.appendChild(kreis);
     }
-    const nadel = el('span', 'karte-nadel' + (pulsen ? ' puls' : ''));
+    /* Ohne Zustandsklasse: ob die Nadel pulst oder matt ist, entscheidet die
+       Klasse am Feld darüber (`.karte-live` / `.karte-steht`), nicht diese
+       Funktion — die läuft nur einmal, der Zustand ändert sich weiter. */
+    const nadel = el('span', 'karte-nadel');
     nadel.style.left = (b / 2) + 'px';
     nadel.style.top = (h / 2) + 'px';
     a.appendChild(nadel);
@@ -2472,7 +2534,7 @@
        direkt. Warum, steht dort ausführlich: eine Kachel-URL IST der Standort.
        Geholt wird ausschließlich, was hier sichtbar ist — kein Vorrat, das
        verlangen die Nutzungsbedingungen ausdrücklich. */
-    karte(n, pulsen) {
+    karte(n) {
       const a = el('a', 'karte');
       a.href = mapsLink(n.lat, n.lon);
       a.target = '_blank';
@@ -2495,12 +2557,17 @@
       a.appendChild(el('span', 'karte-quelle')).innerHTML =
         '© <a href="https://www.openstreetmap.org/copyright" target="_blank" ' +
         'rel="noopener">OpenStreetMap</a>-Mitwirkende';
-      a._lage = { z, mx, my, streu, pulsen, lat: n.lat };
+      a._lage = { z, mx, my, streu, lat: n.lat };
       return a;
     },
 
     /* Eine Zeile im Notrufblock. Der Name, was fehlt, seit wann — und die
-       Karte darunter, weil sie die eigentliche Auskunft ist. */
+       Karte darunter, weil sie die eigentliche Auskunft ist.
+
+       Was sich mit der Uhr ändert (die Marke, die Unterzeile, der Puls der
+       Nadel), steht NICHT hier, sondern in `notrufStand` — das läuft alle
+       zwanzig Sekunden noch einmal über dieselbe Zeile, ohne die Karte neu
+       zu bauen. Sonst holte jede Aktualisierung die Kacheln neu. */
     notruf(n, meiner) {
       const z = el('div', 'nr-zeile' + (meiner ? ' meiner' : ''));
       const satz = meiner
@@ -2510,7 +2577,9 @@
         : n.name + (n.art === 'bier' ? ' braucht Bier'
            : n.art === 'kamerad' ? ' sucht Gesellschaft'
            : ' braucht Bier und Gesellschaft');
-      z.appendChild(el('div', 'nr-wer', satz));
+      const wer = el('div', 'nr-wer', satz);
+      wer.appendChild(el('span', 'nr-marke'));
+      z.appendChild(wer);
 
       /* Zum eigenen Notruf führt kein „hin" — man ist schon da. Stattdessen
          der Weg zurück, derselbe wie im Blatt. */
@@ -2527,20 +2596,76 @@
         z.appendChild(hin);
       }
 
-      const unter = el('div', 'nr-unter');
-      const uhr = z => new Date(z)
-        .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-      const seit = Math.max(0, Math.round((Date.now() - new Date(n.erstellt)) / 60000));
-      unter.textContent = (seit < 1 ? 'gerade eben'
-        : 'seit ' + seit + (seit === 1 ? ' Minute' : ' Minuten'))
-        + (Number.isFinite(n.genau) ? ' · auf ' + weite(n.genau) + ' genau' : '')
-        + ' · erlischt um ' + uhr(n.bis);
-      z.appendChild(unter);
+      z.appendChild(el('div', 'nr-unter'));
 
-      const k = VARIANTE.karte(n, !meiner);
+      const k = VARIANTE.karte(n);
       k.style.gridColumn = '1 / -1';
       z.appendChild(k);
+
+      /* Die Daten bleiben an der Zeile hängen, statt dass `notrufeNachziehen`
+         sie über den Index aus einer Liste danebenholt: kommt zwischen zwei
+         Zeichnungen ein Notruf dazu oder fällt einer weg, zeigten die beiden
+         Reihen sonst auf verschiedene Zeilen — und die Tafel malte die Frische
+         des einen an den anderen. */
+      z._n = n;
+      VARIANTE.notrufStand(z, n);
       return z;
+    },
+
+    /* Was an einer Notrufzeile mit der Uhr weiterwandert — und zwar an einer
+       Zeile, die schon steht. Drei Zustände, aus zwei Tatsachen (siehe
+       `worker/migrations/0018`): `live` ist, was der Absender versprochen hat,
+       `standort_am`, wann er es zuletzt eingelöst hat.
+
+         einmalig  live=0            eine Aufnahme, kein Anspruch auf mehr
+         live      Nachtrag frisch   die Nadel pulst, die Zeit zählt in Sekunden
+         steht     Nachtrag zu alt   Tab zu, Akku leer, Funkloch
+
+       Der dritte ist der Grund für den ganzen Aufwand. Ohne ihn stünde auf der
+       Tafel „live" an einer Position, die seit vierzig Minuten dieselbe ist —
+       und bei einem Notruf ist das die falsche Sorte Fehler. */
+    notrufStand(z, n) {
+      const marke = z.querySelector('.nr-marke');
+      const unter = z.querySelector('.nr-unter');
+      const karte = z.querySelector('.karte');
+      if (!marke || !unter) return;
+
+      /* Bis zum ersten Nachtrag gilt das Absetzen selbst als Bestätigung:
+         `watchPosition` meldet sich erst nach einer Drossellänge, und die
+         Zeile soll in diesen zwanzig Sekunden nicht schon „steht still"
+         sagen, obwohl noch niemand etwas versäumt hat. */
+      const bestaetigt = new Date(n.standort_am || n.erstellt).getTime();
+      const her = Math.max(0, Date.now() - bestaetigt);
+      const modus = !n.live ? 'einmalig'
+        : her <= NOTRUF_LIVE_FRIST ? 'live' : 'steht';
+
+      marke.textContent = modus === 'live' ? 'live' : modus === 'steht' ? 'steht' : '';
+      marke.className = 'nr-marke' + (modus === 'einmalig' ? '' : ' nr-marke-' + modus);
+      marke.hidden = modus === 'einmalig';
+
+      if (karte) {
+        karte.classList.toggle('karte-live', modus === 'live');
+        karte.classList.toggle('karte-steht', modus === 'steht');
+      }
+
+      const uhr = t => new Date(t)
+        .toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      const min = Math.round(her / 60000);
+      /* Sekunden nur, solange sie etwas heißen. Danach Minuten: „vor 214
+         Sekunden" ist eine Genauigkeit, die niemand braucht und die diese
+         Zeile bei jedem Takt unruhig macht. */
+      const frisch = her < 45000 ? 'gerade eben'
+        : min < 60 ? 'vor ' + min + (min === 1 ? ' Minute' : ' Minuten')
+        : 'um ' + uhr(bestaetigt);
+      const alt = Math.max(0, Math.round((Date.now() - new Date(n.erstellt)) / 60000));
+
+      unter.textContent = (
+        modus === 'live'  ? 'Standort ' + frisch
+        : modus === 'steht' ? 'letzter Standort ' + frisch
+        : 'Standort von ' + uhr(n.erstellt) + ' · ' + (alt < 1 ? 'gerade eben'
+            : 'seit ' + alt + (alt === 1 ? ' Minute' : ' Minuten')))
+        + (Number.isFinite(n.genau) ? ' · auf ' + weite(n.genau) + ' genau' : '')
+        + ' · erlischt um ' + uhr(n.bis);
     },
   };
 
@@ -2913,6 +3038,21 @@
     if (!meineNot) notrufLiveStoppen();
   }
 
+  /* Die Zustände an den stehenden Zeilen weiterdrehen, ohne den Worker zu
+     fragen und ohne die Karten neu zu bauen.
+
+     Das braucht es, weil der Übergang von „live" nach „steht still" der
+     einzige ist, zu dem NICHTS hereinkommt: er passiert ja gerade dadurch,
+     dass der Absender aufgehört hat zu senden. Ohne diesen Takt bliebe „live"
+     bis zum nächsten Nachfassen stehen — mit stehender Leitung bis zu drei
+     Minuten (siehe `nachfassen`), und exakt so lange behauptete die Tafel
+     eine Frische, die es nicht mehr gibt. */
+  function notrufeNachziehen() {
+    for (const z of $('notruf-liste').children) {
+      if (z._n) VARIANTE.notrufStand(z, z._n);
+    }
+  }
+
   /* --- Das Notrufblatt -----------------------------------------------------
      Zwei Knöpfe, dann die Ortung, dann die eigene Karte. Der Standort wird
      ERST NACH der Wahl geholt: wer nur nachsieht, was hinter dem Knopf steckt,
@@ -2928,9 +3068,24 @@
   function notrufAuf() {
     $('nr-karte').textContent = '';
     notrufSagt('');
-    // Der Schieberegler bleibt über die Sitzung stehen - beim Wiederaufmachen
-    // zeigt er, was zuletzt gewählt war, nicht immer "einmalig".
-    $(notrufLiveModus ? 'nr-modus-live' : 'nr-modus-einmalig').checked = true;
+    /* Der Schieberegler zeigt, was am NOTRUF steht, nicht, was dieser Tab
+       zuletzt vorhatte — sobald einer läuft. Sonst stand hier „Einmalig",
+       während die Zeile direkt darüber auf der Tafel „live" trug: derselbe
+       Notruf, zwei Aussagen. Das passiert öfter, als es klingt — es genügt,
+       die Seite neu zu laden, und schon weiß der Tab nichts mehr davon.
+
+       Und weil dieser Tab dann auch wirklich nachtragen soll, wird `watch-
+       Position` gleich mit angeworfen: ohne das bliebe „Live" ein Etikett
+       ohne Nachschub, und die Tafel schriebe zwei Minuten später „steht".
+       Ohne laufenden Notruf bleibt es beim gemerkten Wunsch — es gibt ja noch
+       nichts, woran er hängen könnte.
+
+       Eine Rückfrage kostet das nicht: wer einen Notruf abgesetzt hat, hat die
+       Ortung für diese Herkunft schon freigegeben. */
+    const live = meineNot ? !!meineNot.live : notrufLiveModus;
+    $(live ? 'nr-modus-live' : 'nr-modus-einmalig').checked = true;
+    notrufLiveModus = live;
+    if (live) notrufLiveStarten(); else notrufLiveStoppen();
     /* Aufmachen VOR dem Zeichnen. Ein verstecktes Blatt hat keine Breite, und
        ohne Breite gibt es kein Kachelraster — die Karte blieb dann leer und
        zeigte nur ihre Namensnennung. */
@@ -2958,7 +3113,16 @@
     const feld = $('nr-karte');
     feld.textContent = '';
     if (!n) return;
-    const k = VARIANTE.karte(n, true);
+    const k = VARIANTE.karte(n);
+    /* Dieselbe Aussage wie auf der Tafel, damit man im Blatt sieht, was die
+       anderen sehen: pulst die Nadel hier, wandert der Standort auch dort mit.
+       Der Zustand kommt aus denselben zwei Feldern — nicht aus
+       `notrufLiveModus`, denn der sagt nur, was dieser Tab GERADE VORHAT, und
+       nicht, was beim Worker angekommen ist. */
+    k.classList.toggle('karte-live',
+      !!n.live && Date.now() - new Date(n.standort_am || n.erstellt) <= NOTRUF_LIVE_FRIST);
+    k.classList.toggle('karte-steht',
+      !!n.live && Date.now() - new Date(n.standort_am || n.erstellt) > NOTRUF_LIVE_FRIST);
     feld.appendChild(k);
     karteFuellen(k);
   }
@@ -3003,6 +3167,10 @@
         lat: p.coords.latitude,
         lon: p.coords.longitude,
         genau: Number.isFinite(p.coords.accuracy) ? p.coords.accuracy : null,
+        /* Der Stand des Schiebereglers geht gleich mit — sonst stünde der
+           Notruf für die anderen bis zum ersten Nachtrag als einmaliger da,
+           und die Marke poppte zwanzig Sekunden später auf. */
+        live: notrufLiveModus,
       });
       meineNot = d.notruf;
       notrufSagt('');
@@ -3066,11 +3234,35 @@
      von selbst: schließt der Tab, ist auch `watchPosition` weg, ohne dass
      hier eine Spur davon bleibt. */
   const NOTRUF_LIVE_ABSTAND = 20000;
+  /* Ab wann ein Live-Standort als stehengeblieben gilt. Drei versäumte
+     Nachträge plus Luft: unter dem Doppelten dieser Drossel flackerte die
+     Marke bei jedem Funkloch, deutlich darüber verschwiege sie einen
+     abgerissenen Standort minutenlang. Die Grenze steht HIER und nicht im
+     Worker, weil sie an genau diesem Takt hängt — wer `NOTRUF_LIVE_ABSTAND`
+     ändert, muss sie mitziehen (siehe worker/migrations/0018). */
+  const NOTRUF_LIVE_FRIST = 75000;
 
-  function notrufModusSetzen(live) {
+  /* Den Schieberegler auch dem Worker sagen, aber nur, wenn er etwas zu sagen
+     hat: ohne laufenden Notruf gibt es nichts umzustellen, der Wunsch bleibt
+     gemerkt und geht beim Absetzen mit (`notrufSenden`).
+
+     Das Umlegen auf „einmalig" braucht diesen Weg zwingend — es hört ja gerade
+     damit auf, Koordinaten zu schicken, könnte also über den Standort-Nachtrag
+     gar nicht mitreisen. Ohne die Meldung stünde der Notruf auf der Tafel als
+     „steht still" statt schlicht wieder als einmalige Aufnahme. Scheitert der
+     Ruf, bleibt es beim Zustand von vorher: das Blatt deswegen zu stören wäre
+     mehr Lärm als der Fehler wert ist. */
+  async function notrufModusSetzen(live) {
     notrufLiveModus = live;
     if (live) notrufLiveStarten();
     else notrufLiveStoppen();
+    if (!meineNot) return;
+    try {
+      const d = await ruf('/api/notruf/live', { live });
+      meineNot = d.notruf;
+      if (!$('notruf').hidden) notrufLage(d.notruf);
+      hole(true);
+    } catch {}
   }
 
   function notrufLiveStarten() {
@@ -5323,6 +5515,9 @@
       // Das Sicherheitsnetz unter dem Uhrwerk: ein Wecker, den die Laufzeit
       // hat fallen lassen, kostet so höchstens 20 Sekunden Verzug.
       nachDerUhr();
+      /* Und derselbe Takt für die Notrufzeilen: „live" wird zu „steht still",
+         ohne dass etwas hereinkommt — siehe `notrufeNachziehen`. */
+      notrufeNachziehen();
       if (stehtDieLeitung()) {
         // Hält die Leitung offen; beantwortet wird das von der Laufzeit selbst,
         // das Durable Object schläft dabei weiter.
