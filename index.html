@@ -1191,20 +1191,52 @@
     position: absolute; inset: auto 0 0 0; padding: 4px 8px 5px;
     background: #05080799; font-size: 10.5px; color: var(--kreide-weg);
   }
-  /* Abschicken bleibt breit, die Anhängeknöpfe nehmen nur, was sie brauchen.
-     Beide Regeln mit zwei Klassen, weil `.knopf { width: 100% }` weiter unten
-     steht und bei gleichem Gewicht sonst gewinnt.
+  /* Abschicken und die Tür zu den Anhängen teilen sich die Zeile im
+     Verhältnis 4:1 - das eine ist die Tat, das andere nur ein Weg dorthin.
+     Alle Regeln hier mit zwei Klassen, weil `.knopf` weiter unten steht und
+     bei gleichem Gewicht sonst gewinnt.
 
-     Die drei Anhängeknöpfe (Foto/GIF/Meme) stehen als EINE Gruppe
-     `.ko-anhang` in der Zeile - `flex-wrap` auf `.ko-knoepfe` wirft die ganze
-     Gruppe in eine eigene Reihe, sobald neben "Abschicken" kein Platz mehr
-     ist, statt sie einzeln umzubrechen. Die Basisbreite von 160px an
-     "Abschicken" ist der Punkt, ab dem es auf einem schmalen Telefon eng
-     würde - erst darunter macht der Umbruch Platz. */
-  .ko-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 8px; }
-  .ko-knoepfe .ko-ab { flex: 1 1 160px; margin-top: 0; }
-  .ko-anhang { display: flex; gap: 8px; }
-  .ko-anhang .ko-foto { width: auto; flex: 0 0 auto; padding: 11px 12px; }
+     Foto, GIF und Meme standen früher zu dritt in dieser Zeile und drängten
+     "Abschicken" auf einem schmalen Telefon in eine eigene Reihe. Jetzt
+     liegen sie hinter dem "+" und klappen erst auf Tippen darüber auf -
+     gebraucht wird von ihnen ohnehin selten einer. */
+  .ko-knoepfe { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
+  .ko-knoepfe .ko-ab { flex: 4 1 0; margin-top: 0; }
+  /* Der Anker für das Menü: `absolute` darin rechnet gegen diese Kante. */
+  .ko-anhang { position: relative; flex: 1 1 0; }
+  .ko-anhang .ko-plus {
+    height: 100%; padding: 11px 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ko-anhang .ko-plus svg { width: 20px; height: 20px; transition: transform .18s; }
+  /* Aus dem + wird beim Aufklappen ein × - derselbe Knopf schließt wieder. */
+  .ko-anhang .ko-plus[aria-expanded="true"] svg { transform: rotate(45deg); }
+
+  /* Das Menü klappt nach OBEN auf: unter dem Knopf endet auf dem Telefon das
+     Blatt, und der Daumen, der gerade getippt hat, liegt genau dort.
+
+     Nebeneinander, nicht als Turm: übereinander stand es 158 px hoch und
+     stieß bei einem Abend ohne Beiträge oben an den Rand von `.fly-blatt`
+     (das scrollt, also wird dort abgeschnitten). In der Reihe sind es 54 px,
+     und die hat das Blatt über dem Schreibfeld immer. */
+  .ko-anhang-menu {
+    position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 2;
+    display: flex; gap: 2px; padding: 4px;
+    /* Ein zusammenhängendes Feld statt drei schwebender Plättchen: das Menü
+       liegt über dem Schreibfeld, und durch die Lücken dazwischen blitzte der
+       Text darunter hervor. Deckend, mit einem Rahmen um alle drei. */
+    border: 1.5px solid #ffffff55; border-radius: 4px; background: #151b1a;
+    box-shadow: 0 6px 18px #0009;
+  }
+  .ko-anhang-menu[hidden] { display: none; }
+  .ko-anhang-menu .ko-anhang-knopf {
+    width: 44px; height: 44px; padding: 0; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    /* Den eigenen Rahmen trägt das Feld; hier bleibt er unsichtbar, bis der
+       Finger darauf liegt - dann zieht `.knopf:hover` ihn gelb. */
+    border-color: transparent; background: transparent;
+  }
+  .ko-anhang-menu .ko-anhang-knopf svg { width: 24px; height: 24px; }
 
   /* --- GIF- und Meme-Raster -------------------------------------------------
      Dasselbe Kachelraster für beide Blätter: feste Kanten, damit das Auge
@@ -1892,17 +1924,60 @@
                   placeholder="Etwas dazu sagen …"></textarea>
         <div class="ko-knoepfe">
           <button class="knopf ko-ab" id="fly-ab" type="button">Abschicken</button>
-          <div class="ko-anhang">
+          <div class="ko-anhang" id="fly-anhang-tuer">
+            <!-- Die drei Wege zu einem Bild stehen über dem "+", nicht in der
+                 Zeile. Sie tragen nur ihr Zeichen; den Namen sagen `title`
+                 und `aria-label`, damit weder Maus noch Vorleser rät. -->
+            <div class="ko-anhang-menu" id="fly-anhang" hidden>
+              <button class="knopf ko-anhang-knopf" id="fly-foto" type="button"
+                      title="Foto" aria-label="Foto anhängen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 8h3l1.5-2.3h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/>
+                  <circle cx="12" cy="13.4" r="3.3"/>
+                </svg>
+              </button>
+              <button class="knopf ko-anhang-knopf" id="fly-gif" type="button"
+                      title="GIF" aria-label="GIF anhängen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2.2" y="4.6" width="19.6" height="14.8" rx="2.6"/>
+                  <!-- Als einzige Stelle der Seite NICHT die Kreideschrift:
+                       Chalkduster macht aus drei Buchstaben auf 9 px einen
+                       Fleck. Nachgemessen, nicht vermutet. -->
+                  <text x="12" y="15.2" text-anchor="middle" stroke="none" fill="currentColor"
+                        font-family="Helvetica, Arial, sans-serif" font-weight="700"
+                        font-size="9">GIF</text>
+                </svg>
+              </button>
+              <!-- Ein Bild mit einer Zeile darüber - genau das ist ein Meme.
+                   Zwei nackte Balken im Rahmen sahen daneben aus wie eine
+                   Karteikarte, das Bild darin macht den Unterschied. -->
+              <button class="knopf ko-anhang-knopf" id="fly-meme" type="button"
+                      title="Meme" aria-label="Meme anhängen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2.6"/>
+                  <path d="M4.4 16.2l3.8-4.4 2.7 2.9 2.4-2.6 4.3 4.1"/>
+                  <circle cx="16.4" cy="9" r="1.4"/>
+                  <path d="M6.4 7.6h6.6"/>
+                </svg>
+              </button>
+            </div>
             <!-- Der Dateiwähler bleibt versteckt: sein Aussehen lässt sich
                  nicht gestalten, und auf dem Handy öffnet der Knopf ohnehin
-                 direkt die Kamera-Auswahl des Systems. -->
-            <button class="knopf ko-foto" id="fly-foto" type="button"
-                    aria-label="Foto anhängen">Foto</button>
+                 direkt die Kamera-Auswahl des Systems. Er steht NEBEN dem
+                 Menü, nicht darin - was der Fotoknopf vorschiebt, soll nicht
+                 mit dem Menü verschwinden, das sich dabei schließt. -->
             <input id="fly-datei" type="file" accept="image/*" hidden>
-            <button class="knopf ko-foto" id="fly-gif" type="button"
-                    aria-label="GIF anhängen">GIF</button>
-            <button class="knopf ko-foto" id="fly-meme" type="button"
-                    aria-label="Meme anhängen">Meme</button>
+            <button class="knopf ko-plus" id="fly-plus" type="button"
+                    aria-label="Etwas anhängen" aria-expanded="false"
+                    aria-controls="fly-anhang">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                   stroke-linecap="round" aria-hidden="true">
+                <path d="M12 5.5v13M5.5 12h13"/>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -4313,9 +4388,26 @@
     // schließt, soll nicht eines davon offen zurücklassen.
     gifZu();
     memeZu();
+    anhangZu();
     $('flyout').hidden = true;
     flyZiel = null;
     koerperSperren();
+  }
+
+  /* --- Die Tür zu den Anhängen ---------------------------------------------
+     Foto, GIF und Meme liegen hinter dem "+" und klappen darüber auf. Das
+     Menü schließt sich bei jeder Wahl, bei Escape, beim Griff daneben und
+     mit dem Blatt - es soll nie offen zurückbleiben.
+     --------------------------------------------------------------------- */
+  function anhangZu() {
+    $('fly-anhang').hidden = true;
+    $('fly-plus').setAttribute('aria-expanded', 'false');
+  }
+
+  function anhangUm() {
+    const auf = $('fly-anhang').hidden;      // zu -> es geht jetzt auf
+    $('fly-anhang').hidden = !auf;
+    $('fly-plus').setAttribute('aria-expanded', String(auf));
   }
 
   /* --- Das Foto am Schreibfeld --------------------------------------------
@@ -4831,10 +4923,15 @@
     $('fly-ab').textContent = flyModus.art === 'aendern' ? 'Übernehmen' : 'Abschicken';
     $('fly-feld').placeholder = flyModus.art === 'antwort'
       ? 'Antwort an ' + flyModus.wer + ' …' : 'Etwas dazu sagen …';
-    /* Beim Ändern gibt es keinen Fotoknopf: die Änderungsroute fasst das Bild
-       nicht an. Wer ein anderes will, löscht den Kommentar und schreibt neu —
-       ein Foto nachträglich zu tauschen ist ein eigener Bau, kein Nebeneffekt. */
-    $('fly-foto').hidden = flyModus.art === 'aendern';
+    /* Beim Ändern verschwindet die ganze Anhang-Tür: die Änderungsroute fasst
+       das Bild nicht an, und `flyAbschicken` wirft dort jede Auswahl weg. Als
+       nur der Fotoknopf fehlte, standen GIF und Meme weiter offen — wer eines
+       nahm, sah es in der Vorschau landen und beim Übernehmen still
+       verschwinden. Wer ein anderes Bild will, löscht den Kommentar und
+       schreibt neu; nachträglich zu tauschen ist ein eigener Bau. */
+    $('fly-anhang-tuer').hidden = flyModus.art === 'aendern';
+    // Ein Moduswechsel räumt das Menü weg: es gehörte zur vorigen Absicht.
+    anhangZu();
   }
 
   function flyModusZurueck() {
@@ -5694,16 +5791,25 @@
   $('fly-ab').addEventListener('click', flyAbschicken);
   $('fly-an-weg').addEventListener('click', flyModusZurueck);
 
+  /* Das "+" klappt die drei Wege zu einem Bild auf. Ein Griff irgendwo
+     daneben klappt sie wieder zu — auch der auf "Abschicken". Der Klick auf
+     das "+" selbst blubbert hier ebenfalls vorbei, liegt aber innerhalb von
+     `.ko-anhang` und löst deshalb nichts aus. */
+  $('fly-plus').addEventListener('click', anhangUm);
+  document.addEventListener('click', ev => {
+    if (!$('fly-anhang').hidden && !ev.target.closest('.ko-anhang')) anhangZu();
+  });
+
   /* Der Knopf schiebt den versteckten Dateiwähler vor — der lässt sich selbst
      nicht gestalten, öffnet auf dem Handy aber direkt Kamera und Galerie. */
-  $('fly-foto').addEventListener('click', () => $('fly-datei').click());
+  $('fly-foto').addEventListener('click', () => { anhangZu(); $('fly-datei').click(); });
   $('fly-datei').addEventListener('change', ev => flyBildWaehlen(ev.target.files[0]));
   $('fly-bild-weg').addEventListener('click', flyBildWeg);
   // Irgendwo in die Lupe tippen schließt sie — der Weg zurück ist der kurze.
   $('lupe').addEventListener('click', lupeZu);
 
   /* --- GIF- und Meme-Blatt: dieselbe Bedienung wie die übrigen Blätter --- */
-  $('fly-gif').addEventListener('click', gifAuf);
+  $('fly-gif').addEventListener('click', () => { anhangZu(); gifAuf(); });
   $('gif-zu').addEventListener('click', gifZu);
   $('gif-schirm').addEventListener('click', gifZu);
   $('gif-mehr').addEventListener('click', () => gifSuchen(gifWeiter));
@@ -5722,7 +5828,7 @@
     if (b && !b.disabled) gifHolen(b);
   });
 
-  $('fly-meme').addEventListener('click', memeAuf);
+  $('fly-meme').addEventListener('click', () => { anhangZu(); memeAuf(); });
   $('meme-zu').addEventListener('click', memeZu);
   $('meme-schirm').addEventListener('click', memeZu);
   $('meme-suche').addEventListener('input', memeRasterZeichnen);
@@ -5767,6 +5873,8 @@
     if (!$('memeblatt').hidden) { memeZu(); return; }
     if (!$('notruf').hidden) { notrufZu(); return; }
     if (!$('losmail').hidden) { losMailZu(); return; }
+    // Das Anhang-Menü liegt im Blatt, also fällt es vor dem Blatt.
+    if (!$('flyout').hidden && !$('fly-anhang').hidden) { anhangZu(); return; }
     if (!$('flyout').hidden) { flyZu(); return; }
     if (!$('deckel').hidden) { deckelZu(); return; }
     if (!$('chronik').hidden) chronikZu();
