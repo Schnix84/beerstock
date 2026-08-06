@@ -1354,10 +1354,21 @@
   .ko-zitat.leer { font-style: italic; opacity: .55; }
   /* Schrift, Zeilenlauf und Farbe des Schreibfelds. Rahmen, Höhe und Polster
      stehen NICHT hier, sondern bei `.ko-knoepfe .ko-feld`: seit dem Umbau
-     trägt die Zeile den Rahmen, und das Feld darin ist rahmenlos. */
+     trägt die Zeile den Rahmen, und das Feld darin ist rahmenlos.
+
+     16 px ist keine Geschmacksfrage, sondern eine Untergrenze: iOS zoomt beim
+     Hineinspringen in ein Feld, dessen Schrift KLEINER als 16 px ist, das Bild
+     um genau den fehlenden Rest hoch (bei 15 px sind das 6,7 % — „minimal
+     rangezoomt") und danach nicht wieder heraus. Das Flyout liegt `fixed`, also
+     hängt sein „×" oben rechts ab da halb außerhalb des sichtbaren Fensters.
+     Zu sehen war es am Wisch, weil der von selbst ins Feld springt
+     (`koAntworten`) — der Tipp ins Feld tat dasselbe. Alle anderen Felder der
+     Seite stehen auf 17 px (`.feld`); dieses hier war das einzige unter der
+     Marke. Kein `maximum-scale` im Viewport dagegen: das nähme dem Nutzer das
+     Aufziehen mit zwei Fingern. */
   .ko-feld {
     width: 100%; border: none; padding: 9px 10px;
-    background: transparent; color: var(--kreide); font-family: var(--hand); font-size: 15px;
+    background: transparent; color: var(--kreide); font-family: var(--hand); font-size: 16px;
     line-height: 1.45;
   }
   .ko-feld:focus { outline: none; }
