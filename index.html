@@ -4185,13 +4185,17 @@
   }
 
   /* ---------------------------------------------------------------------
-     Getippte Gesichter werden echte: aus „:-)" wird 🙂.
+     Getippte Gesichter werden echte: aus „:-)" wird 🙂. An ZWEI Stellen, und
+     beide werden gebraucht:
 
-     Beim ANZEIGEN, nicht beim Speichern. In der Datenbank steht weiter, was
-     jemand getippt hat, und das aus drei Gründen: alte Kommentare bekommen
-     es rückwirkend, das Bearbeiten legt wieder „:-)" ins Feld statt eines
-     Zeichens, das dort niemand hingeschrieben hat, und der Worker braucht
-     keine Zeile dafür. Der Preis: in Mail und Push steht weiter „:-)".
+     1. Im Feld, während getippt wird (`emojiBeimTippen`) — man sieht, was
+        man abschickt, und ab da steht das Zeichen selbst in der Datenbank.
+        Damit bekommt auch die Echo-Mail das Gesicht — sie zitiert die ersten
+        200 Zeichen des Kommentars (`mailEcho`, worker/src/index.js).
+     2. Beim Anzeigen (`mitEmojis`, unten in `mitLinks`) — für alles, was
+        vor dieser Änderung geschrieben wurde, und für das, was die Regel
+        beim Tippen mit Absicht liegen lässt: die Form ganz am Ende der
+        Nachricht (siehe `emojiBeimTippen`, dort steht warum).
 
      Die Regel ist mit Absicht eng. Kein „:/" und kein „:|" — das eine steht
      in jedem „http://", das andere in keiner Unterhaltung. Nach rechts
@@ -4209,23 +4213,79 @@
     [':o', '😮'], [":'(", '😢'], [':*', '😘'], ['xd', '😆'], ['<3', '❤️'],
   ]);
 
+  /* Eine gefundene Form zu ihrem Zeichen — die eine Regel für beide Wege,
+     das Feld wie die Anzeige. `null`, wenn nichts dahintersteht. */
+  function emojiFuer(z, text, stelle) {
+    // Nase weg, Klammern zusammen: „:-))))" ist dasselbe Gesicht wie „:)".
+    const schluessel = z.replace('-', '').replace(/([()])[()]*$/, '$1').toLowerCase();
+    const zeichen = EMOJI_TAFEL.get(schluessel);
+    if (!zeichen) return null;
+    /* „(so :-))" — die letzte Klammer gehört dem Satz und nicht dem Gesicht.
+       Nur dann zurückgeben, wenn links wirklich eine offen ist: „sehr gut
+       :-))" meint zwei Klammern und keinen Rahmen. Beim Anzeigen wird nur im
+       Stück gezählt, das `mitLinks` gerade reicht — liegt eine Adresse
+       zwischen Klammer und Gesicht, kommt keine zurück. Kosmetik. */
+    const davor = text.slice(0, stelle);
+    const offen = (davor.match(/\(/g) || []).length > (davor.match(/\)/g) || []).length;
+    return z.endsWith('))') && offen ? zeichen + ')' : zeichen;
+  }
+
   /* String zu String, das Ergebnis geht in einen Textknoten — die Regel von
      unten („nie `innerHTML`") gilt hier genauso. */
   function mitEmojis(text) {
-    return text.replace(EMOJI_RE, (z, stelle) => {
-      // Nase weg, Klammern zusammen: „:-))))" ist dasselbe Gesicht wie „:)".
-      const schluessel = z.replace('-', '').replace(/([()])[()]*$/, '$1').toLowerCase();
-      const zeichen = EMOJI_TAFEL.get(schluessel);
-      if (!zeichen) return z;
-      /* „(so :-))" — die letzte Klammer gehört dem Satz und nicht dem
-         Gesicht. Nur dann zurückgeben, wenn links wirklich eine offen ist:
-         „sehr gut :-))" meint zwei Klammern und keinen Rahmen. Gezählt wird
-         nur im Stück, das `mitLinks` gerade reicht — liegt eine Adresse
-         zwischen Klammer und Gesicht, kommt keine zurück. Kosmetik. */
-      const davor = text.slice(0, stelle);
-      const offen = (davor.match(/\(/g) || []).length > (davor.match(/\)/g) || []).length;
-      return z.endsWith('))') && offen ? zeichen + ')' : zeichen;
-    });
+    return text.replace(EMOJI_RE, (z, stelle) => emojiFuer(z, text, stelle) || z);
+  }
+
+  /* Dasselbe im Feld, während getippt wird. Umgesetzt wird genau EINE Form:
+     die, die gerade fertig geworden ist. Sie muss ein Zeichen vor der
+     Schreibmarke enden, und dieses eine Zeichen ist ihre Grenze nach rechts.
+
+     Darauf zu warten ist der ganze Trick. Wer „:D" getippt hat, ist
+     vielleicht gerade erst bei „:Der Abend" — die Regel oben sieht den
+     Buchstaben danach, hier gibt es ihn noch nicht. Also passiert nichts,
+     solange die Form am Ende der Eingabe steht; erst das Zeichen danach
+     (Leerzeichen, Punkt, Umbruch) entscheidet. Aus demselben Grund bleibt
+     ein „:-)" ganz am Schluss stehen, bis abgeschickt ist — dort setzt es
+     `mitEmojis` beim Anzeigen um, und darum werden beide Wege gebraucht.
+
+     Ein „)" mehr ist ebenfalls kein Trennzeichen: aus „:-)" kann noch
+     „:-))" werden, und das ist dieselbe Form, nicht zwei.
+
+     `execCommand` und nicht `.value = …`: das eine ist ein Schritt, den
+     Strg+Z zurücknimmt, das andere räumt die Rückgängig-Liste des Feldes ab.
+     Es ist abgekündigt, darum der Rückweg darunter. */
+  let emojiSetztGerade = false;
+
+  function emojiBeimTippen(feld) {
+    // Das Einsetzen löst selbst ein `input` aus; ohne den Riegel liefe der
+    // Griff ins Feld mitten in sich selbst noch einmal.
+    if (emojiSetztGerade) return;
+    if (feld.selectionStart !== feld.selectionEnd) return;   // Auswahl: Finger weg
+    const p = feld.selectionStart;
+    const vorn = feld.value.slice(0, p);
+    let treffer = null;
+    for (const t of vorn.matchAll(EMOJI_RE)) {
+      if (t.index + t[0].length === p - 1) { treffer = t; break; }
+    }
+    if (!treffer) return;
+    const zeichen = emojiFuer(treffer[0], vorn, treffer.index);
+    if (!zeichen) return;
+
+    /* Die Marke steht hinter dem Trennzeichen und bleibt dort — sie rutscht
+       nur um das mit, was das Zeichen kürzer ist als die Form. */
+    const marke = p - treffer[0].length + zeichen.length;
+    emojiSetztGerade = true;
+    try {
+      feld.setSelectionRange(treffer.index, treffer.index + treffer[0].length);
+      let gesetzt = false;
+      try { gesetzt = document.execCommand('insertText', false, zeichen); }
+      catch { gesetzt = false; }
+      if (!gesetzt) {
+        feld.value = feld.value.slice(0, treffer.index) + zeichen
+                   + feld.value.slice(treffer.index + treffer[0].length);
+      }
+      feld.setSelectionRange(marke, marke);
+    } finally { emojiSetztGerade = false; }
   }
 
   /* Aus Text wird eine Folge von Knoten: Textstücke und <a> dazwischen. NIE
@@ -8030,7 +8090,14 @@
      einem mehrzeiligen Feld erwartet das jeder so. */
   // Bei jedem Tastendruck: aus dem ersten Zeichen wird der Knopf grün, mit
   // dem letzten gelöschten wieder grau.
-  $('fly-feld').addEventListener('input', () => {
+  /* Die Gesichter zuerst: was danach kommt, misst und prüft den Text, und
+     der soll dann schon der endgültige sein.
+
+     `isComposing` ist kein Beiwerk. Android-Tastaturen bauen ein Wort in
+     einer Schwebe auf, und wer da hineingreift, zerlegt die Eingabe. Ein
+     Trennzeichen beendet die Schwebe ohnehin — genau dann sind wir dran. */
+  $('fly-feld').addEventListener('input', ev => {
+    if (!ev.isComposing) emojiBeimTippen($('fly-feld'));
     flyAbPruefen(); flyFeldWachsen(); flyVorPruefen();
   });
   $('fly-feld').addEventListener('keydown', ev => {
