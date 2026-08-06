@@ -1021,6 +1021,69 @@
     border: none; background: none; padding: 0 2px; cursor: pointer;
     font-size: 24px; line-height: 1; color: var(--kreide-weg);
   }
+
+  /* --- Der Griff -----------------------------------------------------------
+     Am Zeigergerät schließt das ×. Am Finger schließt das Wischen nach unten,
+     und der Balken oben ist das Schild dazu — so hält es iOS („grabber") wie
+     Material 3 („drag handle"). Beides nebeneinander zu zeigen hieße, zwei
+     Wege anzubieten, von denen sich je einer falsch anfühlt; also tauscht die
+     Medienabfrage sie gegeneinander aus.
+
+     Der Griff ist ausdrücklich ein <button> und nicht der übliche Strich aus
+     einem <div>: nimmt man dem Handy das × weg und legt das Schließen ganz in
+     eine Geste, hat VoiceOver keinen Weg mehr aus dem Blatt. Als Knopf
+     schließt er auch beim bloßen Antippen — für jeden, der das Wischen nicht
+     errät.
+
+     Er muss ganz oben KLEBEN, sonst scrollt der Schließknopf davon. Und weil
+     ein klebender Kasten seinen Inhaltsrahmen nicht verlassen darf, lässt er
+     sich nicht mit einem negativen Rand in die 18px Polsterung des Blattes
+     hinaufziehen — der erste Versuch saß gemessene 19px zu tief, genau um
+     Polsterung plus Rahmenlinie. Also nimmt am Finger das Blatt seine obere
+     Polsterung weg und der Griff bringt seine eigene mit. Seitlich bleibt
+     sie stehen, darum dort der negative Rand und die Breite mit Zuschlag.
+
+     Verwischt wird der Grund hinter ihm, statt ihn zu übermalen: das Blatt
+     liegt auf einem Verlauf, eine gedeckte Fläche zöge quer darüber eine
+     Kante. */
+  .fly-griff {
+    display: none; position: sticky; top: 0; z-index: 3;
+    box-sizing: border-box; width: calc(100% + 32px); margin: 0 -16px;
+    padding: 13px 0 11px; border: none; background: none; cursor: pointer;
+    -webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px);
+    /* Vom Griff aus gehört die Bewegung uns, und zwar von der ersten
+       Berührung an: sonst hat iOS den Finger schon dem Gummiband des Blattes
+       versprochen, ehe unser `preventDefault` nach acht Pixeln kommt — dann
+       federt es, statt zu folgen. Dass man von diesem Streifen aus nicht mehr
+       scrollen kann, ist kein Verlust: er ist der Griff. */
+    touch-action: none;
+  }
+  .fly-griff::before {
+    content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
+    border-radius: 999px; background: #ffffff38;
+  }
+  .fly-griff:active::before { background: #ffffff5c; }
+
+  @media (hover: none), (pointer: coarse) {
+    .fly-griff { display: block; }
+    .fly-zu { display: none; }
+    .fly-blatt { padding-top: 0; }
+  }
+
+  /* Gezogen wird ohne Überblendung — dort setzt jeder Fingerbreit den Wert
+     neu, und eine Überblendung machte daraus ein Nachhinken. Die Rückfahrt
+     und der Abgang laufen mit ihr. Dieselbe Trennung wie am Kommentarwisch,
+     nur hängt die Klasse hier am `.flyout`: Blatt und Schirm ziehen zusammen.
+
+     `overscroll-behavior` gehört dazu: ohne es gibt das Blatt am oberen
+     Anschlag die Bewegung an die Seite darunter weiter, und iOS hat den
+     Finger dann schon dem Gummiband versprochen. */
+  .fly-blatt { transition: transform .22s ease-out; overscroll-behavior: contain; }
+  .fly-schirm { transition: opacity .22s ease-out; }
+  .flyout.zieht .fly-blatt, .flyout.zieht .fly-schirm { transition: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .fly-blatt, .fly-schirm { transition: none; }
+  }
   .fly-unter { font-size: 11px; color: var(--kreide-weg); margin-top: 3px; }
   .fly-gesamt {
     display: flex; align-items: baseline; gap: 9px; margin: 12px 0 4px;
@@ -8153,6 +8216,114 @@
     if (!$('deckel').hidden) { deckelZu(); return; }
     if (!$('chronik').hidden) chronikZu();
   });
+
+  /* --- Runterwischen schließt ----------------------------------------------
+     Jedes der sieben Blätter bekommt oben seinen Griff, und jedes lässt sich
+     nach unten wegschieben. Gebaut wird der Griff hier statt siebenmal im
+     Markup: die Blätter sind bis aufs Wort gleich gebaut, und ein Knopf, der
+     nur zusammen mit dieser Geste einen Sinn ergibt, gehört zu ihr.
+
+     Die Zuhörer hängen IMMER, nicht nur am Finger — ein Notebook mit
+     Berührungsschirm meldet `pointer: fine` und hat trotzdem einen. Was die
+     Medienabfrage entscheidet, ist allein, was zu SEHEN ist: dort der Balken,
+     hier das ×. Von einer Maus kommt ohnehin kein `touch`-Ereignis, das
+     Binden kostet also nichts.
+
+     Geschlossen wird über den Klick auf das vorhandene ×. Damit bleiben alle
+     sieben Schließroutinen unangetastet, samt allem, was sie sonst noch
+     aufräumen — und das × steht weiter im Markup, nur unsichtbar.
+
+     Nicht dabei: die Lupe und die Wrapped-Karte. Das sind mittige Karten,
+     keine Bögen von unten; an ihnen wischt niemand nach unten.
+     --------------------------------------------------------------------- */
+  {
+    const ZUG_AUF = 92;        // gezogene px, ab denen das Loslassen schließt
+    const ZUG_SCHLUPF = 8;     // px, ab denen die Achse feststehen kann
+    const ZUG_VORSPRUNG = 1.5; // um so viel muss senkrecht vor waagrecht liegen
+    const ZUG_TAKT = 220;      // ms, muss zur `transition` am Blatt passen
+    const ohneTakt = matchMedia('(prefers-reduced-motion: reduce)');
+
+    document.querySelectorAll('.flyout').forEach(fly => {
+      const blatt = fly.querySelector('.fly-blatt');
+      const schirm = fly.querySelector('.fly-schirm');
+      const kreuz = fly.querySelector('.fly-zu');
+      if (!blatt || !schirm || !kreuz) return;
+
+      const griff = el('button', 'fly-griff');
+      griff.type = 'button';
+      griff.setAttribute('aria-label', 'Schließen');
+      griff.addEventListener('click', () => kreuz.click());
+      blatt.prepend(griff);
+
+      let zug = null;          // { x, y, achse, weg } — die laufende Bewegung
+
+      function zurueck() {
+        fly.classList.remove('zieht');
+        blatt.style.transform = '';
+        schirm.style.opacity = '';
+        zug = null;
+      }
+
+      blatt.addEventListener('touchstart', ev => {
+        zug = null;
+        if (ev.touches.length !== 1) return;
+        /* Vom Griff aus geht es immer, sonst nur von ganz oben: wer mitten im
+           Blatt nach unten wischt, will scrollen und nicht schließen. */
+        if (blatt.scrollTop > 0 && !ev.target.closest('.fly-griff')) return;
+        zug = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, achse: null, weg: 0 };
+      }, { passive: true });
+
+      /* `passive: false`, weil das Gummiband des Browsers weg muss, sobald
+         die Bewegung uns gehört. Vorher NICHT — solange die Achse offen ist,
+         gehört sie noch dem Scrollen. */
+      blatt.addEventListener('touchmove', ev => {
+        if (!zug) return;
+        const t = ev.touches[0];
+        const dx = t.clientX - zug.x, dy = t.clientY - zug.y;
+        if (zug.achse === null) {
+          /* Quer gehört dem Kommentarwisch (siehe `thread` weiter oben, der
+             seinerseits alles Senkrechte liegen lässt), hoch dem Scrollen.
+             Uns gehört allein die Bewegung nach unten. */
+          if (Math.abs(dx) > ZUG_SCHLUPF && Math.abs(dx) > Math.abs(dy)) { zug = null; return; }
+          if (dy < -ZUG_SCHLUPF) { zug = null; return; }
+          /* Nach unten reicht die Schwelle allein NICHT — dafür braucht es den
+             Vorsprung. Eine Antwortgeste, die leicht abwärts anläuft (6 quer,
+             9 hoch), hätte die Schwelle überschritten, bevor der Kommentarwisch
+             sich für „quer" entschieden hat: seine Schwelle liegt bei 10, und
+             er verlangt seinerseits einen Vorsprung. Zwischen beiden Schwellen
+             lag ein Streifen, in dem uns die Bewegung schon gehörte und ihm
+             gleich darauf auch — Karte und Blatt zögen zusammen los. */
+          if (dy <= ZUG_SCHLUPF || dy <= Math.abs(dx) * ZUG_VORSPRUNG) return;
+          zug.achse = 'runter';
+          fly.classList.add('zieht');
+        }
+        ev.preventDefault();
+        zug.weg = Math.max(0, dy - ZUG_SCHLUPF);
+        blatt.style.transform = 'translateY(' + zug.weg + 'px)';
+        // Der Schirm geht mit: das Blatt fährt nicht vor eine Wand, sondern
+        // gibt die Tafel darunter frei, während es geht.
+        schirm.style.opacity = String(Math.max(0, 1 - zug.weg / (blatt.offsetHeight || 400)));
+      }, { passive: false });
+
+      blatt.addEventListener('touchend', () => {
+        if (!zug || zug.achse !== 'runter' || zug.weg < ZUG_AUF) { zurueck(); return; }
+        const hoehe = blatt.offsetHeight;
+        zug = null;
+        fly.classList.remove('zieht');     // erst die Überblendung zurück, dann das Ziel
+        if (navigator.vibrate) navigator.vibrate(12);
+        if (ohneTakt.matches) { zurueck(); kreuz.click(); return; }
+        blatt.style.transform = 'translateY(' + hoehe + 'px)';
+        schirm.style.opacity = '0';
+        /* Eine Uhr, kein `transitionend`: fällt das Ereignis einmal aus —
+           weil etwas anderes das Blatt inzwischen verborgen hat —, bliebe es
+           mit stehen gebliebener Verschiebung offen und wäre nicht mehr zu
+           sehen. Die Uhr läuft in jedem Fall ab. */
+        setTimeout(() => { zurueck(); kreuz.click(); }, ZUG_TAKT);
+      }, { passive: true });
+
+      blatt.addEventListener('touchcancel', zurueck, { passive: true });
+    });
+  }
 
   /* Das Eintrageformular klappt auf, statt dauerhaft dazustehen: die Liste ist
      das Wichtige, das Formular braucht man selten. */
