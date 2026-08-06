@@ -79,7 +79,7 @@ Worker sieht davon nichts als einen Bearer-Token.
 ## `ideas/PROJECT-MEMORY.md`
 
 Dort steht das Langzeitgedächtnis dieses Projekts: verworfene Alternativen mit Begründung,
-Messwerte, die Fallen des Glücksrads, der lokale Prüfstand, die offenen Punkte. **Zu Beginn
+Messwerte, die Fallen des Glücksrads, die lokale Testinstanz, die offenen Punkte. **Zu Beginn
 jeder Session lesen — aber abschnittsweise, nie ganz:**
 
 ```

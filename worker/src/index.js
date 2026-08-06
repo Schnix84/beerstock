@@ -1232,7 +1232,7 @@ const statistikRunde = (ergebnis) => {
    die Meldung an den Betreiber - gehen hier durch, damit Absender, Fehlerbild
    und Protokollzeile nur an einer Stelle stehen. */
 async function schickeMail(env, empfaenger, betreff, text, html, anhaenge) {
-  /* Der Pruefstand. Ohne diese Weiche ist jeder lokale Testlauf eine echte
+  /* Die Testinstanz. Ohne diese Weiche ist jeder lokale Testlauf eine echte
      Mail an eine echte Adresse - und beim Durchspielen des Verteilers sind
      das schnell sechs auf einen Schlag. Gesetzt wird sie nur in `.dev.vars`,
      draussen gibt es sie nicht. */
