@@ -7,6 +7,28 @@
 <meta name="description" content="Wer gerade am meisten kaltes Bier hat — angeschrieben an der Kneipentafel.">
 <meta name="theme-color" content="#20262a">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
+<!-- Das Schild, das andere von dieser Seite sehen: WhatsApp, Signal, Telegram
+     und die eigene Link-Vorschau im Kommentarfeld lesen den Kopf, nicht die
+     Seite. Ohne `og:image` bleibt die Karte bildlos - das Favicon zaehlt dabei
+     nicht, kein Sammler sieht es an.
+
+     `og.png` ist ein echtes PNG neben dieser Datei, 1200x630, das 🍺 auf dem
+     Grau der Tafel. Es MUSS eine Datei sein: `data:`-Adressen holt kein
+     Sammler, und `bildTyp()` im Worker prueft ohnehin die Bytes. Der Grundsatz
+     „eine geschlossene Datei" bleibt heil - der Browser holt hier nichts, das
+     tun nur die Sammler. Adresse absolut, weil relative Angaben nur die
+     Haelfte von ihnen aufloest. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Kaltes Bier">
+<meta property="og:title" content="Kaltes Bier">
+<meta property="og:description" content="Wer gerade am meisten kaltes Bier hat — angeschrieben an der Kneipentafel.">
+<meta property="og:url" content="https://schnix84.github.io/beerstock/">
+<meta property="og:image" content="https://schnix84.github.io/beerstock/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Ein volles Bierglas auf dunklem Grund">
+<meta name="twitter:card" content="summary_large_image">
 <style>
   /* ==========================================================================
      ENTWURF „TAFEL“ — die Kneipentafel neben dem Zapfhahn.
