@@ -2647,6 +2647,64 @@ async function rundmailGeplantVersenden(env, ctx) {
   }
 }
 
+/* Der Stand der SEITE, im Unterschied zum Stand des Workers.
+
+   Der Worker stempelt sich beim Deploy selbst (GIT_SHA/DEPLOYED_AT als --var,
+   siehe CLAUDE.md, Ausrollen). Von der Tafel weiss er nichts: sie liegt auf
+   GitHub Pages und kommt hier nie vorbei. Ein Push der Seite laesst seinen
+   eigenen Stempel darum unberuehrt - genau das sah im Kontor aus, als waere
+   nichts angekommen, und ist der Grund fuer diese Funktion.
+
+   Gefragt wird GitHub nach dem letzten Commit auf `main`. Das ist bewusst
+   NICHT nach Pfad gefiltert: die Oberflaeche sind vier Dateien (index.html,
+   statistik.html, admin.html, bilder.js), ein Filter auf eine davon uebersaehe
+   die Aenderung an den anderen. Die ehrlichere Quelle waere der Pages-Build
+   selbst (/pages/builds/latest - welcher Commit wurde wirklich veroeffentlicht),
+   die verlangt aber Schreibrechte und antwortet ohne Anmeldung mit 404.
+   Nachgeprueft, nicht vermutet.
+
+   Drei Vorkehrungen, alle aus demselben Grund: `/api/health` las bisher nur
+   env-Werte und antwortete sofort. Es haengt im `Promise.all` des Kontors, und
+   ein haengender Fremdaufruf haelt dort die ganze Seite auf.
+
+     - Zeitgrenze. Nach zweieinhalb Sekunden ist GitHub eben nicht da.
+     - Gecacht. Ohne Anmeldung erlaubt GitHub 60 Aufrufe je Stunde und IP;
+       aus dem Worker zaehlt das je Rechenzentrum, nicht je Kontor-Besucher.
+       Eine Viertelstunde reicht - ein Deploy dauert laenger als der Blick,
+       mit dem man danach nachsieht.
+     - Nie werfen. Was schiefgeht, kommt als Text heraus und wird im Kontor
+       rot. Eine unerreichbare GitHub-API ist kein kaputter Dienst, aber sie
+       darf auch nicht stillschweigend verschwinden: ein Stand, der einfach
+       fehlt, sieht sonst aus wie ein Stand, der eben nicht weitergezaehlt
+       hat. */
+async function seitenStand(env) {
+  const leer = { version: null, deployed_at: null };
+  if (!env.SEITE_REPO) return { ...leer, stand: 'aus (SEITE_REPO fehlt)' };
+  try {
+    const r = await fetch(
+      'https://api.github.com/repos/' + env.SEITE_REPO + '/commits?per_page=1&sha=main',
+      {
+        // Ohne User-Agent weist GitHub jeden Aufruf mit 403 ab. Das ist keine
+        // Hoeflichkeit, das ist Pflicht.
+        headers: { 'user-agent': 'beerstock-worker', accept: 'application/vnd.github+json' },
+        cf: { cacheTtl: 900, cacheEverything: true },
+        signal: AbortSignal.timeout(2500),
+      });
+    if (!r.ok) return { ...leer, stand: 'fehler: GitHub antwortet ' + r.status };
+    const d = await r.json();
+    const c = Array.isArray(d) ? d[0] : null;
+    if (!c || !c.sha) return { ...leer, stand: 'fehler: GitHub nennt keinen Commit' };
+    return {
+      stand: 'ok',
+      version: String(c.sha).slice(0, 7),
+      deployed_at: (c.commit && c.commit.committer && c.commit.committer.date) || null,
+    };
+  } catch (e) {
+    const warum = e && e.name === 'TimeoutError' ? 'GitHub antwortet nicht' : String(e && e.message || e);
+    return { ...leer, stand: 'fehler: ' + warum };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Routen
 // ---------------------------------------------------------------------------
@@ -2664,6 +2722,10 @@ const ROUTEN = {
     const bilder = !env.BILDER ? 'nicht eingerichtet'
       : !env.BILDER_URL ? 'Bucket da, aber BILDER_URL fehlt'
       : 'ok';
+
+    // Der einzige Fremdaufruf in dieser Route - siehe `seitenStand`, warum er
+    // gedeckelt und gecacht ist und niemals wirft.
+    const seite = await seitenStand(env);
 
     return antwort(request, {
       ok: true, dienst: 'beerstock-api', db, bilder,
@@ -2685,8 +2747,17 @@ const ROUTEN = {
       // Kommen als --var beim Deploy herein (siehe CLAUDE.md, Ausrollen),
       // nicht aus wrangler.jsonc - sie aendern sich ja bei jedem Deploy.
       // Lokal (wrangler dev) bleiben beide unbesetzt, das ist kein Fehler.
+      // Sie gelten NUR fuer den Worker; die Seite hat ihren eigenen Stand
+      // gleich darunter, und die beiden gehen auseinander, sobald nur eines
+      // von beidem geworfen wurde.
       version: env.GIT_SHA || null,
       deployed_at: env.DEPLOYED_AT || null,
+      // Der Stand der Tafel, bei GitHub erfragt (siehe `seitenStand`).
+      // `seite_stand` traegt das Warum, wenn die beiden anderen leer sind -
+      // das Kontor macht daraus eine rote Zeile statt gar keiner.
+      seite_stand: seite.stand,
+      seite_version: seite.version,
+      seite_deployed_at: seite.deployed_at,
     });
   },
 

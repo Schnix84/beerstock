@@ -497,7 +497,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/admin/rundmail/geplant` 🔒 | die noch anstehenden und die fehlgeschlagenen geplanten Rundmails — nur Admin |
 | `POST /api/admin/rundmail/geplant/aendern` 🔒 | `{id, ...Felder}` ändert eine geplante Rundmail, `{id, verwerfen:true}` löscht sie — geht nur, solange sie noch `geplant` ist |
 | `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
-| `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM`, `GIPHY_KEY`; dazu `version` und `deployed_at` vom letzten Deploy (Kontor zeigt sie unter der Ampel) |
+| `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM`, `GIPHY_KEY`; dazu **zwei Stände**, die das Kontor unter der Ampel nebeneinanderstellt: `version`/`deployed_at` vom letzten Worker-Deploy und `seite_version`/`seite_deployed_at`/`seite_stand` vom letzten Commit auf `main` (bei GitHub erfragt, eine Viertelstunde gecacht) |
 
 🔒 heißt: braucht den `Bearer`-Token, sonst 401. Für die `POST`-Routen gilt das
 ohnehin — sie schreiben; die beiden Ausnahmen sind `/api/anmelden` und

@@ -46,6 +46,14 @@
     "AGENTMAIL_INBOX": "beerstock@agentmail.to",
     "SEITE": "https://schnix84.github.io/beerstock/",
 
+    // Woher der Worker den Stand der SEITE erfaehrt: "Eigner/Repo" bei GitHub.
+    // Anders als GIT_SHA/DEPLOYED_AT (die kommen als --var beim Deploy und
+    // meinen den Worker selbst) steht das hier fest - das Repo wechselt nicht.
+    // Wird der Wert entfernt, sagt GET /api/health das unter `seite_stand`,
+    // und das Kontor zeigt eine rote Zeile statt gar keiner. Siehe
+    // `seitenStand` in src/index.js.
+    "SEITE_REPO": "Schnix84/beerstock",
+
     // Die oeffentliche Adresse des Bilder-Buckets, OHNE Schraegstrich am Ende.
     // Sie entsteht erst, wenn im Dashboard unter R2 > beerstock-bilder >
     // Settings die "Public Development URL" (r2.dev) eingeschaltet wird -

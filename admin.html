@@ -124,9 +124,22 @@
   .ampel span.aus::before { color: var(--rot); }
   .ampel span.egal::before { color: var(--tinte-weg); }
   /* Der Stand darunter ist keine Ampel-Lampe - kein gut/schlecht, nur eine
-     Auskunft, wann und als was der Worker zuletzt aufgeschlagen wurde. Selber
-     Ton wie `.unter` gleich am Kopf, nur eine Nummer kleiner. */
-  .wurf { font-size: 11px; color: var(--tinte-weg); margin-top: 8px; }
+     Auskunft, wann und als was zuletzt aufgeschlagen wurde. Selber Ton wie
+     `.unter` gleich am Kopf, nur eine Nummer kleiner.
+
+     Zwei Staende stehen hier nebeneinander, Worker und Seite. Nebeneinander
+     und nicht untereinander, weil man sie vergleicht: gehen sie auseinander,
+     ist nur eines von beidem geworfen. Auf dem Handy bricht die Zeile um,
+     dafuer der grosszuegige Abstand quer - sonst laesen sich "Worker: abc1234"
+     und "Seite: def5678" wie ein einziger Satz. */
+  .wurf {
+    display: flex; flex-wrap: wrap; gap: 3px 16px;
+    font-size: 11px; color: var(--tinte-weg); margin-top: 8px;
+  }
+  /* Rot, aber ohne Pille: ein Stand, der nicht zu erfahren ist, ist keine
+     kaputte Lampe am Dienst. Er darf nur nicht aussehen wie einer, der eben
+     nicht weitergezaehlt hat - und genau so saehe er aus, wenn er fehlte. */
+  .wurf .fehlt { color: var(--rot); }
 
   /* --- Die Runde -----------------------------------------------------------
      Eine Karte je Mensch, kein Tabellengitter. Zehn Spalten bekommt man auf
@@ -636,27 +649,47 @@
         a.appendChild(s);
       });
 
-    /* Version und letzter Deploy, beide aus --var beim Deploy (CLAUDE.md,
-       Ausrollen) - kein Fehlerzustand, darum keine Pille, sondern eine
-       stille Zeile darunter. Bleibt sie leer, lief der letzte Wurf ohne
-       --var, zum Beispiel `wrangler dev` lokal. */
-    if (health.version) {
+    /* ZWEI Stände, nicht einer. Der Worker stempelt sich beim Deploy selbst
+       (--var, siehe CLAUDE.md, Ausrollen); die Seite liegt auf GitHub Pages
+       und kommt am Worker nie vorbei, ihren Stand holt er bei GitHub
+       (`seitenStand` in src/index.js). Die beiden gehen auseinander, sobald
+       nur eines von beidem geworfen wurde — und genau das war die Frage, aus
+       der diese Zeile entstand: ein Push der Seite ließ den einen Stempel
+       stehen und sah aus, als sei nichts angekommen.
+
+       Keine Ampel-Pille: das ist kein gut/schlecht am Dienst, sondern eine
+       Auskunft. Aber auch nicht mehr stillschweigend weg, wenn nichts kommt —
+       ein fehlender Stand sähe sonst aus wie ein Stand, der eben nicht
+       weitergezählt hat. Fehlt er, steht rot da, warum. */
+    const standZeile = (titel, version, wann, warum) => {
       /* Ein frisches <span> je Durchlauf, aus demselben Grund wie bei den
          Ampel-Pillen oben: `tippAm` haengt Listener an den Knoten, den man
          ihm gibt. Am bleibenden `#wurf` selbst haengten sie sich bei jedem
          `laden()` neu an und stapelten sich - irgendwann oeffnete Hovern
          uebers leere Div einen Tooltip, der zu keinem Text mehr gehoerte. */
-      const z = el('span', null, 'Stand: ' + health.version
-        + (health.deployed_at ? ' · ' + datum(health.deployed_at) : ''));
+      const fehlt = !version;
+      const z = el('span', fehlt ? 'fehlt' : null,
+        titel + ': ' + (fehlt ? 'unbekannt'
+          : version + (wann ? ' · ' + datum(wann) : '')));
       Bilder.tippAm(z, {
-        titel: 'Stand',
-        zeilen: [
-          { was: 'Version', wert: health.version },
-          { was: 'Deployt', wert: datum(health.deployed_at) },
+        titel: 'Stand: ' + titel,
+        zeilen: fehlt ? [{ farbe: '#b04a38', was: 'Grund', wert: warum || '—' }] : [
+          { was: 'Version', wert: version },
+          { was: wann ? 'Vom' : 'Deployt', wert: wann ? datum(wann) : '—' },
         ],
+        fuss: warum,
       });
       st.appendChild(z);
-    }
+    };
+
+    /* Der Worker ohne Stempel ist KEIN Fehler: so läuft er lokal unter
+       `wrangler dev`, wo es keine --var gibt. Darum bleibt seine Zeile in dem
+       Fall ganz weg, statt rot zu werden — anders als die der Seite, die der
+       Worker immer beantworten kann, und sei es mit einem Grund. */
+    if (health.version) standZeile('Worker', health.version, health.deployed_at);
+    standZeile('Seite', health.seite_version, health.seite_deployed_at,
+      health.seite_stand && health.seite_stand !== 'ok' ? health.seite_stand
+        : 'Letzter Commit auf main, bei GitHub erfragt.');
   }
 
   /* Der Filter über der Runde. Er steht erst da, seit die Runde wächst: bei
