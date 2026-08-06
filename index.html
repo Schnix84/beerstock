@@ -524,16 +524,27 @@
      niemand mehr sendet, ist etwas anderes als eine, die von Anfang an nur
      ein Schnappschuss sein sollte. Deshalb auch grau statt gelb: die Marke
      zieht keine Aufmerksamkeit mehr auf sich, sie nimmt sie zurück.
+
+     `live` ist die EINZIGE Marke der Seite, die gefüllt ist statt umrandet —
+     sie bricht die Sprache von `.z-marke` mit Absicht. Umrandet stand sie in
+     derselben Reihe wie „erster" oder „gemessen", also unter lauter Marken,
+     die etwas über Vergangenes aussagen. Diese hier sagt „gerade jetzt kommt
+     etwas herein", und das ist der eine Fall, der lauter sein darf.
      --------------------------------------------------------------------- */
   .nr-marke {
     font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .16em;
     text-transform: uppercase; border-radius: 2px; padding: 1px 4px;
     margin-left: 7px; vertical-align: 2px; white-space: nowrap;
   }
-  .nr-marke-live { color: var(--gelb); border: 1px solid #e8c76655; }
+  .nr-marke-live {
+    color: var(--schiefer-t); background: var(--gelb);
+    border: 1px solid var(--gelb); font-weight: 600;
+    box-shadow: 0 0 10px #e8c76640;
+  }
   .nr-marke-steht { color: var(--kreide-weg); border: 1px solid #ffffff26; }
-  /* Der Punkt vor „live" atmet im selben Takt wie die Nadel auf der Karte —
-     zwei Stellen, ein Puls, damit das Auge sie als dieselbe Aussage liest. */
+  /* Der Punkt vor „live" atmet im selben Takt wie die Ringe an der Nadel auf
+     der Karte — zwei Stellen, ein Puls, damit das Auge sie als dieselbe
+     Aussage liest. Er erbt die dunkle Schriftfarbe der gefüllten Marke. */
   .nr-marke-live::before {
     content: '●'; font-size: 7px; margin-right: 4px; vertical-align: 1px;
     animation: t-puls 2.2s ease-in-out infinite;
@@ -552,67 +563,182 @@
   .karte {
     position: relative; display: block; width: 100%; height: 150px;
     margin-top: 8px; overflow: hidden; border-radius: 3px;
-    background: #2b3230; border: 1px solid #ffffff1f; cursor: pointer;
+    background: #1a201e; border: 1px solid #ffffff1f; cursor: pointer;
   }
+  /* Die Kacheln sind hell, die Tafel ist dunkel — und daran ist die gelbe
+     Nadel fast gestorben. Mit `grayscale(.35) brightness(.82)` lag die
+     Grundfläche von OSM-Carto (#f2efe9) bei Luminanz 0,571, `--gelb` liegt
+     bei 0,590: Kontrast 1,03:1. Nadel und Untergrund waren exakt gleich hell,
+     sichtbar blieb sie einzig durch ihren dunklen Rand.
+
+     Ein kräftigeres Gelb hilft dagegen nicht — ein Gelb, das auf hellgrauem
+     Grund knallt, gibt es nicht, Gelb IST hell. Also muss der Untergrund
+     runter. Wie weit, ist am gerenderten Bild gemessen, nicht geschätzt
+     (2026-08-06, Luminanz im Ring 14–24 px um die Nadel, Vignette und
+     Streuwolke eingerechnet):
+
+       brightness(.82)  1,03:1   wie es war
+       brightness(.55)  2,15:1   zu wenig
+       brightness(.46)  2,66:1   zu wenig
+       brightness(.38)  3,23:1   knapp über der Schwelle
+       brightness(.33)  ~3,9:1   die aktive Fassung
+       brightness(.32)  4,10:1   ganz grau, Wasser und Parks gehen verloren
+
+     Die Schwelle ist 3:1 (WCAG 1.4.11, grafische Elemente, die man zum
+     Verstehen braucht — eine Standortnadel im Notruf ist genau das). Bei .33
+     bleibt mit grayscale(.85) noch ein Rest Farbe: Wasser blau, Park grün,
+     gerade genug, um sie auseinanderzuhalten.
+
+     VERWORFEN — der invert/hue-rotate-Griff für eine echte Dark-Map. Auf dem
+     Papier der beste Wert (4,66:1 gemessen), am Bild aber unbrauchbar: Carto
+     färbt Straßen HELLER als das Land, nach der Umkehr sind sie dunkler, und
+     hue-rotate dreht die invertierten Blautöne nach Braun. Was herauskommt,
+     ist keine dunkle Karte, sondern ein Sepia-Negativ mit dunklen Adern statt
+     Straßen. Gerechnet gewinnt es, angesehen verliert es. */
   .karte img {
     position: absolute; width: 256px; height: 256px; max-width: none;
-    /* Die Kacheln sind hell, die Tafel ist dunkel. Etwas Zurückhaltung nimmt
-       ihnen das Grelle, ohne die Straßennamen unlesbar zu machen. */
-    filter: grayscale(.35) brightness(.82) contrast(1.05);
+    filter: grayscale(.85) brightness(.33) contrast(1.12);
     -webkit-user-drag: none; user-select: none;
+  }
+  /* Die Vignette bindet die Kachel an die Tafel: ohne sie sitzt ein Rechteck
+     Straßenkarte auf dem Schiefer wie ein aufgeklebter Screenshot. Sie liegt
+     ÜBER den Kacheln und UNTER allem anderen — daher die z-Index-Stufen an
+     Streukreis, Nadel und Namensnennung. `pointer-events` aus, sonst frisst
+     sie den Klick in die Navigation, und die ganze Fläche IST der Knopf. */
+  .karte::after {
+    content: ''; position: absolute; inset: 0; z-index: 1;
+    pointer-events: none;
+    background: radial-gradient(120% 90% at 50% 45%, #0000 38%, #101614b3 100%);
   }
   /* Der Streuradius der Ortung. Er steht VOR der Nadel im Stapel und ist
      bewusst kein Punkt: eine WLAN-Ortung liegt gern zwei Kilometer daneben,
-     und ein scharfer Punkt behauptete eine Schärfe, die es nicht gibt. */
+     und ein scharfer Punkt behauptete eine Schärfe, die es nicht gibt.
+
+     Der Rand ist gestrichelt, weil eine durchgezogene Linie eine Grenze
+     behauptet — hier hört aber nichts auf, hier wird nur unschärfer. Und die
+     Füllung läuft nach außen aus, statt an der Kante abzubrechen: die alte
+     Fläche mit 12 % Deckkraft war auf der Kachel schlicht nicht da. */
   .karte-streu {
-    position: absolute; border-radius: 50%;
-    background: #e8c7661f; border: 1px solid #e8c76659;
+    position: absolute; border-radius: 50%; z-index: 2;
+    background: radial-gradient(circle,
+      #e8c76633 0%, #e8c76614 55%, #e8c76600 74%);
+    border: 1px dashed #e8c76680;
     transform: translate(-50%, -50%); pointer-events: none;
   }
+  /* Der Radararm. Er streicht über die Streufläche und nicht über die ganze
+     Karte, und das ist keine Bequemlichkeit, sondern die Aussage: abgesucht
+     wird der Bereich, in dem der Standort liegen KANN. Ein conic-gradient
+     statt eines gedrehten Keils — dann bleibt es ein Element ohne eigene
+     Geometrie, das mit dem Kreis mitwächst, wie grob die Ortung auch ist.
+
+     Der Schweif geht über 120°, nicht über 20: mit einem schmalen Keil stand
+     da eine Speiche im Rad statt eines Arms, der über die Fläche streicht
+     (am Bild geprüft, 2026-08-06). Und er trägt schon in der Mitte sichtbare
+     Deckkraft — ein Schweif, der erst auf den letzten Grad hell wird, IST
+     eine Speiche, nur mit mehr Stufen. */
+  .karte-live .karte-streu::after {
+    content: ''; position: absolute; inset: -1px; border-radius: 50%;
+    background: conic-gradient(from 0deg,
+      #e8c76600 0deg, #e8c76600 240deg, #e8c7661a 278deg,
+      #e8c76633 312deg, #e8c76659 342deg, #e8c766a6 360deg);
+    animation: nr-sweep 3.6s linear infinite;
+  }
+  @keyframes nr-sweep { to { transform: rotate(360deg); } }
+  /* Die Nadel. Drei Schatten übereinander, jeder mit einer Aufgabe: der erste
+     gibt ihr einen eigenen dunklen Grund, damit sie auf JEDER Kachel steht und
+     nicht nur auf den dunklen; der zweite legt sie auf die Karte, statt sie
+     draufzukleben; der dritte lässt sie glimmen. Der Verlauf in der Füllung
+     ist derselbe Griff — eine Lichtkante oben links macht aus dem Punkt eine
+     Kugel. */
   .karte-nadel {
-    position: absolute; width: 13px; height: 13px; border-radius: 50%;
-    background: var(--gelb); border: 2px solid #1d2320;
+    position: absolute; width: 15px; height: 15px; border-radius: 50%;
+    z-index: 2;
+    background: radial-gradient(circle at 34% 30%,
+      #fff3d2 0%, var(--gelb) 58%, #c9a03e 100%);
+    border: 2px solid #141a18;
     transform: translate(-50%, -50%); pointer-events: none;
-    box-shadow: 0 0 0 1px #e8c76688;
+    box-shadow: 0 0 0 4px #101614a6, 0 3px 8px #000000a6, 0 0 14px #e8c76666;
   }
   /* Der Puls der Nadel gehört seit dem Schieberegler dem LIVE-Standort, nicht
      mehr der Frage, ob es der eigene Notruf ist (das sagt der Satz darüber
      schon: „Du brauchst Bier" gegen „Jo braucht Bier"). Ein auslaufender
      Ring statt eines Blinkens: Blinken heißt Alarm, ein Ring, der nach außen
      verschwindet, heißt „hier kommt gerade etwas an" — und genau das ist die
-     Aussage. `box-shadow` statt eines zweiten Elements, damit die Nadel eine
-     Nadel bleibt und `karteFuellen` nichts davon wissen muss.
+     Aussage.
+
+     ZWEI Ringe, um 1,6 s versetzt. Mit einem einzigen klaffte zwischen zwei
+     Läufen ein Loch, in dem die Nadel still dastand — und wer in genau dem
+     Moment hinsah, sah keinen Unterschied zu einem einmaligen Standort. Zwei
+     Zeitachsen brauchen zwei Elemente, deshalb `::before`/`::after` statt des
+     früheren `box-shadow`-Griffs; die Nadel bleibt trotzdem ein Element, und
+     `karteFuellen` muss nach wie vor nichts davon wissen.
 
      Der Zustand hängt am `.karte`-Feld und nicht an der Nadel: die Nadel
      entsteht erst, wenn das Feld Maße hat (siehe `karteFuellen`), die Klasse
      aber schon beim Zeichnen der Zeile — und sie wandert danach im
-     20-Sekunden-Takt weiter, ohne dass die Karte neu gebaut wird. */
-  /* Die Deckkraft hält bis weit in den Lauf hinein und fällt erst zum Schluss:
-     mit einer geraden Blende von 35 % auf 0 stand der Ring bei 16 px Radius
-     schon auf 8 % und war auf einer hellen Kachel schlicht nicht mehr da
-     (nachgemessen am 2026-08-06). Die mittlere Marke hält ihn sichtbar,
-     solange er wächst — sichtbar ist der ganze Zweck der Übung. */
-  @keyframes nr-radar {
-    0%   { box-shadow: 0 0 0 1px #e8c76688, 0 0 0 1px  #e8c766cc; }
-    55%  { box-shadow: 0 0 0 1px #e8c76688, 0 0 0 13px #e8c76666; }
-    100% { box-shadow: 0 0 0 1px #e8c76688, 0 0 0 24px #e8c76600; }
+     20-Sekunden-Takt weiter, ohne dass die Karte neu gebaut wird.
+
+     Die Deckkraft hält bis weit in den Lauf hinein und fällt erst zum Schluss:
+     mit einer geraden Blende von 85 % auf 0 stand der Ring auf halber Strecke
+     schon so tief, dass er auf einer hellen Kachel nicht mehr da war
+     (nachgemessen am 2026-08-06, damals noch als `box-shadow`). Die mittlere
+     Marke hält ihn sichtbar, solange er wächst — sichtbar ist der ganze Zweck
+     der Übung. */
+  /* 23 px ist nicht gegriffen: das ist genau die Außenkante des dunklen
+     Kontaktschattens (15 px Nadel + 4 px ringsum). Der Ring startet damit
+     dort, wo die Nadel aufhört — begänne er kleiner, liefe er die erste
+     Zehntelsekunde als gelber Ring über gelbem Grund und wäre unsichtbar. */
+  .karte-live .karte-nadel::before,
+  .karte-live .karte-nadel::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: 23px; height: 23px; margin: -11.5px 0 0 -11.5px;
+    border-radius: 50%; border: 1.5px solid var(--gelb);
+    animation: nr-ring 3.2s linear infinite;
   }
-  .karte-live .karte-nadel { animation: nr-radar 2.4s linear infinite; }
-  /* Steht der Live-Standort still, wird die Nadel matt und hohl: sie sagt
-     dann „hier war er zuletzt", nicht mehr „hier ist er". */
+  .karte-live .karte-nadel::after { animation-delay: 1.6s; }
+  @keyframes nr-ring {
+    from { transform: scale(1);   opacity: .85; }
+    62%  {                        opacity: .42; }
+    to   { transform: scale(2.8); opacity: 0; }
+  }
+  /* Steht der Live-Standort still, wird die Nadel HOHL — aber nicht dunkel.
+     Erster Versuch war eine matte Füllung mit blassem Innenring; auf der
+     abgedunkelten Kachel wurde daraus ein dunkler Fleck auf dunklem Grund,
+     der schlicht verschwand (am Bild gesehen, 2026-08-06). Das ist der
+     falsche Schluss aus „nimm dich zurück": wer stehengeblieben ist, braucht
+     trotzdem Hilfe an genau dieser Stelle, die Nadel muss auffindbar bleiben.
+
+     Also bleibt der Rand hell und nur die Mitte geht leer. Ein Ring sagt
+     „hier war er zuletzt", eine Kugel sagt „hier ist er" — der Unterschied
+     sitzt in der Füllung, nicht in der Helligkeit. Der Streukreis geht mit
+     zurück, auch die Suchfläche ist ja nur noch eine Erinnerung. */
   .karte-steht .karte-nadel {
-    background: #e8c76633; border-color: #1d2320;
-    box-shadow: 0 0 0 1px #e8c76655;
+    background: #e8c76614; border-color: #141a18;
+    box-shadow: 0 0 0 4px #10161480, 0 2px 5px #00000080,
+                inset 0 0 0 2px #e8c766b8;
   }
+  .karte-steht .karte-streu { border-style: dotted; opacity: .55; }
+  /* Ohne Bewegung war „live" auf der Karte bisher NICHT von „einmalig" zu
+     unterscheiden — es fiel schlicht die Animation weg und übrig blieb
+     dieselbe Nadel. Wer Bewegung abbestellt hat, bestellt keine Auskunft ab.
+     Also bleibt ein Ring stehen, statt zu verschwinden: derselbe Zustand,
+     nur ohne Takt. Der zweite Ring und der Radararm gehen ganz. */
   @media (prefers-reduced-motion: reduce) {
-    .karte-live .karte-nadel,
     .nr-marke-live::before { animation: none; }
+    .karte-live .karte-streu::after,
+    .karte-live .karte-nadel::after { display: none; }
+    .karte-live .karte-nadel::before {
+      animation: none; transform: scale(1.5); opacity: .5;
+    }
   }
   /* Namensnennung. Lizenzpflicht bei OSM-Kacheln, und sie darf nicht unter
      der Oberfläche verschwinden — deshalb unten rechts auf der Karte, mit
-     eigenem Grund, damit sie auf jeder Kachel lesbar bleibt. */
+     eigenem Grund, damit sie auf jeder Kachel lesbar bleibt. Ganz oben im
+     Stapel (3), über Vignette (1) und Streukreis/Nadel (2): eine grobe
+     Ortung malt einen Kreis, der bis in die Ecke reicht, und die Lizenz darf
+     nicht unter der Streufläche liegen. */
   .karte-quelle {
-    position: absolute; right: 0; bottom: 0; z-index: 2;
+    position: absolute; right: 0; bottom: 0; z-index: 3;
     padding: 1px 4px; background: #10141391; font-size: 8.5px;
     color: var(--kreide-weg); border-radius: 3px 0 0 0;
   }
