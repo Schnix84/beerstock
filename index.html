@@ -1120,6 +1120,29 @@
     cursor: zoom-in;
   }
   .ko-antw .ko-bild { height: 130px; }
+  /* Foto und Satz in EINEM Rahmen, nach Art von WhatsApp: was zusammen
+     abgeschickt wurde, steht auch zusammen da. Vorher war der Satz ein eigener
+     Block ÜBER dem Bild, mit 7 px Luft dazwischen und dem nächsten Kommentar
+     gleich darunter — bei zwei bebilderten Karten hintereinander war nicht zu
+     sehen, welcher Satz zu welchem Bild gehört.
+
+     Nur wenn es beides gibt: ein Foto allein bleibt ein nacktes Foto, ein Satz
+     allein ein Satz. Deshalb hängen Rand und Ecke an DIESER Klasse und nicht
+     an `.ko-bild` — sonst bekäme das Foto ohne Satz zwei Rahmen.
+
+     Die 3-px-Ecke ist die des nackten Fotos, nicht die 12 der Linkkarte: ein
+     Bild mit Satz soll nicht plötzlich rund sein, wo eines ohne Satz kantig
+     ist. `overflow: hidden` klemmt die Ecken des Bildes darin. */
+  .ko-foto {
+    margin: 7px 0 0; border: 1px solid #ffffff26; border-radius: 3px;
+    overflow: hidden; background: #00000033;
+  }
+  .ko-foto .ko-bild { margin: 0; border: none; border-radius: 0; }
+  /* Die Beschriftung trägt die Schrift des Kommentars (`.ko-text` bleibt an
+     ihr) — sie IST der Kommentar und nicht die Bildlegende einer Zeitung. Von
+     hier kommen nur Polster und Füllung, und die Füllung ist die der
+     Linkkarte: dieselbe Sorte „gehört zusammen". */
+  .ko-foto .ko-text { margin: 0; padding: 7px 9px 8px; }
   /* Die Vorschaukarte zum ersten Link. Angelehnt (nicht angeklebt) an
      `.ko-bild`: dieselbe Rundung wie die Schreibzeile, damit der Faden eine
      Formsprache hat. */
@@ -3333,8 +3356,10 @@
       if (anWen) kopf.appendChild(anWen);
       z.appendChild(kopf);
 
-      /* Hing eine Bewertung am selben Absenden, steht sie über dem Text —
-         so liest man, worauf sich das Lob bezieht. */
+      /* Hing eine Bewertung am selben Absenden, steht sie ganz oben — vor dem
+         Satz, und bei einem bebilderten Kommentar vor dem Bild samt seiner
+         Beschriftung. So liest man erst die Note und dann, worauf sie sich
+         bezieht. */
       if (k.sterne) {
         const n = el('div', 'ko-noten');
         kategorien.forEach(kat => {
@@ -3344,18 +3369,23 @@
         if (n.childNodes.length) z.appendChild(n);
       }
 
+      /* Foto und Satz zusammen abgeschickt: dann gehören sie auch zusammen
+         angeschrieben — der Satz hängt unter dem Bild, in demselben Rahmen
+         (`.ko-foto`), wie die Beschriftung eines Bildes im Messenger.
+
+         Gelöscht kann hier nicht mitlaufen: der Worker räumt bei der Löschung
+         Text UND Bild weg (`text = ''`, `bild_key = NULL`), das „gelöscht"
+         bleibt also der freistehende Textblock darunter. */
+      const beschriftet = !k.geloescht && !!k.text && !!k.bild;
+
       /* Ein Foto allein ist ein gültiger Kommentar — dann steht hier keine
          leere Textzeile, die im Kreidebild wie ein Fehler aussähe. */
-      if (k.geloescht || k.text) {
+      if (!beschriftet && (k.geloescht || k.text)) {
         const t = el('div', 'ko-text' + (k.geloescht ? ' weg' : ''));
         if (k.geloescht) t.textContent = 'gelöscht';
         else t.appendChild(mitLinks(k.text));
         z.appendChild(t);
       }
-
-      /* Nach dem Text, vor dem Foto: die Karte gehört zu dem, was gesagt
-         wurde — das Foto ist eine eigene Sache daneben. */
-      if (k.vorschau) z.appendChild(vorschauKarte(k.vorschau));
 
       if (k.bild) {
         const b = el('img', 'ko-bild');
@@ -3363,8 +3393,26 @@
         b.loading = 'lazy';
         b.alt = 'Foto von ' + k.autor;
         b.dataset.gross = k.bild;
-        z.appendChild(b);
+        if (!beschriftet) z.appendChild(b);
+        else {
+          /* `figure`/`figcaption` und nicht zwei `div`: Bild mit Beschriftung
+             ist genau das, was die beiden Elemente bedeuten — der Vorleser sagt
+             es damit von selbst, ohne ein `aria-` von Hand. Das `ko-text` an
+             der Beschriftung ist Absicht: sie liest sich wie jeder andere
+             Kommentar, samt Zeilenumbrüchen und Links darin. */
+          const f = el('figure', 'ko-foto');
+          const t = el('figcaption', 'ko-text');
+          t.appendChild(mitLinks(k.text));
+          f.append(b, t);
+          z.appendChild(f);
+        }
       }
+
+      /* Die Linkkarte steht NACH dem Foto und nicht mehr davor: sie stammt aus
+         dem Satz, und der Satz steht jetzt unter dem Bild. Vor der Beschriftung
+         läge die Karte zwischen Bild und dem Link, aus dem sie kommt. Ohne Foto
+         ist die Reihenfolge dieselbe wie vorher — Satz, dann Karte. */
+      if (k.vorschau) z.appendChild(vorschauKarte(k.vorschau));
 
       const fuss = el('div', 'ko-fuss');
       if (!k.geloescht) {
