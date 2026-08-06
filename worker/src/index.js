@@ -284,6 +284,23 @@ const VORSCHAU_TEXT_MAX = 300;                // Zeichen og:description
 const VORSCHAU_TAKT     = 20;                 // frische Abrufe je Fenster
 const VORSCHAU_FENSTER  = 60;                 // Sekunden
 
+/* Wie lange eine Vorschauzeile bleibt, an der kein Kommentar haengt. Seit der
+   Karte SCHON BEIM TIPPEN ist das der Normalfall und nicht mehr die Ausnahme:
+   jeder getippte und nie abgeschickte Link legt eine Zeile an, dazu die halb
+   getippten Adressen aus dem Nachlauf - die meisten davon `fehler`-Zeilen ganz
+   ohne Bild.
+
+   Die Frist ist zugleich die Lebensdauer des Caches fuer so eine Adresse: ein
+   toter Link wird nach dreissig Tagen einmal neu versucht. Das ist der Preis
+   und er ist klein - ein Versuch je Monat und Adresse, und nur fuer Adressen,
+   die niemand abgeschickt hat.
+
+   Der Deckel je Lauf wie bei den Waisen und aus demselben Grund (siehe dort):
+   er greift beim ersten Lauf mit Altbestand und laesst den ueber ein paar Tage
+   abfliessen statt in einem Rutsch. */
+const VORSCHAU_MUELL       = 30;              // Tage ohne Kommentar
+const VORSCHAUEN_PRO_LAUF  = 200;
+
 /* GIFs und Memes an Kommentaren (siehe ideas/gifs-und-memes.md). Ein GIF wird
    wie ein Foto ein `bild_key` - dieselbe Sperre, dasselbe Tagesbudget, kein
    eigener Weg. Giphys Deckel ist 100 Abrufe die Stunde; der Cache haelt eine
@@ -1324,8 +1341,8 @@ async function ogLesen(antwort, basis) {
    KEIN Eintrag in `bild_uploads`. Das ist die Waisen-Liste fuer Bilder, die ein
    NUTZER hochgeladen hat und die ohne Kommentar liegenbleiben koennten. Ein
    Vorschaubild haengt an einer `vorschauen`-Zeile, die es immer gibt - es ist
-   nie Waise. Umgekehrt heisst das: der bestehende Aufraeumer fasst diese
-   Objekte nicht an, und das ist gewollt (siehe ideas/todo.md). */
+   nie Waise. `waisenWegraeumen()` sieht diese Objekte darum nicht; weggeraeumt
+   werden sie ueber ihre Zeile, von `vorschauenWegraeumen()` weiter unten. */
 async function vorschauBild(env, adresse) {
   if (!env.BILDER) return null;
   const ziel = darfGeholtWerden(adresse);
@@ -5845,6 +5862,54 @@ async function waisenWegraeumen(env) {
   return waisen.results.length;
 }
 
+/* ---------------------------------------------------------------------------
+   Die Vorschauzeilen wegraeumen, an denen kein Kommentar mehr haengt.
+
+   Eine `vorschauen`-Zeile gehoert keiner Karte, sondern einer Adresse: beim
+   Loeschen eines Kommentars wird sie nur ABGEHAENGT (`vorschau_id = NULL`),
+   weil dieselbe Adresse unter drei anderen Karten noch stehen kann. Und die
+   Tippvorschau legt Zeilen an, die nie an einer Karte landen, weil der Link
+   getippt und nicht abgeschickt wurde. Beides bleibt sonst fuer immer liegen.
+
+   REIHENFOLGE andersherum als bei den Waisen oben - dort erst das Objekt, hier
+   erst die Zeile. Der Grund ist, dass es hier ein EINZIGES Statement ist: es
+   gibt kein Fenster zwischen Suchen und Loeschen, in dem sich ein frischer
+   Kommentar an eine Zeile haengt, die gleich faellt. Der Preis ist ein Objekt,
+   das im Bucket liegen bleibt, wenn der Lauf zwischen den beiden `await`
+   stirbt - das ist unsichtbar. Ein `bild_key` ins Leere waere es nicht:
+   `vorschauen` ist ein CACHE und reichte die kaputte Karte dem naechsten
+   Poster derselben Adresse wieder heraus.
+
+   NOT EXISTS und nicht NOT IN: bei `NOT IN (SELECT vorschau_id FROM
+   kommentare)` genuegt ein einziges NULL darin, und die Bedingung ist fuer
+   JEDE Zeile unwahr - das Aufraeumen liefe still leer, ohne Fehler. Ein Index
+   auf `kommentare.vorschau_id` bleibt aus, `0022` begruendet warum; die Tafel
+   hat Tausende Kommentare, nicht Millionen. */
+async function vorschauenWegraeumen(env) {
+  const weg = await env.DB.prepare(`
+    DELETE FROM vorschauen
+    WHERE id IN (
+      SELECT v.id FROM vorschauen v
+      WHERE v.geholt < datetime('now', ?)
+        AND NOT EXISTS (SELECT 1 FROM kommentare k WHERE k.vorschau_id = v.id)
+      ORDER BY v.geholt
+      LIMIT ?
+    )
+    RETURNING bild_key
+  `).bind(`-${VORSCHAU_MUELL} days`, VORSCHAUEN_PRO_LAUF).all();
+
+  /* Die Mehrzahl der Zeilen hat gar kein Bild - `fehler`-Zeilen von halb
+     getippten Adressen. Ein `null` im Stapel fuer R2 waere bestenfalls
+     wirkungslos, und die Zeilen sind an dieser Stelle schon weg.
+
+     Kein `if (!env.BILDER) return` am Anfang wie bei den Waisen: ohne Bucket
+     sollen die Zeilen trotzdem verschwinden. */
+  const keys = weg.results.map(z => z.bild_key).filter(Boolean);
+  if (keys.length && env.BILDER) await env.BILDER.delete(keys);
+
+  return { zeilen: weg.results.length, bilder: keys.length };
+}
+
 export default {
   /* Zwei Zeitgeber im ganzen Dienst. Alles sonst traegt sich beim naechsten
      Schreiben nach (siehe `verfallStmt`).
@@ -5895,6 +5960,14 @@ export default {
       if (weg) console.log(`Waisenbilder weggeraeumt: ${weg}`);
     } catch (e) {
       console.error('Waisenbilder:', e && e.stack || e);
+    }
+
+    // Und die Vorschauen ohne Kommentar. Eigener try aus demselben Grund.
+    try {
+      const weg = await vorschauenWegraeumen(env);
+      if (weg.zeilen) console.log(`Vorschauen weggeraeumt: ${weg.zeilen} (Bilder: ${weg.bilder})`);
+    } catch (e) {
+      console.error('Vorschauen:', e && e.stack || e);
     }
   },
 
