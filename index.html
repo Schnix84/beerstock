@@ -5555,6 +5555,15 @@
     return b.toISOString();
   }
 
+  /* Der Kalendertag danach, als 'YYYY-MM-DD'. Mittags gerechnet, damit die
+     Sommerzeit-Umstellung das Datum nicht verrutschen lässt. */
+  function tagDanach(tag) {
+    const d = new Date(tag + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    return [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+      .map((n, i) => i ? String(n).padStart(2, '0') : n).join('-');
+  }
+
   /* `wieViel` ist die Zahl der Abende in der Chronik. Sie kommt mit der
      Bestenliste und entscheidet nur, ob der Knopf dahin dasteht - und ob die
      Sektion ueberhaupt erscheint: nach zwei stillen Wochen ist die Terminliste
@@ -5824,8 +5833,15 @@
     /* Entscheiden darf nur der Gezogene selbst. Alle anderen lesen bloß, worauf
        die Flasche zeigt — auch der, der gedreht hat. */
     const frage = $('los-antwort');
+    /* Die Zeiten werden nur beim AUFKLAPPEN vorbelegt, nicht bei jedem
+       Zeichnen — sonst überschriebe der halbminütige Abgleich, was der
+       Gezogene gerade in die Felder tippt. */
+    const frageWar = frage.hidden;
     frage.hidden = !(binGewinner && wartet);
-    if (!frage.hidden) $('los-ja').disabled = $('los-nein').disabled = false;
+    if (!frage.hidden) {
+      $('los-ja').disabled = $('los-nein').disabled = false;
+      if (frageWar) losZeitVorbelegen();
+    }
 
     const knopf = $('rad-knopf');
     knopf.hidden = gezogen || !genug || !darf;
@@ -5915,6 +5931,24 @@
     }
   }
 
+  /* Die Vorgabe im Zusage-Formular rechnet mit der Uhr, statt fest auf 19:00
+     zu stehen: wer spät dreht, bekäme sonst einen Abend vorgesetzt, der beim
+     Zusagen schon vorbei ist — genau das ist einmal passiert (Drehung 22:07,
+     Termin 19–21, 2026-08-07). Vorbelegt wird die nächste halbe Stunde,
+     frühestens 19:00; nach Mitternacht wäre 19:00 aber die Vergangenheit von
+     gestern, darum gilt die Untergrenze erst ab morgens. Das Ende liegt vier
+     Stunden dahinter wie bei der alten Spanne 19–23 — rutscht es über
+     Mitternacht, versteht `endeUTC` das ohnehin als nächsten Morgen. */
+  function losZeitVorbelegen() {
+    const j = new Date();
+    let von = Math.ceil((j.getHours() * 60 + j.getMinutes()) / 30) * 30;
+    if (j.getHours() >= 6 && von < 19 * 60) von = 19 * 60;
+    const hhmm = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' +
+                      String(m % 60).padStart(2, '0');
+    $('f-zeit').value = hhmm(von);
+    $('f-ende').value = hhmm(von + 4 * 60);
+  }
+
   /* Zusagen oder absagen. Nur der Gezogene kommt hier überhaupt hin — der
      Worker prüft es noch einmal, die Knöpfe sind nur die halbe Miete. */
   async function antwortLos(ja) {
@@ -5922,12 +5956,19 @@
     radSagt('');
     try {
       /* Das Datum ist der Bierabend-Tag der Ziehung, nicht „heute" im Browser:
-         wer um ein Uhr nachts zusagt, meint den Abend, der gerade läuft. */
+         wer um ein Uhr nachts zusagt, meint den Abend, der gerade läuft.
+
+         Eine Anfangszeit vor sechs Uhr früh gehört dabei in die NACHT dieses
+         Abends, nicht an seinen Morgen: „ab halb eins" heißt nach Mitternacht
+         des Bierabend-Tags. An den Tag selbst geklebt läge sie fast 24 Stunden
+         zurück — und `TERMIN_RUECK` auf dem Worker ließe das auch noch durch.
+         Das Ende rechnet vom selben Tag, `endeUTC` rollt es bei Bedarf weiter. */
       const von = $('f-zeit').value || '19:00', bis = $('f-ende').value || '23:00';
+      const vonTag = von < '06:00' ? tagDanach(losTag) : losTag;
       const d = await ruf('/api/los/antwort', ja
         ? { antwort: 'ja',
-            beginnt_am: alsUTC(losTag, von),
-            endet_am: endeUTC(losTag, von, bis) }
+            beginnt_am: alsUTC(vonTag, von),
+            endet_am: endeUTC(vonTag, von, bis) }
         : { antwort: 'nein', grund: $('f-grund').value });
 
       /* Nach einer Absage steht die Flasche wieder bereit. `selbstGedreht`
