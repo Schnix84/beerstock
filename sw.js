@@ -75,9 +75,25 @@ self.addEventListener('push', ev => {
   try { d = ev.data ? ev.data.json() : {}; } catch { d = {}; }
 
   ev.waitUntil((async () => {
+    /* ---- VORUEBERGEHENDE DIAGNOSE, wieder entfernen ----------------------
+       Zwei Fragen auf einmal, und die Antwort reist in der Meldung selbst
+       mit, weil ein Service Worker sonst niemandem etwas sagen kann:
+       WELCHE Fassung laeuft ueberhaupt (`sw4`), und SIEHT sie die liegende
+       Meldung (`tag:` mit Filter, `alle:` ohne). Daraus faellt heraus, ob
+       `getNotifications` auf iOS gar nichts liefert oder nur der Filter
+       danebengreift. -------------------------------------------------- */
+    let diagnose = '';
+    try {
+      const mitMarke = await self.registration.getNotifications({ tag: d.tag });
+      const ohneMarke = await self.registration.getNotifications();
+      diagnose = `\n[sw4 · gleiche Marke: ${mitMarke.length} · insgesamt: ${ohneMarke.length}]`;
+    } catch (e) {
+      diagnose = `\n[sw4 · getNotifications wirft: ${e && e.name}]`;
+    }
+
     await marke_freiraeumen(d.tag);
     await self.registration.showNotification(d.titel || 'Wer hat kalt', {
-      body: d.text || '',
+      body: (d.text || '') + diagnose,
       /* Die Marke ersetzt eine liegende Meldung, statt sich danebenzustellen:
          wer einen Abend dreimal verschiebt, hinterlässt sonst drei Zettel, von
          denen zwei falsch sind. Vergeben wird sie im Worker (`stosse`) — und
