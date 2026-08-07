@@ -29,23 +29,53 @@
    Was der Worker schickt, ist ein kleines JSON: { titel, text, url, tag }.
    Kommt etwas anderes an (oder gar nichts), bleibt es bei den Vorgaben — eine
    leere Meldung ist immer noch besser als ein verlorenes Abo. */
+/* WebKit nimmt die Marke entgegen und tut nichts damit. Das ist kein Verdacht,
+   sondern ein offener Fehler: WebKit-Bug 258922, „Push notifications with same
+   tag do not replace each other", angelegt im Juli 2023 und im Juli 2026 immer
+   noch `NEW`. Auf dem iPhone stapeln sich damit drei Zettel zu einem dreimal
+   verschobenen Abend — genau das, was die Marke verhindern soll.
+
+   Das Gegenmittel steht im Bug-Thread selbst: die liegenden Meldungen mit
+   dieser Marke suchen und schließen, bevor die neue kommt. `getNotifications`
+   kann WebKit, nur das Zusammenfassen nicht.
+
+   NUR AUF WEBKIT, und das ist der Grund für die hässliche Kennungsprüfung: wo
+   die Marke funktioniert, ersetzt der Browser lautlos. Erst schließen und dann
+   neu zeigen wäre dort eine NEUE Meldung — sie würde klingeln. Bei einem
+   Notruf, dessen Kreis erweitert wird, bekämen alle, die ihn schon haben, ein
+   zweites Mal Ton. Fällt der Bug irgendwann, kann diese ganze Funktion weg. */
+const WEBKIT_STAPELT = /AppleWebKit/.test(self.navigator.userAgent)
+  && !/Chrome|Chromium|Edg\//.test(self.navigator.userAgent);
+
+async function marke_freiraeumen(marke) {
+  if (!WEBKIT_STAPELT || !marke) return;
+  try {
+    const liegen = await self.registration.getNotifications({ tag: marke });
+    liegen.forEach(n => n.close());
+  } catch { /* dann liegt eben eine zu viel — besser als gar keine */ }
+}
+
 self.addEventListener('push', ev => {
   let d = {};
   try { d = ev.data ? ev.data.json() : {}; } catch { d = {}; }
 
-  ev.waitUntil(self.registration.showNotification(d.titel || 'Wer hat kalt', {
-    body: d.text || '',
-    /* Die Marke ersetzt eine liegende Meldung, statt sich danebenzustellen:
-       wer einen Abend dreimal verschiebt, hinterlässt sonst drei Zettel, von
-       denen zwei falsch sind. Vergeben wird sie im Worker (`stosse`). */
-    tag: d.tag || undefined,
-    icon: 'icon.png?v=3',    // liegt neben dieser Datei; `?v=` siehe index.html
-    /* Das Ziel reist an der Meldung mit und wird erst beim Antippen gebraucht.
-       Es ist immer eine vollständige Adresse (der Worker baut sie aus `SEITE`)
-       — eine relative würde sich gegen *diese Datei* auflösen und landete auf
-       `sw.js#los=41`. */
-    data: { url: d.url || self.registration.scope },
-  }));
+  ev.waitUntil((async () => {
+    await marke_freiraeumen(d.tag);
+    await self.registration.showNotification(d.titel || 'Wer hat kalt', {
+      body: d.text || '',
+      /* Die Marke ersetzt eine liegende Meldung, statt sich danebenzustellen:
+         wer einen Abend dreimal verschiebt, hinterlässt sonst drei Zettel, von
+         denen zwei falsch sind. Vergeben wird sie im Worker (`stosse`) — und
+         auf WebKit räumt `marke_freiraeumen` von Hand vor. */
+      tag: d.tag || undefined,
+      icon: 'icon.png?v=3',    // liegt neben dieser Datei; `?v=` siehe index.html
+      /* Das Ziel reist an der Meldung mit und wird erst beim Antippen gebraucht.
+         Es ist immer eine vollständige Adresse (der Worker baut sie aus `SEITE`)
+         — eine relative würde sich gegen *diese Datei* auflösen und landete auf
+         `sw.js#los=41`. */
+      data: { url: d.url || self.registration.scope },
+    });
+  })());
 });
 
 /* Angetippt. Der übliche Fall auf dem Handy ist: die Tafel liegt schon
