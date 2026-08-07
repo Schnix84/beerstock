@@ -2014,6 +2014,19 @@
     background-size: 4px 4px, 6px 6px; background-position: 0 0, 2px 3px;
   }
   .wr-brett > * { position: relative; z-index: 1; }
+  /* Das Blatt nimmt den Fokus, zeigt ihn aber nicht: es ist kein Bedienelement,
+     sondern das, worauf man schaut. Sichtbar wird der Fokus erst wieder, sobald
+     er auf etwas liegt, das man drücken kann. */
+  .wr-brett:focus { outline: none; }
+
+  /* Am Finger hält man die Karte an, indem man liegen bleibt — und genau das
+     ist auch die Geste, mit der ein Handy Text markiert. Beides zusammen gibt
+     eine blau hinterlegte Zeile statt einer angehaltenen Seite. Nur am Finger:
+     am Rechner ist das Ziehen über einen Text zum Kopieren da, und dort stört
+     es das Anhalten auch nicht. */
+  @media (hover: none), (pointer: coarse) {
+    .wr-brett { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  }
 
   /* --- Die Striche sind die Uhr ---------------------------------------------
      Nicht ihre Anzeige — die Uhr selbst. Die Karte blättert weiter, wenn die
@@ -2031,12 +2044,14 @@
   .wr-fortschritt i {
     flex: 1; height: 3px; border-radius: 2px; background: #ffffff22; overflow: hidden;
   }
+  /* Ein Ton für alle Striche, und zwar der, den ein voller Strich hat. Der
+     laufende war einmal gelb und sprang beim Vollwerden auf Kreide um — damit
+     wechselte zweimal etwas die Farbe, ohne dass etwas anderes passiert wäre
+     als das, was der Strich ohnehin zeigt. Was läuft, sagt die LÄNGE. */
   .wr-fortschritt i b { display: block; height: 100%; width: 0; background: #ffffff66; }
-  /* Gewesen: ganz voll, in der ruhigen Kreide. Jetzt: läuft, und in Gelb. */
   .wr-fortschritt i.wr-war b { width: 100%; }
-  .wr-fortschritt i.wr-jetzt { box-shadow: 0 0 6px #e8c76688; }
   .wr-fortschritt i.wr-jetzt b {
-    width: 100%; background: var(--gelb);
+    width: 100%;
     transform-origin: left; animation: wr-lauf var(--wr-takt, 7s) linear forwards;
   }
   @keyframes wr-lauf { from { transform: scaleX(0); } to { transform: scaleX(1); } }
@@ -2139,14 +2154,18 @@
   }
   .wr-knopf:hover { background: #ffffff1a; border-color: var(--gelb); }
   .wr-knopf:disabled { opacity: .35; cursor: default; }
-  /* In Kreide wie jeder andere Knopf. Gelb war er einmal, und gelb ist auf
-     dieser Tafel die Farbe des Ersten und der großen Zahl — ein Knopf, der sie
-     trägt, ruft lauter als das, worüber er steht. */
+  /* Nur das Zeichen, kein Kasten. Gelb war er einmal, und gelb ist auf dieser
+     Tafel die Farbe des Ersten und der großen Zahl — ein Knopf, der sie trägt,
+     ruft lauter als das, worüber er steht. Der Rahmen ging mit: er war die
+     Einfassung, die den Knopf von den beiden Blätter-Knöpfen daneben abgrenzte,
+     und die stehen nicht mehr da. Übrig bleibt das Zeichen, das jedes Handy
+     ohnehin ohne Kasten zeigt. */
   .wr-teilen {
     margin-left: auto;
     display: flex; align-items: center; justify-content: center;
-    width: 44px; padding: 0;
+    width: 44px; padding: 0; border: none; background: none;
   }
+  .wr-teilen:hover { background: #ffffff14; }
   .wr-teilen svg {
     width: 20px; height: 20px; fill: none; stroke: currentColor;
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
@@ -2972,7 +2991,13 @@
   <div class="wr-ebene" id="wrapped" hidden>
     <div class="wr-schirm" id="wr-schirm"></div>
     <div class="wr-rahmen">
-      <div class="wr-brett" id="wr-brett" role="dialog" aria-labelledby="wr-titel" aria-modal="true">
+      <!-- `tabindex="-1"`, damit der Fokus beim Aufschlagen auf dem Blatt selbst
+           landen kann und nicht auf dem ×. Er lag dort, und am Rechner sah man
+           sofort einen gelben Ring um den Schließknopf — als hätte die Karte
+           einen zu drücken, statt sich ansehen zu lassen. Ein Fokus muss
+           trotzdem hier hinein, sonst steht er hinter der Ebene auf der Tafel
+           und die Tabulatortaste läuft durch das, was gerade verdeckt ist. -->
+      <div class="wr-brett" id="wr-brett" tabindex="-1" role="dialog" aria-labelledby="wr-titel" aria-modal="true">
         <div class="wr-fortschritt" id="wr-fortschritt" aria-hidden="true"></div>
         <div class="wr-kopf">
           <h1 class="kr" id="wr-titel">Dein Jahr am Kühlschrank <span class="wr-jahr" id="wr-jahrzahl"></span></h1>
@@ -7339,6 +7364,16 @@
   const wrHalt = new Set();
   const wrStrich = () => $('wr-fortschritt').querySelector('.wr-jetzt b');
 
+  // Wie weit die laufende Seite ist, in Millisekunden — `null`, wenn gar keine
+  // Uhr läuft. Gefragt wird die Animation selbst: sie ist die Uhr, also weiß
+  // nur sie es, und bei angehaltener Seite steht ihr Stand still wie er soll.
+  const WR_NOCHMAL = 600;   // ms, unter denen ein zweiter Tipp links zurückführt
+  function wrVerstrichen() {
+    const b = wrStrich();
+    const a = b && b.getAnimations ? b.getAnimations()[0] : null;
+    return a ? Number(a.currentTime) || 0 : null;
+  }
+
   function wrLaufStellen() {
     const b = wrStrich();
     if (b) b.style.animationPlayState = wrHalt.size ? 'paused' : 'running';
@@ -7383,7 +7418,7 @@
     $('wr-teilen').hidden = true;
     $('wrapped').hidden = false;
     koerperSperren();
-    $('wr-zu').focus();
+    $('wr-brett').focus();
     try {
       const r = await fetch(`${API}/api/wrapped?jahr=${jahr}`, { headers: mitToken(), cache: 'no-store' });
       let d = {};
@@ -7767,7 +7802,18 @@
     if (gezogen) return;
     if (ev.target.closest('svg, button, a, table')) return;
     const b = $('wr-buehne').getBoundingClientRect();
-    wrappedZeigen(ev.clientX - b.left < b.width * .3 ? wrWo - 1 : wrWo + 1);
+    if (ev.clientX - b.left >= b.width * .3) { wrappedZeigen(wrWo + 1); return; }
+    /* Links heißt zunächst „nochmal", nicht „zurück". Wer nach links tippt,
+       hat meistens etwas nicht zu Ende gelesen, und das steht auf DIESER
+       Kachel — die vorige wäre eine Antwort auf eine Frage, die niemand
+       gestellt hat. Erst wer gleich nochmal tippt, während die Seite noch am
+       Anfang steht, will wirklich eine zurück; dieselbe Staffelung wie am
+       Status-Bild und am Titelsprung jedes Musikspielers.
+
+       Läuft gar keine Uhr (`prefers-reduced-motion`), gibt es nichts
+       neuzustarten — dann führt der erste Tipp direkt zurück. */
+    const verstrichen = wrVerstrichen();
+    wrappedZeigen(verstrichen === null || verstrichen < WR_NOCHMAL ? wrWo - 1 : wrWo);
   });
   /* Der Wisch quer blättert — und seit die Karte sich auch nach unten
      wegschieben lässt, muss er die Achse mitprüfen. Ohne das schöbe ein
