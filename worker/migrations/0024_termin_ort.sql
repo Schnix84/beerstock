@@ -1,0 +1,37 @@
+-- ===========================================================================
+-- Schema 24: Ein Abend auswaerts.
+--
+-- Bis hierher war der Ort eines Abends immer ein Mensch: `gastgeber_id`, und
+-- die Karte hiess "Bierabend bei Maike". Nicht jeder Abend faellt aber bei
+-- jemandem an - beim Italiener, in der Kneipe, im Park. Dafuer diese Spalte.
+--
+-- `ort IS NOT NULL` HEISST AUSWAERTS. Das ist die ganze Unterscheidung, und
+-- sie steht nirgends doppelt: kein Schalter daneben, der dasselbe noch einmal
+-- behauptet und irgendwann etwas anderes sagt.
+--
+-- Was der Text drin ist, schreibt der Eintragende: "beim Italiener", "im
+-- Park". Die Praeposition steht MIT drin, weil der Worker sie nicht raten
+-- kann - "bei Italiener" waere Kauderwelsch, und eine Liste von Praepositionen
+-- je Ortsart waere ein Woerterbuch, das niemand pflegt. Ueberall, wo bisher
+-- " bei <Name>" stand, steht jetzt " <ort>".
+--
+-- `gastgeber_id` BLEIBT NOT NULL - der Umbau auf NULL waere in SQLite ein
+-- Neubau der Tabelle samt Index und UNIQUE, an Daten, die schon leben. Bei
+-- einem Abend auswaerts traegt die Spalte deshalb denselben wie
+-- `erstellt_von`: es gibt keinen Gastgeber, nur jemanden, der den Abend
+-- ausgemacht hat. Wer damit rechnet, MUSS `ort IS NULL` dazuschreiben -
+-- betroffen sind die Gastgeber-Balken der Statistik, die Zaehlung im Kontor
+-- und "Gastgeber des Jahres" im Wrapped. Wer das vergisst, macht den, der
+-- einmal den Italiener vorgeschlagen hat, zum Gastgeber.
+--
+-- Was NICHT davon beruehrt ist: bewertet wird ein Abend auswaerts wie jeder
+-- andere. Die Sterne haengen an `bewertungen(ziel_art='termin')`, also am
+-- Abend selbst und nicht an einem Menschen; nur die Echo-Mail ("X hat deinen
+-- Abend bewertet") faellt aus, weil es niemanden gibt, dem er gehoert - und
+-- aus demselben Grund darf hier auch der Eintragende bewerten.
+--
+-- Geaendert wird der Ort nicht (`/api/termin/aendern` fasst ihn nicht an),
+-- genau wie der Gastgeber: wo der Abend ist, ist ein anderer Abend.
+-- ===========================================================================
+
+ALTER TABLE termine ADD COLUMN ort TEXT;   -- NULL = beim Gastgeber

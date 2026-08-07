@@ -106,6 +106,13 @@ die aus keiner Ziehung stammen, trägt man von Hand ein: Gastgeber, Tag, Uhrzeit
 Kommende stehen oben, Gewesenes darunter. Abgesagt wird weich: die Zeile bleibt
 durchgestrichen stehen, damit die Kommentare darunter ihren Zusammenhang behalten.
 
+Nicht jeder Abend ist bei jemandem. Unter den Namen steht **„Auswärts …"**, und wer
+das wählt, schreibt statt eines Gastgebers einen Ort hin — „beim Italiener", „im
+Park". Die Präposition gehört mit ins Feld; der Abend heißt danach überall so, auf
+der Tafel wie im Kalendereintrag der Mail. Ein Abend auswärts zählt für niemanden
+als Gastgeberschaft, dafür darf ihn jeder bewerten, auch der, der ihn ausgemacht
+hat — bewertet wird ja der Italiener und nicht er.
+
 Die Liste reicht zwei Wochen zurück, sonst wüchse sie mit jedem Abend, den es je
 gab. Alles davor steht in der **Chronik** hinter dem Knopf am Kopf der Sektion:
 nach Monaten geordnet, seitenweise nachgeladen, und ein Tap öffnet dasselbe Blatt
@@ -539,7 +546,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/mail/stumm` | `{id, sig}` aus dem Ein-Klick-Abmeldelink — ohne Anmeldung, per HMAC |
 | `POST /api/drehen` | die Flasche drehen; ein zweiter Ruf liefert dasselbe Los |
 | `POST /api/los/antwort` | `{antwort:'ja'\|'nein', grund?, beginnt_am?, endet_am?}` — nur der Gezogene, per Token **oder** mit `{los, t}` aus der Gewinner-Mail |
-| `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand |
+| `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand; mit `{ort}` statt `gastgeber` einer auswärts |
 | `POST /api/termin/aendern` | verschieben, umbenennen, absagen; ohne `endet_am` wandert das Ende beim Verschieben mit |
 | `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?, bild?, ohne_vorschau?}` — überschreibt |
 | `GET /api/bewertungen` 🔒 | `?ziel=user:5` — Schnitte, eigene Abgabe, Kommentarbaum |

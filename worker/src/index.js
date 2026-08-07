@@ -705,7 +705,7 @@ function pruefeEnde(roh, beginn) {
    Absage sichtbar - sonst verschwindet ein Abend, unter dem Kommentare stehen. */
 const termineStmt = env => env.DB.prepare(`
   SELECT t.id, t.gastgeber_id, t.beginnt_am, t.endet_am, t.titel, t.los_id,
-         t.abgesagt_am, t.erstellt_von,
+         t.abgesagt_am, t.erstellt_von, t.ort,
          coalesce(u.name, 'Ehemaliger') AS gastgeber,
          coalesce(e.name, 'Ehemaliger') AS eingetragen_von
   FROM termine t
@@ -720,7 +720,12 @@ const termineStmt = env => env.DB.prepare(`
    erst am 403 merken, dass sie ihn nicht haette zeigen duerfen. */
 const terminAntwort = (t, noten, wieViele) => ({
   id: t.id,
-  gastgeber: t.gastgeber,
+  /* Auswaerts gibt es KEINEN Gastgeber (siehe migrations/0024): in der Spalte
+     steht dann der Eintragende, weil sie NOT NULL ist. Der Name geht deshalb
+     hier gar nicht erst hinaus - eine Stelle auf der Seite, die ihn trotzdem
+     hinschreibt, faellt so sofort auf, statt still den Falschen zu nennen. */
+  gastgeber: t.ort ? null : t.gastgeber,
+  ort: t.ort || null,
   von: t.eingetragen_von || null,
   beginnt_am: utc(t.beginnt_am),
   /* NULL nur bei einer Zeile, die aelter ist als Schema 10 und die Nachpflege
@@ -1889,10 +1894,12 @@ const statistikAbfragen = (env, fenster) => [
     ORDER BY r.user_id, j.tag
   `).bind(fenster),
   // 3 — Wer war wie oft Gastgeber. Liegende Balken.
+  // `ort IS NULL`: ein Abend auswaerts hat keinen Gastgeber (migrations/0024),
+  // in der Spalte steht dort nur der, der ihn ausgemacht hat.
   env.DB.prepare(`
     SELECT coalesce(u.name,'Ehemaliger') AS name, count(*) AS n
     FROM termine t JOIN users u ON u.id = t.gastgeber_id
-    WHERE t.abgesagt_am IS NULL
+    WHERE t.abgesagt_am IS NULL AND t.ort IS NULL
     GROUP BY t.gastgeber_id ORDER BY n DESC
   `),
   // 4 — Ausgang der Ziehungen. Gestapelter Balken.
@@ -2320,8 +2327,16 @@ function icsFalten(zeile) {
 // ohne VTIMEZONE: das ist die eine Form, die jeder Client gleich versteht.
 const icsZeit = dbZeit => String(dbZeit).replace(/[-:]/g, '').replace(' ', 'T') + 'Z';
 
+/* Wo der Abend ist - mit fuehrendem Leerzeichen, damit es sich ueberall
+   anhaengen laesst: "Bierabend bei Maike", "Bierabend beim Italiener".
+   Auswaerts steht die Praeposition IM Ort und nicht davor (migrations/0024).
+   Der eine Ort fuer diese Entscheidung: Kalendereintrag, Mail und Push haben
+   sie sonst je einmal, und drei Fassungen laufen auseinander. */
+const terminWo = termin =>
+  termin.ort ? ` ${termin.ort}` : termin.gastgeber ? ` bei ${termin.gastgeber}` : '';
+
 function icsBauen(env, termin, abgesagt) {
-  const titel = termin.titel || `Bierabend${termin.gastgeber ? ' bei ' + termin.gastgeber : ''}`;
+  const titel = termin.titel || `Bierabend${terminWo(termin)}`;
   const zeilen = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -2608,7 +2623,7 @@ Tag ist wieder frei.`,
    Betreff und Text hier Funktionen des Empfaengers. */
 function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen') {
   const wann = alsText(termin.beginnt_am);
-  const wo = termin.gastgeber ? ` bei ${termin.gastgeber}` : '';
+  const wo = terminWo(termin);
   const was = termin.titel ? `\n\nEs geht um: ${termin.titel}` : '';
   const selbst = u => u.id === ausloeser;
   const eigen = wieEntstanden === 'zugesagt'
@@ -2655,7 +2670,7 @@ function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen
    neuen - das schlechteste aller Ergebnisse. */
 function mailTerminAendert(env, ctx, termin, ausloeser, was) {
   const wann = alsText(termin.beginnt_am);
-  const wo = termin.gastgeber ? ` bei ${termin.gastgeber}` : '';
+  const wo = terminWo(termin);
   const abgesagt = was === 'abgesagt';
   const selbst = u => u.id === ausloeser;
 
@@ -2711,7 +2726,27 @@ function mailTerminAendert(env, ctx, termin, ausloeser, was) {
 
 /* Die einzige Art, die von Haus aus AUS ist: an einem lebhaften Abend ist sie
    die, die eine Runde zumuellt. Wer sie will, schaltet sie ein. */
-function mailEcho(env, ctx, anWen, vonWem, worum, bezug) {
+/* Die Sprungmarke zu einem Ziel. `termin:3` -> `#termin=3`, `user:5` ->
+   `#nutzer=5`; die Tafel kennt beide (siehe `pushEinstieg`). Ohne Ziel bleibt
+   es bei der nackten Adresse.
+
+   Warum `#nutzer` und nicht `#user`: die Sprungmarken sind das Einzige an
+   dieser Anwendung, was ein Mensch im Klartext zu sehen bekommt - in der
+   Adresszeile, in einer kopierten Mail. Dort steht sonst auch nirgends
+   Englisch. */
+const zielMarke = ziel => !ziel ? ''
+  : ziel.art === 'termin' ? `#termin=${ziel.id}`
+  : ziel.art === 'user' ? `#nutzer=${ziel.id}`
+  : '';
+
+function mailEcho(env, ctx, anWen, vonWem, worum, bezug, ziel = null) {
+  /* WOHIN das Echo zeigt. Hier stand lange nur `env.SEITE`, mit der
+     Begruendung, der Verteiler wisse nicht, in welchem Blatt der Faden
+     steckt. Das stimmte fuer DIESE Funktion - sie bekommt nur Text und
+     Bezug - und war trotzdem falsch: die beiden Aufrufer haben `ziel`
+     direkt daneben liegen, es wurde nur nie durchgereicht. Jetzt schon,
+     und die Mail nimmt denselben Weg wie der Push. */
+  const wohin = env.SEITE + zielMarke(ziel);
   /* Auch hier von Haus aus AUS - derselbe Schalter, dieselbe Vorgabe. Und
      dasselbe Ziel wie in der Mail: die Tafel, ohne Sprungmarke. Ein Echo
      zeigt auf einen Faden, und in welchem Blatt der gerade steckt, weiss der
@@ -2726,15 +2761,15 @@ function mailEcho(env, ctx, anWen, vonWem, worum, bezug) {
   stosse(env, ctx, 'echo', [anWen], {
     titel: `${vonWem}: ${worum.kurz}`,
     text: worum.lang,
-    url: env.SEITE,
+    url: wohin,
     tag: bezug,
   });
 
   benachrichtige(env, ctx, 'echo', [anWen], {
     bezug,
     betreff: `${vonWem}: ${worum.kurz}`,
-    text: `${worum.lang}\n\nNachlesen: ${env.SEITE}`,
-    html: `<p>${nurText(worum.lang)}</p>` + mailKnopf(env.SEITE, 'Nachlesen'),
+    text: `${worum.lang}\n\nNachlesen: ${wohin}`,
+    html: `<p>${nurText(worum.lang)}</p>` + mailKnopf(wohin, 'Nachlesen'),
   });
 }
 
@@ -4004,11 +4039,22 @@ const ROUTEN = {
       return fehler(request, `Der Titel darf höchstens ${TERMIN_TITEL_MAX} Zeichen haben`);
     }
 
+    /* Auswaerts oder bei jemandem - das entscheidet allein `ort` (siehe
+       migrations/0024). Steht dort etwas, wird ein mitgeschickter Gastgeber
+       gar nicht erst angesehen: zwei Angaben zum selben Ort waeren zwei
+       Wahrheiten, und die Seite bietet auch nur eine von beiden an. */
+    const ort = String(daten.ort ?? '').trim().replace(/\s+/g, ' ');
+    if (ort.length > TERMIN_TITEL_MAX) {
+      return fehler(request, `Der Ort darf höchstens ${TERMIN_TITEL_MAX} Zeichen haben`);
+    }
+
     // Der Gastgeber kommt als Name aus der Liste - Ids stehen nirgends auf der Seite.
-    const wer = String(daten.gastgeber ?? '').trim().toLowerCase();
+    const wer = ort ? '' : String(daten.gastgeber ?? '').trim().toLowerCase();
     const gast = wer
       ? await env.DB.prepare('SELECT id, name FROM users WHERE name_klein = ?').bind(wer).first()
-      : null;
+      /* Auswaerts gibt es keinen Gastgeber. Die Spalte ist NOT NULL und traegt
+         dann den, der den Abend ausgemacht hat - dasselbe wie `erstellt_von`. */
+      : ort ? { id: ich.id, name: ich.name } : null;
     if (!gast) return fehler(request, 'Den Gastgeber gibt es nicht');
 
     /* Wie die Meldesperre: gegen den Freund, der zehnmal drueckt. Gezaehlt wird
@@ -4022,19 +4068,20 @@ const ROUTEN = {
     }
 
     const neu = await env.DB.prepare(`
-      INSERT INTO termine (gastgeber_id, beginnt_am, endet_am, titel, erstellt_von)
-      VALUES (?, ?, ?, ?, ?) RETURNING id
-    `).bind(gast.id, alsDbZeit(p.d), alsDbZeit(e.d), titel || null, ich.id).first();
+      INSERT INTO termine (gastgeber_id, beginnt_am, endet_am, titel, ort, erstellt_von)
+      VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+    `).bind(gast.id, alsDbZeit(p.d), alsDbZeit(e.d), titel || null, ort || null, ich.id).first();
 
     mailTerminNeu(env, ctx, {
       id: neu.id, beginnt_am: alsDbZeit(p.d), endet_am: alsDbZeit(e.d),
-      gastgeber: gast.name, titel: titel || null, fassung: 0,
+      gastgeber: ort ? null : gast.name, ort: ort || null,
+      titel: titel || null, fassung: 0,
     }, ich.id, 'eingetragen');
 
     const alle = await termineStmt(env).all();
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
-      ok: true, id: neu.id, gastgeber: gast.name,
+      ok: true, id: neu.id, gastgeber: ort ? null : gast.name, ort: ort || null,
       termine: alle.results.map(t => terminAntwort(t)),
     }, 201);
   },
@@ -4053,7 +4100,10 @@ const ROUTEN = {
 
     const t = await env.DB.prepare(`
       SELECT t.id, t.gastgeber_id, t.erstellt_von, t.los_id, t.beginnt_am, t.endet_am,
-             t.titel, t.abgesagt_am, t.fassung,
+             -- Der Ort MUSS mit heraus: auswaerts steht in gastgeber_id der
+             -- Eintragende, und terminWo() haelt den Namen nur dann aus den
+             -- Mails heraus, wenn es den Ort ueberhaupt zu sehen bekommt.
+             t.titel, t.abgesagt_am, t.fassung, t.ort,
              coalesce(u.name, 'Ehemaliger') AS gastgeber,
              (t.beginnt_am <= datetime('now')) AS laeuft
       FROM termine t JOIN users u ON u.id = t.gastgeber_id WHERE t.id = ?
@@ -4273,16 +4323,22 @@ const ROUTEN = {
          darf man immer. Sonst haenge eine Note, die vor dieser Regel entstand,
          fuer immer fest. */
       const t = await env.DB.prepare(`
-        SELECT abgesagt_am, gastgeber_id, (beginnt_am <= datetime('now')) AS gewesen
+        SELECT abgesagt_am, gastgeber_id, ort, (beginnt_am <= datetime('now')) AS gewesen
         FROM termine WHERE id = ?
       `).bind(ziel.id).first();
       if (!t) return fehler(request, 'Den Termin gibt es nicht', 404);
       if (t.abgesagt_am) return fehler(request, 'Der Abend ist abgesagt worden', 409);
       if (!t.gewesen) return fehler(request, 'Der Abend hat noch nicht angefangen', 409);
-      if (t.gastgeber_id === ich.id) {
+      /* Auswaerts faellt beides weg - die Sperre und das Echo. Der Abend
+         gehoert niemandem (migrations/0024): "Versorgung" und "Location"
+         bewerten dann den Italiener, nicht den, der ihn vorgeschlagen hat, und
+         genau deshalb darf der auch mitbewerten. Die Sterne selbst haengen
+         ohnehin am Abend und nicht an einem Menschen - `bewerteter` traegt
+         allein die Echo-Mail weiter unten. */
+      if (!t.ort && t.gastgeber_id === ich.id) {
         return fehler(request, 'Den eigenen Abend bewertet man nicht', 403);
       }
-      bewerteter = t.gastgeber_id;
+      bewerteter = t.ort ? null : t.gastgeber_id;
     }
 
     /* Wie die Meldesperre, aber ausdruecklich nur gegen ANDERE Ziele - warum,
@@ -4343,7 +4399,7 @@ const ROUTEN = {
       mailEcho(env, ctx, bewerteter, ich.name, ziel.art === 'user'
         ? { kurz: 'Sterne für dich', lang: `${ich.name} hat dir Sterne gegeben.` }
         : { kurz: 'Sterne für deinen Abend', lang: `${ich.name} hat deinen Abend bewertet.` },
-        `bewertung:${b.id}`);
+        `bewertung:${b.id}`, ziel);
     }
 
     /* Zwei Marken: der Schnitt steht auch in der Liste bzw. am Termin, der
@@ -4736,7 +4792,7 @@ const ROUTEN = {
       mailEcho(env, ctx, angesprochen, ich.name, {
         kurz: 'Antwort auf deinen Beitrag',
         lang: `${ich.name} hat dir geantwortet: „${text.slice(0, 200)}${text.length > 200 ? ' …' : ''}"`,
-      }, `kommentar:${neu.id}`);
+      }, `kommentar:${neu.id}`, ziel);
     }
 
     /* Steht ein Link im Text, holt der Worker im Nachgang die Vorschaukarte
@@ -4922,7 +4978,7 @@ const ROUTEN = {
        mit - ein eigener Ruf waere eine Runde fuer eine Zeile. */
     if (ziel.art === 'termin') {
       stmts.push(env.DB.prepare(`
-        SELECT abgesagt_am, gastgeber_id, (beginnt_am <= datetime('now')) AS gewesen
+        SELECT abgesagt_am, gastgeber_id, ort, (beginnt_am <= datetime('now')) AS gewesen
         FROM termine WHERE id = ?
       `).bind(ziel.id));
     }
@@ -4957,7 +5013,10 @@ const ROUTEN = {
       : ziel.art === 'user' && ich.id === ziel.id ? 'Sich selbst bewertet man nicht.'
       : ziel.art !== 'termin'                     ? null
       : !a                                        ? 'Den Abend gibt es nicht mehr.'
-      : a.gastgeber_id === ich.id                 ? 'Den eigenen Abend bewertet man nicht.'
+      /* Auswaerts hat der Abend keinen Gastgeber, also auch keinen, dem er
+         gehoert - dieselbe Ausnahme wie in POST /api/bewerten, und aus
+         demselben Grund an derselben Stelle. */
+      : !a.ort && a.gastgeber_id === ich.id       ? 'Den eigenen Abend bewertet man nicht.'
       : a.abgesagt_am                             ? 'Abgesagt — bewertet wird ein Abend, den es gab.'
       : !a.gewesen                                ? 'Bewertet wird, wenn der Abend gewesen ist.'
       : null;
@@ -5019,7 +5078,7 @@ const ROUTEN = {
        das ganze Archiv waere derselbe Satz zum doppelten Preis. */
     const zeilen = await env.DB.prepare(`
       SELECT t.id, t.gastgeber_id, t.beginnt_am, t.endet_am, t.titel, t.los_id,
-             t.abgesagt_am, t.erstellt_von,
+             t.abgesagt_am, t.erstellt_von, t.ort,
          coalesce(u.name, 'Ehemaliger') AS gastgeber,
          coalesce(e.name, 'Ehemaliger') AS eingetragen_von
       FROM termine t
@@ -5091,7 +5150,10 @@ const ROUTEN = {
                (SELECT count(*) FROM reports r     WHERE r.user_id = u.id)   AS meldungen,
                (SELECT max(r.gemeldet_am) FROM reports r WHERE r.user_id = u.id) AS zuletzt,
                (SELECT count(*) FROM kommentare k  WHERE k.autor_id = u.id)  AS kommentare,
-               (SELECT count(*) FROM termine  t    WHERE t.gastgeber_id = u.id) AS gastgeber,
+               -- Nur echte Gastgeberschaften: auswaerts steht in der Spalte
+               -- bloss der, der den Abend ausgemacht hat (migrations/0024).
+               (SELECT count(*) FROM termine  t
+                 WHERE t.gastgeber_id = u.id AND t.ort IS NULL)              AS gastgeber,
                (SELECT count(*) FROM bewertungen b
                  WHERE b.ziel_art = 'user' AND b.ziel_id = u.id)             AS bewertet
         FROM users u
@@ -5571,9 +5633,12 @@ const ROUTEN = {
         GROUP BY k.ziel_id
       `).bind(jahrStartVoll, jahrEndeExkl),
 
-      // 9 - die Termine des Jahres selbst: wann, bei wem.
+      // 9 - die Termine des Jahres selbst: wann, bei wem. Ein Abend auswaerts
+      // steht mit drin - er kann Abend des Jahres werden wie jeder andere,
+      // er heisst dann nur nach seinem Ort statt nach einem Gastgeber.
       env.DB.prepare(`
-        SELECT t.id, t.beginnt_am, t.gastgeber_id, coalesce(u.name,'Ehemaliger') AS gastgeber_name
+        SELECT t.id, t.beginnt_am, t.gastgeber_id, t.ort,
+               coalesce(u.name,'Ehemaliger') AS gastgeber_name
         FROM termine t JOIN users u ON u.id = t.gastgeber_id
         WHERE t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
       `).bind(jahrStartVoll, jahrEndeExkl),
@@ -5585,10 +5650,12 @@ const ROUTEN = {
         WHERE ziel_art = 'user' AND erstellt >= ?1 AND erstellt < ?2
       `).bind(jahrStartVoll, jahrEndeExkl),
 
-      // 11 - wie viele Abende je Gastgeber im Jahr stattfanden.
+      // 11 - wie viele Abende je Gastgeber im Jahr stattfanden. Ohne die
+      // auswaerts: sie zaehlen fuer niemanden (migrations/0024).
       env.DB.prepare(`
         SELECT gastgeber_id, count(*) AS abende FROM termine
         WHERE beginnt_am >= ?1 AND beginnt_am < ?2 AND abgesagt_am IS NULL
+          AND ort IS NULL
         GROUP BY gastgeber_id
       `).bind(jahrStartVoll, jahrEndeExkl),
 
@@ -5745,7 +5812,10 @@ const ROUTEN = {
       const { t, schnitt, e } = abendGewinner;
       const k = abendKommentareJe.get(t.id) || { kommentare: 0, fotos: 0 };
       return {
-        terminId: t.id, wann: utc(t.beginnt_am), gastgeberName: t.gastgeber_name, schnitt,
+        terminId: t.id, wann: utc(t.beginnt_am), schnitt,
+        // Auswaerts nennt das Blatt den Ort; der Name in `gastgeber_id` ist
+        // dort nur der Eintragende und geht deshalb gar nicht erst hinaus.
+        gastgeberName: t.ort ? null : t.gastgeber_name, ort: t.ort || null,
         sterne: KATEGORIEN.termin.map(([feld, name]) => {
           const j = e.je.get(feld);
           return { feld, name, schnitt: j ? note(j.summe, j.zahl) : null };

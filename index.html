@@ -2516,6 +2516,23 @@
             <label><span class="feld-label">Tag</span>
               <input class="feld" id="t-datum" type="date" required></label>
           </div>
+          <!-- Nur für „auswärts" — bis dahin ist der Gastgeber der Ort. Das
+               `required` setzt `terminOrtZeigen()` mit der Sichtbarkeit: ein
+               verstecktes Pflichtfeld lässt sich nicht anspringen, und der
+               Browser bricht das Abschicken dann wortlos ab.
+
+               Das Feld heißt `t-wohin` und NICHT `t-ort`, obwohl die Spalte
+               dahinter `ort` heißt: „Ort" ist in der deutschen Autofill-
+               Heuristik das Wort für Stadt. Mit dem alten Namen hielt der
+               Browser das hier für ein Adressfeld und bot eine gespeicherte
+               Anschrift an — mit Personensymbol im Feld. `autocomplete="off"`
+               allein reicht dagegen nicht, Adress- und Kontaktfelder nehmen
+               sich Safari wie Chrome trotzdem heraus. -->
+          <div class="melde eins" id="t-wohin-zeile" hidden>
+            <label><span class="feld-label">Wo</span>
+              <input class="feld" id="t-wohin" maxlength="60" autocomplete="off"
+                     placeholder="beim Italiener"></label>
+          </div>
           <div class="melde">
             <label><span class="feld-label">Von</span>
               <input class="feld" id="t-zeit" type="time" value="19:00" required></label>
@@ -3456,6 +3473,16 @@
     a.appendChild(nadel);
   }
 
+  /* Wo ein Abend ist, und wie er heißt, wenn ihm niemand einen Namen gegeben
+     hat. Zwei Zeilen, aber an sechs Stellen gebraucht — Liste, Blatt, Chronik,
+     Rückmeldung nach dem Eintragen, Wrapped —, und die Regel dahinter ist
+     nicht offensichtlich: auswärts trägt der Ort seine Präposition SELBST
+     („beim Italiener"), bei einem Gastgeber steht sie davor. Der Worker
+     schickt `gastgeber: null`, sobald `ort` steht (siehe migrations/0024), ein
+     „bei null" fiele also sofort auf. */
+  const terminWo = t => t.ort || 'bei ' + t.gastgeber;
+  const terminName = t => t.titel || 'Bierabend ' + terminWo(t);
+
   const VARIANTE = {
     kopf(p, modus) {
       const ziel = $('hero-striche');
@@ -3601,7 +3628,7 @@
         + (t.abgesagt ? ' ab' : ''));
       z.type = 'button';
       z.dataset.ziel = 'termin:' + t.id;
-      z.dataset.name = t.titel || 'Bierabend bei ' + t.gastgeber;
+      z.dataset.name = terminName(t);
       // Kein `aria-label` — siehe `zeile`: es überschriebe Datum, Zeit und Note.
       z.setAttribute('aria-haspopup', 'dialog');
 
@@ -3625,7 +3652,7 @@
       z.appendChild(tag);
 
       const mitte = el('div', 't-mitte');
-      mitte.appendChild(el('div', 't-titel kr', t.titel || 'Bierabend bei ' + t.gastgeber));
+      mitte.appendChild(el('div', 't-titel kr', terminName(t)));
 
       const unter = el('div', 't-unter');
       const uhr = x => x.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
@@ -3634,7 +3661,7 @@
          es sind die 26 px, die dieser längsten aller Zeilen fehlten. */
       unter.appendChild(el('span', null,
         e ? uhr(d) + '–' + uhr(e) : uhr(d) + ' Uhr'));
-      if (t.titel) unter.appendChild(el('span', null, '· bei ' + t.gastgeber));
+      if (t.titel) unter.appendChild(el('span', null, '· ' + terminWo(t)));
       // Ausgelost steht oben in der Datumsspalte; von Hand eingetragen nennt
       // hier einen Namen und passt in keine 58 px breite Spalte.
       if (!t.aus_ziehung && t.von && t.von !== t.gastgeber) {
@@ -5712,6 +5739,14 @@
     }, wart);
   }
 
+  /* „Auswärts" steht als letzter Eintrag in DERSELBEN Liste und nicht als
+     Schalter daneben: es ist dieselbe Frage („wo ist der Abend?"), nur eine
+     andere Antwort. Der Wert kann kein Name sein — Namen dürfen nur Buchstaben,
+     Ziffern, Leerzeichen und `- . _` enthalten (siehe POST /api/name), ein
+     Sternchen also nie. Er verlässt die Seite auch nicht: abgeschickt wird der
+     Ort, und der Worker liest allein daran, dass der Abend auswärts ist. */
+  const T_AUSWAERTS = '*auswärts*';
+
   /* Das Formular füllt sich aus der Bestenliste — Gastgeber ist, wer in der
      Liste steht. Ids kennt die Seite nicht, sie schickt den Namen. */
   function terminFormular() {
@@ -5723,10 +5758,20 @@
       o.value = p.name;
       gast.appendChild(o);
     });
+    const aus = el('option', null, 'Auswärts …');
+    aus.value = T_AUSWAERTS;
+    gast.appendChild(aus);
     gast.value = gewaehlt || meinName || (letztesFeld[0] || {}).name || '';
     if (!$('t-datum').value) {
       $('t-datum').value = heuteOrt();   // Ortszeit, siehe dort
     }
+    terminOrtZeigen();
+  }
+
+  function terminOrtZeigen() {
+    const aus = $('t-gast').value === T_AUSWAERTS;
+    $('t-wohin-zeile').hidden = !aus;
+    $('t-wohin').required = aus;
   }
 
   // --- Das Glücksrad --------------------------------------------------------
@@ -7367,7 +7412,10 @@
         const a = d.runde.abend;
         if (a) {
           k.appendChild(el('div', 'wr-oben', 'DER ABEND DES JAHRES'));
-          k.appendChild(el('div', 'wr-held kr', `${wrWochentag(a.wann)} — bei ${a.gastgeberName}`));
+          // Auswärts heißt der Abend nach seinem Ort — `gastgeberName` ist
+          // dann null, dort stand nur der, der ihn ausgemacht hat.
+          k.appendChild(el('div', 'wr-held kr',
+            `${wrWochentag(a.wann)} — ${a.ort || 'bei ' + a.gastgeberName}`));
           const h = el('div', 'wr-hero wr-kleiner');
           h.append(a.schnitt.toFixed(1).replace('.', ',') + ' ');
           h.appendChild(el('span', 'wr-einheit', '★ im Schnitt'));
@@ -9202,9 +9250,19 @@
     const f = $('termin-form');
     f.hidden = !f.hidden;
     $('termin-neu').textContent = f.hidden ? 'eintragen' : 'abbrechen';
-    if (!f.hidden) { terminFormular(); $('t-datum').focus(); }
+    /* Der Sprung ins Datumsfeld gilt nur der Maus. Auf dem Telefon reisst ein
+       fokussiertes `type=date` sofort das Picker-Blatt des Systems auf — man
+       sieht das Formular gar nicht, das man eben geoeffnet hat. */
+    if (!f.hidden) {
+      terminFormular();
+      if (!matchMedia('(pointer: coarse)').matches) $('t-datum').focus();
+      f.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
     terminSagt('');
   });
+
+  // Die Zeile für den Ort geht mit der Wahl auf und wieder zu.
+  $('t-gast').addEventListener('change', terminOrtZeigen);
 
   $('termin-form').addEventListener('submit', async ev => {
     ev.preventDefault();
@@ -9213,17 +9271,25 @@
     const wann = alsUTC($('t-datum').value, von);
     const bisWann = endeUTC($('t-datum').value, von, bis);
     if (!wann) { terminSagt('Tag und Uhrzeit fehlen.', true); return; }
+    /* Auswärts oder bei jemandem — eines von beiden, nie beides. Der Worker
+       liest es genauso: steht ein Ort da, sieht er den Gastgeber gar nicht
+       erst an. Das Sternchen bleibt hier auf der Seite. */
+    const auswaerts = $('t-gast').value === T_AUSWAERTS;
+    const ort = auswaerts ? $('t-wohin').value.trim() : '';
+    if (auswaerts && !ort) { terminSagt('Der Ort fehlt.', true); return; }
     knopf.disabled = true; terminSagt('');
     try {
       const d = await ruf('/api/termin', {
-        gastgeber: $('t-gast').value, beginnt_am: wann, endet_am: bisWann,
+        gastgeber: auswaerts ? '' : $('t-gast').value, ort,
+        beginnt_am: wann, endet_am: bisWann,
         titel: $('t-titel').value,
       });
       $('t-titel').value = '';
+      $('t-wohin').value = '';
       $('termin-form').hidden = true;
       $('termin-neu').textContent = 'eintragen';
       zeichneTermine(d.termine || letzteTermine);
-      terminSagt('Eingetragen — Bierabend bei ' + d.gastgeber + '.');
+      terminSagt('Eingetragen — Bierabend ' + (d.ort || 'bei ' + d.gastgeber) + '.');
     } catch (e) {
       terminSagt(e.message, true);
     } finally {
@@ -9603,7 +9669,7 @@
       const zeile = document.querySelector('[data-ziel="termin:' + id + '"]');
       const t = letzteTermine.find(x => x.id === id);
       flyAuf('termin:' + id, zeile ? zeile.dataset.name
-        : t ? (t.titel || 'Bierabend bei ' + t.gastgeber) : 'Der Abend');
+        : t ? terminName(t) : 'Der Abend');
       return;
     }
     /* Zum Notruf gibt es kein eigenes Blatt: fremde Notrufe STEHEN auf der
