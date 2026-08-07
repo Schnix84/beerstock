@@ -2950,7 +2950,7 @@
     </div>
   </div>
 
-  <!-- ============ Der Anmeldelink =====================================
+  <!-- ============ Was aus einer Mail kommt ============================
        Derselbe Bau wie das Losblatt darüber, und aus demselben Grund: der
        Link aus der Mail ZEIGT nur, gehandelt wird erst hier.
 
@@ -2967,23 +2967,34 @@
        Am Gewinner-Link stand die Begründung dafür seit jeher da („Mailscanner
        und Vorschaudienste laden Links vor"); sie galt hier genauso, nur hatte
        sie niemand angewendet. Jetzt schon.
+
+       UND SIE GILT AUCH FÜR DEN ABMELDELINK in der Fußzeile jeder Mail. Der
+       ist sogar der unangenehmere Fall: wer sich anmelden wollte, merkt, dass
+       er es nicht ist, und fordert einen neuen Link an. Wer still stumm
+       gestellt wurde, merkt es erst daran, dass wochenlang keine Post kommt —
+       und sucht den Fehler dann bei allem außer bei einer Vorschau, die er
+       einmal versehentlich geöffnet hat.
        ============================================================= -->
-  <div class="flyout" id="anmeldelink" hidden>
-    <div class="fly-schirm" id="al-schirm"></div>
-    <div class="fly-blatt" role="dialog" aria-labelledby="al-titel" aria-modal="true">
+  <div class="flyout" id="mailblatt" hidden>
+    <div class="fly-schirm" id="ml-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="ml-titel" aria-modal="true">
       <div class="fly-kopf">
         <div>
-          <div class="fly-titel kr" id="al-titel">Dein Link liegt an</div>
-          <div class="fly-unter" id="al-unter">einmal tippen, dann gilt er</div>
+          <!-- Titel, Unterzeile und Knopfbeschriftung setzt der Aufrufer: ein
+               Bauteil fuer beide Wege, wie das Flyout fuer Melder und Termin.
+               Zwei fast gleiche Blaetter waeren zwei Stellen, an denen man den
+               naechsten Weg aus einer Mail vergisst. -->
+          <div class="fly-titel kr" id="ml-titel"></div>
+          <div class="fly-unter" id="ml-unter"></div>
         </div>
-        <button class="fly-zu" id="al-zu" type="button" aria-label="Schließen">×</button>
+        <button class="fly-zu" id="ml-zu" type="button" aria-label="Schließen">×</button>
       </div>
 
       <div class="lm-knoepfe">
-        <button class="knopf" id="al-los" type="button">Anmelden</button>
+        <button class="knopf" id="ml-knopf" type="button"></button>
       </div>
 
-      <p class="sagt" id="al-sagt" hidden></p>
+      <p class="sagt" id="ml-sagt" hidden></p>
     </div>
   </div>
 
@@ -9375,58 +9386,75 @@
      deshalb dort und nicht als Suchparameter. Direkt nach dem Einloesen fliegt
      es aus der Adresszeile, damit ein Screenshot oder ein zurueckgeblaettertes
      Fenster ihn nicht weiterreicht (er ist dann ohnehin verbraucht). */
-  let anmeldeLink = null;   // das Token aus dem Fragment, bis jemand tippt
+  /* --- Das Blatt für alles, was aus einer Mail kommt ------------------------
+     EIN AUFBAU DER SEITE IST KEIN MENSCH, DER ETWAS WILL. Das ist die ganze
+     Regel, und sie gilt für jeden Weg aus einer Mail: iOS Mail rendert für die
+     Vorschau beim langen Druck auf einen Link die ganze Seite samt Skript, und
+     jeder Mailscanner und jede Sicherheitssoftware lädt Links vor. Was beim
+     Aufbau handelt, ist damit schon geschehen, bevor der Empfänger die Finger
+     bewegt hat.
 
-  function magicEinloesen() {
-    const treffer = /[#&]anmelden=([a-f0-9]{32,})/i.exec(location.hash || '');
-    if (!treffer) return;
-    history.replaceState(null, '', location.pathname + location.search);
-    /* HIER WIRD NICHT EINGELÖST, hier wird nur aufgeschlagen. Ein Aufbau der
-       Seite ist kein Mensch, der sich anmelden will: iOS Mail rendert für die
-       Vorschau beim langen Druck die ganze Seite samt Skript, und ein `POST`
-       an dieser Stelle verbrannte das Token, bevor der Nutzer die Finger auch
-       nur bewegt hatte. Dasselbe gilt für jeden Mailscanner und jede
-       Sicherheitssoftware, die Links vorlädt — am Gewinner-Link steht genau
-       dieser Satz seit jeher, er galt hier nur nie. */
-    anmeldeLink = treffer[1];
-    alSagt('');
-    $('anmeldelink').hidden = false;
-  }
+     Am Gewinner-Link stand dieser Satz seit jeher; die beiden anderen Wege —
+     Anmelden und Abmelden — haben ihn am 2026-08-07 nachgereicht, der eine,
+     weil er auf dem iPhone nachweislich unbrauchbar geworden war, der andere
+     aus derselben Überlegung, bevor es jemandem passiert.
 
-  function alSagt(text, schlecht) {
-    const p = $('al-sagt');
+     Ein Bauteil für beide, nicht zwei fast gleiche: Titel, Unterzeile,
+     Knopfbeschriftung und die Tat kommen vom Aufrufer. Der nächste Weg aus
+     einer Mail hängt sich hier an, statt ein drittes Blatt zu bauen. */
+  let mailTat = null;   // was der Knopf tut, solange das Blatt offensteht
+
+  function mlSagt(text, schlecht) {
+    const p = $('ml-sagt');
     p.textContent = text || '';
     p.classList.toggle('schlecht', !!schlecht);
     p.hidden = !text;
   }
 
-  /* Zumachen ohne einzulösen ist erlaubt und verliert nichts: das Token gilt
-     seine fünfzehn Minuten weiter, und wer die Mail noch hat, kommt darüber
-     wieder her. Ein Blatt, das man nicht schließen kann, wäre eine Falle. */
-  function anmeldeLinkZu() {
-    anmeldeLink = null;
-    $('anmeldelink').hidden = true;
-    alSagt('');
+  function mailBlattAuf(titel, unter, knopf, tun) {
+    mailTat = tun;
+    $('ml-titel').textContent = titel;
+    $('ml-unter').textContent = unter;
+    $('ml-knopf').textContent = knopf;
+    mlSagt('');
+    $('mailblatt').hidden = false;
   }
 
-  async function anmeldeLinkLos() {
-    if (!anmeldeLink) return;
-    const knopf = $('al-los');
+  /* Zumachen ohne zu handeln ist erlaubt und verliert nichts: die Marke aus der
+     Mail gilt weiter (der Anmeldelink seine fünfzehn Minuten, der Abmeldelink
+     unbegrenzt), und wer die Mail noch hat, kommt darüber wieder her. Ein
+     Blatt, das man nicht schließen kann, wäre eine Falle — und beim Abmelden
+     wäre es sogar eine, die man nur mit „ja" verlässt. */
+  function mailBlattZu() {
+    mailTat = null;
+    $('mailblatt').hidden = true;
+    mlSagt('');
+  }
+
+  async function mailBlattLos() {
+    if (!mailTat) return;
+    const knopf = $('ml-knopf');
     knopf.disabled = true;
-    alSagt('');
-    try {
+    mlSagt('');
+    try { await mailTat(); } finally { knopf.disabled = false; }
+  }
+
+  function magicEinloesen() {
+    const treffer = /[#&]anmelden=([a-f0-9]{32,})/i.exec(location.hash || '');
+    if (!treffer) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    const token = treffer[1];
+    mailBlattAuf('Dein Link liegt an', 'einmal tippen, dann gilt er', 'Anmelden', async () => {
       // Klagt ins Blatt, nicht auf die Seite dahinter — dort liegt der Vorhang.
-      if (!await magicSenden(anmeldeLink, alSagt)) return;
-      anmeldeLinkZu();
+      if (!await magicSenden(token, mlSagt)) return;
+      mailBlattZu();
       /* Von Hand nachziehen, was sonst der nächste Aufbau erledigt hätte: die
          Seite wird hier ja nicht neu geladen. Erst das Formular (der
          Türsteher muss weg), dann die Tafel, dann das Push-Abo. */
       formular();
       await hole();
       pushAbgleich();
-    } finally {
-      knopf.disabled = false;
-    }
+    });
   }
 
   /* Das Einlösen selbst, getrennt vom Ablesen der Adresszeile: es gibt einen
@@ -9471,24 +9499,43 @@
      --------------------------------------------------------------------- */
 
   // Der Ein-Klick-Abmelder aus der Fußzeile jeder Mail.
-  async function stummEinloesen() {
+  function stummEinloesen() {
     const treffer = /[#&]stumm=(\d+)\.([A-Za-z0-9_-]{10,})/.exec(location.hash || '');
     if (!treffer) return;
     history.replaceState(null, '', location.pathname + location.search);
-    try {
-      const r = await fetch(API + '/api/mail/stumm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: Number(treffer[1]), sig: treffer[2] }),
+    const id = Number(treffer[1]), sig = treffer[2];
+
+    /* Auch hier wird nicht beim Aufbau gehandelt, und von den drei Wegen ist
+       dieser der unangenehmste, wenn man es doch tut: wer sich anmelden wollte,
+       merkt sofort, dass er nicht drin ist, und fordert einen neuen Link an.
+       Wer still stumm gestellt wurde, merkt es erst daran, dass wochenlang
+       keine Post kommt — und sucht den Grund dann überall, nur nicht bei einer
+       Vorschau, die er einmal versehentlich aufgezogen hat. Die Marke gilt
+       unbegrenzt, ein zweiter Versuch kostet also nichts.
+
+       Ein Abmeldelink SOLL mit einem Klick wirken, und das tut er weiterhin —
+       der Klick ist nur nicht mehr der auf den Link in der Mail, sondern der
+       auf den Knopf, der daraufhin dasteht. */
+    mailBlattAuf('Keine Mails mehr vom Wirt?', 'einmal tippen, dann ist Ruhe',
+      'Abstellen', async () => {
+        try {
+          const r = await fetch(API + '/api/mail/stumm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, sig }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) { mlSagt(d.fehler || 'Der Link hat nicht funktioniert.', true); return; }
+          mailBlattZu();
+          sagt('Erledigt — du bekommst keine Mails mehr vom Wirt. '
+            + 'Unter „mein Deckel" kannst du es zurücknehmen.');
+          // Steht der Deckel gerade offen, zeigt er sonst weiter die alten
+          // Schalter — dieselbe Wahrheit an zwei Stellen, eine davon falsch.
+          if (deckelOffen) deckelLaden();
+        } catch {
+          mlSagt('Das ließ sich gerade nicht abschicken. Netz weg?', true);
+        }
       });
-      const d = await r.json().catch(() => ({}));
-      sagt(r.ok
-        ? 'Erledigt — du bekommst keine Mails mehr vom Wirt. '
-          + 'Unter „mein Deckel" kannst du es zurücknehmen.'
-        : (d.fehler || 'Der Link hat nicht funktioniert.'), !r.ok);
-    } catch {
-      sagt('Das ließ sich gerade nicht abschicken. Netz weg?', true);
-    }
   }
 
   // Die Antwort des Gewinners. Der Link zeigt nur — geschickt wird per Knopf.
@@ -9711,9 +9758,9 @@
   $('lm-ja').addEventListener('click', () => losMailAntwort(true));
   $('lm-nein').addEventListener('click', () => losMailAntwort(false));
 
-  $('al-zu').addEventListener('click', anmeldeLinkZu);
-  $('al-schirm').addEventListener('click', anmeldeLinkZu);
-  $('al-los').addEventListener('click', anmeldeLinkLos);
+  $('ml-zu').addEventListener('click', mailBlattZu);
+  $('ml-schirm').addEventListener('click', mailBlattZu);
+  $('ml-knopf').addEventListener('click', mailBlattLos);
 
   /* Der Weg aus dem Kontor: `?wrapped=2026` schlägt den Rückblick für dieses
      Jahr auf. Das Kontor kann ihn nicht selbst zeigen — die Kacheln stehen
@@ -9780,7 +9827,7 @@
   /* `magicEinloesen` schlägt nur noch das Blatt auf und wartet auf einen
      Fingertipp — es ist deshalb nicht mehr asynchron, und die Kette darunter
      hängt nicht mehr an ihm. Der Aufbau läuft durch, als läge kein Link an;
-     tippt jemand dann auf „Anmelden", zieht `anmeldeLinkLos` Formular und
+     tippt jemand dann auf „Anmelden", zieht die Tat im Blatt Formular und
      Tafel von Hand nach. */
   magicEinloesen();
 

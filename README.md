@@ -269,23 +269,29 @@ Eintrag, statt einen zweiten daneben zu legen, und eine Absage räumt ihn per
 eine Einladung und zeigt im Postfach Zusagen-/Absagen-Knöpfe, deren Antwort an
 ein Postfach ginge, das niemand liest. Zugesagt wird auf der Tafel.
 
-**Kein Link aus einer Mail tut etwas von selbst** — sie führen auf die Seite, und
-dort löst erst ein Knopf aus. Das galt lange nur für die Antwort des Gewinners
-(„Mailscanner und Vorschaudienste laden Links vor; ein `GET`, das zusagt, wäre
-binnen einer Woche einmal von einem Virenscanner beantwortet worden"), seit dem
-7. August 2026 auch für den **Anmeldelink**: iOS Mail rendert beim langen Druck
-auf einen Link die Seite samt JavaScript, und das reichte, um das Token zu
-verbrennen, bevor der Nutzer die Finger bewegt hatte. Wer die Tafel auf dem
-iPhone-Bildschirm liegen hat, kam damit gar nicht mehr herein. Der Link schlägt
-jetzt ein Blatt mit einem Knopf auf; ein Aufbau der Seite ist kein Mensch, der
-sich anmelden will.
+**Kein Link aus einer Mail tut etwas von selbst.** Alle drei — Anmelden,
+Abmelden, die Antwort des Gewinners — führen auf die Seite und schlagen dort ein
+Blatt mit einem Knopf auf. Erst der Fingertipp handelt. *Ein Aufbau der Seite
+ist kein Mensch, der etwas will:* Mailscanner und Sicherheitssoftware laden
+Links vor, und iOS Mail rendert für die Vorschau beim langen Druck die ganze
+Seite samt JavaScript.
+
+Beim Gewinner-Link galt das von Anfang an; die beiden anderen haben es am
+7. August 2026 nachgereicht. Der **Anmeldelink**, weil er auf dem iPhone
+nachweislich unbrauchbar geworden war: die Vorschau verbrannte das Token, bevor
+der Empfänger die Finger bewegt hatte, und wer die Tafel auf dem Homescreen
+liegen hat, kam damit gar nicht mehr herein. Der **Abmeldelink** aus der
+Fußzeile aus derselben Überlegung, bevor es jemandem passiert — und er ist der
+unangenehmere Fall: wer sich nicht anmelden konnte, merkt es sofort; wer still
+stumm gestellt wurde, merkt es erst, wenn wochenlang keine Post kommt. Ein
+Abmeldelink soll mit einem Klick wirken, und das tut er weiterhin — der Klick
+ist nur nicht mehr der auf den Link in der Mail, sondern der auf den Knopf, der
+daraufhin dasteht.
 
 Zwei Links kommen ohne Anmeldung aus: das Abmelden und die Antwort des
 Gewinners. Beide tragen eine **HMAC-Signatur statt einer Zeile in der Datenbank**
 — sie steht nirgends, sie wird gerechnet, und ein Rundumschlag ist ein neues
-`MAIL_GEHEIM`. Beide führen auf die Seite und tun dort erst etwas, wenn man
-klickt: Mailscanner laden Links vor, und ein `GET`, das zusagt, wäre binnen einer
-Woche einmal von einem Virenscanner beantwortet worden.
+`MAIL_GEHEIM`.
 
 ### Push aufs Gerät
 
