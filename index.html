@@ -1985,6 +1985,12 @@
     position: fixed; inset: 0; z-index: 55; display: flex;
     align-items: center; justify-content: center;
     padding: clamp(6px, 2vw, 18px);
+    /* Wie lange eine Seite steht. Am Status-Bild sind es vier bis fünf
+       Sekunden — dort steht ein Foto. Hier stehen Fließtext und auf der
+       Hälfte der Kacheln ein Diagramm; die Bilanz ist in vier Sekunden nicht
+       gelesen. Eine Zahl für alle Seiten, keine nach Textlänge gerechnete:
+       eine Karte, die mal kurz und mal lang steht, fühlt sich kaputt an. */
+    --wr-takt: 7s;
   }
   .wr-schirm { position: absolute; inset: 0; background: #050807f0; }
   .wr-rahmen {
@@ -2009,10 +2015,38 @@
   }
   .wr-brett > * { position: relative; z-index: 1; }
 
+  /* --- Die Striche sind die Uhr ---------------------------------------------
+     Nicht ihre Anzeige — die Uhr selbst. Die Karte blättert weiter, wenn die
+     Animation des laufenden Striches ihr `animationend` meldet, und sonst nie.
+     Ein `setTimeout` daneben wäre eine zweite Uhr, die man mit dieser hier
+     synchron halten müsste: bei jedem Anhalten, jedem Sprung, jedem Tab-Wechsel
+     einmal mehr, und beim ersten vergessenen Fall liefe der Strich voll, ohne
+     dass etwas passiert. So gibt es nur eine, und Anhalten ist eine Zeile.
+
+     Ein eigenes <b> im <i> statt eines Pseudoelements: die Animation muss sich
+     neu starten lassen (Klasse ab, Umbruch erzwingen, Klasse dran), und ein
+     Element, das man anfassen kann, ist dafür der kürzere Weg.
+     --------------------------------------------------------------------- */
   .wr-fortschritt { display: flex; gap: 5px; padding: 2px 0 8px; }
-  .wr-fortschritt i { flex: 1; height: 3px; border-radius: 2px; background: #ffffff22; }
-  .wr-fortschritt i.wr-war   { background: #ffffff66; }
-  .wr-fortschritt i.wr-jetzt { background: var(--gelb); box-shadow: 0 0 6px #e8c76688; }
+  .wr-fortschritt i {
+    flex: 1; height: 3px; border-radius: 2px; background: #ffffff22; overflow: hidden;
+  }
+  .wr-fortschritt i b { display: block; height: 100%; width: 0; background: #ffffff66; }
+  /* Gewesen: ganz voll, in der ruhigen Kreide. Jetzt: läuft, und in Gelb. */
+  .wr-fortschritt i.wr-war b { width: 100%; }
+  .wr-fortschritt i.wr-jetzt { box-shadow: 0 0 6px #e8c76688; }
+  .wr-fortschritt i.wr-jetzt b {
+    width: 100%; background: var(--gelb);
+    transform-origin: left; animation: wr-lauf var(--wr-takt, 7s) linear forwards;
+  }
+  @keyframes wr-lauf { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  /* Wer die Systemeinstellung gesetzt hat, blättert selbst: ein Inhalt, der von
+     allein weiterspringt, braucht sonst einen dauerhaften Stopp-Schalter, und
+     das Halten mit dem Finger ist keiner, den man findet. Der Strich steht
+     dann einfach voll da — er zeigt die Seite, nicht mehr die Zeit. */
+  @media (prefers-reduced-motion: reduce) {
+    .wr-fortschritt i.wr-jetzt b { animation: none; }
+  }
 
   .wr-kopf { display: flex; align-items: baseline; gap: 8px; }
   .wr-kopf h1 {
@@ -2105,8 +2139,11 @@
   }
   .wr-knopf:hover { background: #ffffff1a; border-color: var(--gelb); }
   .wr-knopf:disabled { opacity: .35; cursor: default; }
+  /* In Kreide wie jeder andere Knopf. Gelb war er einmal, und gelb ist auf
+     dieser Tafel die Farbe des Ersten und der großen Zahl — ein Knopf, der sie
+     trägt, ruft lauter als das, worüber er steht. */
   .wr-teilen {
-    margin-left: auto; border-color: var(--gelb); color: var(--gelb);
+    margin-left: auto;
     display: flex; align-items: center; justify-content: center;
     width: 44px; padding: 0;
   }
@@ -2943,9 +2980,12 @@
         </div>
         <main class="wr-buehne" id="wr-buehne"></main>
         <p class="sagt" id="wr-sagt" hidden></p>
+        <!-- Im Fuß steht nur noch das Teilen-Zeichen. „‹ zurück" und „weiter ›"
+             standen hier, solange die Karte auf einen Klick wartete; seit sie
+             von selbst läuft, sind sie zwei Knöpfe für etwas, das ohnehin
+             geschieht. Geblättert wird weiter durch Tippen auf die linke oder
+             rechte Seite, durch Wischen und mit den Pfeiltasten. -->
         <div class="wr-fuss">
-          <button class="wr-knopf" id="wr-zurueck" type="button" aria-label="vorige Kachel">‹ zurück</button>
-          <button class="wr-knopf" id="wr-weiter" type="button" aria-label="nächste Kachel">weiter ›</button>
           <!-- Das Kästchen mit dem Pfeil heraus: dasselbe Zeichen, mit dem
                jedes Handy teilt. Es steht an der Stelle, an der vorher „3 / 9"
                stand — die Seitenzahl sagte nichts, was die Striche oben nicht
@@ -7264,16 +7304,55 @@
     const k = el('div', 'wr-kachel');
     wrKachelListe[wrWo].bau(k);
     buehne.appendChild(k);
+    /* Die Striche neu stellen — und den laufenden von vorn starten. Die
+       Klasse allein genügt dafür nicht: bleibt sie an demselben <b> hängen
+       (Sprung auf dieselbe Kachel), läuft die Animation einfach weiter, wo sie
+       war. Ein frisches <b> je Segment ist der kürzeste sichere Neustart und
+       spart das übliche `void offsetWidth`-Ritual. */
     [...$('wr-fortschritt').children].forEach((seg, j) => {
       seg.className = j < wrWo ? 'wr-war' : (j === wrWo ? 'wr-jetzt' : '');
+      seg.replaceChildren(el('b'));
     });
-    $('wr-zurueck').disabled = wrWo === 0;
-    $('wr-weiter').disabled = wrWo === wrKachelListe.length - 1;
+    wrLaufStellen();
     // Der Teilen-Knopf hing einmal nur an der letzten Kachel — nicht als
     // Entwurf, sondern weil der Maler darunter nur deren fünf Textklassen
     // kannte. Seit er die ganze Kachel abliest, trägt ihn jede.
     $('wr-teilen').hidden = false;
   }
+
+  /* --- Der Selbstlauf --------------------------------------------------------
+     Wie am Status-Bild: die Seite läuft ab, der Strich oben füllt sich dabei,
+     dann kommt die nächste — und nach der letzten ist Schluss. Gehalten wird
+     mit dem Finger oder der Maustaste, und es läuft dort weiter, wo es stand,
+     nicht von vorn.
+
+     Angehalten wird über eine MENGE von Gründen, nicht über einen Schalter.
+     Es gibt mehr als einen: der Finger liegt auf der Karte, der Teilen-Dialog
+     ist offen, der Tab liegt im Hintergrund. Mit einem Schalter gäbe der erste
+     Grund, der endet, den Lauf frei, während ein anderer noch gilt — man nimmt
+     den Finger hoch, während der Teilen-Dialog offen ist, und die Karte
+     blättert hinter ihm weiter.
+
+     Der Teilen-Fall ist dabei kein gedachter: der Systemdialog nimmt den Zeiger
+     an sich, das `pointerup` kommt nie an, und ohne eigenen Grund für ihn
+     bliebe die Karte danach für immer stehen. */
+  const wrHalt = new Set();
+  const wrStrich = () => $('wr-fortschritt').querySelector('.wr-jetzt b');
+
+  function wrLaufStellen() {
+    const b = wrStrich();
+    if (b) b.style.animationPlayState = wrHalt.size ? 'paused' : 'running';
+  }
+  const wrHalten = grund => { wrHalt.add(grund); wrLaufStellen(); };
+  const wrWeiter = grund => { wrHalt.delete(grund); wrLaufStellen(); };
+
+  /* Ein Zuhörer am Fortschritt statt einem je Strich: die Striche werden bei
+     jedem Blättern neu gebaut, ein Zuhörer am Vater überlebt das. */
+  $('wr-fortschritt').addEventListener('animationend', ev => {
+    if (ev.animationName !== 'wr-lauf' || $('wrapped').hidden) return;
+    if (wrWo >= wrKachelListe.length - 1) { wrappedZu(); return; }
+    wrappedZeigen(wrWo + 1);
+  });
 
   async function wrappedAuf(jahr, ausKontor) {
     // Ein Laufzaehler statt eines Jahresvergleichs: "dasselbe Jahr zweimal
@@ -7292,14 +7371,15 @@
        Ohne diese Zeile verschluckte die Karte beim nächsten Öffnen den ersten
        Tipp. */
     wrGezogen = false;
+    // Und aus demselben Grund die Haltegründe: ein Finger, der beim Schließen
+    // auf der Karte lag, hinterliesse sonst eine Seite, die nie weiterläuft.
+    wrHalt.clear();
     wrKachelListe = [];
     wrWo = 0;
     $('wr-jahrzahl').textContent = jahr;
     $('wr-buehne').textContent = '';
     $('wr-fortschritt').textContent = '';
     wrSagt('');
-    $('wr-zurueck').disabled = true;
-    $('wr-weiter').disabled = true;
     $('wr-teilen').hidden = true;
     $('wrapped').hidden = false;
     koerperSperren();
@@ -7624,6 +7704,9 @@
   async function wrappedTeilen() {
     const knopf = $('wr-teilen');
     knopf.disabled = true;
+    // Solange der Dialog offen steht, blättert nichts: sonst teilt man eine
+    // Kachel und kommt auf einer anderen zurück.
+    wrHalten('teilen');
     try {
       const blob = await wrappedKachelZeichnen();
       if (!blob) throw new Error('Das Bild ließ sich nicht bauen.');
@@ -7641,15 +7724,38 @@
       if (e.name !== 'AbortError') wrSagt(e.message || 'Teilen ging nicht.', true);
     } finally {
       knopf.disabled = false;
+      wrWeiter('teilen');
     }
   }
 
   $('wrapped-auf').addEventListener('click', () => wrappedAuf(new Date().getFullYear()));
   $('wr-zu').addEventListener('click', wrappedZu);
   $('wr-schirm').addEventListener('click', wrappedZu);
-  $('wr-zurueck').addEventListener('click', () => wrappedZeigen(wrWo - 1));
-  $('wr-weiter').addEventListener('click', () => wrappedZeigen(wrWo + 1));
   $('wr-teilen').addEventListener('click', wrappedTeilen);
+
+  /* Halten hält an. `pointer`-Ereignisse und nicht `touch`: dieselbe Geste
+     kommt hier vom Finger wie von der gedrückten Maustaste, und beide sollen
+     dasselbe tun. Ein kurzes Tippen hält dabei für ein paar Millisekunden an
+     und läuft dann weiter — unsichtbar, und der Preis dafür, dass Halten keine
+     eigene Schwelle braucht.
+
+     `pointercancel` gehört dazu: nimmt das Betriebssystem den Zeiger an sich
+     (Wischgeste, Systemdialog), kommt nie ein `pointerup`, und die Karte stünde
+     von da an still. `wr-rahmen` statt `wr-brett`, damit auch der Rand zählt —
+     dort liegt beim Halten oft schon der Daumen. */
+  {
+    const rahmen = $('wrapped').querySelector('.wr-rahmen');
+    rahmen.addEventListener('pointerdown', () => wrHalten('finger'));
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(art =>
+      rahmen.addEventListener(art, () => wrWeiter('finger')));
+  }
+
+  /* Ein Tab im Hintergrund soll die Seiten nicht durchlaufen lassen. Die
+     Browser drosseln Animationen dort zwar, aber sie halten sie nicht an —
+     ohne das käme man zurück und fände den Rückblick geschlossen vor. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) wrHalten('weg'); else wrWeiter('weg');
+  });
 
   /* Tippen blättert — aber nur Tippen. Ein kurzer Zug nach unten, der die
      Schwelle der Schließgeste nicht erreicht, ruft kein `preventDefault` und
