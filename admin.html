@@ -617,8 +617,18 @@
   /* --- Die Jahr-Wahl -------------------------------------------------------
      Der Rückblick liegt drüben auf der Tafel, nicht hier: er ist nichts, was
      man verwaltet. Das Kontor fragt nur, WELCHES Jahr, und schickt einen dann
-     hinüber. Ein kleines Stück Tafel auf abgedunkeltem Schirm — dieselbe Form
-     wie die Blätter drüben, nur mittig.
+     hinüber. Auf dem Blatt steht darum nichts als die Frage und die Jahre.
+
+     Ein Satz stand hier einmal mit: „Der Rückblick geht auch unterjährig,
+     beim laufenden Jahr zählt er bis heute." Er erklärte eine Eigenschaft des
+     Workers an der Stelle, an der man wählt und nicht liest — und die Zeile
+     neben dem laufenden Jahr sagt dasselbe noch einmal, nur dort, wo es
+     zählt. Zwei Sätze für eine Auskunft sind einer zu viel.
+
+     Zwei Formen, eine Ebene, dieselbe Trennung wie bei den Blättern drüben:
+     am Zeigergerät eine mittige Karte, die das × schließt; am Finger ein
+     Bogen von unten, den man wegwischt. Der Knopf „doch nicht" war der
+     Ersatz für beides und fällt mit ihnen weg.
      --------------------------------------------------------------------- */
   .wahl-ebene {
     position: fixed; inset: 0; z-index: 60;
@@ -628,15 +638,23 @@
   .wahl-schirm { position: absolute; inset: 0; background: #000000aa; }
   .wahl-blatt {
     position: relative; width: min(340px, 92vw);
-    background: radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 55%, var(--schiefer-t) 100%);
+    max-height: 88vh; overflow-y: auto; overscroll-behavior: contain;
+    background: radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
     border: 6px solid #4a3527; border-radius: 8px;
-    padding: 18px 18px 16px; box-shadow: 0 14px 44px #000c, 0 0 0 1px #0009 inset;
+    padding: 14px 18px 16px; box-shadow: 0 14px 44px #000c, 0 0 0 1px #0009 inset;
+    animation: wahl-kommt .2s ease-out;
   }
+  @keyframes wahl-kommt { from { transform: translateY(12px); opacity: .4; } }
+  .wahl-kopf { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
   .wahl-blatt h3 {
-    font-family: var(--hand); font-size: 19px; font-weight: normal;
-    color: var(--kreide); margin: 0 0 4px;
+    flex: 1; font-family: var(--hand); font-size: 19px; font-weight: normal;
+    color: var(--kreide); margin: 0;
   }
-  .wahl-blatt p { font-size: 12px; color: var(--kreide-weg); margin: 0 0 12px; }
+  .wahl-zu {
+    border: none; background: none; padding: 0 2px; cursor: pointer;
+    font-size: 24px; line-height: 1; color: var(--kreide-weg);
+  }
+  .wahl-zu:hover { color: var(--kreide); }
   .jahr-zeile {
     display: flex; width: 100%; text-align: left; align-items: baseline; gap: 10px;
     background: #ffffff0a; border: 1px solid #ffffff26; border-radius: 3px;
@@ -645,7 +663,49 @@
   .jahr-zeile b { font-family: var(--hand); font-size: 18px; font-weight: normal; }
   .jahr-zeile span { font-size: 11.5px; color: var(--kreide-weg); flex: 1; }
   .jahr-zeile:hover { border-color: #ffffff66; background: #ffffff12; }
-  .wahl-blatt .zu { margin-top: 6px; width: 100%; }
+  .jahr-zeile:last-child { margin-bottom: 0; }
+
+  /* Der Griff. Wortgleich zu dem der Tafel (`.fly-griff` in `index.html`),
+     samt des waagrecht nachgezeichneten Verlaufs: das Blatt liegt auf
+     demselben Rundverlauf, also passen dieselben Stützstellen. Er klebt oben,
+     weil die Jahre bei einer langen Runde scrollen können — und ein
+     Schließknopf, der wegscrollt, ist keiner. Ein <button> und kein Strich
+     aus einem <div>, damit am Finger, wo das × fehlt, VoiceOver einen Weg
+     aus dem Blatt behält. */
+  .wahl-griff {
+    display: none; position: sticky; top: 0; z-index: 3;
+    box-sizing: border-box; width: calc(100% + 36px); margin: 0 -18px;
+    padding: 13px 0 11px; border: none; cursor: pointer;
+    background: linear-gradient(90deg,
+      #303738 0%, #343d3c 25%, #2e3536 50%, #262c2e 75%, #212628 100%);
+    touch-action: none;
+  }
+  .wahl-griff::before {
+    content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
+    border-radius: 999px; background: #ffffff38;
+  }
+  .wahl-griff:active::before { background: #ffffff5c; }
+
+  @media (hover: none), (pointer: coarse) {
+    .wahl-ebene { align-items: flex-end; padding: 0; }
+    .wahl-blatt {
+      width: 100%; max-width: 520px; margin: 0 auto;
+      border-width: 6px 0 0; border-radius: 10px 10px 0 0;
+      padding-top: 0; animation: wahl-hoch .22s ease-out;
+    }
+    .wahl-griff { display: block; }
+    .wahl-zu { display: none; }
+  }
+  @keyframes wahl-hoch { from { transform: translateY(18px); opacity: .4; } }
+
+  /* Gezogen wird ohne Überblendung, die Rückfahrt und der Abgang mit ihr —
+     wie drüben am Blatt. */
+  .wahl-blatt { transition: transform .22s ease-out; }
+  .wahl-schirm { transition: opacity .22s ease-out; }
+  .wahl-ebene.zieht .wahl-blatt, .wahl-ebene.zieht .wahl-schirm { transition: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .wahl-blatt, .wahl-schirm { transition: none; animation: none; }
+  }
 
   /* Wer hier nichts verloren hat, sieht das — und nicht eine leere Seite, die
      wie ein Fehler aussieht. Das Tor selbst sitzt im Worker, das hier ist die
@@ -780,12 +840,14 @@
 <!-- Die Jahr-Wahl. Sie steht außerhalb des Buches, weil sie über allem liegt;
      gewählt wird hier nur, GEZEIGT wird der Rückblick drüben auf der Tafel. -->
 <div class="wahl-ebene" id="wahl-ebene" hidden>
-  <div class="wahl-schirm" data-wahl-zu></div>
-  <div class="wahl-blatt" role="dialog" aria-modal="true" aria-label="Jahr wählen">
-    <h3>Dein Jahr — welches?</h3>
-    <p>Der Rückblick geht auch unterjährig: beim laufenden Jahr zählt er bis heute.</p>
+  <div class="wahl-schirm" id="wahl-schirm" data-wahl-zu></div>
+  <div class="wahl-blatt" id="wahl-blatt" role="dialog" aria-modal="true" aria-label="Jahr wählen">
+    <button class="wahl-griff" type="button" aria-label="Schließen" data-wahl-zu></button>
+    <div class="wahl-kopf">
+      <h3>Dein Jahr — welches?</h3>
+      <button class="wahl-zu" type="button" aria-label="Schließen" data-wahl-zu>×</button>
+    </div>
     <div id="jahr-liste"></div>
-    <button class="zu" type="button" data-wahl-zu>doch nicht</button>
   </div>
 </div>
 
@@ -1570,7 +1632,12 @@
     if (erste) erste.focus();
   }
 
-  const jahrWahlZu = () => { $('wahl-ebene').hidden = true; };
+  function jahrWahlZu() {
+    $('wahl-ebene').classList.remove('zieht');
+    $('wahl-blatt').style.transform = '';
+    $('wahl-schirm').style.opacity = '';
+    $('wahl-ebene').hidden = true;
+  }
   document.querySelectorAll('[data-wahl-zu]')
     .forEach(k => k.addEventListener('click', jahrWahlZu));
   // Wie jedes Blatt drüben: Escape macht zu. Ohne das bliebe der abgedunkelte
@@ -1578,6 +1645,79 @@
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape' && !$('wahl-ebene').hidden) jahrWahlZu();
   });
+
+  /* --- Runterwischen schließt ----------------------------------------------
+     Dieselbe Geste wie an den Blättern der Tafel, dieselben Schwellen und
+     dieselbe Uhr am Ende (siehe dort „Runterwischen schließt"). Kürzer nur
+     an einer Stelle: drüben liegen sieben Blätter nebeneinander und teilen
+     sich einen Aufbau, hier ist es eines — und quer will hier niemand
+     wischen, es gibt keine Karten, die zur Seite gingen. Die Achse muss
+     trotzdem feststehen, sonst schließt ein schräger Daumen das Blatt beim
+     Scrollen durch eine lange Jahresliste.
+
+     Die Zuhörer hängen immer, nicht nur am Finger: ein Notebook mit
+     Berührungsschirm meldet `pointer: fine` und hat trotzdem einen. Was die
+     Medienabfrage entscheidet, ist allein, was zu SEHEN ist — dort der
+     Balken, hier das ×.
+     --------------------------------------------------------------------- */
+  {
+    const ZUG_AUF = 92, ZUG_SCHLUPF = 8, ZUG_VORSPRUNG = 1.5, ZUG_TAKT = 220;
+    const ohneTakt = matchMedia('(prefers-reduced-motion: reduce)');
+    const ebene = $('wahl-ebene'), blatt = $('wahl-blatt'), schirm = $('wahl-schirm');
+    let zug = null;
+
+    function zurueck() {
+      ebene.classList.remove('zieht');
+      blatt.style.transform = '';
+      schirm.style.opacity = '';
+      zug = null;
+    }
+
+    blatt.addEventListener('touchstart', ev => {
+      zug = null;
+      if (ev.touches.length !== 1) return;
+      // Vom Griff aus geht es immer, sonst nur von ganz oben: wer mitten im
+      // Blatt nach unten wischt, will scrollen und nicht schließen.
+      if (blatt.scrollTop > 0 && !ev.target.closest('.wahl-griff')) return;
+      zug = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, achse: null, weg: 0 };
+    }, { passive: true });
+
+    // `passive: false`, weil das Gummiband des Browsers weg muss, sobald die
+    // Bewegung uns gehört. Vorher NICHT — solange die Achse offen ist, gehört
+    // sie noch dem Scrollen.
+    blatt.addEventListener('touchmove', ev => {
+      if (!zug) return;
+      const t = ev.touches[0];
+      const dx = t.clientX - zug.x, dy = t.clientY - zug.y;
+      if (zug.achse === null) {
+        if (Math.abs(dx) > ZUG_SCHLUPF && Math.abs(dx) > Math.abs(dy)) { zug = null; return; }
+        if (dy < -ZUG_SCHLUPF) { zug = null; return; }
+        if (dy <= ZUG_SCHLUPF || dy <= Math.abs(dx) * ZUG_VORSPRUNG) return;
+        zug.achse = 'runter';
+        ebene.classList.add('zieht');
+      }
+      ev.preventDefault();
+      zug.weg = Math.max(0, dy - ZUG_SCHLUPF);
+      blatt.style.transform = 'translateY(' + zug.weg + 'px)';
+      schirm.style.opacity = String(Math.max(0, 1 - zug.weg / (blatt.offsetHeight || 400)));
+    }, { passive: false });
+
+    blatt.addEventListener('touchend', () => {
+      if (!zug || zug.achse !== 'runter' || zug.weg < ZUG_AUF) { zurueck(); return; }
+      const hoehe = blatt.offsetHeight;
+      zug = null;
+      ebene.classList.remove('zieht');
+      if (navigator.vibrate) navigator.vibrate(12);
+      if (ohneTakt.matches) { jahrWahlZu(); return; }
+      blatt.style.transform = 'translateY(' + hoehe + 'px)';
+      schirm.style.opacity = '0';
+      // Eine Uhr, kein `transitionend`: fällt das Ereignis einmal aus, bliebe
+      // das Blatt mit stehen gebliebener Verschiebung offen und unsichtbar.
+      setTimeout(jahrWahlZu, ZUG_TAKT);
+    }, { passive: true });
+
+    blatt.addEventListener('touchcancel', zurueck, { passive: true });
+  }
 
   // ==========================================================================
   // Rundmail

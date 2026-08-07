@@ -2026,7 +2026,11 @@
     color: var(--kreide); font-size: 17px; line-height: 1; cursor: pointer;
   }
 
-  .wr-buehne { flex: 1; min-height: 0; overflow-y: auto; display: flex; }
+  /* `overscroll-behavior` gehört zur Wischgeste weiter unten: ohne es gibt die
+     Bühne am oberen Anschlag die Bewegung an die Tafel darunter weiter, und
+     iOS hat den Finger dann schon seinem Gummiband versprochen. Dieselbe
+     Zeile steht aus demselben Grund am `.fly-blatt`. */
+  .wr-buehne { flex: 1; min-height: 0; overflow-y: auto; display: flex; overscroll-behavior: contain; }
   .wr-kachel { margin: auto 0; width: 100%; padding: 12px 0; animation: wr-kommt .35s ease-out; }
   @keyframes wr-kommt { from { opacity: 0; transform: translateY(8px); } }
   @media (prefers-reduced-motion: reduce) { .wr-kachel { animation: none; } }
@@ -2101,10 +2105,38 @@
   }
   .wr-knopf:hover { background: #ffffff1a; border-color: var(--gelb); }
   .wr-knopf:disabled { opacity: .35; cursor: default; }
-  .wr-wo { margin-left: auto; font-size: 11px; color: var(--kreide-weg); }
-  .wr-teilen { border-color: var(--gelb); color: var(--gelb); }
+  .wr-teilen {
+    margin-left: auto; border-color: var(--gelb); color: var(--gelb);
+    display: flex; align-items: center; justify-content: center;
+    width: 44px; padding: 0;
+  }
+  .wr-teilen svg {
+    width: 20px; height: 20px; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .wr-teilen:disabled { opacity: .35; }
   .wr-knopf:focus-visible, .wr-zu:focus-visible, .wr-klein-knopf:focus-visible, .ch-jahrgang:focus-visible {
     outline: 2px solid var(--gelb); outline-offset: 3px; border-radius: 2px;
+  }
+
+  /* Am Finger schließt das Runterwischen, nicht das × — dieselbe Trennung wie
+     an den Blättern (siehe `.fly-griff` weiter oben). Der Griff ist
+     buchstäblich derselbe: das Skript hängt ihn hier wie dort ein, und weil
+     das Brett auf demselben Rundverlauf und derselben seitlichen Polsterung
+     (16 px) sitzt, passt sein waagrecht nachgezeichneter Streifen ohne Zutat.
+
+     Gezogen wird der RAHMEN, nicht das Brett: das Holz gehört zur Karte, und
+     eine Schiefertafel, die aus ihrem Rahmen nach unten herausführe, wäre
+     eine zerlegte Karte statt einer weggeschobenen. */
+  @media (hover: none), (pointer: coarse) {
+    .wr-zu { display: none; }
+    .wr-brett { padding-top: 0; }
+  }
+  .wr-rahmen { transition: transform .22s ease-out; }
+  .wr-schirm { transition: opacity .22s ease-out; }
+  .wr-ebene.zieht .wr-rahmen, .wr-ebene.zieht .wr-schirm { transition: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .wr-rahmen, .wr-schirm { transition: none; }
   }
 
   .wr-tip {
@@ -2914,8 +2946,19 @@
         <div class="wr-fuss">
           <button class="wr-knopf" id="wr-zurueck" type="button" aria-label="vorige Kachel">‹ zurück</button>
           <button class="wr-knopf" id="wr-weiter" type="button" aria-label="nächste Kachel">weiter ›</button>
-          <button class="wr-knopf wr-teilen" id="wr-teilen" type="button" hidden>Kachel teilen</button>
-          <span class="wr-wo" id="wr-wo"></span>
+          <!-- Das Kästchen mit dem Pfeil heraus: dasselbe Zeichen, mit dem
+               jedes Handy teilt. Es steht an der Stelle, an der vorher „3 / 9"
+               stand — die Seitenzahl sagte nichts, was die Striche oben nicht
+               schon zeigen, und der Platz unten rechts ist der, an dem der
+               Daumen ohnehin liegt. -->
+          <button class="wr-knopf wr-teilen" id="wr-teilen" type="button"
+                  aria-label="Diese Kachel teilen" title="Diese Kachel teilen">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 15.5V3.5"/>
+              <path d="M7.5 8 12 3.5 16.5 8"/>
+              <path d="M5 12.5v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -6855,6 +6898,7 @@
   const wrWochentag = iso => new Date(iso).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
 
   let wrJahr = null, wrKachelListe = [], wrWo = 0, wrFarbenKarte = new Map(), wrLauf = 0;
+  let wrAusKontor = false;   // aus dem Kontor geöffnet? — entscheidet den Rückweg
   const wrFarbe = id => wrFarbenKarte.get(id) || '#93a09a';
 
   function wrSagt(text, schlecht) {
@@ -7225,17 +7269,29 @@
     });
     $('wr-zurueck').disabled = wrWo === 0;
     $('wr-weiter').disabled = wrWo === wrKachelListe.length - 1;
-    $('wr-teilen').hidden = wrWo !== wrKachelListe.length - 1;
-    $('wr-wo').textContent = (wrWo + 1) + ' / ' + wrKachelListe.length;
+    // Der Teilen-Knopf hing einmal nur an der letzten Kachel — nicht als
+    // Entwurf, sondern weil der Maler darunter nur deren fünf Textklassen
+    // kannte. Seit er die ganze Kachel abliest, trägt ihn jede.
+    $('wr-teilen').hidden = false;
   }
 
-  async function wrappedAuf(jahr) {
+  async function wrappedAuf(jahr, ausKontor) {
     // Ein Laufzaehler statt eines Jahresvergleichs: "dasselbe Jahr zweimal
     // geoeffnet" (zu, dann gleich wieder auf) muss die veraltete Antwort
     // genauso verwerfen wie ein Jahreswechsel waehrend des Ladens - sonst
     // haengen doppelte Fortschrittsstriche an.
     const lauf = ++wrLauf;
     wrJahr = jahr;
+    // Bei JEDEM Öffnen neu gesetzt, nicht nur beim Weg aus dem Kontor: sonst
+    // erbte die Chronik den Stand von vorhin und schickte einen beim
+    // Zumachen in die Verwaltung, aus der man nie gekommen ist.
+    wrAusKontor = !!ausKontor;
+    /* Aus demselben Grund hier: schließt man die Karte durch Wischen, feuert
+       das `touchend` der Bühne noch mit und setzt `wrGezogen` — den Klick, der
+       ihn wieder abräumen würde, bekommt danach aber das ×, nicht die Bühne.
+       Ohne diese Zeile verschluckte die Karte beim nächsten Öffnen den ersten
+       Tipp. */
+    wrGezogen = false;
     wrKachelListe = [];
     wrWo = 0;
     $('wr-jahrzahl').textContent = jahr;
@@ -7245,7 +7301,6 @@
     $('wr-zurueck').disabled = true;
     $('wr-weiter').disabled = true;
     $('wr-teilen').hidden = true;
-    $('wr-wo').textContent = '';
     $('wrapped').hidden = false;
     koerperSperren();
     $('wr-zu').focus();
@@ -7265,7 +7320,20 @@
     }
   }
 
+  /* Zugemacht wird dorthin zurück, woher der Rückblick kam. Von der Tafel
+     aus bleibt man auf der Tafel; aus dem Kontor heraus geht es ins Kontor
+     zurück — wer dort auf „Dein Jahr" geklickt hat, wollte nicht auf die
+     Tafel umziehen, sondern sich etwas ansehen und weiterverwalten.
+
+     Woher es kam, muss beim ÖFFNEN gemerkt werden: `wrappedAusAdresse` räumt
+     `?wrapped=` aus der Adresszeile, lange bevor hier jemand zumacht, und
+     `document.referrer` weiß es beim Nachladen im selben Tab auch nicht mehr.
+
+     Die Ebene bleibt beim Umzug stehen. Sie erst zu verbergen hieße, für die
+     Dauer des Ladens die Tafel zu zeigen — ein Aufblitzen der Seite, die man
+     gerade nicht sehen will. */
   function wrappedZu() {
+    if (wrAusKontor) { wrAusKontor = false; location.href = 'admin.html'; return; }
     $('wrapped').hidden = true;
     wrTipWeg();
     koerperSperren();
@@ -7273,60 +7341,283 @@
 
   /* --- Kachel teilen: Canvas statt Screenshot --------------------------------
      Wie beim Meme (`memeUebernehmen`): auf ein <canvas> malen, `toBlob`,
-     `navigator.share`. Nur die letzte Kachel trägt den Knopf (Prost), ihr
-     Text kommt direkt aus dem gerade gezeichneten DOM - was auf dem Schirm
-     steht, steht auch auf dem Bild. Kein Font-Preload nötig: die Handschrift
-     ist ein Systemfont-Stack ohne @font-face, genau wie überall sonst auf
-     der Tafel. */
-  function wrappedKachelZeichnen() {
-    return new Promise(resolve => {
-      const kachel = $('wr-buehne').querySelector('.wr-kachel');
-      if (!kachel) { resolve(null); return; }
-      const text = klasse => kachel.querySelector('.' + klasse)?.textContent || '';
-      const oben = text('wr-oben'), held = text('wr-held'), hero = text('wr-hero'),
-            emoji = text('wr-emoji-gross'), satz = text('wr-satz');
+     `navigator.share`.
 
-      const b = 640, h = 800;
+     Der Maler kannte einmal fünf Klassen — genau die der Prost-Kachel — und
+     GENAU DARUM trug auch nur sie den Teilen-Knopf. Das war keine Absicht,
+     das war der Maler, der von den anderen neun nichts wusste. Jetzt liest er
+     die Kachel ab: einmal von oben nach unten durch ihre Kinder, für jede
+     Form ein kurzes Rezept. Was er nicht kennt, malt er als Absatz — lieber
+     schlicht als ein leeres Bild. Eine elfte Kachel trägt sich damit von
+     selbst, solange sie aus denselben Formen gebaut ist wie die zehn davor.
+
+     Links ausgerichtet und nicht mehr mittig: das Bild soll die Kachel sein,
+     die man gerade ansieht, und die steht links. Die Höhe kann darum nicht
+     mehr fest sein — die Bilanz ist doppelt so hoch wie der Prost. Also zwei
+     Durchgänge: der erste misst und legt die Züge an, der zweite führt sie
+     auf einer Leinwand aus, deren Höhe dann feststeht.
+
+     Die Grafiken kommen als SVG hinein, nicht als Nachbau: sie tragen Farben
+     und Maße als Attribute, also lässt sich das serialisierte SVG unverändert
+     in ein <img> laden. Ein `data:`-URL gilt als gleiche Herkunft — die
+     Leinwand bleibt sauber und `toBlob` erlaubt. Kein Font-Preload nötig: die
+     Handschrift ist ein Systemfont-Stack ohne @font-face, genau wie überall
+     sonst auf der Tafel. */
+  const WR_HAND = "'Chalkduster','Bradley Hand','Segoe Print','Comic Sans MS',cursive";
+  const WR_GROTESK = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+  function wrappedKachelZeichnen() {
+    const kachel = $('wr-buehne').querySelector('.wr-kachel');
+    if (!kachel) return Promise.resolve(null);
+
+    const B = 640, R = 52, INNEN = B - R * 2;
+    const GELB = '#e8c766', KREIDE = '#eef1ea', MATT = '#cfd6cd', WEG = '#93a09a';
+    const mess = document.createElement('canvas').getContext('2d');
+    const zuege = [];        // (ctx) => void, in der Reihenfolge des Malens
+    const nachladen = [];    // die Grafiken, die noch geladen werden
+    let y = 64;
+
+    const schrift = (px, hand, fett) =>
+      (fett ? '600 ' : '') + px + 'px ' + (hand ? WR_HAND : WR_GROTESK);
+
+    /* Ein Absatz zerfällt in Läufe. `<b>`, der Ampel-Ton aus `stufe()` und die
+       kleine Einheit hinter der großen Zahl stehen im DOM als eigene Knoten —
+       und sollen auch im Bild stehen. */
+    function laeufe(elm, farbe, px, hand) {
+      const raus = [];
+      (function geh(n, f, p, h, fett) {
+        n.childNodes.forEach(kind => {
+          if (kind.nodeType === 3) {
+            if (kind.nodeValue) raus.push({ text: kind.nodeValue, farbe: f, px: p, hand: h, fett });
+            return;
+          }
+          if (kind.nodeType !== 1) return;
+          const kc = kind.classList;
+          const einheit = kc.contains('wr-einheit');
+          geh(kind,
+            kind.style.color || (einheit ? WEG : (kind.tagName === 'B' ? KREIDE : f)),
+            einheit ? 30 : p,
+            h || kc.contains('wr-wort') || kc.contains('wr-sterne'),
+            fett || kind.tagName === 'B');
+        });
+      })(elm, farbe, px, hand, false);
+      return raus;
+    }
+
+    /* Wort für Wort, und jedes mit der Schrift SEINES Laufes: fett misst
+       breiter als mager, und ein Umbruch, der das nicht mitzählt, läuft über
+       den Rand. */
+    function brechen(runs, breite) {
+      const zeilen = [[]]; let x = 0;
+      runs.forEach(r => {
+        const f = schrift(r.px, r.hand, r.fett);
+        mess.font = f;
+        r.text.split(/(\s+)/).forEach(st => {
+          if (!st) return;
+          const leer = /^\s+$/.test(st);
+          if (leer && x === 0) return;              // führende Leerzeichen fallen weg
+          const w = mess.measureText(st).width;
+          if (!leer && x + w > breite && x > 0) { zeilen.push([]); x = 0; }
+          zeilen[zeilen.length - 1].push({ text: st, font: f, farbe: r.farbe, px: r.px, w });
+          x += w;
+        });
+      });
+      return zeilen.filter(z => z.length);
+    }
+
+    function malAbsatz(runs, breite, x0, luftVor, luftNach) {
+      const zeilen = brechen(runs, breite);
+      if (!zeilen.length) return 0;
+      y += luftVor;
+      const anfang = y;
+      zeilen.forEach(z => {
+        const gross = Math.max(...z.map(s => s.px));
+        const grund = y + gross;
+        zuege.push(ctx => {
+          let x = x0;
+          z.forEach(s => {
+            ctx.font = s.font; ctx.fillStyle = s.farbe;
+            ctx.fillText(s.text, x, grund);
+            x += s.w;
+          });
+        });
+        y += Math.round(gross * 1.32);
+      });
+      y += luftNach;
+      return y - anfang;
+    }
+
+    function strich(farbe, luftVor, luftNach) {
+      y += luftVor;
+      const oben = y;
+      zuege.push(ctx => {
+        ctx.save();
+        ctx.strokeStyle = farbe; ctx.lineWidth = 1; ctx.setLineDash([6, 5]);
+        ctx.beginPath(); ctx.moveTo(R, oben + .5); ctx.lineTo(R + INNEN, oben + .5); ctx.stroke();
+        ctx.restore();
+      });
+      y += luftNach;
+    }
+
+    function malSternZeile(z) {
+      const hol = k => z.querySelector('.' + k)?.textContent || '';
+      const kat = hol('wr-kat'), sterne = hol('wr-sterne'), zahl = hol('wr-zahl');
+      y += 8;
+      const grund = y + 21;
+      zuege.push(ctx => {
+        ctx.font = schrift(21, false, false); ctx.fillStyle = MATT;
+        ctx.fillText(kat, R, grund);
+        ctx.font = schrift(25, true, false); ctx.fillStyle = GELB;
+        ctx.fillText(sterne, R + 150, grund);
+        ctx.textAlign = 'right';
+        ctx.font = schrift(21, false, false); ctx.fillStyle = KREIDE;
+        ctx.fillText(zahl, R + INNEN, grund);
+        ctx.textAlign = 'left';
+      });
+      y += 30;
+    }
+
+    /* Die Kästchen. Zwei je Reihe wie im Raster, ein breites nimmt die ganze.
+       Die Höhe der Reihe steht erst fest, wenn beide gemessen sind — der Zug
+       liest sie darum aus einem Kästchen, das nach der Reihe gefüllt wird. */
+    function malPaare(gitter) {
+      const alle = [...gitter.children];
+      const spalte = (INNEN - 18) / 2;
+      y += 16;
+      let i = 0;
+      while (i < alle.length) {
+        const breit = alle[i].classList.contains('wr-breit');
+        const reihe = breit ? [alle[i]] : alle.slice(i, i + 2).filter(k => !k.classList.contains('wr-breit'));
+        if (!reihe.length) { i++; continue; }
+        const oben = y;
+        const hoehe = { h: 0 };
+        reihe.forEach((k, j) => {
+          const b = breit ? INNEN : spalte;
+          const x = R + j * (spalte + 18);
+          const wert = k.querySelector('.wr-wert')?.textContent || '';
+          const was = brechen([{ text: k.querySelector('.wr-was')?.textContent || '',
+                                 farbe: WEG, px: 18, hand: false, fett: false }], b - 28);
+          hoehe.h = Math.max(hoehe.h, 20 + 43 + 10 + was.length * 24 + 16);
+          zuege.push(ctx => {
+            ctx.save();
+            ctx.strokeStyle = '#ffffff26'; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+            ctx.strokeRect(x + .5, oben + .5, b - 1, hoehe.h - 1);
+            ctx.restore();
+            ctx.font = schrift(43, true, false); ctx.fillStyle = KREIDE;
+            ctx.fillText(wert, x + 14, oben + 20 + 43);
+            ctx.font = schrift(18, false, false); ctx.fillStyle = WEG;
+            was.forEach((zeile, n) => {
+              let wx = x + 14;
+              zeile.forEach(s => { ctx.fillText(s.text, wx, oben + 20 + 43 + 28 + n * 24); wx += s.w; });
+            });
+          });
+        });
+        y = oben + hoehe.h + 12;
+        i += reihe.length;
+      }
+      y += 4;
+    }
+
+    function malTabelle(t) {
+      y += 6;
+      [...t.rows].forEach(tr => {
+        const links = tr.cells[0]?.textContent || '', rechts = tr.cells[1]?.textContent || '';
+        const grund = y + 20;
+        zuege.push(ctx => {
+          ctx.font = schrift(20, false, false);
+          ctx.fillStyle = MATT; ctx.fillText(links, R + 4, grund);
+          ctx.textAlign = 'right'; ctx.fillStyle = KREIDE;
+          ctx.fillText(rechts, R + INNEN - 4, grund);
+          ctx.textAlign = 'left';
+          ctx.save();
+          ctx.strokeStyle = '#ffffff1a'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+          ctx.beginPath(); ctx.moveTo(R, grund + 8.5); ctx.lineTo(R + INNEN, grund + 8.5); ctx.stroke();
+          ctx.restore();
+        });
+        y += 32;
+      });
+      y += 6;
+    }
+
+    function svgAlsBild(svg, b, h) {
+      return new Promise(fertig => {
+        const klon = svg.cloneNode(true);
+        klon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        klon.setAttribute('width', b);
+        klon.setAttribute('height', h);
+        /* Die Schriftgröße steht im SVG, die FAMILIE kommt sonst aus dem
+           Stylesheet der Seite — und das sieht ein einzeln geladenes Bild
+           nicht. Ohne diese Zeile stünden die Namen an den Balken plötzlich
+           in der Serife des Browsers. */
+        klon.setAttribute('font-family', WR_GROTESK);
+        const bild = new Image();
+        bild.onload = () => fertig(bild);
+        bild.onerror = () => fertig(null);
+        bild.src = 'data:image/svg+xml;charset=utf-8,'
+          + encodeURIComponent(new XMLSerializer().serializeToString(klon));
+      });
+    }
+
+    function malBild(box) {
+      const titel = box.querySelector('.wr-bild-kopf h2');
+      if (titel) malAbsatz(laeufe(titel, KREIDE, 24, true), INNEN, R, 18, 4);
+      const svg = box.querySelector('svg');
+      const tab = box.querySelector('.wr-zahlen');
+      // „Zahlen" umgelegt? Dann steht die Tabelle auf dem Schirm, nicht die
+      // Grafik — und dann steht sie auch auf dem Bild.
+      if (tab && !tab.hidden) { malTabelle(tab); return; }
+      if (!svg) return;
+      const vb = (svg.getAttribute('viewBox') || '0 0 330 132').split(/[\s,]+/).map(Number);
+      const h = Math.round(INNEN * ((vb[3] || 132) / (vb[2] || 330)));
+      const oben = y + 6;
+      const platz = {};
+      nachladen.push(svgAlsBild(svg, INNEN, h).then(bild => { platz.bild = bild; }));
+      zuege.push(ctx => { if (platz.bild) ctx.drawImage(platz.bild, R, oben, INNEN, h); });
+      y = oben + h + 8;
+    }
+
+    // --- Erster Durchgang: die Kachel ablesen -------------------------------
+    [...kachel.children].forEach(kind => {
+      const c = kind.classList;
+      if (c.contains('wr-oben'))            malAbsatz(laeufe(kind, GELB, 21, true), INNEN, R, 0, 14);
+      else if (c.contains('wr-emoji-gross')) {
+        const t = kind.textContent;
+        y += 8;
+        const grund = y + 92;
+        zuege.push(ctx => { ctx.font = '92px sans-serif'; ctx.fillStyle = KREIDE; ctx.fillText(t, R, grund); });
+        y = grund + 14;
+      }
+      else if (c.contains('wr-hero'))       malAbsatz(laeufe(kind, GELB, c.contains('wr-kleiner') ? 62 : 84, true), INNEN, R, 4, 4);
+      else if (c.contains('wr-held'))       malAbsatz(laeufe(kind, KREIDE, 56, true), INNEN, R, 4, 4);
+      else if (c.contains('wr-satz'))       malAbsatz(laeufe(kind, MATT, 22, false), INNEN, R, 10, 2);
+      else if (c.contains('wr-neben'))      malAbsatz(laeufe(kind, WEG, 19, false), INNEN, R, 8, 2);
+      else if (c.contains('wr-trenn') || kind.tagName === 'HR') strich('#ffffff26', 22, 20);
+      else if (c.contains('wr-stern-zeile')) malSternZeile(kind);
+      else if (c.contains('wr-paare'))      malPaare(kind);
+      else if (c.contains('wr-bild'))       malBild(kind);
+      else                                  malAbsatz(laeufe(kind, MATT, 22, false), INNEN, R, 10, 2);
+    });
+
+    // --- Zweiter Durchgang: ausführen ---------------------------------------
+    const H = Math.max(800, y + 96);
+    return Promise.all(nachladen).then(() => {
       const leinwand = document.createElement('canvas');
-      leinwand.width = b; leinwand.height = h;
+      leinwand.width = B; leinwand.height = H;
       const ctx = leinwand.getContext('2d');
 
-      const grund = ctx.createRadialGradient(b * .22, h * .08, 40, b * .5, h * .5, b * .9);
+      const grund = ctx.createRadialGradient(B * .22, H * .08, 40, B * .5, H * .5, B * .9);
       grund.addColorStop(0, '#37403f'); grund.addColorStop(.45, '#262c2e'); grund.addColorStop(1, '#191d1f');
-      ctx.fillStyle = grund; ctx.fillRect(0, 0, b, h);
+      ctx.fillStyle = grund; ctx.fillRect(0, 0, B, H);
 
-      const hand = "'Chalkduster','Bradley Hand','Segoe Print','Comic Sans MS',cursive";
-      const zeilen = (t, breite) => {
-        const worte = t.split(/\s+/).filter(Boolean);
-        const z = []; let zeile = '';
-        worte.forEach(wort => {
-          const versuch = zeile ? zeile + ' ' + wort : wort;
-          if (zeile && ctx.measureText(versuch).width > breite) { z.push(zeile); zeile = wort; } else { zeile = versuch; }
-        });
-        if (zeile) z.push(zeile);
-        return z;
-      };
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      zuege.forEach(z => z(ctx));
 
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#e8c766';
-      ctx.font = `20px ${hand}`;
-      ctx.fillText(oben, b / 2, 110);
+      ctx.font = schrift(18, false, false);
+      ctx.fillStyle = WEG;
+      ctx.fillText('beerstock — Dein Jahr am Kühlschrank ' + wrJahr, B / 2, H - 40);
 
-      let y = 220;
-      if (emoji) { ctx.font = '96px sans-serif'; ctx.fillText(emoji, b / 2, y); y += 110; }
-      if (held)  { ctx.fillStyle = '#eef1ea'; ctx.font = `44px ${hand}`; ctx.fillText(held, b / 2, y); y += 90; }
-      if (hero)  { ctx.fillStyle = '#e8c766'; ctx.font = `80px ${hand}`; ctx.fillText(hero, b / 2, y); y += 90; }
-      if (satz) {
-        ctx.fillStyle = '#cfd6cd';
-        ctx.font = '22px system-ui, sans-serif';
-        zeilen(satz, b - 100).forEach(z => { ctx.fillText(z, b / 2, y); y += 32; });
-      }
-
-      ctx.fillStyle = '#93a09a';
-      ctx.font = '18px system-ui, sans-serif';
-      ctx.fillText('beerstock — Dein Jahr am Kühlschrank', b / 2, h - 40);
-
-      leinwand.toBlob(blob => resolve(blob), 'image/png');
+      return new Promise(fertig => leinwand.toBlob(fertig, 'image/png'));
     });
   }
 
@@ -7360,17 +7651,34 @@
   $('wr-weiter').addEventListener('click', () => wrappedZeigen(wrWo + 1));
   $('wr-teilen').addEventListener('click', wrappedTeilen);
 
+  /* Tippen blättert — aber nur Tippen. Ein kurzer Zug nach unten, der die
+     Schwelle der Schließgeste nicht erreicht, ruft kein `preventDefault` und
+     kommt darum als Klick hier an: die Karte spränge eine Seite weiter, weil
+     man sie zumachen wollte. `wrGezogen` merkt sich, dass der Finger unterwegs
+     war, und verschluckt genau diesen Klick. */
   $('wr-buehne').addEventListener('click', ev => {
+    const gezogen = wrGezogen; wrGezogen = false;
+    if (gezogen) return;
     if (ev.target.closest('svg, button, a, table')) return;
     const b = $('wr-buehne').getBoundingClientRect();
     wrappedZeigen(ev.clientX - b.left < b.width * .3 ? wrWo - 1 : wrWo + 1);
   });
-  let wrWischX = null;
-  $('wr-buehne').addEventListener('touchstart', ev => { wrWischX = ev.touches[0].clientX; }, { passive: true });
+  /* Der Wisch quer blättert — und seit die Karte sich auch nach unten
+     wegschieben lässt, muss er die Achse mitprüfen. Ohne das schöbe ein
+     schräger Daumen die Karte weg UND blätterte dabei um: beide Schwellen
+     wären überschritten, jede in ihrer Richtung. */
+  let wrWisch = null, wrGezogen = false;
+  $('wr-buehne').addEventListener('touchstart', ev => {
+    wrWisch = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+    wrGezogen = false;
+  }, { passive: true });
   $('wr-buehne').addEventListener('touchend', ev => {
-    if (wrWischX == null) return;
-    const dx = ev.changedTouches[0].clientX - wrWischX; wrWischX = null;
-    if (Math.abs(dx) > 48) wrappedZeigen(dx < 0 ? wrWo + 1 : wrWo - 1);
+    if (!wrWisch) return;
+    const dx = ev.changedTouches[0].clientX - wrWisch.x;
+    const dy = ev.changedTouches[0].clientY - wrWisch.y;
+    wrWisch = null;
+    wrGezogen = Math.abs(dx) > 10 || Math.abs(dy) > 10;
+    if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) wrappedZeigen(dx < 0 ? wrWo + 1 : wrWo - 1);
   }, { passive: true });
   // Pfeiltasten nur, solange Wrapped offen ist - Escape läuft im gemeinsamen
   // Zuhörer weiter unten mit, zusammen mit allen anderen Ebenen. Die
@@ -8273,8 +8581,16 @@
      sieben Schließroutinen unangetastet, samt allem, was sie sonst noch
      aufräumen — und das × steht weiter im Markup, nur unsichtbar.
 
-     Nicht dabei: die Lupe und die Wrapped-Karte. Das sind mittige Karten,
-     keine Bögen von unten; an ihnen wischt niemand nach unten.
+     Die Wrapped-Karte hängt mit dran, obwohl sie mittig steht und kein Bogen
+     von unten ist. Sie füllt am Handy fast den ganzen Schirm, und was den
+     Schirm füllt, macht man dort mit einem Wisch zu — das × oben rechts war
+     an einer Karte, durch die man mit dem Daumen blättert, die zweite Geste
+     zu viel. Sie braucht dafür drei Abweichungen, und die sind die einzigen
+     Argumente dieser Funktion: gezogen wird ihr RAHMEN (das Holz gehört zur
+     Karte), gescrollt wird in der BÜHNE darin, und ihr Griff wandert ins
+     Brett, nicht in den Rahmen.
+
+     Nicht dabei bleibt die Lupe: ein Bild im Vollbild, das man antippt.
      --------------------------------------------------------------------- */
   {
     const ZUG_AUF = 92;        // gezogene px, ab denen das Loslassen schließt
@@ -8283,47 +8599,50 @@
     const ZUG_TAKT = 220;      // ms, muss zur `transition` am Blatt passen
     const ohneTakt = matchMedia('(prefers-reduced-motion: reduce)');
 
-    document.querySelectorAll('.flyout').forEach(fly => {
-      const blatt = fly.querySelector('.fly-blatt');
-      const schirm = fly.querySelector('.fly-schirm');
-      const kreuz = fly.querySelector('.fly-zu');
-      if (!blatt || !schirm || !kreuz) return;
+    /* ebene   — trägt die Klasse `zieht` (schaltet die Überblendungen ab)
+       zieher  — was sich verschiebt und die Berührungen hört
+       scroller— was gescrollt wird; von ganz oben aus gehört uns die Geste
+       griffIn — wohin der Griff kommt (voreingestellt: der Zieher selbst) */
+    function runterWischen({ ebene, zieher, schirm, kreuz, scroller, griffIn }) {
+      if (!ebene || !zieher || !schirm || !kreuz) return;
+      scroller = scroller || zieher;
 
       const griff = el('button', 'fly-griff');
       griff.type = 'button';
       griff.setAttribute('aria-label', 'Schließen');
       griff.addEventListener('click', () => kreuz.click());
-      blatt.prepend(griff);
+      (griffIn || zieher).prepend(griff);
 
       let zug = null;          // { x, y, achse, weg } — die laufende Bewegung
 
       function zurueck() {
-        fly.classList.remove('zieht');
-        blatt.style.transform = '';
+        ebene.classList.remove('zieht');
+        zieher.style.transform = '';
         schirm.style.opacity = '';
         zug = null;
       }
 
-      blatt.addEventListener('touchstart', ev => {
+      zieher.addEventListener('touchstart', ev => {
         zug = null;
         if (ev.touches.length !== 1) return;
         /* Vom Griff aus geht es immer, sonst nur von ganz oben: wer mitten im
            Blatt nach unten wischt, will scrollen und nicht schließen. */
-        if (blatt.scrollTop > 0 && !ev.target.closest('.fly-griff')) return;
+        if (scroller.scrollTop > 0 && !ev.target.closest('.fly-griff')) return;
         zug = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, achse: null, weg: 0 };
       }, { passive: true });
 
       /* `passive: false`, weil das Gummiband des Browsers weg muss, sobald
          die Bewegung uns gehört. Vorher NICHT — solange die Achse offen ist,
          gehört sie noch dem Scrollen. */
-      blatt.addEventListener('touchmove', ev => {
+      zieher.addEventListener('touchmove', ev => {
         if (!zug) return;
         const t = ev.touches[0];
         const dx = t.clientX - zug.x, dy = t.clientY - zug.y;
         if (zug.achse === null) {
           /* Quer gehört dem Kommentarwisch (siehe `thread` weiter oben, der
-             seinerseits alles Senkrechte liegen lässt), hoch dem Scrollen.
-             Uns gehört allein die Bewegung nach unten. */
+             seinerseits alles Senkrechte liegen lässt) bzw. am Rückblick dem
+             Blättern, hoch dem Scrollen. Uns gehört allein die Bewegung nach
+             unten. */
           if (Math.abs(dx) > ZUG_SCHLUPF && Math.abs(dx) > Math.abs(dy)) { zug = null; return; }
           if (dy < -ZUG_SCHLUPF) { zug = null; return; }
           /* Nach unten reicht die Schwelle allein NICHT — dafür braucht es den
@@ -8335,24 +8654,24 @@
              gleich darauf auch — Karte und Blatt zögen zusammen los. */
           if (dy <= ZUG_SCHLUPF || dy <= Math.abs(dx) * ZUG_VORSPRUNG) return;
           zug.achse = 'runter';
-          fly.classList.add('zieht');
+          ebene.classList.add('zieht');
         }
         ev.preventDefault();
         zug.weg = Math.max(0, dy - ZUG_SCHLUPF);
-        blatt.style.transform = 'translateY(' + zug.weg + 'px)';
+        zieher.style.transform = 'translateY(' + zug.weg + 'px)';
         // Der Schirm geht mit: das Blatt fährt nicht vor eine Wand, sondern
         // gibt die Tafel darunter frei, während es geht.
-        schirm.style.opacity = String(Math.max(0, 1 - zug.weg / (blatt.offsetHeight || 400)));
+        schirm.style.opacity = String(Math.max(0, 1 - zug.weg / (zieher.offsetHeight || 400)));
       }, { passive: false });
 
-      blatt.addEventListener('touchend', () => {
+      zieher.addEventListener('touchend', () => {
         if (!zug || zug.achse !== 'runter' || zug.weg < ZUG_AUF) { zurueck(); return; }
-        const hoehe = blatt.offsetHeight;
+        const hoehe = zieher.offsetHeight;
         zug = null;
-        fly.classList.remove('zieht');     // erst die Überblendung zurück, dann das Ziel
+        ebene.classList.remove('zieht');   // erst die Überblendung zurück, dann das Ziel
         if (navigator.vibrate) navigator.vibrate(12);
         if (ohneTakt.matches) { zurueck(); kreuz.click(); return; }
-        blatt.style.transform = 'translateY(' + hoehe + 'px)';
+        zieher.style.transform = 'translateY(' + hoehe + 'px)';
         schirm.style.opacity = '0';
         /* Eine Uhr, kein `transitionend`: fällt das Ereignis einmal aus —
            weil etwas anderes das Blatt inzwischen verborgen hat —, bliebe es
@@ -8361,7 +8680,23 @@
         setTimeout(() => { zurueck(); kreuz.click(); }, ZUG_TAKT);
       }, { passive: true });
 
-      blatt.addEventListener('touchcancel', zurueck, { passive: true });
+      zieher.addEventListener('touchcancel', zurueck, { passive: true });
+    }
+
+    document.querySelectorAll('.flyout').forEach(fly => runterWischen({
+      ebene: fly,
+      zieher: fly.querySelector('.fly-blatt'),
+      schirm: fly.querySelector('.fly-schirm'),
+      kreuz: fly.querySelector('.fly-zu'),
+    }));
+
+    runterWischen({
+      ebene: $('wrapped'),
+      zieher: $('wrapped').querySelector('.wr-rahmen'),
+      schirm: $('wr-schirm'),
+      kreuz: $('wr-zu'),
+      scroller: $('wr-buehne'),
+      griffIn: $('wr-brett'),
     });
   }
 
@@ -8779,7 +9114,9 @@
     const heuer = new Date().getFullYear();
     if (!Number.isInteger(jahr) || jahr < 2024 || jahr > heuer) return;
     if (!drinnen()) return;   // ohne Anmeldung gibt es nichts zu erzählen
-    wrappedAuf(jahr);
+    // Der zweite Wert ist der Rückweg: von hier aus führt das Zumachen ins
+    // Kontor zurück, nicht auf die Tafel.
+    wrappedAuf(jahr, true);
   }
 
   /* Reihenfolge: erst den Link einloesen (der setzt das Token), dann wissen,
