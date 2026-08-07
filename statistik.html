@@ -214,23 +214,36 @@
      Der Tooltip dreht sich wie drüben um: dort Papier auf Tinte, hier Kreide
      auf Schiefer, also ein helles Kärtchen. */
   Bilder.aufsetzen({
-    /* Platz 4+5 (Blau/Lila) waren sich zu ähnlich — für Farbenblinde kaum,
-       für Normalsichtige nur schwer zu trennen. Lila jetzt dunkler und
-       kräftiger statt nur im Farbton verschoben, weil gleiche Helligkeit
-       plus mehr Sättigung allein die Verwechslung nicht behoben hätte. */
-    reihe:      ['#8fc9a6', '#e8c766', '#d9705f', '#94c8ea', '#a1519e', '#cfd6cd'],
+    /* Die durch den Sechs-Prüfungen-Lauf gezogene Reihe. Die vorige
+       (`#8fc9a6 #e8c766 #d9705f #94c8ea #a1519e`) fiel durch: Grün und Gelb
+       lagen auch für Normalsichtige zu nah beieinander (ΔE 12,7 gegen eine
+       Schwelle von 15), Grün, Gelb und Blau standen außerhalb des
+       Helligkeitsbands, Grün und Blau unter der Chroma-Schwelle.
+
+       Die ORDNUNG ist die von `bilder.js` — Grün, Gelb, Rot, Blau, Lila, und
+       auf Platz 6 der Zurückhaltungston. Sie ist keine Geschmacksfrage: die
+       Datei setzt darauf die Los-Ausgänge (`losFarbenSetzen`). Dieselbe Reihe
+       steht wortgleich im Kontor: seit beide Seiten Schiefer sind, wären zwei
+       verschiedene Grüns für dasselbe Bild ein Fehler. */
+    reihe:      ['#399c69', '#b29126', '#b15041', '#4c9bcb', '#994d96', '#8a938f'],
     linie:      '#ffffff33',
     text:       '#cfd6cd',
     textWeg:    '#93a09a',
-    grund:      '#262c2e',
+    /* `grund` ist der KARTENGRUND, nicht der Schiefer dahinter: damit werden
+       die Punkte auf den Kurven ausgestanzt, und sie sitzen auf der Karte. */
+    grund:      '#2d3335',
     stark:      '#eef1ea',
     karteGrund: '#ffffff08',
-    karteRand:  '#ffffff1f',
+    karteRand:  '#ffffff22',
     titel:      '#cfd6cd',
     tippGrund:  '#eef1ea',
     tippText:   '#4a5450',
     tippKopf:   '#1b2220',
     tippStrich: '#00000022',
+    /* Der Fokusrahmen ist ausdrücklich KEINE Serienfarbe: ein Rahmen in der
+       Farbe einer Kurve läse sich wie eine Hervorhebung dieser Kurve. `--gelb`
+       ist auf beiden Seiten der Ton für Bedienung statt Daten (hier der aktive
+       Zeitraum-Reiter, im Kontor die Marke „du"). */
     ring:       '#e8c766',
     hand:       "'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive",
   });

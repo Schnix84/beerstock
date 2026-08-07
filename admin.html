@@ -9,85 +9,168 @@
   /* ==========================================================================
      DAS KONTOR
 
-     Das Hinterzimmer derselben Kneipe. Die Tafel (index.html) ist Kreide auf
-     Schiefer; hier liegt das Kontorbuch des Wirts: Papier, Linien, Tinte.
+     Das Hinterzimmer derselben Kneipe — und seit dem Umbau auf Register auch
+     im selben Kleid: Schiefer im Holzrahmen, Kreide darauf. Jedes Blatt ist
+     eine Tafel, die man aufschlägt; die Zungen oben sagen, welche.
 
-     Warum es überhaupt anders aussehen darf: die Tafel ist die Gaststube und
-     ein Gegenstand — ein zweiter Anstrich wäre eine andere Tafel. Das Kontor
-     ist kein Gegenstand, sondern ein Buch, und es spart, den ganzen
-     Kreide-Stil zu duplizieren.
+     Vorher lag hier ein Kontorbuch aus Papier und Tinte. Der Grund dafür war
+     gut („das Kontor ist kein Gegenstand, sondern ein Buch, und es spart, den
+     ganzen Kreide-Stil zu duplizieren") — er hat nur nicht gehalten: die
+     Statistikseite (`statistik.html`) zeigt dieselben Bilder längst auf
+     Schiefer, und wer aus der Tafel ins Kontor ging, wechselte auf halbem Weg
+     das Haus. Der Stil ist auch nicht dupliziert: `bilder.js` bekommt seine
+     Farben als Palette gereicht, und die paar Dutzend Zeilen hier sind die
+     Haut, nicht die Bedienung.
 
-     Die FARBWERTE sind dieselben Familien wie drüben, nur andersherum
-     verwendet: Tinte auf Papier statt Kreide auf Schiefer. Grün, Sand und
-     Braun stehen wortgleich schon in den Mails, die dieser Worker verschickt
-     (schickeLink, meldeNeuenNutzer) — das Kontor sieht damit aus wie die Post,
-     die aus ihm herausgeht.
+     Was NICHT mit auf die Tafel wandert, ist die Mail-Vorschau: eine Mail
+     wird in einem fremden Programm auf hellem Grund gelesen. Bliebe sie
+     dunkel, löge sie.
 
-     Kein Hell/Dunkel-Umschalter, wie drüben: ein Buch hat eine Farbe.
+     Kein Hell/Dunkel-Umschalter — wie drüben. Eine Tafel hat eine Farbe.
      ========================================================================== */
   :root {
-    --papier:     #f4efe3;
-    --papier-t:   #eae2d1;   /* der Rand, wo das Blatt aufliegt */
-    --linie:      #d9cfb8;   /* die Linien im Kontorbuch        */
-    --tinte:      #1d2a24;
-    --tinte-matt: #47544d;
-    --tinte-weg:  #6f6653;   /* verblasst: Nebentext            */
-    --gruen:      #2f5d4a;   /* der Bezug, wie in den Mails     */
-    --gelb:       #b8901f;   /* dieselbe Familie wie --gelb drüben, auf Papier lesbar */
-    --rot:        #b04a38;   /* dieselbe Familie wie --rot drüben */
+    --schiefer:    #262c2e;
+    --schiefer-t:  #191d1f;
+    --holz:        #6b4a2c;
+    --holz-t:      #3f2a17;
+    --kreide:      #eef1ea;
+    --kreide-matt: #cfd6cd;
+    --kreide-weg:  #93a09a;
+    --gelb:        #e8c766;
+    --rot:         #d9705f;
+    --gruen:       #7fc08c;
+    --linie:       #ffffff22;   /* die Haarlinie auf Schiefer            */
+    --karte:       #ffffff08;   /* eine Karte ist hier ein Hauch Kreide  */
     --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+    /* Die Breite des Buches. Steht als Variable da, weil sie an ZWEI Stellen
+       gebraucht wird — Register und Blätter. Gingen sie auseinander, endete
+       die letzte Zunge am Fenster- statt am Tafelrand. */
+    --rand: 940px;
   }
 
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 18px 14px 60px;
-    background: var(--papier-t);
-    color: var(--tinte);
+    margin: 0; padding: 0 0 60px;
+    background: #14181a;
+    color: var(--kreide);
     font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
   }
-  .buch { max-width: 940px; margin: 0 auto; }
+  .buch { max-width: var(--rand); margin: 0 auto; padding: 0 14px; }
+  /* Solange das Register weg ist — beim Skelett und an der verschlossenen Tür
+     — klebte die Tafel sonst oben am Fensterrand. Den Platz, den die Zungen
+     einnehmen, gibt dann das Buch selbst her. */
+  .register[hidden] + .buch { padding-top: 16px; }
 
-  /* Ein Block ist ein Blatt. Die Linien darin sind echt gezeichnet, nicht
-     angedeutet: ein Kontorbuch ohne Linien ist ein Notizzettel.
+  /* --- Das Register --------------------------------------------------------
+     Fünf Zungen am oberen Tafelrand, dazu ganz rechts der Weg hinaus. Vorher
+     lagen alle fünf Blätter untereinander auf einer Endlos-Rolle; wer ins
+     Protokoll wollte, scrollte an elf Grafiken vorbei.
 
-     Zwei davon liegen im Hintergrund und nicht als Element: das Linienraster
-     im Abstand von 26 px und der rote Randstrich links, den jedes Kontorbuch
-     hat. Beide sind so blass, dass sie unter dem Text verschwinden — sie
-     sollen das Blatt zu Papier machen, nicht zum Formular. Deshalb liegt
-     links auch mehr Luft: der Text beginnt RECHTS vom Randstrich, sonst ist
-     es kein Rand, sondern ein Strich mitten durch. */
+     Mittig über AUTO-RÄNDER, nicht über `justify-content: center`: bei einer
+     Reihe, die auf schmalen Schirmen überläuft, schiebt `center` den Anfang
+     nach links aus dem Bild — und dorthin scrollt kein Mensch zurück. Ein
+     `margin-left: auto` an der ersten Zunge zentriert genauso und gibt beim
+     Überlaufen den Platz einfach wieder her.
+     --------------------------------------------------------------------- */
+  .register {
+    position: sticky; top: 0; z-index: 39;
+    display: flex; gap: 2px; padding: 10px 14px 0;
+    max-width: var(--rand); margin: 0 auto;
+    /* Der Verlauf statt einer Fläche: die Zungen sollen am oberen Rand
+       kleben, ohne dass darunter eine Kante durchs Bild wandert. */
+    background: linear-gradient(#14181a 82%, #14181a00);
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .register[hidden] { display: none; }
+  .register::-webkit-scrollbar { display: none; }
+  .register button:first-child { margin-left: auto; }
+  .register button, .register .zur-tafel {
+    font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+    text-decoration: none;
+    border: 1px solid #ffffff26; border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: #ffffff08; color: var(--kreide-weg);
+    padding: 6px 14px 7px;
+    transition: background .15s, color .15s;
+  }
+  .register button:hover, .register .zur-tafel:hover {
+    background: #ffffff12; color: var(--kreide-matt);
+  }
+  /* Das aufgeschlagene Blatt: die Zunge nimmt die Farbe des Schiefers an und
+     die des Holzes am Rand — sie gehört jetzt zur Tafel darunter. */
+  .register button.an {
+    background: #37403f; color: var(--kreide); font-weight: 600;
+    border-color: #4a3527;
+  }
+  .register button i { font-style: normal; opacity: .6; margin-left: 5px; font-size: 11px; }
+  /* Der Weg hinaus gehört zur Reihe, aber nicht zu den Blättern — deshalb ein
+     eigenes `auto` an der linken Seite, das ihn ans andere Ende schiebt und
+     die fünf Zungen trotzdem mittig lässt. */
+  .register .zur-tafel { margin-left: auto; }
+
+  /* Ein Blatt ist hier eine Tafel: Schiefer im Holzrahmen, wie das Brett der
+     Hauptseite — samt Korn und den Schlieren vom letzten Wischen. Der Rahmen
+     hat bewusst dieselbe Breite und Maserung wie `.brett` in `index.html`;
+     gemalt als durchsichtige Border, in deren Streifen die Holz-Hintergründe
+     per `border-box` laufen. Drüben sind das zwei Elemente, hier reicht so
+     eines. */
   .blatt {
+    position: relative;
+    border: clamp(9px, 2.4vw, 15px) solid transparent;
+    border-radius: 6px;
     background:
-      linear-gradient(#b04a3830, #b04a3830) 13px 0 / 1px 100% no-repeat,
-      repeating-linear-gradient(#0000 0 26px, #d9cfb85e 26px 27px),
-      var(--papier);
-    border: 1px solid var(--linie);
-    border-radius: 3px;
-    box-shadow: 0 1px 0 #00000008, 0 6px 18px #0000000d;
-    padding: 16px 16px 18px 24px;
-    margin-bottom: 16px;
-    /* Die Blätter kommen nacheinander herein, nicht alle auf einmal: sie
-       werden ja auch nacheinander aufgeschlagen. Vier Stufen reichen — was
-       danach kommt, sieht ohnehin niemand mehr beim Erscheinen zu. */
-    animation: aufschlagen .34s ease-out both;
+      radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%) padding-box,
+      repeating-linear-gradient(97deg, #ffffff0a 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px) border-box,
+      linear-gradient(160deg, var(--holz), var(--holz-t) 60%, #2c1c0f) border-box;
+    box-shadow:
+      0 30px 60px -24px #000d,
+      0 0 0 1px #0009 inset,
+      0 0 40px #0006 inset;
+    padding: 18px 16px 20px 20px;
+    /* KEINE Einblendung. Vorher lief hier ein `aufschlagen` von 0,28 s, aus
+       der Zeit, als die fünf Blätter untereinander lagen und nacheinander
+       hereinkamen. Unter dem Register wird daraus etwas anderes: das
+       Umschalten von `hidden` startet die Animation JEDES MAL neu (gemessen:
+       `currentTime` 0 und `opacity` 0 bei jedem Klick auf eine Zunge). Jeder
+       Registerwechsel hätte also 0,28 s Warten gekostet — auf einer Seite,
+       deren ganzer Zweck es ist, schneller zwischen den Blättern zu kommen. */
+  /* Das Korn der Tafel. Liegt über allem und fängt nichts ab. */
+  .blatt::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+    border-radius: 2px;
+    background-image:
+      radial-gradient(#ffffff0d 1px, transparent 1.4px),
+      radial-gradient(#00000030 1px, transparent 1.6px);
+    background-size: 4px 4px, 6px 6px;
+    background-position: 0 0, 2px 3px;
   }
-  .blatt:nth-of-type(2) { animation-delay: .05s; }
-  .blatt:nth-of-type(3) { animation-delay: .10s; }
-  .blatt:nth-of-type(n+4) { animation-delay: .15s; }
-  @keyframes aufschlagen { from { opacity: 0; transform: translateY(5px); } }
-  @media (prefers-reduced-motion: reduce) { .blatt { animation: none; } }
+  .blatt[hidden] { display: none; }
+
   h1 {
     font-family: var(--hand); font-size: 27px; font-weight: normal;
     margin: 0 0 2px; letter-spacing: .01em;
   }
-  .unter { font-size: 12px; color: var(--tinte-weg); margin: 0 0 16px; }
+  .unter { font-size: 12px; color: var(--kreide-weg); margin: 0 0 16px; }
   h2 {
     font-size: 12px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
-    color: var(--tinte-weg); margin: 0 0 12px;
+    color: var(--kreide-weg); margin: 0 0 12px;
     padding-bottom: 5px; border-bottom: 1px solid var(--linie);
   }
-  h3 { font-size: 13px; font-weight: 600; margin: 0 0 6px; color: var(--tinte-matt); }
+  h3 { font-size: 13px; font-weight: 600; margin: 0 0 6px; color: var(--kreide-matt); }
+
+  /* Ein Zwischentitel im Statistikblatt. Elf Bilder hintereinander sind eine
+     Halde; drei benannte Gruppen sind eine Gliederung. Der Strich läuft bis
+     zum Rand aus, damit der Titel eine Zeile anfängt und nicht in der Luft
+     hängt. */
+  .gruppe {
+    display: flex; align-items: baseline; gap: 10px;
+    margin: 26px 0 10px; font-size: 12px; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--kreide-weg);
+  }
+  .gruppe::after { content: ''; flex: 1; border-bottom: 1px solid var(--linie); }
+  .gruppe:first-child { margin-top: 2px; }
 
   /* --- Der Kopf ------------------------------------------------------------
      Vier Zahlen und eine Ampel. Sie stehen ganz oben, weil sie die Frage
@@ -96,17 +179,17 @@
   .zahlen { display: flex; flex-wrap: wrap; gap: 10px; }
   .zahl {
     flex: 1 1 110px; padding: 10px 12px;
-    border: 1px solid var(--linie); border-radius: 3px; background: #ffffff66;
+    border: 1px solid var(--linie); border-radius: 3px; background: var(--karte);
   }
-  .zahl b { display: block; font-family: var(--hand); font-size: 26px; line-height: 1.1; }
-  .zahl span { font-size: 11px; color: var(--tinte-weg); }
+  .zahl b { display: block; font-family: var(--hand); font-size: 26px; line-height: 1.1; font-weight: normal; }
+  .zahl span { font-size: 11px; color: var(--kreide-weg); }
   .zahl.warn b { color: var(--rot); }
   /* Der Verlauf unter der Zahl. Eine einzelne Zahl sagt nicht, ob sie viel
      ist — „12 Mails" ist ein ruhiger Tag oder ein Ausbruch, je nachdem, was
      davor war. Die Linie steht nur an den Kacheln, für die es wirklich eine
      Reihe gibt; die übrigen bleiben nackt, statt eine zu erfinden. */
   .zahl svg { display: block; width: 100%; height: 22px; margin-top: 7px; }
-  .zahl em { display: block; font-size: 10.5px; font-style: normal; color: var(--tinte-weg); }
+  .zahl em { display: block; font-size: 10.5px; font-style: normal; color: var(--kreide-weg); }
 
   /* Die Ampel ist die wichtigste Auskunft des Kopfes und sah als Fließtext mit
      Punkten davor aus wie eine Aufzählung. Als Pillen ist sie eine Reihe von
@@ -117,29 +200,55 @@
   .ampel span {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 3px 10px 3px 9px; border-radius: 999px;
-    border: 1px solid var(--linie); background: #ffffff80; color: var(--tinte-matt);
+    border: 1px solid #ffffff26; background: #ffffff0a; color: var(--kreide-matt);
+    cursor: default;
   }
   .ampel span::before { content: '●'; font-size: 9px; color: var(--gruen); }
-  .ampel span.aus { border-color: #b04a3855; background: #b04a380f; color: #7d3527; }
+  .ampel span.aus { border-color: #d9705f66; background: #d9705f14; color: #f0c6be; }
   .ampel span.aus::before { color: var(--rot); }
-  .ampel span.egal::before { color: var(--tinte-weg); }
-  /* Der Stand darunter ist keine Ampel-Lampe - kein gut/schlecht, nur eine
-     Auskunft, wann und als was zuletzt aufgeschlagen wurde. Selber Ton wie
-     `.unter` gleich am Kopf, nur eine Nummer kleiner.
+  .ampel span.egal::before { color: var(--kreide-weg); }
+  /* Der Stand darunter ist keine Ampel-Lampe — kein gut/schlecht, nur eine
+     Auskunft, wann und als was zuletzt aufgeschlagen wurde.
 
-     Zwei Staende stehen hier nebeneinander, Worker und Seite. Nebeneinander
+     Zwei Stände stehen hier nebeneinander, Worker und Seite. Nebeneinander
      und nicht untereinander, weil man sie vergleicht: gehen sie auseinander,
      ist nur eines von beidem geworfen. Auf dem Handy bricht die Zeile um,
-     dafuer der grosszuegige Abstand quer - sonst laesen sich "Worker: abc1234"
-     und "Seite: def5678" wie ein einziger Satz. */
+     dafür der großzügige Abstand quer — sonst läsen sich „Worker: abc1234"
+     und „Seite: def5678" wie ein einziger Satz. */
   .wurf {
     display: flex; flex-wrap: wrap; gap: 3px 16px;
-    font-size: 11px; color: var(--tinte-weg); margin-top: 8px;
+    font-size: 11px; color: var(--kreide-weg); margin-top: 8px;
   }
   /* Rot, aber ohne Pille: ein Stand, der nicht zu erfahren ist, ist keine
      kaputte Lampe am Dienst. Er darf nur nicht aussehen wie einer, der eben
-     nicht weitergezaehlt hat - und genau so saehe er aus, wenn er fehlte. */
+     nicht weitergezählt hat — und genau so sähe er aus, wenn er fehlte. */
   .wurf .fehlt { color: var(--rot); }
+
+  /* --- Die Querverweise ----------------------------------------------------
+     Drei Karten unter dem Kopf. Sie erfinden nichts nach: alles darin ist
+     schon geladen (Protokoll, geplante Rundmails, das Wachstum) — sie sagen
+     nur, was in den anderen Blättern wartet, damit man sie nicht der Reihe
+     nach aufschlagen muss, um es zu erfahren.
+
+     Baugleich, ausdrücklich: Titelzeile, Inhalt, unten derselbe schlichte
+     Knopf. Eine Karte mit eigenem Anstrich wäre eine Anzeige.
+     --------------------------------------------------------------------- */
+  .quer { display: grid; gap: 12px; grid-template-columns: 1fr; margin-top: 18px; }
+  @media (min-width: 720px) { .quer { grid-template-columns: repeat(3, 1fr); } }
+  .quer .karte { display: flex; flex-direction: column; gap: 8px; }
+  .quer .k-titel {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--kreide-weg);
+  }
+  .quer .mini-log { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+  .quer .mini-log li { display: flex; gap: 7px; padding: 3px 0; align-items: baseline; }
+  .quer .mini-log .zeichen { flex: 0 0 14px; text-align: center; color: var(--kreide-weg); }
+  .quer .mini-log .zeichen.rot { color: var(--rot); }
+  .quer .mini-log .zeichen.gruen { color: var(--gruen); }
+  .quer .mini-log time { color: var(--kreide-weg); font-size: 11px; flex: 0 0 66px; }
+  .quer .mini-log .wen { overflow-wrap: anywhere; }
+  /* Der Knopf sitzt unten bündig, auch wenn die Karte daneben länger ist —
+     drei Knöpfe auf drei Höhen sähen aus wie drei verschiedene Angebote. */
+  .quer .spring { margin-top: auto; align-self: flex-start; }
 
   /* --- Die Runde -----------------------------------------------------------
      Eine Karte je Mensch, kein Tabellengitter. Zehn Spalten bekommt man auf
@@ -151,63 +260,79 @@
   .runde { display: grid; gap: 12px; grid-template-columns: 1fr; }
   @media (min-width: 680px) { .runde { grid-template-columns: 1fr 1fr; } }
 
-  /* --- Reiter --------------------------------------------------------------
-     Zweimal dieselbe Form: der Filter über der Runde und der Zeitraum über
-     den Bildern. Beides ist dieselbe Handlung — „zeig mir einen Ausschnitt" —
-     und soll deshalb auch gleich aussehen. Sie stehen ÜBER dem, was sie
-     filtern, weil man sonst erst liest und dann erfährt, dass man das Falsche
-     gelesen hat.
+  /* --- Werkzeugzeile: Suche und Sieb ---------------------------------------
+     Beides ist dieselbe Handlung — „zeig mir einen Ausschnitt" — und steht
+     deshalb in EINER Zeile und ÜBER dem, was es einschränkt. Die Suche kommt
+     zuerst: sie ist die feinere Frage, und wer einen Namen im Kopf hat, tippt
+     ihn, statt sich durch Siebe zu klicken.
      --------------------------------------------------------------------- */
-  .reiter { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px; }
+  .werkzeug { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 14px; }
+  .werkzeug .suche { flex: 1 1 180px; max-width: 260px; position: relative; }
+  .werkzeug .suche input {
+    width: 100%; font: inherit; font-size: 13px;
+    border: 1px solid #ffffff33; border-radius: 999px; background: #00000033;
+    color: var(--kreide); padding: 5px 12px 5px 28px;
+  }
+  .werkzeug .suche::before {
+    content: '⌕'; position: absolute; left: 10px; top: 50%; transform: translateY(-54%);
+    color: var(--kreide-weg); font-size: 15px; pointer-events: none;
+  }
+  .werkzeug .suche input:focus { outline: none; border-color: var(--gruen); }
+
+  /* --- Reiter --------------------------------------------------------------
+     Zweimal dieselbe Form: das Sieb über der Runde und der Zeitraum über den
+     Bildern. Sie stehen ÜBER dem, was sie filtern, weil man sonst erst liest
+     und dann erfährt, dass man das Falsche gelesen hat.
+     --------------------------------------------------------------------- */
+  .reiter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .reiter button {
-    border-radius: 999px; padding: 4px 12px; background: #ffffff66;
-    font-size: 12px; color: var(--tinte-weg);
+    border-radius: 999px; padding: 4px 12px; background: #ffffff0a;
+    font-size: 12px; color: var(--kreide-weg);
   }
-  .reiter button.an {
-    background: var(--gruen); border-color: var(--gruen); color: var(--papier);
-  }
-  .reiter button.an:hover { background: #24493a; color: #fff; }
+  .reiter button.an { background: var(--kreide); border-color: var(--kreide); color: #222a27; }
+  .reiter button.an:hover { background: #fff; color: #14181a; }
   .reiter button i { font-style: normal; opacity: .65; margin-left: 5px; }
   .reiter .wozu {
-    align-self: center; font-size: 11px; color: var(--tinte-weg);
-    letter-spacing: .08em; text-transform: uppercase; margin-right: 2px;
+    font-size: 11px; color: var(--kreide-weg); letter-spacing: .08em;
+    text-transform: uppercase; margin-right: 2px;
   }
 
   .karte {
-    border: 1px solid var(--linie); border-radius: 3px; background: #ffffff66;
+    border: 1px solid var(--linie); border-radius: 3px; background: var(--karte);
     padding: 12px 13px 11px;
   }
-  .karte.gesperrt { background: #b04a380d; border-color: #b04a3844; }
+  .karte.gesperrt { background: #d9705f10; border-color: #d9705f55; }
   .karte.weg { opacity: .55; }
   .k-kopf { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .k-name { font-family: var(--hand); font-size: 20px; }
   /* Das Monogramm. Nicht Zierde: die Karten unterscheiden sich sonst erst
      beim Lesen des Namens, und im Kontor sucht man eine bestimmte. Ein
-     Buchstabe in Tinte ist das, was ein Wirt auch ins Buch schreiben würde —
-     ein Foto hat hier niemand hinterlegt. */
+     Buchstabe in Kreide ist das, was ein Wirt auch an die Tafel schreiben
+     würde — ein Foto hat hier niemand hinterlegt. */
   .k-mono {
     flex: 0 0 auto; align-self: center;
     width: 27px; height: 27px; border-radius: 50%;
     display: inline-flex; align-items: center; justify-content: center;
     font-family: var(--hand); font-size: 14px; line-height: 1;
-    background: var(--gruen); color: var(--papier);
+    background: #399c69; color: var(--kreide);
   }
-  .karte.gesperrt .k-mono { background: var(--rot); }
-  .karte.weg .k-mono { background: var(--tinte-weg); }
+  .karte.gesperrt .k-mono { background: #b15041; }
+  .karte.weg .k-mono { background: #5a635f; }
   .marke {
     font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
     border: 1px solid currentColor; border-radius: 999px; padding: 1px 7px;
-    color: var(--tinte-weg);
+    color: var(--kreide-weg);
   }
   .marke.admin { color: var(--gruen); }
   .marke.rot { color: var(--rot); }
   .marke.ich { color: var(--gelb); }
   .k-mail {
-    font-size: 12px; color: var(--tinte-weg); margin: 3px 0 0; overflow-wrap: anywhere;
+    font-size: 12px; color: var(--kreide-weg); margin: 3px 0 0; overflow-wrap: anywhere;
   }
   /* Die Zahlen einer Karte: Beschriftung klein darüber, Wert darunter. Als
-     Gitter, damit sie in beiden Karten einer Zeile auf derselben Höhe stehen. */
-  /* Drei feste Spalten, nicht `auto-fit`: sechs Zahlen ergeben so zwei saubere
+     Gitter, damit sie in beiden Karten einer Zeile auf derselben Höhe stehen.
+
+     Drei feste Spalten, nicht `auto-fit`: sechs Zahlen ergeben so zwei saubere
      Reihen. Automatisch verteilt setzte die Karte je nach Breite fünf in die
      erste Zeile und eine allein darunter — das sieht aus wie ein Umbruchfehler. */
   .k-zahlen {
@@ -217,73 +342,89 @@
   }
   /* Auf einem schmalen Handy zwei statt drei. Nicht, weil es sonst überliefe
      — es läuft nicht über —, sondern weil „BEWERTET VON" bei drei Spalten
-     umbricht und dann eine Zeile höher steht als seine Nachbarn. Zwei Spalten
-     ergeben drei saubere Reihen; die Begründung für DREI oben gilt weiter,
-     sie gilt nur nicht bei 390 px. */
+     umbricht und dann eine Zeile höher steht als seine Nachbarn. */
   @media (max-width: 430px) { .k-zahlen { grid-template-columns: 1fr 1fr; } }
   .k-zahlen div { font-size: 15px; font-family: var(--hand); }
   .k-zahlen div span {
     display: block; font: 10px/1.3 system-ui, sans-serif;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--tinte-weg);
+    letter-spacing: .08em; text-transform: uppercase; color: var(--kreide-weg);
   }
   .k-grund {
     margin: 9px 0 0; padding: 7px 9px; font-size: 12px; line-height: 1.45;
-    background: #b04a3814; border-left: 2px solid var(--rot); border-radius: 2px;
+    background: #d9705f14; border-left: 2px solid var(--rot); border-radius: 2px;
   }
   .k-tat { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
 
   /* --- Knöpfe --------------------------------------------------------------
-     Ein Knopf ist hier klein und aus Tinte gezeichnet: die Seite ist eine
-     Verwaltung, keine Bedienoberfläche. Wer eine zerstörende Handlung anfasst,
-     bekommt den zweiten Klick in derselben Zeile — wie am Rad drüben, und
-     ausdrücklich kein confirm(): ein Systemdialog reißt einen aus dem Blatt.
+     Die Kreide-Umrissform der Tafel (`.knopf` in `index.html`), nur kleiner:
+     das Kontor ist eine Verwaltung, keine Bedienoberfläche. Wer eine
+     zerstörende Handlung anfasst, bekommt den zweiten Klick in derselben
+     Zeile — wie am Rad drüben, und ausdrücklich kein confirm(): ein
+     Systemdialog reißt einen aus dem Blatt.
      --------------------------------------------------------------------- */
   button {
     font: inherit; font-size: 12px; cursor: pointer;
-    border: 1px solid var(--linie); border-radius: 3px;
-    background: #ffffffaa; color: var(--tinte-matt);
+    border: 1px solid #ffffff40; border-radius: 3px;
+    background: #ffffff0d; color: var(--kreide-matt);
     padding: 5px 10px;
     transition: background .15s, border-color .15s, color .15s;
   }
-  button:hover { background: #fff; border-color: var(--tinte-weg); color: var(--tinte); }
+  button:hover { background: #ffffff1c; border-color: #ffffff77; color: var(--kreide); }
   button[disabled] { opacity: .4; cursor: default; }
-  button.sicher { border-color: var(--rot); color: var(--rot); background: #b04a380f; }
+  button.sicher { border-color: var(--rot); color: var(--rot); background: #d9705f1a; }
   button.gross {
     font-size: 14px; padding: 9px 18px; font-family: var(--hand);
-    background: var(--gruen); border-color: var(--gruen); color: var(--papier);
+    border: 1.5px solid #ffffff55; letter-spacing: .04em;
+    background: #ffffff0d; color: var(--kreide);
   }
-  button.gross:hover { background: #24493a; color: #fff; }
+  button.gross:hover { background: #ffffff22; }
+  /* Auch der große Knopf wird rot, wenn er zurückfragt. Eigene Regel, weil
+     `.gross` sonst Rand und Grund von `.sicher` überschriebe — sie steht
+     danach im Blatt. */
+  button.gross.sicher { border-color: var(--rot); color: var(--rot); background: #d9705f1a; }
 
   input[type="text"], input[type="email"], input[type="date"], input[type="time"],
   textarea {
     font: inherit; font-size: 14px; width: 100%;
-    border: 1px solid var(--linie); border-radius: 3px; background: #ffffffcc;
-    color: var(--tinte); padding: 7px 9px;
+    border: 1px solid #ffffff33; border-radius: 3px; background: #00000033;
+    color: var(--kreide); padding: 7px 9px;
   }
   input:focus, textarea:focus { outline: none; border-color: var(--gruen); }
   textarea { resize: vertical; min-height: 130px; line-height: 1.55; }
   label.feld-titel {
     display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--tinte-weg); margin: 12px 0 4px;
+    color: var(--kreide-weg); margin: 12px 0 4px;
   }
 
-  /* --- Die Mail-Vorschau ----------------------------------------------------
-     Dasselbe Aussehen wie `mailRumpf`/`mailKnopf` im Worker
-     (worker/src/index.js) - eine Mail wird in einem fremden Programm auf
-     weissem Grund gelesen, nicht im Kontorbuch. Aendert sich dort etwas an
-     Schrift oder Farbe, muss es hier nachgezogen werden, sonst luegt die
-     Vorschau.
+  /* --- Die Rundmail --------------------------------------------------------
+     Zweispaltig, sobald es reicht: die Maske links, die Vorschau rechts, und
+     die Vorschau bleibt beim Scrollen stehen. Vorher stand sie unter dem
+     Formular und erschien erst auf Knopfdruck — man schrieb also blind und
+     sah das Ergebnis erst, als es schon zu spät zum Umformulieren war.
      --------------------------------------------------------------------- */
+  .post { display: grid; gap: 18px; grid-template-columns: 1fr; }
+  @media (min-width: 860px) { .post { grid-template-columns: 1fr 1fr; align-items: start; } }
+  /* Datum und Uhrzeit, nur unter „Später planen". Die Regel steht hier und
+     nicht als `style`-Attribut am Element: ein `display` dort schlägt das
+     `hidden`-Attribut, und die zwei Felder standen deshalb auch unter
+     „Jetzt" da — sichtbar, aber ohne Wirkung. */
+  #r-spaeter { display: flex; gap: 8px; margin-top: 4px; }
+  #r-spaeter[hidden] { display: none; }
+  /* Die Vorschau ist WEISS und bleibt es. Dasselbe Aussehen wie `mailRumpf`
+     und `mailKnopf` im Worker (`worker/src/index.js`) — eine Mail wird in
+     einem fremden Programm auf hellem Grund gelesen, nicht auf der Tafel.
+     Ändert sich dort etwas an Schrift oder Farbe, muss es hier nachgezogen
+     werden, sonst lügt die Vorschau. */
   .mail-vorschau {
-    border: 1px solid var(--linie); border-radius: 3px; overflow: hidden;
-    margin-top: 14px; background: #fff;
+    border: 1px solid #0006; border-radius: 3px; overflow: hidden; background: #fff;
   }
+  @media (min-width: 860px) { .mail-vorschau { position: sticky; top: 56px; } }
   .mv-kopf {
-    padding: 10px 16px; background: var(--papier); border-bottom: 1px solid var(--linie);
-    font-size: 12px; color: var(--tinte-weg); display: flex; gap: 8px; align-items: baseline;
+    padding: 10px 16px; background: #f4efe3; border-bottom: 1px solid #d9cfb8;
+    font-size: 12px; color: #6f6653; display: flex; gap: 8px; align-items: baseline;
     flex-wrap: wrap;
   }
-  .mv-kopf strong { font-size: 14px; color: var(--tinte); font-weight: 600; }
+  .mv-kopf strong { font-size: 14px; color: #1d2a24; font-weight: 600; }
   .mv-rumpf {
     padding: 18px 16px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -291,33 +432,35 @@
   }
   .mv-bild { max-width: 100%; border-radius: 4px; display: block; margin: 0 0 12px; }
   .mv-knopf {
-    display: inline-block; background: var(--gruen); color: var(--papier);
+    display: inline-block; background: #2f5d4a; color: #f4efe3;
     padding: 12px 22px; border-radius: 3px; text-decoration: none;
     letter-spacing: .15em; text-transform: uppercase; font-size: 13px;
   }
+  /* Solange Betreff oder Text fehlen, hat die Vorschau nichts zu zeigen —
+     ein leeres weißes Rechteck sähe aus wie ein Ladefehler. */
+  .mv-leer {
+    padding: 26px 16px; font-size: 13px; color: #6f6653; font-style: italic;
+  }
 
   /* --- Die Grafiken --------------------------------------------------------
-     Handgezeichnetes SVG, ohne Fremdbibliothek: die Seite darf keine externe
-     Abhängigkeit bekommen, und `sparkline()` drüben zeigt, dass es reicht.
-     Zwei nebeneinander ab 680 px.
+     Das Raster gehört der Seite: wie viele nebeneinander passen, weiß sie,
+     nicht das Bild. Alles, was IN einem Bild steckt — Kärtchen, Legende,
+     Tabelle, Tooltip — bringt `bilder.js` selbst mit, samt Farben aus der
+     Palette, die `Bilder.aufsetzen` unten übergibt.
      --------------------------------------------------------------------- */
-  /* Das Raster der Bilder gehört der Seite: wie viele nebeneinander passen,
-     weiß sie, nicht das Bild. Alles, was IN einem Bild steckt — Kärtchen,
-     Legende, Tooltip — bringt `bilder.js` selbst mit, samt Farben aus der
-     Palette, die `Bilder.aufsetzen` unten übergibt. */
   .bilder { display: grid; gap: 14px; grid-template-columns: 1fr; }
   @media (min-width: 680px) { .bilder { grid-template-columns: 1fr 1fr; } }
 
   /* --- Das Skelett ---------------------------------------------------------
-     Bis die vier Abrufe da sind, stand hier eine weiße Seite — die sieht aus
-     wie ein Fehler. Ein paar graue Balken sagen „gleich", ohne etwas zu
-     behaupten, was noch niemand weiß.
+     Bis die vier Abrufe da sind, stand hier eine leere Seite — die sieht aus
+     wie ein Fehler. Ein paar Balken sagen „gleich", ohne etwas zu behaupten,
+     was noch niemand weiß.
      --------------------------------------------------------------------- */
   .skelett b { display: block; height: 22px; width: 40%; margin-bottom: 14px; }
   .skelett i { display: block; height: 12px; margin-bottom: 9px; }
   .skelett b, .skelett i {
     border-radius: 2px;
-    background: linear-gradient(90deg, #e9e0cc 25%, #f3ecdd 50%, #e9e0cc 75%);
+    background: linear-gradient(90deg, #ffffff0f 25%, #ffffff22 50%, #ffffff0f 75%);
     background-size: 280% 100%;
     animation: schimmer 1.5s linear infinite;
   }
@@ -325,7 +468,7 @@
   @media (prefers-reduced-motion: reduce) { .skelett b, .skelett i { animation: none; } }
 
   .zwei-zahlen {
-    display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 14px;
+    display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 16px;
     padding-top: 12px; border-top: 1px solid var(--linie); font-size: 13px;
   }
   .zwei-zahlen b { font-family: var(--hand); font-size: 18px; font-weight: normal; }
@@ -334,41 +477,80 @@
      Ein Verlauf, keine Tabelle. Deshalb steht vorn die Zeichnung der Handlung
      und dann „vor drei Stunden" — so liest ein Mensch eine Vorgeschichte. Das
      genaue Datum ist damit nicht weg, es steht im Tooltip: man braucht es
-     selten, aber wenn, dann auf die Minute.
+     selten, aber wenn, dann auf die Minute. Gestrichelt getrennt wie die
+     Listen der Tafel.
      --------------------------------------------------------------------- */
   .log { list-style: none; margin: 0; padding: 0; font-size: 13px; }
   .log li {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px;
-    padding: 7px 0; border-bottom: 1px solid var(--linie);
+    padding: 7px 0; border-bottom: 1px dashed #ffffff1f;
   }
   .log li:last-child { border-bottom: none; }
-  .log time { font-size: 11px; color: var(--tinte-weg); flex: 0 0 92px; }
+  .log time { font-size: 11px; color: var(--kreide-weg); flex: 0 0 92px; }
   .log .was { font-weight: 600; }
   .log .zeichen {
-    flex: 0 0 17px; text-align: center; color: var(--tinte-weg); font-size: 13px;
+    flex: 0 0 17px; text-align: center; color: var(--kreide-weg); font-size: 13px;
   }
   .log .zeichen.rot { color: var(--rot); }
   .log .zeichen.gruen { color: var(--gruen); }
 
   .sagt {
     margin: 13px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 13px;
-    background: #2f5d4a12; border-left: 2px solid var(--gruen); line-height: 1.5;
+    background: #7fc08c14; border-left: 2px solid var(--gruen); line-height: 1.5;
   }
-  .sagt.schlecht { background: #b04a3812; border-left-color: var(--rot); color: #7d3527; }
-  .leer-hinweis { font-size: 13px; color: var(--tinte-weg); font-style: italic; }
+  .sagt.schlecht { background: #d9705f14; border-left-color: var(--rot); color: #f0c6be; }
+  .leer-hinweis { font-size: 13px; color: var(--kreide-weg); font-style: italic; }
+
+  /* --- Die Jahr-Wahl -------------------------------------------------------
+     Der Rückblick liegt drüben auf der Tafel, nicht hier: er ist nichts, was
+     man verwaltet. Das Kontor fragt nur, WELCHES Jahr, und schickt einen dann
+     hinüber. Ein kleines Stück Tafel auf abgedunkeltem Schirm — dieselbe Form
+     wie die Blätter drüben, nur mittig.
+     --------------------------------------------------------------------- */
+  .wahl-ebene {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center; padding: 18px;
+  }
+  .wahl-ebene[hidden] { display: none; }
+  .wahl-schirm { position: absolute; inset: 0; background: #000000aa; }
+  .wahl-blatt {
+    position: relative; width: min(340px, 92vw);
+    background: radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 55%, var(--schiefer-t) 100%);
+    border: 6px solid #4a3527; border-radius: 8px;
+    padding: 18px 18px 16px; box-shadow: 0 14px 44px #000c, 0 0 0 1px #0009 inset;
+  }
+  .wahl-blatt h3 {
+    font-family: var(--hand); font-size: 19px; font-weight: normal;
+    color: var(--kreide); margin: 0 0 4px;
+  }
+  .wahl-blatt p { font-size: 12px; color: var(--kreide-weg); margin: 0 0 12px; }
+  .jahr-zeile {
+    display: flex; width: 100%; text-align: left; align-items: baseline; gap: 10px;
+    background: #ffffff0a; border: 1px solid #ffffff26; border-radius: 3px;
+    padding: 10px 12px; margin-bottom: 8px; font-size: 14px; color: var(--kreide);
+  }
+  .jahr-zeile b { font-family: var(--hand); font-size: 18px; font-weight: normal; }
+  .jahr-zeile span { font-size: 11.5px; color: var(--kreide-weg); flex: 1; }
+  .jahr-zeile:hover { border-color: #ffffff66; background: #ffffff12; }
+  .wahl-blatt .zu { margin-top: 6px; width: 100%; }
 
   /* Wer hier nichts verloren hat, sieht das — und nicht eine leere Seite, die
      wie ein Fehler aussieht. Das Tor selbst sitzt im Worker, das hier ist die
-     Auskunft darüber. */
-  .tuer { text-align: center; padding: 50px 20px; }
-  .tuer p { color: var(--tinte-weg); font-size: 14px; }
+     Auskunft darüber. Das Register steht dabei NICHT da: fünf Zungen über
+     „Nicht dein Zimmer" wären fünf Türen, die alle zu sind. */
+  .tuer { text-align: center; padding: 50px 20px; margin-top: 14px; }
+  .tuer p { color: var(--kreide-weg); font-size: 14px; }
   .zurueck { display: inline-block; margin-top: 14px; color: var(--gruen); font-size: 13px; }
-  /* Im Kopf steht er über dem Titel statt unter einem Absatz — dort ist der
-     Abstand nach oben falsch herum. */
-  #kopf-blatt .zurueck { margin: 0 0 8px; }
 </style>
 </head>
 <body>
+
+<!-- Die Zungen. Leer, bis `laden()` weiß, ob überhaupt jemand hereindarf —
+     ein Register über dem Skelett verspräche fünf Blätter, die es vielleicht
+     gar nicht gibt, und über der verschlossenen Tür wären es fünf Türen, die
+     alle zu sind. -->
+<nav class="register" id="register" aria-label="Blätter des Kontors" hidden></nav>
+
 <div class="buch">
 
   <!-- Das einzige, was ohne `hidden` startet: bis der erste Abruf da ist, ist
@@ -381,77 +563,98 @@
     <i style="width:76%"></i>
   </div>
 
-  <div class="blatt" id="kopf-blatt" hidden>
-    <!-- Der Weg zurück. Stand bisher nur auf der verschlossenen Tür — wer
-         hereinkam, hatte keinen mehr und musste die Adresse von Hand kürzen.
-         Über den Titel, weil man ihn dort sucht und nicht unter der Ampel. -->
-    <a class="zurueck" href="./">← zurück zur Tafel</a>
+  <!-- Die Übersicht. Titel und Anmeldung stehen hier oben und nicht in einer
+       eigenen Leiste: eine Kopfleiste gab es zwischenzeitlich, sie war eine
+       zweite Navigation neben dem Register und flog wieder raus. Der Weg
+       zurück zur Tafel hängt jetzt als letzte Zunge im Register. -->
+  <section class="blatt" id="kopf-blatt" aria-label="Übersicht" hidden>
     <h1>Kontor</h1>
     <p class="unter" id="wer"></p>
     <div class="zahlen" id="zahlen"></div>
     <div class="ampel" id="ampel"></div>
     <div class="wurf" id="wurf"></div>
-  </div>
+    <div class="quer" id="quer"></div>
+  </section>
 
-  <div class="blatt" id="runde-blatt" hidden>
+  <section class="blatt" id="runde-blatt" aria-label="Mitglieder" hidden>
     <h2>Mitglieder</h2>
-    <div class="reiter" id="filter"></div>
+    <div class="werkzeug">
+      <span class="suche"><input type="text" id="suche" placeholder="Name oder Adresse…"
+                                 aria-label="Mitglieder durchsuchen"></span>
+      <span class="reiter" id="filter"></span>
+    </div>
     <div class="runde" id="runde"></div>
     <p class="sagt" id="runde-sagt" hidden></p>
-  </div>
+  </section>
 
-  <div class="blatt" id="stat-blatt" hidden>
+  <section class="blatt" id="stat-blatt" aria-label="Statistiken" hidden>
     <h2>Statistiken</h2>
-    <div class="reiter" id="zeitraum"></div>
-    <div class="bilder" id="bilder"></div>
+    <div class="werkzeug">
+      <span class="reiter" id="zeitraum"></span>
+    </div>
+    <div id="bilder"></div>
     <div class="zwei-zahlen" id="zwei-zahlen"></div>
     <p class="sagt" id="stat-sagt" hidden></p>
-  </div>
+  </section>
 
-  <div class="blatt" id="rund-blatt" hidden>
+  <section class="blatt" id="rund-blatt" aria-label="Rundmail" hidden>
     <h2>Rundmail</h2>
-    <label class="feld-titel" for="r-betreff">Betreff</label>
-    <input type="text" id="r-betreff" maxlength="120" placeholder="Freitag steht">
-    <label class="feld-titel" for="r-text">Text</label>
-    <textarea id="r-text" maxlength="4000"
-              placeholder="Was der Wirt zu sagen hat. Leerzeile trennt Absätze."></textarea>
-    <p class="unter" id="r-zaehler" style="margin:6px 0 0"></p>
+    <div class="post">
+      <div>
+        <label class="feld-titel" for="r-betreff">Betreff</label>
+        <input type="text" id="r-betreff" maxlength="120" placeholder="Freitag steht">
+        <label class="feld-titel" for="r-text">Text</label>
+        <textarea id="r-text" maxlength="4000"
+                  placeholder="Was der Wirt zu sagen hat. Leerzeile trennt Absätze."></textarea>
+        <p class="unter" id="r-zaehler" style="margin:6px 0 0"></p>
 
-    <label class="feld-titel" for="r-bild">Bild (Adresse, freiwillig)</label>
-    <input type="text" id="r-bild" placeholder="https://…">
+        <label class="feld-titel" for="r-bild">Bild (Adresse, freiwillig)</label>
+        <input type="text" id="r-bild" placeholder="https://…">
 
-    <label class="feld-titel" for="r-knopf-text">Knopf (freiwillig)</label>
-    <div style="display:flex;gap:8px">
-      <input type="text" id="r-knopf-text" maxlength="40" placeholder="Zur Tafel"
-             style="flex:1 1 40%">
-      <input type="text" id="r-knopf-link" placeholder="https://…" style="flex:1 1 60%">
+        <label class="feld-titel" for="r-knopf-text">Knopf (freiwillig)</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="r-knopf-text" maxlength="40" placeholder="Zur Tafel"
+                 style="flex:1 1 40%">
+          <input type="text" id="r-knopf-link" placeholder="https://…" style="flex:1 1 60%">
+        </div>
+
+        <label class="feld-titel">Versand</label>
+        <div class="reiter" id="r-wann"></div>
+        <!-- Das `display:flex` steht ABSICHTLICH im Blatt und nicht hier als
+             Stil-Attribut: ein `display` am Element schlägt das `hidden`, und
+             die beiden Felder standen dadurch auch unter „Jetzt" da. -->
+        <div id="r-spaeter" hidden>
+          <input type="date" id="r-datum" style="flex:1 1 auto">
+          <input type="time" id="r-zeit" style="flex:0 0 110px">
+        </div>
+
+        <div class="k-tat" style="margin-top:14px">
+          <button class="gross" id="r-ab" type="button">Schicken</button>
+          <button id="r-test" type="button">Testmail an mich</button>
+        </div>
+        <p class="sagt" id="rund-sagt" hidden></p>
+      </div>
+
+      <!-- Die Vorschau steht daneben und schreibt beim Tippen mit. Kein
+           eigenes Gerüst darin: `mailVorschau()` baut den Kasten, und zwar
+           denselben, der vorher auf Knopfdruck erschien — zwei Zeichner
+           liefen auseinander, sobald der Worker seine Mail änderte. -->
+      <div>
+        <label class="feld-titel" style="margin-top:12px">Vorschau</label>
+        <div id="r-vorschau"></div>
+      </div>
     </div>
 
-    <label class="feld-titel">Versand</label>
-    <div class="reiter" id="r-wann"></div>
-    <div id="r-spaeter" hidden style="display:flex;gap:8px;margin-top:4px">
-      <input type="date" id="r-datum" style="flex:1 1 auto">
-      <input type="time" id="r-zeit" style="flex:0 0 110px">
-    </div>
-
-    <div class="k-tat" style="margin-top:14px">
-      <button class="gross" id="r-ab" type="button">Vorschau</button>
-      <button id="r-test" type="button">Testmail an mich</button>
-      <button id="r-weg" type="button" hidden>verwerfen</button>
-    </div>
-    <div id="r-vorschau" hidden></div>
-    <p class="sagt" id="rund-sagt" hidden></p>
-
-    <div id="r-geplant" hidden style="margin-top:22px;padding-top:14px;border-top:1px solid var(--linie)">
+    <div id="r-geplant" hidden style="margin-top:24px;padding-top:14px;border-top:1px solid var(--linie)">
       <h3>Geplant</h3>
       <div id="r-geplant-liste" style="display:grid;gap:10px"></div>
     </div>
-  </div>
+  </section>
 
-  <div class="blatt" id="log-blatt" hidden>
+  <section class="blatt" id="log-blatt" aria-label="Protokoll" hidden>
     <h2>Protokoll</h2>
     <ul class="log" id="log"></ul>
-  </div>
+  </section>
 
   <div class="blatt tuer" id="tuer" hidden>
     <h1>Nicht dein Zimmer</h1>
@@ -459,6 +662,18 @@
     <a class="zurueck" href="./">← zurück zur Tafel</a>
   </div>
 
+</div>
+
+<!-- Die Jahr-Wahl. Sie steht außerhalb des Buches, weil sie über allem liegt;
+     gewählt wird hier nur, GEZEIGT wird der Rückblick drüben auf der Tafel. -->
+<div class="wahl-ebene" id="wahl-ebene" hidden>
+  <div class="wahl-schirm" data-wahl-zu></div>
+  <div class="wahl-blatt" role="dialog" aria-modal="true" aria-label="Jahr wählen">
+    <h3>Dein Jahr — welches?</h3>
+    <p>Der Rückblick geht auch unterjährig: beim laufenden Jahr zählt er bis heute.</p>
+    <div id="jahr-liste"></div>
+    <button class="zu" type="button" data-wahl-zu>doch nicht</button>
+  </div>
 </div>
 
 <script src="bilder.js"></script>
@@ -545,26 +760,47 @@
 
   // ==========================================================================
   // Die Bilder kommen aus `bilder.js` — dieselbe Datei, die die Statistikseite
-  // benutzt. Hier bekommen sie die Farben des Kontors: Tinte auf Papier.
-  // Das ist zugleich die Vorgabe der Datei, steht aber trotzdem ausgeschrieben
-  // da — sonst sieht die eine Seite so aus, als hätte sie keine Wahl gehabt.
+  // benutzt. Beide Seiten sind jetzt Schiefer, also bekommen beide DIESELBE
+  // Palette; sie steht trotzdem an beiden Stellen ausgeschrieben, weil die
+  // Vorgabe der Datei Papier ist und ein vergessenes `aufsetzen` sonst
+  // aussieht wie ein Stilbruch statt wie ein Fehler.
+  //
+  // `grund` ist hier der KARTENGRUND, nicht der Schiefer dahinter: mit ihm
+  // werden die Punkte auf den Kurven ausgestanzt, und ein Loch in der Farbe
+  // der Tafel läge neben der Karte, auf der es sitzt.
+  // `stark` ist HELL — der Wisch, der eine Säule hinterlegt, muss auf
+  // Schiefer aufhellen, nicht abdunkeln. Der Tooltip dreht sich mit um:
+  // drüben Papier auf Tinte, hier ein Kreidezettel auf Schiefer.
   // ==========================================================================
   Bilder.aufsetzen({
-    /* Platz 4+5 (Blau/Lila), dieselbe Korrektur wie in statistik.html: Lila
-       dunkler und kräftiger statt nur im Farbton verschoben — nur ein
-       Helligkeitssprung trennt die zwei zuverlässig, auch für Deuteranopie. */
-    reihe:      ['#2f5d4a', '#b8901f', '#b04a38', '#3f77a8', '#7d3470', '#6f6653'],
-    linie:      '#d9cfb8',
-    text:       '#47544d',
-    textWeg:    '#6f6653',
-    grund:      '#f4efe3',
-    stark:      '#1d2a24',
-    karteGrund: '#ffffff66',
-    karteRand:  '#d9cfb8',
-    tippGrund:  '#1d2a24',
-    tippText:   '#ded7c8',
-    tippKopf:   '#ffffff',
-    ring:       '#2f5d4a',
+    /* Die durch den Sechs-Prüfungen-Lauf gezogene Kreide-Reihe. Die alte
+       (`#8fc9a6 #e8c766 #d9705f #94c8ea #a1519e`) fiel durch: Grün↔Gelb lagen
+       auch für Normalsichtige zu nah beieinander, drei der fünf standen
+       außerhalb des Helligkeitsbands.
+
+       Die ORDNUNG ist die von `bilder.js` — Grün, Gelb, Rot, Blau, Lila, und
+       auf Platz 6 der Zurückhaltungston. Sie ist keine Geschmacksfrage: die
+       Datei setzt darauf die Los-Ausgänge (`losFarbenSetzen`, abgesagt =
+       Platz 3, offen = Platz 2). Wer Rot und Gelb tauscht, färbt „abgesagt"
+       gelb und „offen" rot. */
+    reihe:      ['#399c69', '#b29126', '#b15041', '#4c9bcb', '#994d96', '#8a938f'],
+    linie:      '#ffffff33',
+    text:       '#cfd6cd',
+    textWeg:    '#93a09a',
+    grund:      '#2d3335',
+    stark:      '#eef1ea',
+    karteGrund: '#ffffff08',
+    karteRand:  '#ffffff22',
+    titel:      '#cfd6cd',
+    tippGrund:  '#eef1ea',
+    tippText:   '#4a5450',
+    tippKopf:   '#1b2220',
+    tippStrich: '#00000022',
+    /* Der Fokusrahmen ist ausdrücklich KEINE Serienfarbe: ein Rahmen in der
+       Farbe einer Kurve läse sich wie eine Hervorhebung dieser Kurve. `--gelb`
+       ist auf beiden Seiten der Ton für Bedienung statt Daten (hier die Marke
+       „du", drüben der aktive Zeitraum-Reiter). */
+    ring:       '#e8c766',
     hand:       "'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive",
   });
   const REIHE = Bilder.reihe;
@@ -576,6 +812,8 @@
   let stand = null;        // die letzte Antwort von /api/admin/nutzer
   let mich = null;         // /api/me — für das Neuzeichnen des Kopfes
   let letzteAmpel = null;  // die letzte Antwort von /api/health, dito
+  let letzteStat = null;   // /api/admin/statistik — die Übersicht liest daraus
+                           // die Jahre für den Rückblick
 
   function kopfZeichnen(kopf, ich, health, s) {
     $('wer').textContent = 'Angemeldet als ' + (ich.name || 'namenlos') + ' · ' + ich.email;
@@ -589,7 +827,7 @@
       d.appendChild(el('b', null, zahl(wert)));
       d.appendChild(el('span', null, was));
       if (reihe && reihe.length > 1) {
-        d.appendChild(Bilder.funke(reihe, warn ? '#b04a38' : REIHE[0]));
+        d.appendChild(Bilder.funke(reihe, warn ? REIHE[2] : REIHE[0]));
         if (dazu) d.appendChild(el('em', null, dazu));
       }
       z.appendChild(d);
@@ -644,7 +882,7 @@
         const s = el('span', gut ? '' : 'aus', titel);
         Bilder.tippAm(s, {
           titel,
-          zeilen: [{ farbe: gut ? '#2f5d4a' : '#b04a38', was: 'Antwort', wert: wert || '—' }],
+          zeilen: [{ farbe: gut ? REIHE[0] : REIHE[2], was: 'Antwort', wert: wert || '—' }],
         });
         a.appendChild(s);
       });
@@ -673,7 +911,7 @@
           : version + (wann ? ' · ' + datum(wann) : '')));
       Bilder.tippAm(z, {
         titel: 'Stand: ' + titel,
-        zeilen: fehlt ? [{ farbe: '#b04a38', was: 'Grund', wert: warum || '—' }] : [
+        zeilen: fehlt ? [{ farbe: REIHE[2], was: 'Grund', wert: warum || '—' }] : [
           { was: 'Version', wert: version },
           { was: wann ? 'Vom' : 'Deployt', wert: wann ? datum(wann) : '—' },
         ],
@@ -705,9 +943,27 @@
   };
   let sieb = 'alle';
 
+  /* Das Suchwort. Es filtert ZUSÄTZLICH zum Sieb und ruft nichts nach: die
+     ganze Runde liegt seit `laden()` da, und ein Abruf je Tastendruck wäre
+     eine Anfrage pro Buchstabe für eine Liste, die in den Speicher passt.
+
+     Name ODER Adresse, weil man mal das eine und mal das andere im Kopf hat —
+     und ohne Groß/Klein, weil niemand „Micha" tippt, wenn er sucht. */
+  let suchwort = '';
+  $('suche').addEventListener('input', ev => {
+    suchwort = ev.target.value.trim().toLowerCase();
+    if (stand) runde(stand.nutzer);
+  });
+
+  const passtZurSuche = u => !suchwort
+    || (u.name + ' ' + (u.email || '')).toLowerCase().includes(suchwort);
+
   function filterZeichnen(nutzer) {
     const ziel = $('filter');
     ziel.textContent = '';
+    /* Die Zahlen an den Sieben zählen die GANZE Runde, nicht das Suchergebnis:
+       ein Sieb, dessen Zahl beim Tippen mitwandert, sieht aus, als hätte sich
+       die Runde geändert. Was das Suchwort übrig lässt, steht darunter. */
     const sichtbar = Object.entries(SIEBE)
       .map(([k, v]) => [k, v, nutzer.filter(v.passt).length])
       .filter(([k, , n]) => n > 0 || k === 'alle');
@@ -730,7 +986,7 @@
     const ziel = $('runde');
     ziel.textContent = '';
     filterZeichnen(nutzer);
-    nutzer.filter(SIEBE[sieb].passt).forEach(u => {
+    nutzer.filter(u => SIEBE[sieb].passt(u) && passtZurSuche(u)).forEach(u => {
       const k = el('div', 'karte'
         + (u.gesperrt ? ' gesperrt' : '') + (u.entfernt ? ' weg' : ''));
 
@@ -776,6 +1032,14 @@
       if (!u.entfernt) k.appendChild(knoepfe(u));
       ziel.appendChild(k);
     });
+    /* Ein leeres Raster sieht aus wie ein Ladefehler. Der Satz sagt beides,
+       Sieb UND Suchwort — wer das eine vergisst, sucht sonst den Fehler beim
+       anderen. */
+    if (!ziel.children.length) {
+      ziel.appendChild(el('p', 'leer-hinweis', suchwort
+        ? 'Niemand passt auf Sieb und Suchwort.'
+        : 'Hier steht gerade niemand.'));
+    }
   }
 
   /* Jede zerstörende Handlung fragt zurück — als zweiter Klick auf denselben
@@ -911,6 +1175,13 @@
       // Der Kopf hängt mit dran: „+2 in 30 Tagen" unter der Melderzahl wäre
       // sonst der Satz zum vorigen Zeitraum.
       if (stand && mich) kopfZeichnen(stand.kopf, mich, letzteAmpel, s);
+      /* Die Querverweise NICHT: das einzige, was sie aus der Statistik ziehen,
+         sind die Jahre für den Rückblick, und `wachstum` läuft über die ganze
+         Geschichte statt über das Fenster (Abfrage 6 im Worker, ohne
+         Zeitgrenze). Sie stünden nach dem Neuzeichnen wortgleich da. Wer hier
+         je etwas Fensterabhängiges hineinschreibt, muss `querZeichnen`
+         mitnehmen — die Protokollzeilen dafür lägen dann allerdings auch nicht
+         mehr vor. */
     } catch (e) {
       sagt('stat-sagt', 'Der Zeitraum ließ sich nicht wechseln: ' + e.message, true);
     } finally {
@@ -919,6 +1190,7 @@
   }
 
   function statistik(s) {
+    letzteStat = s;
     zeitraumZeichnen();
     const ziel = $('bilder');
     ziel.textContent = '';
@@ -931,38 +1203,59 @@
     // Rückfall ist nicht theoretisch: zwischen Seiten-Push und Worker-Deploy
     // liegen Minuten, in denen die neue Seite die alte Antwort bekommt.
     const fenster = ', ' + (s.tage || zeitraum) + ' Tage';
-    ziel.appendChild(Bilder.flaeche('Meldungen je Tag' + fenster,
-      s.meldungen, z => z.n, z => nurTag(z.tag), 'Meldungen'));
-    ziel.appendChild(Bilder.schar('Bestand je Melder' + fenster, s.bestand));
-    // Direkt hinter dem Bestand: beide Kurven kommen aus derselben Meldung,
-    // und nebeneinander sieht man, ob der Kühlschrank mit dem Nachlegen
-    // hochgeht. `|| []` — die alte Antwort kennt das Feld noch nicht.
-    ziel.appendChild(Bilder.grad('Temperatur je Melder' + fenster, s.grad || []));
-    ziel.appendChild(Bilder.liegend('Wer war wie oft Gastgeber, insgesamt',
-      s.gastgeber, z => z.name, z => z.n, 'Abende'));
-    // `|| []` — die alte Antwort kennt das Feld noch nicht.
-    ziel.appendChild(Bilder.liegend('Wer wie oft einen Notruf abgesetzt hat, insgesamt',
-      s.notrufe || [], z => z.name, z => z.n, 'Notrufe'));
-    ziel.appendChild(Bilder.band('Ausgang der Ziehungen, insgesamt', s.lose));
-    ziel.appendChild(Bilder.losJeMelder('Ausgang der Ziehungen je Melder, insgesamt',
-      s.lose_je_melder || []));
-    ziel.appendChild(Bilder.saeulen('Betrieb je Woche' + fenster, s.betrieb, [
-      { feld: 'kommentare', titel: 'Kommentare', farbe: REIHE[0] },
-      { feld: 'reaktionen', titel: 'Reaktionen', farbe: REIHE[1] },
-      { feld: 'sterne',     titel: 'Sterne',     farbe: REIHE[3] },
-    ], g => 'KW ' + String(g.woche).slice(-2)));
-    ziel.appendChild(Bilder.saeulen('Mails je Art' + fenster, s.mails, [
-      { feld: 'n',      titel: 'verschickt', farbe: REIHE[0] },
-      { feld: 'kaputt', titel: 'ging nicht raus', farbe: REIHE[2] },
-    ], g => g.art.replace(/_/g, ' ')));
+
+    /* Elf Bilder in einem Raster sind eine Halde: man sucht das eine, das man
+       wollte, und liest zehn Überschriften. In drei benannten Gruppen sucht
+       man erst die Gruppe. Die Namen sind keine Kategorien der Datenbank,
+       sondern die drei Fragen, mit denen man hierherkommt: was macht der
+       Kühlschrank, was macht die Runde, was macht der Betrieb. */
+    const gruppe = (name, ...bilder) => {
+      ziel.appendChild(el('div', 'gruppe', name));
+      const g = el('div', 'bilder');
+      bilder.forEach(b => g.appendChild(b));
+      ziel.appendChild(g);
+    };
+
+    gruppe('Der Kühlschrank',
+      Bilder.flaeche('Meldungen je Tag' + fenster,
+        s.meldungen, z => z.n, z => nurTag(z.tag), 'Meldungen'),
+      Bilder.schar('Bestand je Melder' + fenster, s.bestand),
+      // Direkt hinter dem Bestand: beide Kurven kommen aus derselben Meldung,
+      // und nebeneinander sieht man, ob der Kühlschrank mit dem Nachlegen
+      // hochgeht. `|| []` — die alte Antwort kennt das Feld noch nicht.
+      Bilder.grad('Temperatur je Melder' + fenster, s.grad || []));
+
+    gruppe('Runde & Rad',
+      Bilder.liegend('Wer war wie oft Gastgeber, insgesamt',
+        s.gastgeber, z => z.name, z => z.n, 'Abende'),
+      // `|| []` — die alte Antwort kennt das Feld noch nicht.
+      Bilder.liegend('Wer wie oft einen Notruf abgesetzt hat, insgesamt',
+        s.notrufe || [], z => z.name, z => z.n, 'Notrufe'),
+      Bilder.band('Ausgang der Ziehungen, insgesamt', s.lose),
+      Bilder.losJeMelder('Ausgang der Ziehungen je Melder, insgesamt',
+        s.lose_je_melder || []));
+
     // Die Farbe kommt von hier, nicht vom Worker: der kennt die Palette des
     // Kontors nicht, nur die Reihenfolge (meistbeschaeftigt zuerst).
     const aufrufeReihen = (s.aufrufe_nutzer_reihen || [])
       .map((r, i) => ({ ...r, farbe: REIHE[i % REIHE.length] }));
-    ziel.appendChild(Bilder.saeulen('Seitenaufrufe je Tag, nach Nutzer' + fenster,
-      s.aufrufe_je_tag || [], aufrufeReihen, g => nurTag(g.tag)));
-    ziel.appendChild(Bilder.liegend('Seitenaufrufe je Nutzer, insgesamt',
-      s.aufrufe_je_nutzer || [], z => z.name, z => z.n, 'Aufrufe'));
+
+    gruppe('Betrieb & Post',
+      Bilder.saeulen('Betrieb je Woche' + fenster, s.betrieb, [
+        { feld: 'kommentare', titel: 'Kommentare', farbe: REIHE[0] },
+        { feld: 'reaktionen', titel: 'Reaktionen', farbe: REIHE[1] },
+        { feld: 'sterne',     titel: 'Sterne',     farbe: REIHE[3] },
+      ], g => 'KW ' + String(g.woche).slice(-2)),
+      Bilder.saeulen('Mails je Art' + fenster, s.mails, [
+        { feld: 'n',      titel: 'verschickt', farbe: REIHE[0] },
+        // Platz 3 ist das Rot der Reihe. Nicht Platz 2 — das ist das Gelb,
+        // und eine Mail, die nicht rausging, ist kein halber Erfolg.
+        { feld: 'kaputt', titel: 'ging nicht raus', farbe: REIHE[2] },
+      ], g => g.art.replace(/_/g, ' ')),
+      Bilder.saeulen('Seitenaufrufe je Tag, nach Nutzer' + fenster,
+        s.aufrufe_je_tag || [], aufrufeReihen, g => nurTag(g.tag)),
+      Bilder.liegend('Seitenaufrufe je Nutzer, insgesamt',
+        s.aufrufe_je_nutzer || [], z => z.name, z => z.n, 'Aufrufe'));
 
     /* Jedes Bild bekommt seine Überschrift als Namen. `role="img"` ohne
        Beschriftung ist für einen Screenreader ein leeres Bild — und seit die
@@ -993,7 +1286,7 @@
   }
 
   /* Ein Zeichen je Handlung. Keine Emoji: die kämen aus einer fremden
-     Schrift, wären bunt und säßen auf einem Blatt Papier wie ein Aufkleber.
+     Schrift, wären bunt und säßen auf einer Schiefertafel wie ein Aufkleber.
      Diese hier sind Zeichen, die auch ein Setzer gehabt hätte. */
   const LOG_ZEICHEN = {
     sperren:    ['⊘', 'rot'],
@@ -1003,6 +1296,30 @@
     rundmail:   ['✉', ''],
   };
 
+  // Wen oder was die Handlung betraf, in einem Satzstück.
+  const logWen = z => z.aktion === 'rundmail'
+    ? '„' + (z.detail || '') + '"'
+    : z.wen + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
+
+  /* EINE Zeile für zwei Orte: das Protokollblatt und die Vorschaukarte auf der
+     Übersicht. `kurz` lässt dort das „wer → was" weg — in einer drittel Karte
+     ist für drei Spalten kein Platz, und die Frage dort ist ohnehin nur, ob
+     seit dem letzten Blick etwas passiert ist. */
+  function logZeile(z, kurz) {
+    const li = el('li');
+    const [glyph, ton] = LOG_ZEICHEN[z.aktion] || ['·', ''];
+    li.appendChild(el('span', 'zeichen ' + ton, glyph));
+    const t = el('time', null, vorhin(z.wann));
+    t.dateTime = z.wann;
+    // Das genaue Datum bleibt erreichbar — im selben Kasten wie überall
+    // sonst auf dieser Seite, nicht als grauer Systemtooltip.
+    Bilder.tippAm(t, { titel: datum(z.wann), zeilen: [] });
+    li.appendChild(t);
+    if (!kurz) li.appendChild(el('span', 'was', z.wer + ' → ' + z.aktion));
+    li.appendChild(el('span', kurz ? 'wen' : null, logWen(z)));
+    return li;
+  }
+
   function protokoll(zeilen) {
     const ziel = $('log');
     ziel.textContent = '';
@@ -1010,30 +1327,143 @@
       ziel.appendChild(el('li', 'leer-hinweis', 'Noch hat niemand etwas verwaltet.'));
       return;
     }
-    zeilen.forEach(z => {
-      const li = el('li');
-      const [glyph, ton] = LOG_ZEICHEN[z.aktion] || ['·', ''];
-      li.appendChild(el('span', 'zeichen ' + ton, glyph));
-      const t = el('time', null, vorhin(z.wann));
-      t.dateTime = z.wann;
-      // Das genaue Datum bleibt erreichbar — im selben Kasten wie überall
-      // sonst auf dieser Seite, nicht als grauer Systemtooltip.
-      Bilder.tippAm(t, { titel: datum(z.wann), zeilen: [] });
-      li.appendChild(t);
-      li.appendChild(el('span', 'was', z.wer + ' → ' + z.aktion));
-      li.appendChild(el('span', null, z.aktion === 'rundmail'
-        ? '„' + (z.detail || '') + '"'
-        : z.wen + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '')));
-      ziel.appendChild(li);
-    });
+    zeilen.forEach(z => ziel.appendChild(logZeile(z)));
   }
 
   // ==========================================================================
-  // Rundmail — Vorschau, dann erst der Versand mit der Zahl im Knopf.
-  // Jetzt oder geplant, mit Bild und Knopf; die Vorschau sieht aus wie die
-  // echte Mail (siehe .mail-vorschau), nicht wie das Kontorbuch drumherum.
+  // Die Querverweise auf der Übersicht
+  //
+  // Drei baugleiche Karten. Sie holen nichts nach: Protokoll und geplante
+  // Rundmails liegen seit `laden()` ohnehin da, und das erste Jahr steht in
+  // der Wachstumskurve. Sie ersparen nur das Durchblättern, um zu erfahren,
+  // ob in einem der anderen Blätter überhaupt etwas wartet.
+  //
+  // Baugleich ist Absicht und keine Sparsamkeit: eine Karte mit eigenem
+  // Anstrich oder eigenem Knopf läse sich wie eine Anzeige zwischen zwei
+  // Auskünften.
   // ==========================================================================
-  let vorschauSteht = false;
+  function querKarte(titel, inhalt, knopfWort, beiKlick) {
+    const k = el('div', 'karte');
+    k.appendChild(el('div', 'k-titel', titel));
+    k.appendChild(inhalt);
+    const b = el('button', 'spring', knopfWort);
+    b.type = 'button';
+    b.addEventListener('click', beiKlick);
+    k.appendChild(b);
+    return k;
+  }
+
+  function querZeichnen(logZeilen) {
+    const ziel = $('quer');
+    ziel.textContent = '';
+
+    /* 1 — Der Jahresrückblick. Die Jahre kommen aus der Wachstumskurve: ihr
+       erster Eintrag ist die erste Anmeldung überhaupt, und davor gab es
+       nichts zu erzählen. Kein eigener Abruf dafür. */
+    const jahre = rueckblickJahre();
+    if (jahre.length) {
+      const i = el('div');
+      i.appendChild(el('div', 'k-name', 'Dein Jahr ' + jahre[0]));
+      i.appendChild(el('p', 'k-mail', jahre.length === 1
+        ? 'bis heute gezählt'
+        : 'bis heute gezählt · auch ' + jahre.slice(1).join(' und ')));
+      ziel.appendChild(querKarte('Jahresrückblick', i, 'Dein Jahr öffnen →', jahrWahlAuf));
+    }
+
+    /* 2 — Was zuletzt verwaltet wurde. Drei Zeilen, mehr passt nicht in eine
+       drittel Karte, und mehr beantwortet die Frage auch nicht. */
+    if (logZeilen && logZeilen.length) {
+      const ml = el('ul', 'mini-log');
+      logZeilen.slice(0, 3).forEach(z => ml.appendChild(logZeile(z, true)));
+      ziel.appendChild(querKarte('Zuletzt im Protokoll', ml,
+        'zum Protokoll →', () => blattAuf('log-blatt')));
+    }
+
+    /* 3 — Die nächste geplante Rundmail. Steht keine an, fehlt die Karte:
+       „nichts geplant" mit einem Knopf darunter wäre eine Aufforderung, und
+       das Kontor fordert nichts. */
+    const naechste = geplant
+      .filter(g => g.status === 'geplant')
+      .sort((a, b) => new Date(a.versand_am) - new Date(b.versand_am))[0];
+    if (naechste) {
+      const i = el('div');
+      i.appendChild(el('div', 'k-name', naechste.betreff));
+      i.appendChild(el('p', 'k-mail', 'geplant für ' + datum(naechste.versand_am)));
+      ziel.appendChild(querKarte('Nächste Rundmail', i,
+        'zur Rundmail →', () => blattAuf('rund-blatt')));
+    }
+  }
+
+  // ==========================================================================
+  // Die Jahr-Wahl
+  //
+  // Der Rückblick selbst liegt drüben auf der Tafel — er ist nichts, was man
+  // verwaltet, und die Kacheln zweimal zu bauen hieße, sie beim nächsten Mal
+  // an einer Stelle zu ändern. Das Kontor fragt nur, WELCHES Jahr, und
+  // schickt einen mit `?wrapped=JAHR` hinüber.
+  //
+  // Dass es überhaupt geht, konnte der Worker längst: `GET /api/wrapped`
+  // zählt beim laufenden Jahr bis heute. Gefehlt hat nur der Weg dorthin —
+  // die Tafel zeigt ihren Knopf nur im Dezember, und die Chronik hängt ihre
+  // Jahrgänge erst an ABGESCHLOSSENE Jahre.
+  // ==========================================================================
+  function rueckblickJahre() {
+    const w = letzteStat && letzteStat.wachstum;
+    if (!w || !w.length) return [];
+    const erstes = Number(String(w[0].tag).slice(0, 4));
+    const heuer = new Date().getFullYear();
+    if (!erstes || erstes > heuer) return [heuer];
+    // Absteigend: das laufende Jahr zuerst, wie es der Mock zeigt — danach
+    // fragt man am häufigsten.
+    return Array.from({ length: heuer - erstes + 1 }, (_, i) => heuer - i);
+  }
+
+  function jahrWahlAuf() {
+    const liste = $('jahr-liste');
+    liste.textContent = '';
+    const heuer = new Date().getFullYear();
+    const bisHeute = new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+    rueckblickJahre().forEach(jahr => {
+      const b = el('button', 'jahr-zeile');
+      b.type = 'button';
+      b.appendChild(el('b', null, String(jahr)));
+      b.appendChild(el('span', null, jahr === heuer
+        ? 'läuft noch — gezählt bis ' + bisHeute
+        : 'abgeschlossen'));
+      // Gleicher Tab: der Rückblick ist kein Nachschlagewerk, das man neben
+      // dem Kontor offen hält, sondern etwas, das man einmal durchblättert.
+      b.addEventListener('click', () => { location.href = './?wrapped=' + jahr; });
+      liste.appendChild(b);
+    });
+    $('wahl-ebene').hidden = false;
+    const erste = liste.querySelector('button');
+    if (erste) erste.focus();
+  }
+
+  const jahrWahlZu = () => { $('wahl-ebene').hidden = true; };
+  document.querySelectorAll('[data-wahl-zu]')
+    .forEach(k => k.addEventListener('click', jahrWahlZu));
+  // Wie jedes Blatt drüben: Escape macht zu. Ohne das bliebe der abgedunkelte
+  // Schirm stehen, bis man den kleinen Knopf trifft.
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape' && !$('wahl-ebene').hidden) jahrWahlZu();
+  });
+
+  // ==========================================================================
+  // Rundmail
+  //
+  // Die Vorschau steht daneben und schreibt beim Tippen mit. Vorher war sie
+  // ein eigener Schritt: erst „Vorschau", dann wurde derselbe Knopf zum
+  // Versandknopf. Das war eine Sicherung — eine Rundmail liegt binnen
+  // Sekunden in fünf Postfächern und lässt sich nicht zurückholen —, aber
+  // eine teure: man schrieb blind und sah das Ergebnis erst, als es zum
+  // Umformulieren schon zu spät war.
+  //
+  // Die Sicherung bleibt, sie wandert nur an die Stelle, an der sie hingehört:
+  // in den Knopf selbst, als zweiter Klick mit „wirklich?" — dasselbe Muster
+  // wie beim Sperren eines Mitglieds. Ein confirm() wäre auch hier falsch, aus
+  // demselben Grund: man klickt es weg, ohne es zu lesen.
+  // ==========================================================================
   let planModus = 'jetzt';   // 'jetzt' | 'spaeter'
   let geplantId = null;      // gesetzt beim Bearbeiten einer geplanten Rundmail
   let geplant = [];          // letzte Antwort von GET /api/admin/rundmail/geplant
@@ -1042,20 +1472,83 @@
     const n = $('r-text').value.length;
     $('r-zaehler').textContent = n ? n + ' von 4000 Zeichen' : '';
   }
+
+  /* Jeder Tastendruck zeichnet die Vorschau neu und beschriftet den Knopf neu
+     — und nimmt die stehende Rückfrage zurück: wer nach dem „wirklich?" noch
+     etwas am Text ändert, meint eine andere Mail als die, für die er gerade
+     zugesagt hat. */
   ['r-text', 'r-betreff', 'r-bild', 'r-knopf-text', 'r-knopf-link', 'r-datum', 'r-zeit']
-    .forEach(id => $(id).addEventListener('input', vorschauWeg));
+    .forEach(id => $(id).addEventListener('input', () => {
+      absicherungWeg();
+      vorschauZeichnen();
+      // Auch dann, wenn die Vorschau noch nichts zu zeigen hat: Datum und
+      // Uhrzeit stehen NICHT in der Mail, aber auf dem Knopf.
+      knopfBeschriften();
+    }));
   $('r-text').addEventListener('input', zaehler);
 
-  function vorschauWeg() {
-    if (!vorschauSteht) return;
-    vorschauSteht = false;
-    $('r-vorschau').hidden = true;
-    $('r-weg').hidden = true;
-    $('r-ab').textContent = 'Vorschau';
-    sagt('rund-sagt', '');
+  // Was in den Feldern steht, in der Form, die sowohl die Vorschau als auch
+  // die API bekommt. EINE Stelle, damit die Vorschau nicht etwas anderes
+  // zeigt als das, was gleich verschickt wird.
+  const rundmailFelder = () => ({
+    betreff:   $('r-betreff').value.trim(),
+    text:      $('r-text').value.trim(),
+    bildUrl:   $('r-bild').value.trim(),
+    knopfText: $('r-knopf-text').value.trim(),
+    knopfLink: $('r-knopf-link').value.trim(),
+  });
+
+  function vorschauZeichnen() {
+    const f = rundmailFelder();
+    const v = $('r-vorschau');
+    v.textContent = '';
+    /* Solange Betreff und Text beide leer sind, gibt es nichts zu zeigen. Ein
+       leerer weißer Kasten sähe aus wie ein Ladefehler, ein Kasten mit
+       „Betreff:" und nichts dahinter wie eine kaputte Mail. */
+    if (!f.betreff && !f.text) {
+      const leer = el('div', 'mail-vorschau');
+      leer.appendChild(el('div', 'mv-leer',
+        'Sobald oben etwas steht, steht es hier auch.'));
+      v.appendChild(leer);
+      return;
+    }
+    v.appendChild(mailVorschau(f));
   }
 
-  $('r-weg').addEventListener('click', vorschauWeg);
+  /* Was auf dem grünen Knopf steht, ist die Zusammenfassung dessen, was er
+     tut — die Empfängerzahl beim Sofortversand, der Zeitpunkt beim Planen.
+     Sie stand früher erst im zweiten Schritt darauf; jetzt steht sie immer da,
+     und man liest sie, bevor man das erste Mal drückt. */
+  function empfaengerZahl() {
+    return stand ? stand.nutzer.filter(u =>
+      !u.entfernt && !u.gesperrt && !u.stumm && u.email && u.mail.rundmail).length : 0;
+  }
+
+  function knopfBeschriften() {
+    if (abSicher) return;                 // die Rückfrage hat das Wort
+    const b = $('r-ab');
+    if (planModus === 'jetzt') {
+      const n = empfaengerZahl();
+      b.textContent = n === 1 ? 'An 1 Melder schicken' : 'An ' + n + ' Melder schicken';
+      return;
+    }
+    const wann = alsUTC($('r-datum').value, $('r-zeit').value);
+    b.textContent = (geplantId ? 'Änderung speichern' : 'Planen')
+      + (wann ? ' — ' + datum(wann) : '');
+  }
+
+  /* Die stehende Rückfrage. Sie verfällt von selbst: ein „wirklich?", das
+     eine Stunde stehen bleibt, wird irgendwann versehentlich getroffen. */
+  let abSicher = false;
+  let abSicherUhr = null;
+
+  function absicherungWeg() {
+    if (!abSicher) return;
+    abSicher = false;
+    clearTimeout(abSicherUhr);
+    $('r-ab').classList.remove('sicher');
+    knopfBeschriften();
+  }
 
   function planReiterZeichnen() {
     const ziel = $('r-wann');
@@ -1068,12 +1561,17 @@
         planModus = k;
         planReiterZeichnen();
         $('r-spaeter').hidden = planModus !== 'spaeter';
-        vorschauWeg();
+        absicherungWeg();
+        knopfBeschriften();
       });
       ziel.appendChild(b);
     });
   }
   planReiterZeichnen();
+  // Einmal gleich, damit im leeren Blatt nicht ein weißes Nichts steht — und
+  // der Knopf schon eine Beschriftung hat, bevor die Runde geladen ist.
+  vorschauZeichnen();
+  knopfBeschriften();
 
   /* Aus einem Datum ('YYYY-MM-DD') und einer Uhrzeit ('HH:MM') den
      Zeitpunkt in UTC — dieselbe Rechnung wie auf der Tafel (`alsUTC`): ohne
@@ -1110,7 +1608,9 @@
     planReiterZeichnen();
     $('r-spaeter').hidden = true;
     zaehler();
-    vorschauWeg();
+    absicherungWeg();
+    vorschauZeichnen();
+    knopfBeschriften();
   }
 
   // Eine geplante Rundmail zum Bearbeiten in die Maske laden.
@@ -1128,7 +1628,9 @@
     $('r-datum').value = f.datum;
     $('r-zeit').value = f.zeit;
     zaehler();
-    vorschauWeg();
+    absicherungWeg();
+    vorschauZeichnen();
+    knopfBeschriften();
     $('r-betreff').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -1207,11 +1709,7 @@
   });
 
   $('r-ab').addEventListener('click', async () => {
-    const betreff = $('r-betreff').value.trim();
-    const text = $('r-text').value.trim();
-    const bildUrl = $('r-bild').value.trim();
-    const knopfText = $('r-knopf-text').value.trim();
-    const knopfLink = $('r-knopf-link').value.trim();
+    const { betreff, text, bildUrl, knopfText, knopfLink } = rundmailFelder();
 
     if (!betreff || !text) {
       sagt('rund-sagt', 'Betreff und Text wollen beide etwas.', true);
@@ -1235,29 +1733,35 @@
       }
     }
 
-    /* Erst zeigen, dann schicken. Eine Rundmail an die ganze Runde ist die
-       eine Handlung hier, die sich nicht zurücknehmen lässt — sie liegt
-       binnen Sekunden in fünf Postfächern (oder wartet bis zum geplanten
-       Zeitpunkt, was dasselbe Versprechen ist, nur später eingelöst). */
-    if (!vorschauSteht) {
-      const v = $('r-vorschau');
-      v.textContent = '';
-      v.hidden = false;
-      v.appendChild(mailVorschau({ betreff, text, bildUrl, knopfText, knopfLink }));
-      vorschauSteht = true;
-      $('r-weg').hidden = false;
-      if (planModus === 'jetzt') {
-        const wieViele = stand ? stand.nutzer.filter(u =>
-          !u.entfernt && !u.gesperrt && !u.stumm && u.email && u.mail.rundmail).length : 0;
-        $('r-ab').textContent = wieViele === 1
-          ? 'An 1 Melder schicken'
-          : 'An ' + wieViele + ' Melder schicken';
-      } else {
-        $('r-ab').textContent = (geplantId ? 'Änderung speichern — ' : 'Planen für ')
-          + datum(versandAm);
-      }
+    /* Die Rückfrage. Eine Rundmail an die ganze Runde ist die eine Handlung
+       hier, die sich nicht zurücknehmen lässt — sie liegt binnen Sekunden in
+       fünf Postfächern (oder wartet bis zum geplanten Zeitpunkt, was dasselbe
+       Versprechen ist, nur später eingelöst). Was verschickt wird, steht
+       daneben und muss nicht mehr erst aufgeschlagen werden; hier fehlt nur
+       noch das Ja.
+
+       Sie steht ACHT Sekunden, wie bei den Mitgliedern, und fällt bei jedem
+       Tastendruck im Formular zurück — siehe `absicherungWeg`. */
+    if (!abSicher) {
+      abSicher = true;
+      $('r-ab').classList.add('sicher');
+      $('r-ab').textContent = planModus === 'jetzt'
+        ? 'wirklich? an ' + empfaengerZahl() + ' raus'
+        : 'wirklich? ' + datum(versandAm);
+      sagt('rund-sagt', planModus === 'jetzt'
+        ? 'Nochmal drücken, dann geht sie raus. Zurückholen geht nicht.'
+        : 'Nochmal drücken, dann steht sie im Kalender.');
+      clearTimeout(abSicherUhr);
+      abSicherUhr = setTimeout(() => {
+        absicherungWeg();
+        // Der Satz muss mit weg. Bleibt er stehen, während der Knopf schon
+        // wieder harmlos aussieht, liest man ihn als Zustand statt als Frage.
+        sagt('rund-sagt', '');
+      }, 8000);
       return;
     }
+    absicherungWeg();
+    sagt('rund-sagt', '');
 
     $('r-ab').disabled = true;
     try {
@@ -1281,9 +1785,9 @@
         });
         erfolg = 'Geplant für ' + datum(versandAm) + '.';
       }
-      // Erst zuruecksetzen (das raeumt auch die Vorschau und die alte
-      // Nachricht weg), DANACH die neue Nachricht setzen - sonst loescht
-      // `formZuruecksetzen` den Satz, den es gerade erst zu lesen gab.
+      // Erst zuruecksetzen (das raeumt Felder, Vorschau und Rueckfrage weg),
+      // DANACH die Nachricht setzen - andersherum stuende der Satz da,
+      // waehrend die Maske noch den verschickten Text zeigt.
       formZuruecksetzen();
       sagt('rund-sagt', erfolg);
       await laden();
@@ -1358,12 +1862,80 @@
   }
 
   // ==========================================================================
-  // Laden
+  // Das Register
+  //
+  // Fünf Blätter, eines davon aufgeschlagen. Vorher lagen sie alle
+  // untereinander: wer ins Protokoll wollte, scrollte an elf Grafiken vorbei,
+  // und wer eine Rundmail schrieb, hatte die Mitgliederliste über sich, die
+  // ihn nichts anging.
+  //
+  // Die Blätter selbst sind unverändert geblieben — das Register schaltet nur
+  // `hidden`. Es zeichnet auch nichts nach: was aufgeschlagen war, bleibt es
+  // beim Nachladen nach einer Handlung, sonst spränge man nach jedem Sperren
+  // zurück auf die Übersicht.
   // ==========================================================================
   const BLAETTER = ['kopf-blatt', 'runde-blatt', 'stat-blatt', 'rund-blatt', 'log-blatt'];
+  const ZUNGEN = [
+    ['kopf-blatt',  'Übersicht'],
+    ['runde-blatt', 'Mitglieder'],
+    ['stat-blatt',  'Statistiken'],
+    ['rund-blatt',  'Rundmail'],
+    ['log-blatt',   'Protokoll'],
+  ];
+  let offen = 'kopf-blatt';
 
+  /* Die Zahl an einer Zunge sagt, was einen dort erwartet. Nur dort, wo sie
+     etwas beantwortet: „Statistiken (11)" wäre die Anzahl der Grafiken und
+     damit eine Auskunft über die Seite, nicht über die Runde. */
+  const zungenZahl = id => {
+    if (id === 'runde-blatt') {
+      return stand ? String(stand.nutzer.filter(u => !u.entfernt).length) : null;
+    }
+    if (id === 'rund-blatt') {
+      const n = geplant.filter(g => g.status === 'geplant').length;
+      return n ? String(n) : null;
+    }
+    return null;
+  };
+
+  function registerZeichnen() {
+    const ziel = $('register');
+    ziel.textContent = '';
+    ZUNGEN.forEach(([id, titel]) => {
+      const b = el('button', id === offen ? 'an' : null, titel);
+      b.type = 'button';
+      b.setAttribute('aria-current', id === offen ? 'page' : 'false');
+      const n = zungenZahl(id);
+      if (n) b.appendChild(el('i', null, n));
+      b.addEventListener('click', () => blattAuf(id));
+      ziel.appendChild(b);
+    });
+    /* Der Weg hinaus. Er stand bisher als Link oben im Kopf-Blatt; dort war er
+       nur von der Übersicht aus zu sehen, und wer im Protokoll stand, kürzte
+       die Adresse von Hand. Als letzte Zunge gehört er zur Reihe, aber sein
+       eigenes `margin-left: auto` rückt ihn ans andere Ende — die fünf
+       Blatt-Zungen bleiben dadurch mittig. */
+    const raus = el('a', 'zur-tafel', '← zur Tafel');
+    raus.href = './';
+    ziel.appendChild(raus);
+  }
+
+  function blattAuf(id) {
+    offen = id;
+    BLAETTER.forEach(b => { $(b).hidden = b !== id; });
+    registerZeichnen();
+    // Ein Tooltip aus dem Blatt, das gerade weggeklappt ist, stünde sonst
+    // über dem neuen und zeigte auf nichts.
+    Bilder.tippZu();
+    scrollTo({ top: 0 });
+  }
+
+  // ==========================================================================
+  // Laden
+  // ==========================================================================
   function zeigeTuer(text) {
     $('skelett').hidden = true;
+    $('register').hidden = true;
     BLAETTER.forEach(id => { $(id).hidden = true; });
     $('tuer').hidden = false;
     if (text) $('tuer-text').textContent = text;
@@ -1398,13 +1970,15 @@
       fetch(API + '/api/health', { cache: 'no-store' }).then(r => r.json()).catch(() => null),
     ]);
 
-    /* Die Blätter kommen erst JETZT, nicht schon vor dem Abruf: fünf leere
-       Kästen mit Überschriften sind keine Auskunft, sondern eine Behauptung.
+    /* Register und Blätter kommen erst JETZT, nicht schon vor dem Abruf: fünf
+       Zungen über leeren Kästen sind keine Auskunft, sondern eine Behauptung.
        Bis hierher stand das Skelett. Beim Nachladen nach einer Handlung
-       ändert sich hier nichts — sichtbar bleibt sichtbar, kein Flackern. */
+       ändert sich hier nichts — was aufgeschlagen war, bleibt aufgeschlagen,
+       kein Flackern und kein Sprung zurück auf die Übersicht. */
     $('skelett').hidden = true;
     $('tuer').hidden = true;
-    BLAETTER.forEach(id => { $(id).hidden = false; });
+    $('register').hidden = false;
+    BLAETTER.forEach(id => { $(id).hidden = id !== offen; });
 
     // Ein Tooltip, der noch offen steht, zeigt gleich auf einen Punkt, den es
     // nicht mehr gibt.
@@ -1417,6 +1991,14 @@
     statistik(stat);
     protokoll(log.zeilen);
     geplantZeichnen(geplantListe.zeilen);
+    // Die Empfängerzahl auf dem Versandknopf kommt aus `stand` — vor dem
+    // ersten Abruf stand dort eine Null.
+    knopfBeschriften();
+    /* Zuletzt, nicht zuerst: die Zahlen an den Zungen kommen aus `stand` und
+       `geplant`, und die stehen erst, seit die Zeilen darüber gelaufen sind.
+       Die Querverweise auf der Übersicht hängen an denselben Daten. */
+    querZeichnen(log.zeilen);
+    registerZeichnen();
   }
 
   laden().catch(e => zeigeTuer('Das Kontor ließ sich nicht aufschlagen: ' + e.message));

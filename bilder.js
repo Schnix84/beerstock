@@ -75,10 +75,26 @@ window.Bilder = (function () {
     border: 1px solid var(--bild-karte-rand); border-radius: 3px;
     padding: 11px 12px 12px;
   }
+  .bild .b-kopf { display: flex; align-items: baseline; gap: 8px; }
   .bild h3 {
-    font-size: 13px; font-weight: 600; margin: 0 0 6px; color: var(--bild-titel);
+    font-size: 13px; font-weight: 600; margin: 0; color: var(--bild-titel); flex: 1;
   }
-  .bild svg { display: block; width: 100%; height: auto; }
+  /* Der Umschalter. Bewusst unter .bild .b-kopf gehaengt und nicht als
+     nackter button: beide Seiten, die diese Datei laden, geben button selbst
+     eine Form, und die eine war Tinte, die andere Kreide. (Ohne Akzente im
+     Kommentar - dieser Block ist ein Template-String, ein Backtick darin
+     schloesse ihn.) */
+  .bild .b-kopf button {
+    font: inherit; font-size: 10.5px; cursor: pointer; white-space: nowrap;
+    padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--bild-karte-rand);
+    background: transparent; color: var(--bild-text-weg);
+  }
+  .bild .b-kopf button:hover { color: var(--bild-titel); }
+  .bild .b-kopf button:focus-visible {
+    outline: 2px solid var(--bild-ring); outline-offset: 2px;
+  }
+  .bild svg { display: block; width: 100%; height: auto; margin-top: 7px; }
   .bild svg:focus { outline: none; }
   .bild svg:focus-visible {
     outline: 2px solid var(--bild-ring); outline-offset: 3px; border-radius: 2px;
@@ -86,7 +102,30 @@ window.Bilder = (function () {
   .bild .leer {
     font-size: 12px; color: var(--bild-text-weg); font-style: italic; padding: 18px 0;
   }
+  /* Die Tabelle zum Bild. Zahlen rechtsbuendig und mit tabular-nums, damit
+     die Stellen untereinander stehen - das ist der halbe Zweck einer Tabelle.
+     Die erste Spalte ist die Beschriftung und bleibt links. */
+  .bild .tab-rolle { overflow-x: auto; margin-top: 7px; }
+  .bild table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px; font-variant-numeric: tabular-nums;
+  }
+  .bild th, .bild td {
+    text-align: right; padding: 3px 6px;
+    border-bottom: 1px solid var(--bild-karte-rand); white-space: nowrap;
+  }
+  .bild th:first-child, .bild td:first-child { text-align: left; white-space: normal; }
+  .bild th {
+    font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+    font-weight: 600; color: var(--bild-text-weg);
+  }
+  .bild tr:last-child td { border-bottom: none; }
+
   .legende { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 11px; }
+  /* Ohne diese Zeile bliebe die Legende in der Tabellen-Ansicht stehen: das
+     display oben schlaegt das hidden-Attribut, dessen Vorgabe nur
+     display:none ist. */
+  .legende[hidden] { display: none; }
   .legende span {
     display: inline-flex; align-items: center; gap: 4px; color: var(--bild-text-weg);
   }
@@ -317,10 +356,66 @@ window.Bilder = (function () {
 
   function rahmen(titel) {
     const box = el('div', 'bild');
-    box.appendChild(el('h3', null, titel));
+    const kopf = el('div', 'b-kopf');
+    kopf.appendChild(el('h3', null, titel));
+    box.appendChild(kopf);
     return box;
   }
   const leer = (box, was) => { box.appendChild(el('p', 'leer', was)); return box; };
+
+  /* --- Die Tabelle zum Bild ------------------------------------------------
+     Jedes Bild beantwortet eine Frage nach der FORM. Die nach dem genauen Wert
+     beantwortet der Tooltip, aber immer nur für einen Punkt und nur, solange
+     der Finger draufliegt — abschreiben, vergleichen oder vorlesen lassen kann
+     man ihn nicht. Dafür ist die Tabelle da: dieselben Zahlen, aus denen die
+     Grafik gemalt wurde, als Text.
+
+     Sie tritt an die STELLE des Bildes, nicht darunter. Beides gleichzeitig
+     wäre zweimal dasselbe untereinander, und die Karte doppelt so hoch.
+
+     Die Zeilen kommt jedes Bild selbst mit — aus dem fertigen SVG sind sie
+     nicht mehr zu holen, und aus derselben Quelle gebaut können sie gar nicht
+     erst auseinanderlaufen.
+     --------------------------------------------------------------------- */
+  function tabelleAn(box, koepfe, zeilen) {
+    const svg = box.querySelector('svg');
+    if (!svg || !zeilen.length) return box;
+
+    const rolle = el('div', 'tab-rolle');
+    rolle.hidden = true;
+    const t = el('table');
+    const kz = el('tr');
+    koepfe.forEach(k => kz.appendChild(el('th', null, k)));
+    t.appendChild(kz);
+    zeilen.forEach(z => {
+      const r = el('tr');
+      z.forEach(v => r.appendChild(el('td', null, v == null ? '—' : String(v))));
+      t.appendChild(r);
+    });
+    rolle.appendChild(t);
+    box.appendChild(rolle);
+
+    const legende = box.querySelector('.legende');
+    const knopf = el('button', null, 'Tabelle');
+    knopf.type = 'button';
+    knopf.setAttribute('aria-pressed', 'false');
+    knopf.addEventListener('click', () => {
+      const zeigen = rolle.hidden;
+      rolle.hidden = !zeigen;
+      svg.style.display = zeigen ? 'none' : '';
+      // Die Legende ist der Schlüssel zu den Farben im Bild. Ohne Bild ist sie
+      // eine Farbtabelle zu nichts.
+      if (legende) legende.hidden = zeigen;
+      knopf.textContent = zeigen ? 'Bild' : 'Tabelle';
+      knopf.setAttribute('aria-pressed', String(zeigen));
+      // Ein festgehaltener Kasten zeigte sonst auf einen Punkt, der gerade
+      // weggeklappt ist.
+      tipFest = false;
+      tipAus();
+    });
+    box.querySelector('.b-kopf').appendChild(knopf);
+    return box;
+  }
 
   /* Die Grundlinie, zwei gestrichelte Hilfslinien und die Beschriftung links.
      Die Hilfslinien sind der Unterschied zwischen „die Kurve ist oben" und
@@ -490,7 +585,8 @@ window.Bilder = (function () {
     })));
 
     box.appendChild(svg);
-    return box;
+    return tabelleAn(box, ['', was || 'Anzahl'],
+      punkte.map((p, i) => [markeVon(p), zahl(werte[i])]));
   }
 
   /* 2 — Bestand je Melder. Eine Linie je Mensch, über eine gemeinsame
@@ -656,7 +752,18 @@ window.Bilder = (function () {
       leg.appendChild(s);
     });
     box.appendChild(leg);
-    return box;
+
+    /* Ein fortgeschriebener Wert trägt sein Datum dahinter, genau wie im
+       Kasten: „blass" gibt es in einer Tabelle nicht, und ohne das Datum
+       stünde dort ein Stand, den an diesem Tag niemand gemeldet hat, als
+       wäre er von diesem Tag. Wo noch nichts bekannt war, bleibt die Zelle
+       leer statt null zu behaupten. */
+    return tabelleAn(box, ['', ...mitWerten.map(k => k.name)],
+      tage.map((tag, d) => [nurTag(tag), ...mitWerten.map((k, i) => {
+        const s = stand[i][d];
+        if (!s) return null;
+        return s.frisch ? text(k, s.j) : text(k, s.j) + ' · ' + nurTag(k.tage[s.j]);
+      })]));
   }
 
   /* 2b — Temperatur je Tag und Melder. Dieselbe Kurvenschar wie beim Bestand,
@@ -743,7 +850,8 @@ window.Bilder = (function () {
       }),
     })));
     box.appendChild(svg);
-    return box;
+    return tabelleAn(box, ['', was || 'Anzahl'],
+      zeilen.map(z => [nameVon(z), zahl(wertVon(z))]));
   }
 
   /* 4 — Ein einziger gestapelter Balken. Die Frage ist der ANTEIL: wie oft
@@ -817,7 +925,11 @@ window.Bilder = (function () {
       }),
     })));
     box.appendChild(svg);
-    return box;
+    // Der Anteil steht mit in der Tabelle: er ist die Frage, die dieses Bild
+    // beantwortet, und im Band liest man ihn nur mit dem Auge ab.
+    return tabelleAn(box, ['', 'Ziehungen', 'Anteil'],
+      daten.map(z => [LOS_TITEL[z.status] || z.status, zahl(z.n),
+        Math.round((z.n / summe) * 100) + ' %']));
   }
 
   /* 4b — Dasselbe je Melder: ein liegender Balken je Mensch, so lang wie er
@@ -901,7 +1013,9 @@ window.Bilder = (function () {
       leg.appendChild(s);
     });
     box.appendChild(leg);
-    return box;
+    return tabelleAn(box,
+      ['', 'gezogen', ...LOS_ORDNUNG.map(st => LOS_TITEL[st])],
+      zeilen.map(z => [z.name, zahl(z.gezogen), ...LOS_ORDNUNG.map(st => zahl(z[st] || 0))]));
   }
 
   /* 5/6 — Gestapelte Säulen. Eine Woche (oder eine Mailart) je Säule, die
@@ -977,7 +1091,11 @@ window.Bilder = (function () {
       leg.appendChild(s);
     });
     box.appendChild(leg);
-    return box;
+    // Die Summe hinten dran: gestapelt ist sie die Gesamthöhe der Säule, und
+    // die ist die eine Zahl, die man an einem Stapel wirklich abliest.
+    return tabelleAn(box, ['', ...reihen.map(r => r.titel), 'zusammen'],
+      gruppen.map((g, i) => [markeVon(g),
+        ...reihen.map(r => zahl(g[r.feld] || 0)), zahl(summen[i])]));
   }
 
   /* Was die Seiten benutzen. Alles andere ist Innerei — wer von aussen an

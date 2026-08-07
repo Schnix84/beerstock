@@ -8751,6 +8751,37 @@
   $('lm-ja').addEventListener('click', () => losMailAntwort(true));
   $('lm-nein').addEventListener('click', () => losMailAntwort(false));
 
+  /* Der Weg aus dem Kontor: `?wrapped=2026` schlägt den Rückblick für dieses
+     Jahr auf. Das Kontor kann ihn nicht selbst zeigen — die Kacheln stehen
+     hier, und sie ein zweites Mal zu bauen hieße, sie beim nächsten Mal an
+     einer Stelle zu ändern. Es fragt nur nach dem Jahr und schickt einen
+     her.
+
+     Ein Suchparameter, kein Fragment: hier steht kein Geheimnis drin, und der
+     Link soll sich auch weitergeben lassen. Er fliegt trotzdem gleich aus der
+     Adresszeile — sonst schlüge ein Neuladen der Seite denselben Rückblick
+     wieder auf, und irgendwann fragt man sich, warum man ihn nicht loswird.
+
+     Der Dezember-Riegel am Knopf `wrapped-auf` bleibt, wie er ist: er
+     betrifft den KNOPF auf der Tafel, nicht diesen Weg. Wer eigens im Kontor
+     ein Jahr gewählt hat, hat die Frage schon beantwortet. */
+  function wrappedAusAdresse() {
+    const roh = new URLSearchParams(location.search).get('wrapped');
+    if (!roh) return;
+    const p = new URLSearchParams(location.search);
+    p.delete('wrapped');
+    history.replaceState(null, '',
+      location.pathname + (p.toString() ? '?' + p : '') + location.hash);
+    // Geprüft, nicht durchgereicht: `?wrapped=irgendwas` öffnete sonst eine
+    // Karte, die auf einen 400er wartet. Untere Grenze ist das Jahr, in dem
+    // es diese Seite gibt; obere das laufende, weiter zählt niemand.
+    const jahr = Number(roh);
+    const heuer = new Date().getFullYear();
+    if (!Number.isInteger(jahr) || jahr < 2024 || jahr > heuer) return;
+    if (!drinnen()) return;   // ohne Anmeldung gibt es nichts zu erzählen
+    wrappedAuf(jahr);
+  }
+
   /* Reihenfolge: erst den Link einloesen (der setzt das Token), dann wissen,
      wer man ist, dann zeichnen. Die beiden Wege aus dem Postfach hängen sich
      davor: sie lesen dasselbe Fragment, und `magicEinloesen` räumt es weg. */
@@ -8761,6 +8792,9 @@
     // Ohne den Pfeil bekäme `hole` die Antwort von `werBinIch` als `still` —
     // und der erste Aufbau dürfte dann bei einem Fehler nicht mehr zurückfallen.
     .then(() => hole())
+    // Nach `hole`, nicht davor: `vonDraussen` steht erst danach fest, und
+    // `drinnen()` fragt danach.
+    .then(() => wrappedAusAdresse())
     .then(nachfassen);
 
 </script>
