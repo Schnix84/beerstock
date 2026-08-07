@@ -4883,6 +4883,13 @@
   let notrufLiveModus = false;
   let notrufLiveId = null;     // watchPosition-Handle, oder null wenn aus
   let notrufLiveLetzter = 0;   // Zeitstempel des letzten Nachtrags, fuer die Drossel
+  /* Die Ortung ist an diesem Geraet verweigert worden: kein Selbststart mehr.
+     Ohne den Riegel rennte `zeichneNotrufe` bei jedem Nachladen gegen die
+     verweigerte Freigabe an — dieselbe Meldung, alle paar Sekunden. Geloest
+     wird er nur am Schieberegler: wer Live ausdruecklich noch einmal will,
+     bekommt den neuen Versuch. */
+  let notrufLiveGesperrt = false;
+  let notrufLiveWach = null;   // der Screen-Wake-Lock, solange live gesendet wird
   let brauchtNamen = false; // angemeldet, aber noch ohne Namen fuer die Liste
   let linkRaus = false;     // Magic Link ist unterwegs: Feld weg, Meldung steht
   let vonDraussen = false;  // die letzte Antwort war die beschnittene (siehe `hole`)
@@ -5079,8 +5086,23 @@
        an zwei Geräten hängt: das Handy trägt nach, der Rechner zeigt es. */
     if (meineNot && !$('notruf').hidden) notrufLage(meineNot);
     // Der eigene Notruf ist von selbst erloschen oder abgelaufen - dann gibt
-    // es nichts mehr, wohin ein Live-Standort nachtragen könnte.
-    if (!meineNot) notrufLiveStoppen();
+    // es nichts mehr, wohin ein Live-Standort nachtragen könnte. Die Marke
+    // fällt mit: sie gehörte zu DIESEM Notruf, und ein späterer soll nicht
+    // von ihr zehren, wenn ihn ein anderes Gerät absetzt.
+    if (!meineNot) { liveTabWeg(); notrufLiveStoppen(); }
+    /* Und andersherum: sagt der Datensatz live und läuft hier kein
+       `watchPosition`, wird es angeworfen. Der Fall ist alltäglich — iOS
+       wirft den Tab beim Herumtragen weg und lädt ihn neu, und der frische
+       Tab wüsste sonst nichts von seinem eigenen Versprechen: die Zeile
+       stünde auf „steht", bis zufällig jemand das Blatt öffnet. Aber NUR
+       für den Tab, der das Versprechen gegeben hat (die Marke) oder es
+       gerade gibt (der Regler) — jede andere offene Tafel desselben Kontos
+       ortete sonst ungefragt mit und funkte ihren Standort dazwischen. */
+    else if (meineNot.live && notrufLiveId == null
+             && (notrufLiveModus || liveTabMarke())) {
+      notrufLiveModus = true;
+      notrufLiveStarten();
+    }
   }
 
   /* Die Zustände an den stehenden Zeilen weiterdrehen, ohne den Worker zu
@@ -5440,6 +5462,17 @@
      ändert, muss sie mitziehen (siehe worker/migrations/0018). */
   const NOTRUF_LIVE_FRIST = 75000;
 
+  /* Die Marke „dieser Tab sendet live" — im sessionStorage, damit sie ein
+     Neuladen desselben Tabs übersteht (iOS wirft eingeschlafene Tabs gern weg
+     und baut sie beim Wecken neu auf; alle Variablen hier sind dann leer).
+     Bewusst NICHT localStorage: die Tafel liegt oft zugleich am Rechner
+     offen, und der soll nicht anfangen, seinen eigenen Standort
+     dazwischenzufunken, nur weil das Handy gerade live meldet. */
+  const LIVE_TAB_SPEICHER = 'beerstock-notruf-live-tab';
+  const liveTabMarke  = () => { try { return !!sessionStorage.getItem(LIVE_TAB_SPEICHER); } catch { return false; } };
+  const liveTabSetzen = () => { try { sessionStorage.setItem(LIVE_TAB_SPEICHER, '1'); } catch {} };
+  const liveTabWeg    = () => { try { sessionStorage.removeItem(LIVE_TAB_SPEICHER); } catch {} };
+
   /* Den Schieberegler auch dem Worker sagen, aber nur, wenn er etwas zu sagen
      hat: ohne laufenden Notruf gibt es nichts umzustellen, der Wunsch bleibt
      gemerkt und geht beim Absetzen mit (`notrufSenden`).
@@ -5452,8 +5485,11 @@
      mehr Lärm als der Fehler wert ist. */
   async function notrufModusSetzen(live) {
     notrufLiveModus = live;
-    if (live) notrufLiveStarten();
-    else notrufLiveStoppen();
+    // Der Griff am Regler ist die eine Stelle, die die Sperre einer
+    // verweigerten Ortung löst: die Wahl ist ausdrücklich, und die Meldung
+    // dazu fiele diesmal vor ein offenes Blatt.
+    if (live) { notrufLiveGesperrt = false; notrufLiveStarten(); }
+    else { liveTabWeg(); notrufLiveStoppen(); }
     if (!meineNot) return;
     try {
       const d = await ruf('/api/notruf/live', { live });
@@ -5466,14 +5502,27 @@
   function notrufLiveStarten() {
     // Ohne laufenden eigenen Notruf gibt es nichts nachzutragen - der Wunsch
     // bleibt gemerkt und greift, sobald `notrufSenden` einen anlegt.
-    if (!meineNot || notrufLiveId != null || !navigator.geolocation) return;
-    // Nicht mit 0 starten: der erste `watchPosition`-Ruf liefert oft sofort
-    // einen zwischengespeicherten Fix - das wäre derselbe Punkt, der eben
-    // erst per `notrufSenden` oder Handwahl abgeschickt wurde.
-    notrufLiveLetzter = Date.now();
+    if (!meineNot || notrufLiveId != null || !navigator.geolocation
+        || notrufLiveGesperrt) return;
+    /* Der erste `watchPosition`-Ruf liefert oft sofort einen zwischen-
+       gespeicherten Fix. Direkt nach dem Absetzen wäre das derselbe Punkt
+       noch einmal — also Drossel. Ist der letzte Nachtrag aber älter als der
+       Takt (Tab neu geladen, Handy aus der Tasche), ist genau dieser Fix der
+       Punkt, auf den alle warten, und geht sofort raus. */
+    const her = Date.now() - new Date(meineNot.standort_am || meineNot.erstellt);
+    notrufLiveLetzter = her > NOTRUF_LIVE_ABSTAND ? 0 : Date.now();
     notrufLiveId = navigator.geolocation.watchPosition(
       p => notrufLiveEingang(p),
       e => {
+        /* Nur die verweigerte Freigabe ist endgültig. Alles andere — kein
+           GPS in der Unterführung, ein Fix, der zu lange braucht — meldet
+           `watchPosition` zwar als Fehler, feuert danach aber weiter, sobald
+           das Gerät wieder etwas weiß. Hier abzubauen hieße: das erste
+           Funkloch beendet den Live-Standort für den Rest des Notrufs, und
+           zwar still, denn das Blatt ist unterwegs zu. */
+        if (!e || e.code !== 1) return;
+        notrufLiveGesperrt = true;
+        liveTabWeg();
         notrufSagt(ortungsFehler(e, 'kein Live-Standort'), true);
         notrufLiveStoppen();
         notrufLiveModus = false;
@@ -5481,11 +5530,40 @@
       },
       { enableHighAccuracy: true, maximumAge: 30000 },
     );
+    liveTabSetzen();
+    notrufWachHalten();
   }
 
   function notrufLiveStoppen() {
     if (notrufLiveId != null) navigator.geolocation.clearWatch(notrufLiveId);
     notrufLiveId = null;
+    notrufWachLassen();
+  }
+
+  /* Der Bildschirm bleibt an, solange dieser Tab live sendet. Ohne das ist
+     „live" auf dem Handy ein leeres Versprechen: das Display sperrt nach
+     einer Minute von selbst, damit friert die Seite ein, und der nächste
+     Punkt kommt erst, wenn jemand das Handy wieder weckt. Sperrt der Nutzer
+     von Hand, erlischt der Lock von selbst — das Wiederanfordern übernimmt
+     der Neustart bei `visibilitychange`. Wo es kein Wake Lock gibt (ältere
+     Browser, Stromsparmodus lehnt ab), läuft live wie bisher: in Schüben. */
+  async function notrufWachHalten() {
+    if (notrufLiveWach || !navigator.wakeLock) return;
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      // Inzwischen gestoppt? Dann den Bildschirm nicht grundlos festhalten.
+      if (notrufLiveId == null) { lock.release().catch(() => {}); return; }
+      notrufLiveWach = lock;
+      lock.addEventListener('release', () => {
+        if (notrufLiveWach === lock) notrufLiveWach = null;
+      });
+    } catch { notrufLiveWach = null; }
+  }
+
+  function notrufWachLassen() {
+    if (!notrufLiveWach) return;
+    notrufLiveWach.release().catch(() => {});
+    notrufLiveWach = null;
   }
 
   async function notrufLiveEingang(p) {
@@ -9887,6 +9965,19 @@
          Worker Byte für Byte dasselbe sagt wie vor dem Einschlafen. */
       nachDerUhr();
       strom();
+      /* Der eigene Live-Standort hängt am selben Schlaf: `watchPosition`
+         übersteht das Einfrieren auf iOS oft nur formal — die Kennung lebt,
+         es kommt bloß nie wieder ein Fix. Abreißen und neu aufsetzen macht
+         aus „vielleicht noch dran" ein „läuft"; den ersten frischen Punkt
+         schickt `notrufLiveStarten` von selbst sofort, weil der letzte
+         Nachtrag nach einer Taschenphase alt genug ist. Und der Wake Lock
+         von vorhin ist beim Sperren erloschen — hier kommt er wieder.
+         Nur wo wirklich einer hängt: ein Tab, der nie gesendet hat, soll
+         vom Aufwachen keine Ortung anfangen. */
+      if (meineNot && meineNot.live && notrufLiveId != null) {
+        notrufLiveStoppen();
+        notrufLiveStarten();
+      }
       if (Date.now() - letzte > 20000) frisch();
       if (flyZiel) flyLaden(true);
       if (chronikOffen) chronikLaden(true);
