@@ -29,6 +29,21 @@
    Was der Worker schickt, ist ein kleines JSON: { titel, text, url, tag }.
    Kommt etwas anderes an (oder gar nichts), bleibt es bei den Vorgaben — eine
    leere Meldung ist immer noch besser als ein verlorenes Abo. */
+/* ÜBERNIMM SOFORT. Ohne diese vier Zeilen lädt sich eine neue Fassung zwar
+   herunter, bleibt dann aber im Wartestand, bis JEDE Instanz der App
+   geschlossen wurde — und bis dahin beantwortet der alte Dienst die Meldungen.
+   Genau darüber ist die erste Prüfung des Marken-Umbaus gestolpert: die neue
+   `sw.js` lag längst auf dem Server, gearbeitet hat die alte. Von außen sieht
+   das aus wie „der Umbau wirkt nicht".
+
+   Für einen Dienst, der Seiten ausliefert, wäre das Vordrängen gefährlich —
+   eine halb geladene Seite bekäme plötzlich einen anderen Unterbau. Dieser
+   hier liefert nichts aus: kein `fetch`-Zuhörer, kein Cache. Er kann nur
+   Meldungen anzeigen, und dabei ist die neuere Fassung immer die richtige.
+   Deshalb ist hier richtig, was dort verboten wäre. */
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', ev => ev.waitUntil(self.clients.claim()));
+
 /* WebKit nimmt die Marke entgegen und tut nichts damit. Das ist kein Verdacht,
    sondern ein offener Fehler: WebKit-Bug 258922, „Push notifications with same
    tag do not replace each other", angelegt im Juli 2023 und im Juli 2026 immer
