@@ -129,12 +129,19 @@
 
      Also bleibt der Grund, wie er ist, und heller werden nur Rand und Schrift:
      `--kreide` statt `--kreide-weg`, dazu ein volles statt eines halben Weiß
-     am Rand. Der Rand wird außerdem dicker — 1,5 px statt 1. Das macht die
-     Pille tatsächlich um einen Pixel breiter (`box-sizing: border-box` hilft
-     hier NICHT: ohne feste Breite bestimmt der Inhalt das Maß, Polsterung und
-     Rand kommen obendrauf). Die REIHE bleibt trotzdem konstant, weil immer
-     genau eine Zunge gewählt ist — der eine Pixel wandert nur mit. Gemessen
-     278 px, gleich unter welchem Blatt.
+     am Rand, und der Rand wird dicker.
+
+     2 px und NICHT 1,5. Hier stand erst 1,5 px, und das war eine Regel ohne
+     Wirkung: Chrome rundet Randbreiten auf ganze CSS-Pixel ab, `1.5px` kommt
+     als 1 px heraus. Gemessen bei `deviceScaleFactor` 1, 2 und 3 — auch auf
+     Retina bleibt es 1 px, der Bruch wird also nicht etwa in Gerätepixeln
+     gerettet. Wer hier eine krumme Breite hinschreibt, ändert nichts und sieht
+     es nicht.
+
+     Die Pille wird dadurch zwei Pixel breiter (`box-sizing: border-box` hilft
+     nicht: ohne feste Breite bestimmt der Inhalt das Maß, Polsterung und Rand
+     kommen obendrauf). Die REIHE bleibt trotzdem konstant, weil immer genau
+     eine Zunge gewählt ist — die zwei Pixel wandern nur mit.
 
      Der dickere STRICH kommt über einen Schatten und nicht über
      `font-weight: 600`. Das war der erste Versuch und er hat sich gerächt: der
@@ -149,7 +156,7 @@
      Der Zeiger-Zustand bleibt unverändert: der gewählte Reiter ist schon da,
      wo er hinführt, und ein Aufleuchten verspräche eine Handlung. */
   .register button.an {
-    border-color: var(--kreide); border-width: 1.5px; color: var(--kreide);
+    border-color: var(--kreide); border-width: 2px; color: var(--kreide);
     text-shadow: 0 0 .6px currentColor, 0 0 .6px currentColor;
   }
   .register button.an:hover {
@@ -430,7 +437,7 @@
      Zungen oben hat genau das auf einem 375er-Handy einen Umbruch erzeugt,
      der beim Blättern kam und ging. */
   .reiter button.an {
-    border-color: var(--kreide); border-width: 1.5px; color: var(--kreide);
+    border-color: var(--kreide); border-width: 2px; color: var(--kreide);
     text-shadow: 0 0 .6px currentColor, 0 0 .6px currentColor;
   }
   .reiter button.an:hover { background: #ffffff0a; color: var(--kreide); }

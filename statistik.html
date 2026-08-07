@@ -136,33 +136,45 @@
     margin: 0; transform: rotate(-.8deg); transform-origin: left;
   }
 
-  /* --- Der Zeitraum ------------------------------------------------------- */
+  /* --- Der Zeitraum --------------------------------------------------------
+     WERTGLEICH zum Sieb im Kontor (`.reiter` in `admin.html`) — jede Zahl hier
+     steht auch dort. Beide Seiten zeigen dieselben Bilder aus `bilder.js`, und
+     wer über den Knopf drüben hierher kommt, soll denselben Reiter wiederfinden
+     und nicht einen, der ihn daran erinnert, dass er die Seite gewechselt hat.
+
+     Es waren zwei Formen: hier gestrichelt und ohne Grund, drüben durchgezogen
+     mit einem Hauch Kreide dahinter, und das Gewählte hier GELB gefüllt, drüben
+     weiß. Beim Nebeneinanderlegen sah man, dass keine der Abweichungen eine
+     Begründung hatte — sie sind zu verschiedenen Zeiten entstanden. Jetzt gilt
+     die Fassung des Kontors, weil sie die drei Reiterreihen dort ohnehin schon
+     trägt.
+
+     Der gewählte Reiter wird nicht gefüllt: eine Kreidefläche ist auf Schiefer
+     das Lauteste, was es gibt, und über einer Wand aus Grafiken war das
+     Lauteste auf dem Schirm die Auskunft, über welche dreißig Tage man sieht.
+     Heller Rand, helle Schrift, Grund unverändert. Der dicke Strich kommt über
+     den Schatten und nicht über `font-weight` — fett ist breiter, und die
+     Reiter dahinter rückten bei jeder Wahl.
+
+     Der Abstand nach unten ist die einzige Abweichung und bleibt: drüben sitzt
+     die Reihe in einem `.werkzeug`, das ihn mitbringt, hier steht sie frei.
+     --------------------------------------------------------------------- */
   .reiter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 16px; }
   .reiter .wozu {
     font-size: 11px; color: var(--kreide-weg);
-    letter-spacing: .12em; text-transform: uppercase; margin-right: 4px;
+    letter-spacing: .08em; text-transform: uppercase; margin-right: 2px;
   }
   .reiter button {
     font: inherit; font-size: 12px; cursor: pointer;
-    border: 1px dashed #ffffff2e; border-radius: 999px; padding: 4px 12px;
-    background: none; color: var(--kreide-weg);
-    transition: color .15s, border-color .15s;
+    border: 1px solid #ffffff40; border-radius: 999px; padding: 4px 12px;
+    background: #ffffff0a; color: var(--kreide-weg);
+    transition: background .15s, border-color .15s, color .15s;
   }
-  .reiter button:hover { color: var(--kreide); border-color: #ffffff5c; }
-  /* Der gewählte Zeitraum, wortgleich zum Kontor (`.reiter button.an` in
-     `admin.html`): heller Rand, helle Schrift, Grund unverändert. Er war bis
-     hierher eine volle GELBE Pille — der Akzent der Seite, und genau darum
-     falsch. Über der Wand aus Grafiken war das Lauteste auf dem Schirm die
-     Auskunft, über welche dreißig Tage man gerade sieht.
-
-     Der Strich wird gestrichelt gegen durchgezogen mit gewählt, das war schon
-     so und bleibt: hier gibt es nur EINE Reihe Reiter, und der zusätzliche
-     Unterschied kostet nichts. Der dicke Strich kommt über den Schatten und
-     nicht über `font-weight` — fett ist breiter, und die Reiter dahinter
-     rückten bei jeder Wahl. */
+  .reiter button:hover {
+    background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
+  }
   .reiter button.an {
-    color: var(--kreide); border-color: var(--kreide);
-    border-style: solid; border-width: 1.5px;
+    color: var(--kreide); border-color: var(--kreide); border-width: 2px;
     text-shadow: 0 0 .6px currentColor, 0 0 .6px currentColor;
   }
 
