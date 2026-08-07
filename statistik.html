@@ -92,26 +92,39 @@
      weil er dann nicht mehr das ERSTE ist, was man liest — genau der Vorwurf,
      der ihn seinerzeit aus dem Blatt und aufs Holz getrieben hat.
 
-     Die Form ist der gestrichelte Link, den die verschlossene Tür weiter unten
-     ohnehin benutzt. Kein eigener Knopf dafür: was zweimal dasselbe tut, sieht
-     zweimal gleich aus.
+     Die Form ist die umrissene Kreide-Pille aus dem Register des Kontors,
+     mit demselben Inhalt: nur der Pfeil. Zwei Wege hinaus, zwei Seiten, EINE
+     Form — der gestrichelte Link, der hier kurz stand, sah drüben nach nichts
+     aus und hier nach dem Satzende der verschlossenen Tür weiter unten.
 
-     `align-items: baseline` und nicht `center` — die Überschrift ist 36 px
-     hoch, der Link 13, und mittig ausgerichtet schwämme er in ihrer Mitte
-     statt auf ihrer Linie zu stehen. Die Drehung der Überschrift geht in die
-     Rechnung nicht ein (eine `transform` bewegt kein Layout), sie hebt nur
-     ihren Schwanz um gut zwei Pixel — das ist Handschrift und kein Versatz.
+     `align-items: center` und nicht `baseline` — an einem Wort wäre die
+     Grundlinie richtig, aber die Pille ist ein Kasten, und ein Kasten auf der
+     Grundlinie einer 36-px-Handschrift hängt mit dem Rand darunter heraus.
+     Auf die Mitte gestellt liegt er ruhig neben der Überschrift.
 
      Der Abstand nach unten ist von der Überschrift auf die ZEILE gewandert:
      an der Überschrift wäre er der Abstand eines Elements, das die Zeile nicht
-     mehr allein füllt, und der Link hinge über den Bildern.
+     mehr allein füllt, und die Pille hinge über den Bildern.
      --------------------------------------------------------------------- */
   .kopfzeile {
-    display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 14px;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
     margin-bottom: 18px;
   }
-  .kopfzeile .zurueck { margin-left: auto; white-space: nowrap; }
+  .kopfzeile .zur-tafel {
+    margin-left: auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 40px; padding: 4px 10px;
+    font: inherit; font-size: 12px; text-decoration: none;
+    border: 1px solid #ffffff40; border-radius: 999px;
+    background: #ffffff0a; color: var(--kreide-weg);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .kopfzeile .zur-tafel:hover {
+    background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
+  }
 
+  /* Der gestrichelte Link bleibt — die verschlossene Tür benutzt ihn weiter,
+     und dort ist er ein Satzende („meldet sich an") und keine Pille. */
   .zurueck {
     display: inline-block; color: var(--kreide-weg); font-size: 13px;
     text-decoration: none; border-bottom: 1px dashed #ffffff2e; padding-bottom: 1px;
@@ -180,7 +193,7 @@
   <div class="tafel">
     <div class="kopfzeile">
       <h1 class="kr">Statistiken</h1>
-      <a class="zurueck" href="./">← zur Tafel</a>
+      <a class="zur-tafel" href="./" aria-label="zurück zur Tafel">←</a>
     </div>
 
     <div class="reiter" id="zeitraum" hidden></div>

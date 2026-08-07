@@ -110,27 +110,79 @@
   .register button:hover, .register .zur-tafel:hover {
     background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
   }
-  /* Das aufgeschlagene Blatt: volle Kreide, dunkle Schrift — die Marke, die
-     `.reiter` für das gewählte Sieb benutzt. Kein `font-weight` dazu: gefüllt
-     gegen umrissen ist der Unterschied schon, und fett würde die Zunge um ein
-     paar Pixel breiter und schöbe die Reihe bei jedem Wechsel. */
-  .register button.an { background: var(--kreide); border-color: var(--kreide); color: #222a27; }
-  .register button.an:hover { background: #fff; color: #14181a; }
+  /* Das aufgeschlagene Blatt. Es war kurz voll ausgemalt — Kreidefläche,
+     dunkle Schrift, die Marke von `.reiter`. Das ist an einem Sieb richtig,
+     wo drei gleich große Wörter nebeneinander liegen, und war hier falsch:
+     eine helle Fläche zieht am oberen Rand der Tafel das Auge ganz auf sich,
+     noch bevor man die Überschrift darunter liest. Der gewählte Reiter ist
+     eine Auskunft, kein Anschlag.
+
+     Also bleibt der Grund, wie er ist, und heller werden nur Rand und Schrift:
+     `--kreide` statt `--kreide-weg`, dazu ein volles statt eines halben
+     Weiß am Rand. Der Rand wird außerdem dicker — 1,5 px statt 1 —, und das
+     kostet nichts, weil `box-sizing: border-box` weiter oben für alles gilt.
+
+     Der dickere STRICH kommt über einen Schatten und nicht über
+     `font-weight: 600`. Das war der erste Versuch und er hat sich gerächt: der
+     fette Schnitt ist breiter, jede Zunge trägt ein anderes Wort, und damit
+     hing die Breite der ganzen Reihe daran, WELCHE gerade gewählt ist. Bei
+     375 px passte sie unter „Übersicht" in eine Zeile und brach unter
+     „Statistiken" um — gemessen, ein Umbruch, der beim Blättern kommt und
+     geht. Ein Schatten in der eigenen Farbe verdickt die Striche und rührt die
+     Maße nicht an; auf Kreide ist er ohnehin die richtige Sprache (die Tafel
+     drüben zeichnet ihre Schrift mit demselben Mittel, siehe `.kr`).
+
+     Der Zeiger-Zustand bleibt unverändert: der gewählte Reiter ist schon da,
+     wo er hinführt, und ein Aufleuchten verspräche eine Handlung. */
+  .register button.an {
+    border-color: var(--kreide); border-width: 1.5px; color: var(--kreide);
+    text-shadow: 0 0 .6px currentColor, 0 0 .6px currentColor;
+  }
+  .register button.an:hover {
+    background: #ffffff0a; border-color: var(--kreide); color: var(--kreide);
+  }
   /* Der Zähler tritt zurück, aber nicht aus dem Bild: auf der umrissenen Pille
      sind .65 Deckkraft gegen `--kreide-weg` noch lesbar, und er sitzt auf
      Schiefer und nicht mehr auf Holz, wo dieselbe Zurücknahme einmal auf 2,8:1
      fiel. Dieselbe Zahl wie an `.reiter button i`. */
   .register button i { font-style: normal; opacity: .65; margin-left: 5px; }
 
-  /* Auf schmalen Schirmen bricht die Reihe um, statt abzuschneiden — das
-     besorgt `flex-wrap` von selbst, und es ist dieselbe Antwort, die die
-     Reiter weiter unten seit jeher geben. Der ganze Block, der hier stand
-     (engere Schrift, gestreckte Zungen, „← zur Tafel" auf „←" gekürzt), ist
-     damit gegenstandslos: er löste ein Platzproblem, das die hölzernen Zungen
-     hatten, weil sie eine Scrollfläche waren und nie umbrechen konnten. Die
-     Kreide-Pillen brechen einfach um. Gemessen bleiben im Blatt eines
-     390er-Handys 307 px nutzbare Breite; die vier Pillen brauchen 387 und
-     stehen dort in zwei Reihen. */
+  /* Der Rückweg trägt nur den Pfeil. Das Wort stand einmal dabei und kostete
+     die Reihe: im Blatt eines 390er-Handys bleiben 307 px nutzbare Breite,
+     und mit „← zur Tafel" brauchten die vier Pillen 387 — also zwei Reihen
+     für vier Ziele. Ohne das Wort passen sie in eine.
+
+     Das geht, weil der Pfeil neben drei Substantiven eindeutig ist: die
+     anderen drei führen INS Kontor, dieser eine hinaus. Runde Pille statt
+     eines nackten Zeichens, damit er ein Ziel bleibt, das ein Daumen trifft —
+     daher die Mindestbreite. Der Name für Vorleseprogramme kommt aus dem
+     `aria-label` im JS; ein Pfeil allein ist dort keine Auskunft. */
+  .register .zur-tafel {
+    min-width: 40px; justify-content: center;
+    display: inline-flex; align-items: center;
+    padding: 4px 10px;
+  }
+
+  /* Der Pfeil allein reichte noch nicht ganz: bei 390 px brauchten die vier
+     Pillen gemessen 323 px und hatten 308. Der Rest kommt aus der Polsterung
+     (12 → 8 px, dreimal beidseitig) und dem Zwischenraum (6 → 4); gemessen
+     sind es jetzt 278 plus 12 Zwischenraum. Damit passen sie auch bei 375 px,
+     der zweiten verbreiteten Handybreite — dort sind nur 293 px da, und
+     darunter zu bleiben war das, was den engeren Schnitt entschieden hat.
+
+     Bewusst NICHT über die Schriftgröße: die Zungen sind die Navigation dieser
+     Seite, und was man mit dem Daumen trifft, soll man auch lesen können. Eine
+     engere Pille bleibt gleich gut lesbar, eine kleinere Schrift nicht. Der
+     Pfeil behält seine Mindestbreite aus demselben Grund — er ist das kleinste
+     Ziel der Reihe und darf nicht das erste sein, das schrumpft.
+
+     Bei 320 px reicht auch das nicht (238 px verfügbar), dort bricht die Reihe
+     um. Ein Umbruch bei vier Zielen ist kein Schaden; das Ziel war, ihn auf
+     den üblichen Handybreiten loszuwerden. */
+  @media (max-width: 430px) {
+    .register { gap: 4px; }
+    .register button { padding: 4px 8px; }
+  }
 
   /* Ein Blatt ist hier eine Tafel: Schiefer im Holzrahmen, wie das Brett der
      Hauptseite — samt Korn und den Schlieren vom letzten Wischen. Der Rahmen
@@ -231,6 +283,45 @@
   .ampel span.aus { border-color: #d9705f66; background: #d9705f14; color: #f0c6be; }
   .ampel span.aus::before { color: var(--rot); }
   .ampel span.egal::before { color: var(--kreide-weg); }
+
+  /* Sechs Lampen, sechs verschieden lange Wörter: im Fluss ergab das auf dem
+     Handy DREI Reihen mit 2, 3 und 1 Lampe — eine Treppe, und die letzte
+     Lampe stand allein da, als wäre sie etwas anderes als die fünf darüber.
+     Ein festes Raster aus drei Spalten macht daraus zwei volle Reihen.
+
+     `minmax(0, 1fr)` und nicht `1fr`: die Grundbreite eines Rasterfeldes ist
+     `auto`, also der Inhalt, und „MAIL_GEHEIM" hätte seine Spalte breiter
+     gemacht als die beiden daneben — drei gleiche Spalten gibt es erst mit der
+     ausdrücklichen Null als Untergrenze.
+
+     Enger gesetzt als im Fluss, weil drei Spalten in 307 px Blattbreite je
+     98 px lassen und „MAIL_GEHEIM" bei 12 px mehr braucht. Gemessen passt es
+     bei 11 px mit 6 px Polsterung; die Wörter stehen mittig in ihrer Spalte,
+     sonst klebten die kurzen links und das Raster sähe aus wie ein Versehen.
+
+     Die Grenze steht dort, wo die Reihe im Fluss ohnehin umbricht: sechs
+     Lampen brauchen rund 640 px, das Blatt hat bei einem 700er-Fenster 617.
+
+     Und darunter noch eine zweite Grenze: bei 320 px bleiben je Spalte 75 px,
+     „MAIL_GEHEIM" braucht gemessen 80 und wurde beschnitten. Dort also zwei
+     Spalten statt drei — drei volle Reihen zu zweit sind eine Ordnung, eine
+     Treppe aus 2/3/1 war keine, und ein abgeschnittenes Wort ist schlimmer
+     als beides. Noch kleinere Schrift wäre der dritte Weg und der schlechteste:
+     die Ampel ist die wichtigste Auskunft des Kopfes.
+
+     „Zustand unbekannt" (wenn `/api/health` schweigt) ist EINE Lampe und
+     nimmt die ganze Zeile — in einem Drittel stünde der Satz abgeschnitten. */
+  @media (max-width: 700px) {
+    .ampel {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      font-size: 11px;
+    }
+    .ampel span { justify-content: center; gap: 4px; padding: 3px 6px; }
+    .ampel span.egal { grid-column: 1 / -1; }
+  }
+  @media (max-width: 360px) {
+    .ampel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   /* Der Stand darunter ist keine Ampel-Lampe — kein gut/schlecht, nur eine
      Auskunft, wann und als was zuletzt aufgeschlagen wurde.
 
@@ -2125,14 +2216,13 @@
        an — der Pfeil sagt, dass diese eine hinaus führt und die drei davor
        hinein.
 
-       Das Wort hing hier einmal in einem eigenen `span`, damit die Handy-Regel
-       es ausblenden und aus der Zunge ein „←" machen konnte. Das war der Preis
-       dafür, sechs hölzerne Zungen in eine Reihe zu zwängen, die nicht
-       umbrechen konnte. Die Kreide-Pillen brechen um, also steht das Wort
-       wieder da — und der eigene `aria-label` fällt mit ihm weg, weil der
-       sichtbare Text jetzt immer der ganze ist. */
-    const raus = el('a', 'zur-tafel', '← zur Tafel');
+       Nur der Pfeil, kein Wort — das entscheidet die Handybreite, siehe den
+       Kommentar an `.register .zur-tafel`. Weil ein Pfeil für ein
+       Vorleseprogramm keine Auskunft ist, trägt er einen eigenen Namen; er
+       ist der einzige Grund, warum das hier nicht eine Zeile ist. */
+    const raus = el('a', 'zur-tafel', '←');
     raus.href = './';
+    raus.setAttribute('aria-label', 'zurück zur Tafel');
     ziel.appendChild(raus);
   }
 
