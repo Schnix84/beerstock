@@ -85,15 +85,25 @@
      Reiter, der siebt. Wer die Reihenfolge einmal umstellt, muss sich das hier
      wieder ansehen.
 
-     Links ausgerichtet, nicht mittig. Über dem Buch war die Mitte richtig —
-     ein Register sitzt in der Mitte des Einbands. Im Blatt fängt alles am
-     linken Rand an (Überschrift, Reiter, Karten), und eine zentrierte Reihe
-     darüber stünde quer zu allem darunter. Damit fallen auch die beiden
-     Auto-Ränder weg, die das Zentrieren besorgten.
+     Mittig auf dem Blatt, auf jeder Breite. Sie standen kurz links, mit dem
+     Argument, im Blatt fange alles am linken Rand an (Überschrift, Reiter,
+     Karten) — das stimmt für Text, und die Reihe ist keiner: sie ist die
+     Navigation der ganzen Seite und steht quer über allem, was folgt. Vier
+     kurze Pillen linksbündig lassen rechts daneben ein Loch, das aussieht,
+     als fehlte dort noch etwas.
+
+     Hier geht `justify-content: center`, und das ist der Unterschied zu
+     früher: solange die Reihe eine Scrollfläche war (`overflow-x: auto`, die
+     hölzerne Fassung), schob `center` beim Überlaufen den ANFANG nach links
+     aus dem Bild, und dorthin scrollt kein Mensch zurück — deswegen standen
+     dort einmal zwei Auto-Ränder. Eine umbrechende Reihe hat das Problem
+     nicht: sie läuft nie über, sie bricht um, und `center` zentriert dann
+     jede Zeile für sich. Wer `flex-wrap` je wieder wegnimmt, muss die
+     Auto-Ränder zurückholen.
      --------------------------------------------------------------------- */
   .register {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-    margin-bottom: 16px;
+    justify-content: center; margin-bottom: 16px;
   }
   .register[hidden] { display: none; }
   /* Wortgleich zu `.reiter button` weiter unten, nur trägt die Regel hier auch
@@ -118,9 +128,13 @@
      eine Auskunft, kein Anschlag.
 
      Also bleibt der Grund, wie er ist, und heller werden nur Rand und Schrift:
-     `--kreide` statt `--kreide-weg`, dazu ein volles statt eines halben
-     Weiß am Rand. Der Rand wird außerdem dicker — 1,5 px statt 1 —, und das
-     kostet nichts, weil `box-sizing: border-box` weiter oben für alles gilt.
+     `--kreide` statt `--kreide-weg`, dazu ein volles statt eines halben Weiß
+     am Rand. Der Rand wird außerdem dicker — 1,5 px statt 1. Das macht die
+     Pille tatsächlich um einen Pixel breiter (`box-sizing: border-box` hilft
+     hier NICHT: ohne feste Breite bestimmt der Inhalt das Maß, Polsterung und
+     Rand kommen obendrauf). Die REIHE bleibt trotzdem konstant, weil immer
+     genau eine Zunge gewählt ist — der eine Pixel wandert nur mit. Gemessen
+     278 px, gleich unter welchem Blatt.
 
      Der dickere STRICH kommt über einen Schatten und nicht über
      `font-weight: 600`. Das war der erste Versuch und er hat sich gerächt: der
@@ -404,8 +418,22 @@
     border-radius: 999px; padding: 4px 12px; background: #ffffff0a;
     font-size: 12px; color: var(--kreide-weg);
   }
-  .reiter button.an { background: var(--kreide); border-color: var(--kreide); color: #222a27; }
-  .reiter button.an:hover { background: #fff; color: #14181a; }
+  /* Das gewählte Sieb, wortgleich zur gewählten Zunge oben (`.register
+     button.an`, siehe dort für die Begründung): heller Rand, helle Schrift,
+     Grund unverändert. Voll ausgemalt war es bis 0385291, und dieselbe
+     Beobachtung gilt hier wie oben — eine Kreidefläche ist auf Schiefer das
+     Lauteste, was es gibt, und ein Filter, der lauter ist als das, was er
+     filtert, hat die Rangfolge umgedreht.
+
+     Der dicke Strich kommt über den Schatten, nicht über `font-weight`: fett
+     ist breiter, und die Reiter dahinter rückten bei jeder Wahl. Bei den
+     Zungen oben hat genau das auf einem 375er-Handy einen Umbruch erzeugt,
+     der beim Blättern kam und ging. */
+  .reiter button.an {
+    border-color: var(--kreide); border-width: 1.5px; color: var(--kreide);
+    text-shadow: 0 0 .6px currentColor, 0 0 .6px currentColor;
+  }
+  .reiter button.an:hover { background: #ffffff0a; color: var(--kreide); }
   .reiter button i { font-style: normal; opacity: .65; margin-left: 5px; }
   .reiter .wozu {
     font-size: 11px; color: var(--kreide-weg); letter-spacing: .08em;

@@ -149,9 +149,21 @@
     transition: color .15s, border-color .15s;
   }
   .reiter button:hover { color: var(--kreide); border-color: #ffffff5c; }
+  /* Der gewählte Zeitraum, wortgleich zum Kontor (`.reiter button.an` in
+     `admin.html`): heller Rand, helle Schrift, Grund unverändert. Er war bis
+     hierher eine volle GELBE Pille — der Akzent der Seite, und genau darum
+     falsch. Über der Wand aus Grafiken war das Lauteste auf dem Schirm die
+     Auskunft, über welche dreißig Tage man gerade sieht.
+
+     Der Strich wird gestrichelt gegen durchgezogen mit gewählt, das war schon
+     so und bleibt: hier gibt es nur EINE Reihe Reiter, und der zusätzliche
+     Unterschied kostet nichts. Der dicke Strich kommt über den Schatten und
+     nicht über `font-weight` — fett ist breiter, und die Reiter dahinter
+     rückten bei jeder Wahl. */
   .reiter button.an {
-    color: var(--schiefer-t); background: var(--gelb); border-color: var(--gelb);
-    border-style: solid;
+    color: var(--kreide); border-color: var(--kreide);
+    border-style: solid; border-width: 1.5px;
+    text-shadow: 0 0 .6px currentColor, 0 0 .6px currentColor;
   }
 
   /* Das Raster gehört der Seite, alles im Bild bringt `bilder.js` mit. */
