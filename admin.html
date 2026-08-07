@@ -73,10 +73,18 @@
      nach links aus dem Bild — und dorthin scrollt kein Mensch zurück. Ein
      `margin-left: auto` an der ersten Zunge zentriert genauso und gibt beim
      Überlaufen den Platz einfach wieder her.
+
+     Die Zungen stehen 8 px WEITER INNEN als das Brett darunter (`.buch` hat
+     14 px Rand, hier sind es 22). Das ist der Unterschied zwischen einem
+     Register und einem Stapel Zettel: ein Reiter, der über den Buchrand
+     hinausragt, knickt. Bündig ginge auch nicht ganz — das Brett ist an den
+     oberen Ecken um 6 px gerundet, und eine eckige Zungenkante genau auf der
+     Kante stünde über der Rundung, mit einem Stück Hintergrund darunter. Die
+     8 px räumen beides weg: die Zunge sitzt auf der GERADEN Oberkante.
      --------------------------------------------------------------------- */
   .register {
     position: sticky; top: 0; z-index: 39;
-    display: flex; gap: 2px; padding: 10px 14px 0;
+    display: flex; gap: 2px; padding: 10px 22px 0;
     max-width: var(--rand); margin: 0 auto;
     /* Der Verlauf statt einer Fläche: die Zungen sollen am oberen Rand
        kleben, ohne dass darunter eine Kante durchs Bild wandert. */
@@ -86,25 +94,47 @@
   .register[hidden] { display: none; }
   .register::-webkit-scrollbar { display: none; }
   .register button:first-child { margin-left: auto; }
+  /* Die Zungen sind aus HOLZ, nicht aus Schiefer — dieselbe Maserung und
+     dieselben Töne wie der Rahmen, auf dem sie stehen. Sie waren einmal
+     dunkelgraue Kästchen, und in der Vergrößerung sah man, warum das nicht
+     ging: kühles Grau stieß hart auf warmes Braun, und die Zunge wirkte wie
+     ein Loch über dem Rahmen statt wie ein Reiter daran. Ein Registerreiter
+     ist aus dem Material des Einbands, nicht aus dem der Seite.
+
+     Der untere Rand fehlt bei allen: dort geht die Zunge in den Rahmen über,
+     und eine Linie dazwischen wäre die Fuge, die es nicht geben soll. */
   .register button, .register .zur-tafel {
     font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
     text-decoration: none;
-    border: 1px solid #ffffff26; border-bottom: none;
+    border: 1px solid #00000059; border-bottom: none;
     border-radius: 6px 6px 0 0;
-    background: #ffffff08; color: var(--kreide-weg);
+    background:
+      repeating-linear-gradient(97deg, #ffffff08 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
+      linear-gradient(#3b2917, #31210f);
+    color: var(--kreide-weg);
     padding: 6px 14px 7px;
-    transition: background .15s, color .15s;
+    transition: filter .15s, color .15s;
   }
   .register button:hover, .register .zur-tafel:hover {
-    background: #ffffff12; color: var(--kreide-matt);
+    filter: brightness(1.35); color: var(--kreide-matt);
   }
-  /* Das aufgeschlagene Blatt: die Zunge nimmt die Farbe des Schiefers an und
-     die des Holzes am Rand — sie gehört jetzt zur Tafel darunter. */
+  /* Das aufgeschlagene Blatt. Der Verlauf endet UNTEN auf genau dem Ton, mit
+     dem der Rahmen darunter oben anfängt (`--holz`) — dadurch läuft die Zunge
+     nahtlos ins Brett, statt darauf zu liegen. Nach oben wird sie heller: das
+     Licht kommt von dort, und der vordere Reiter fängt es. */
   .register button.an {
-    background: #37403f; color: var(--kreide); font-weight: 600;
-    border-color: #4a3527;
+    background:
+      repeating-linear-gradient(97deg, #ffffff0d 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
+      linear-gradient(#84603a, var(--holz));
+    color: var(--kreide); font-weight: 600;
+    border-color: #00000066;
   }
-  .register button i { font-style: normal; opacity: .6; margin-left: 5px; font-size: 11px; }
+  .register button.an:hover { filter: none; }
+  /* Der Zähler tritt über die SCHRIFTGRÖSSE zurück, nicht über Deckkraft. Er
+     stand einmal auf `opacity: .6` — auf dem Holz sind das gemessene 2,8:1,
+     und ein Text, den man erraten muss, ist keine Auskunft. Voll deckend sind
+     es 5,1:1, und einen Punkt kleiner tritt er trotzdem hinter das Wort. */
+  .register button i { font-style: normal; margin-left: 5px; font-size: 11px; }
   /* Der Weg hinaus gehört zur Reihe, aber nicht zu den Blättern — deshalb ein
      eigenes `auto` an der linken Seite, das ihn ans andere Ende schiebt und
      die fünf Zungen trotzdem mittig lässt. */
@@ -148,7 +178,10 @@
      Handy, und auf einem Tablet mit 700 px wären sie 188 px breite Bänder.
      --------------------------------------------------------------------- */
   @media (max-width: 480px) {
-    .register { flex-wrap: wrap; overflow-x: visible; padding: 10px 10px 0; row-gap: 3px; }
+    /* Der seitliche Rand bleibt der von oben: er hält die Zungen auf der
+       geraden Oberkante des Bretts, und den hier zu kürzen, um vier Pixel
+       Breite zu gewinnen, ließ sie über den Rahmen hinausragen. */
+    .register { flex-wrap: wrap; overflow-x: visible; row-gap: 3px; }
     .register button, .register .zur-tafel { font-size: 11.5px; padding: 5px 9px 6px; }
     /* Über die ganze Breite. Vier Zungen lassen bei 390 px rund 80 px übrig,
        und die als Loch rechts stehen zu lassen, sähe aus, als fehlte dort noch
@@ -164,10 +197,15 @@
     .register button, .register .zur-tafel { flex: 1 1 auto; margin-left: 0; }
     /* Ohne das Wort bliebe vom Weg hinaus sonst ein Knopf von 30 px — schmaler
        als jedes andere Ziel auf dieser Seite und schmaler, als ein Daumen
-       trifft. Er wächst jetzt ohnehin mit, die Untergrenze steht für den Fall,
-       dass die Reihe doch einmal umbricht. */
+       trifft. Die Obergrenze zieht die andere Linie: bricht die Reihe doch
+       einmal um (unter ~350 px), stünde der Pfeil sonst allein in der zweiten
+       Zeile und würde sich über deren volle Breite ziehen — ein handbreiter
+       Knopf für ein Zeichen. Mit der Grenze bleibt daneben Platz frei, und
+       `justify-content` schiebt ihn dorthin, wo er hingehört: nach rechts. */
+    .register { justify-content: flex-end; }
     .register .zur-tafel {
-      min-width: 44px; display: inline-flex; align-items: center; justify-content: center;
+      min-width: 44px; max-width: 88px;
+      display: inline-flex; align-items: center; justify-content: center;
     }
     .register .zur-tafel .wort { display: none; }
   }
