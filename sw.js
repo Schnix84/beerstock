@@ -39,7 +39,7 @@ self.addEventListener('push', ev => {
        wer einen Abend dreimal verschiebt, hinterlässt sonst drei Zettel, von
        denen zwei falsch sind. Vergeben wird sie im Worker (`stosse`). */
     tag: d.tag || undefined,
-    icon: 'icon.png?v=2',    // liegt neben dieser Datei; `?v=` siehe index.html
+    icon: 'icon.png?v=3',    // liegt neben dieser Datei; `?v=` siehe index.html
     /* Das Ziel reist an der Meldung mit und wird erst beim Antippen gebraucht.
        Es ist immer eine vollständige Adresse (der Worker baut sie aus `SEITE`)
        — eine relative würde sich gegen *diese Datei* auflösen und landete auf
