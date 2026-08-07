@@ -110,6 +110,53 @@
      die fünf Zungen trotzdem mittig lässt. */
   .register .zur-tafel { margin-left: auto; }
 
+  /* --- Das Register auf einem Handy ---------------------------------------
+     Sechs Zungen in voller Größe brauchen 592 px, ein Handy hat 390. Vorher
+     lag der Rest hinter dem rechten Rand: „Protokoll" und der Weg zur Tafel
+     waren nur durch Querscrollen zu erreichen, und dass es dort weitergeht,
+     sah man nicht.
+
+     Drei Griffe, in dieser Reihenfolge — jeder allein reicht nicht:
+
+       1. Aus „← zur Tafel" wird „←". Spart 58 px. Das Wort steht neben fünf
+          Substantiven ohnehin doppelt: die anderen fünf Zungen führen INS
+          Kontor, diese eine hinaus, und das sagt der Pfeil.
+       2. Schrift und Polsterung enger. Spart noch einmal rund 80 px. Die
+          ZÄHLER bleiben — sie sind der Grund, warum die Zungen überhaupt
+          Zahlen tragen: man soll sehen, dass etwas wartet, ohne hinzugehen.
+          Sie kosten die letzten 20 px, die zu einer einzigen Reihe auf dem
+          Handy fehlen, und sind es wert.
+       3. Und weil es dann immer noch nicht reicht, bricht die Reihe um,
+          statt abzuschneiden. `flex-wrap` regelt das selbst: eine Reihe,
+          solange sie passt, sonst zwei — kein zweiter Umschaltpunkt, den
+          jemand pflegen muss.
+
+     Gemessen: eine Reihe ab 470 px, darunter zwei (73 statt 40 px hoch),
+     Querscrollen bei keiner Breite mehr, auch nicht bei 320.
+
+     `overflow-x: visible` muss dazu: mit `auto` bliebe die Reihe eine
+     Scrollfläche und bräche nie um. Und das `margin-left: auto` der ersten
+     Zunge muss weg, sonst schöbe es die obere Reihe nach rechts — zentriert
+     wird nur, was in eine Zeile passt.
+
+     Die Grenze steht auf 700 px und nicht knapper: die VOLLE Fassung braucht
+     620 px, und ab dort darf sie nicht mehr überlaufen können — außerhalb
+     dieser Regeln gibt es kein `flex-wrap`, das sie auffinge.
+     --------------------------------------------------------------------- */
+  @media (max-width: 700px) {
+    .register { flex-wrap: wrap; overflow-x: visible; padding: 10px 10px 0; row-gap: 3px; }
+    .register button:first-child { margin-left: 0; }
+    .register button, .register .zur-tafel { font-size: 11.5px; padding: 5px 9px 6px; }
+    /* Ohne das Wort bliebe vom Weg hinaus ein Knopf von 30 px — schmaler als
+       jedes andere Ziel auf dieser Seite und schmaler, als ein Daumen trifft.
+       Die 14 px, die er dazubekommt, kosten nichts: er steht am Ende einer
+       Reihe, und dort ist Platz übrig. */
+    .register .zur-tafel {
+      min-width: 44px; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .register .zur-tafel .wort { display: none; }
+  }
+
   /* Ein Blatt ist hier eine Tafel: Schiefer im Holzrahmen, wie das Brett der
      Hauptseite — samt Korn und den Schlieren vom letzten Wischen. Der Rahmen
      hat bewusst dieselbe Breite und Maserung wie `.brett` in `index.html`;
@@ -1914,9 +1961,17 @@
        nur von der Übersicht aus zu sehen, und wer im Protokoll stand, kürzte
        die Adresse von Hand. Als letzte Zunge gehört er zur Reihe, aber sein
        eigenes `margin-left: auto` rückt ihn ans andere Ende — die fünf
-       Blatt-Zungen bleiben dadurch mittig. */
-    const raus = el('a', 'zur-tafel', '← zur Tafel');
+       Blatt-Zungen bleiben dadurch mittig.
+
+       Der Pfeil steht für sich, das Wort hängt in einem eigenen `span`: auf
+       schmalen Schirmen blendet das Blatt es aus, und die sechs Zungen passen
+       dadurch in eine Reihe, wo sie sonst nicht hineinpassten. Der Name für
+       Vorleseprogramme bleibt in BEIDEN Fällen derselbe — er enthält den
+       sichtbaren Text, auch wenn der gerade nur ein Pfeil ist. */
+    const raus = el('a', 'zur-tafel', '←');
+    raus.appendChild(el('span', 'wort', ' zur Tafel'));
     raus.href = './';
+    raus.setAttribute('aria-label', 'zurück zur Tafel');
     ziel.appendChild(raus);
   }
 
