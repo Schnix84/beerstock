@@ -2019,13 +2019,22 @@
      er auf etwas liegt, das man drücken kann. */
   .wr-brett:focus { outline: none; }
 
-  /* Am Finger hält man die Karte an, indem man liegen bleibt — und genau das
-     ist auch die Geste, mit der ein Handy Text markiert. Beides zusammen gibt
-     eine blau hinterlegte Zeile statt einer angehaltenen Seite. Nur am Finger:
-     am Rechner ist das Ziehen über einen Text zum Kopieren da, und dort stört
-     es das Anhalten auch nicht. */
-  @media (hover: none), (pointer: coarse) {
-    .wr-brett { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  /* Angehalten wird durch Liegenbleiben — und genau das ist auch die Geste,
+     mit der man Text markiert: am Handy der lange Druck, am Rechner die
+     gedrückte Maustaste. Beides zusammen gibt eine blau hinterlegte Zeile statt
+     einer angehaltenen Seite, und beim Loslassen bleibt die Markierung stehen.
+
+     Das galt zuerst nur am Finger, in der Annahme, das Ziehen über einen Text
+     sei am Rechner zum Kopieren da und störe dort nicht. Es stört: dieselbe
+     Geste, dasselbe Ergebnis, nur mit der Maus. Der Preis ist derselbe wie am
+     Kommentar (siehe `.ko` weiter oben) — aus einer Kachel lässt sich nichts
+     mehr herauskopieren. Die Zahlen stehen im Verlauf, das Bild gibt der
+     Teilen-Knopf heraus.
+
+     `-webkit-user-select` ist kein Beiwerk: unpräfixiert versteht Safari es
+     erst seit 17. */
+  .wr-brett {
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
 
   /* --- Die Striche sind die Uhr ---------------------------------------------
@@ -7717,19 +7726,39 @@
 
   /* Halten hält an. `pointer`-Ereignisse und nicht `touch`: dieselbe Geste
      kommt hier vom Finger wie von der gedrückten Maustaste, und beide sollen
-     dasselbe tun. Ein kurzes Tippen hält dabei für ein paar Millisekunden an
-     und läuft dann weiter — unsichtbar, und der Preis dafür, dass Halten keine
-     eigene Schwelle braucht.
+     dasselbe tun.
 
-     `pointercancel` gehört dazu: nimmt das Betriebssystem den Zeiger an sich
-     (Wischgeste, Systemdialog), kommt nie ein `pointerup`, und die Karte stünde
-     von da an still. `wr-rahmen` statt `wr-brett`, damit auch der Rand zählt —
-     dort liegt beim Halten oft schon der Daumen. */
+     Ein Halten ist aber kein Tippen — und der Browser sieht das anders. Wer
+     gedrückt hält und dann loslässt, hat aus seiner Sicht geklickt: derselbe
+     Punkt runter wie hoch, also `click`. Die Karte lief damit zwar richtig
+     weiter, sprang im selben Atemzug aber eine Seite vor oder zurück, je
+     nachdem auf welcher Hälfte der Finger lag — genau das, was man mit dem
+     Anhalten verhindern wollte. Ein Halten über `WR_TIPP` hinaus setzt darum
+     `wrGezogen`, denselben Merker, mit dem sich schon der kurze Zug nach unten
+     seinen Klick verschluckt. Zurückgesetzt wird er beim Aufsetzen, nicht beim
+     Loslassen: ein `pointerup` außerhalb der Bühne bringt gar keinen Klick
+     mehr, der ihn abräumen könnte.
+
+     `pointercancel` gehört zu den Zuhörern: nimmt das Betriebssystem den
+     Zeiger an sich (Wischgeste, Systemdialog), kommt nie ein `pointerup`, und
+     die Karte stünde von da an still. `wr-rahmen` statt `wr-brett`, damit auch
+     der Rand zählt — dort liegt beim Halten oft schon der Daumen. */
+  const WR_TIPP = 250;   // ms, bis zu denen eine Berührung als Tippen zählt
   {
     const rahmen = $('wrapped').querySelector('.wr-rahmen');
-    rahmen.addEventListener('pointerdown', () => wrHalten('finger'));
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach(art =>
-      rahmen.addEventListener(art, () => wrWeiter('finger')));
+    let seit = 0;
+    rahmen.addEventListener('pointerdown', () => {
+      seit = Date.now();
+      wrGezogen = false;
+      wrHalten('finger');
+    });
+    rahmen.addEventListener('pointerup', () => {
+      if (seit && Date.now() - seit > WR_TIPP) wrGezogen = true;
+      seit = 0;
+      wrWeiter('finger');
+    });
+    ['pointercancel', 'pointerleave'].forEach(art =>
+      rahmen.addEventListener(art, () => { seit = 0; wrWeiter('finger'); }));
   }
 
   /* Ein Tab im Hintergrund soll die Seiten nicht durchlaufen lassen. Die
@@ -7788,7 +7817,12 @@
     const dx = ev.changedTouches[0].clientX - wrWisch.x;
     const dy = ev.changedTouches[0].clientY - wrWisch.y;
     wrWisch = null;
-    wrGezogen = Math.abs(dx) > 10 || Math.abs(dy) > 10;
+    /* Nur SETZEN, nie zurücknehmen. Am Finger kommt `pointerup` vor
+       `touchend` — ein `wrGezogen = …` an dieser Stelle löschte das, was das
+       Halten gerade gesetzt hat, und ein stillliegender Daumen blätterte beim
+       Loslassen doch wieder um. Abgeräumt wird der Merker allein beim
+       Aufsetzen und beim Klick, der ihn verbraucht. */
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) wrGezogen = true;
     if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) wrappedZeigen(dx < 0 ? wrWo + 1 : wrWo - 1);
   }, { passive: true });
   // Pfeiltasten nur, solange Wrapped offen ist - Escape läuft im gemeinsamen
