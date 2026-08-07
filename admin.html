@@ -57,169 +57,80 @@
     -webkit-text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
   }
-  .buch { max-width: var(--rand); margin: 0 auto; padding: 0 14px; }
-  /* Solange das Register weg ist — beim Skelett und an der verschlossenen Tür
-     — klebte die Tafel sonst oben am Fensterrand. Den Platz, den die Zungen
-     einnehmen, gibt dann das Buch selbst her. */
-  .register[hidden] + .buch { padding-top: 16px; }
+  /* Der obere Rand steht jetzt fest. Er hing einmal an einer Regel
+     `.register[hidden] + .buch` — das Register lag über dem Buch, und den
+     Platz, den es einnahm, musste das Buch selbst hergeben, sobald es fehlte.
+     Seit die Zungen IM Blatt stehen, gibt es nichts mehr darüber, und der
+     Abstand gilt für jeden Fall gleich. */
+  .buch { max-width: var(--rand); margin: 0 auto; padding: 16px 14px 0; }
 
   /* --- Das Register --------------------------------------------------------
-     Fünf Zungen am oberen Tafelrand, dazu ganz rechts der Weg hinaus. Vorher
-     lagen alle fünf Blätter untereinander auf einer Endlos-Rolle; wer ins
-     Protokoll wollte, scrollte an elf Grafiken vorbei.
+     Drei Zungen und der Weg hinaus. Vorher lagen alle Blätter untereinander
+     auf einer Endlos-Rolle; wer ins Protokoll wollte, scrollte an elf
+     Grafiken vorbei.
 
-     Mittig über AUTO-RÄNDER, nicht über `justify-content: center`: bei einer
-     Reihe, die auf schmalen Schirmen überläuft, schiebt `center` den Anfang
-     nach links aus dem Bild — und dorthin scrollt kein Mensch zurück. Ein
-     `margin-left: auto` an der ersten Zunge zentriert genauso und gibt beim
-     Überlaufen den Platz einfach wieder her.
+     Es hing lange als Reihe HÖLZERNER Zungen über dem Buch, klebend am
+     Fensterrand — ein Register am Einband, aus dem Material des Einbands.
+     Das war in sich stimmig und trotzdem falsch: über der Tafel lag damit ein
+     brauner Streifen, der bei jedem Scrollen mitfuhr, und das Erste, was man
+     vom Kontor sah, war Holz. Die Tafel ist aber das, was man liest.
 
-     Die Zungen stehen 8 px WEITER INNEN als das Brett darunter (`.buch` hat
-     14 px Rand, hier sind es 22). Das ist der Unterschied zwischen einem
-     Register und einem Stapel Zettel: ein Reiter, der über den Buchrand
-     hinausragt, knickt. Bündig ginge auch nicht ganz — das Brett ist an den
-     oberen Ecken um 6 px gerundet, und eine eckige Zungenkante genau auf der
-     Kante stünde über der Rundung, mit einem Stück Hintergrund darunter. Die
-     8 px räumen beides weg: die Zunge sitzt auf der GERADEN Oberkante.
+     Jetzt steht das Register IM Blatt, in Kreide, in der Form der Reiter
+     weiter unten (`.reiter` — Sieb und Zeitraum): dieselbe Pille, dieselbe
+     gefüllte Marke für das Gewählte. Zwei Formen für „hier wird umgeschaltet"
+     wären eine zu viel, und die Kreide-Pille war schon da.
+
+     Verwechselbar wird das nicht, weil zwischen beiden IMMER eine Überschrift
+     steht: das Register, dann `h1`/`h2` mit ihrer Haarlinie, dann erst der
+     Reiter, der siebt. Wer die Reihenfolge einmal umstellt, muss sich das hier
+     wieder ansehen.
+
+     Links ausgerichtet, nicht mittig. Über dem Buch war die Mitte richtig —
+     ein Register sitzt in der Mitte des Einbands. Im Blatt fängt alles am
+     linken Rand an (Überschrift, Reiter, Karten), und eine zentrierte Reihe
+     darüber stünde quer zu allem darunter. Damit fallen auch die beiden
+     Auto-Ränder weg, die das Zentrieren besorgten.
      --------------------------------------------------------------------- */
   .register {
-    position: sticky; top: 0; z-index: 39;
-    display: flex; gap: 2px; padding: 10px 22px 0;
-    max-width: var(--rand); margin: 0 auto;
-    /* Der Verlauf statt einer Fläche: die Zungen sollen am oberen Rand
-       kleben, ohne dass darunter eine Kante durchs Bild wandert. */
-    background: linear-gradient(#14181a 82%, #14181a00);
-    overflow-x: auto; scrollbar-width: none;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    margin-bottom: 16px;
   }
   .register[hidden] { display: none; }
-  .register::-webkit-scrollbar { display: none; }
-  .register button:first-child { margin-left: auto; }
-  /* Die Zungen sind aus HOLZ, nicht aus Schiefer — dieselbe Maserung und
-     dieselben Töne wie der Rahmen, auf dem sie stehen. Sie waren einmal
-     dunkelgraue Kästchen, und in der Vergrößerung sah man, warum das nicht
-     ging: kühles Grau stieß hart auf warmes Braun, und die Zunge wirkte wie
-     ein Loch über dem Rahmen statt wie ein Reiter daran. Ein Registerreiter
-     ist aus dem Material des Einbands, nicht aus dem der Seite.
-
-     Der untere Rand fehlt bei allen: dort geht die Zunge in den Rahmen über,
-     und eine Linie dazwischen wäre die Fuge, die es nicht geben soll. */
+  /* Wortgleich zu `.reiter button` weiter unten, nur trägt die Regel hier auch
+     das <a> des Rückwegs — ein Link ist kein Knopf und erbt weder die
+     Grundform noch das `font: inherit`. */
   .register button, .register .zur-tafel {
-    font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+    font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
     text-decoration: none;
-    border: 1px solid #00000059; border-bottom: none;
-    border-radius: 6px 6px 0 0;
-    background:
-      repeating-linear-gradient(97deg, #ffffff08 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
-      linear-gradient(#3b2917, #31210f);
-    color: var(--kreide-weg);
-    padding: 6px 14px 7px;
-    transition: filter .15s, color .15s;
+    border: 1px solid #ffffff40; border-radius: 999px;
+    background: #ffffff0a; color: var(--kreide-weg);
+    padding: 4px 12px;
+    transition: background .15s, border-color .15s, color .15s;
   }
   .register button:hover, .register .zur-tafel:hover {
-    filter: brightness(1.35); color: var(--kreide-matt);
+    background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
   }
-  /* Das aufgeschlagene Blatt. Der Verlauf endet UNTEN auf genau dem Ton, mit
-     dem der Rahmen darunter oben anfängt (`--holz`) — dadurch läuft die Zunge
-     nahtlos ins Brett, statt darauf zu liegen. Nach oben wird sie heller: das
-     Licht kommt von dort, und der vordere Reiter fängt es. */
-  .register button.an {
-    background:
-      repeating-linear-gradient(97deg, #ffffff0d 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
-      linear-gradient(#84603a, var(--holz));
-    color: var(--kreide); font-weight: 600;
-    border-color: #00000066;
-  }
-  .register button.an:hover { filter: none; }
-  /* Der Zähler tritt über die SCHRIFTGRÖSSE zurück, nicht über Deckkraft. Er
-     stand einmal auf `opacity: .6` — auf dem Holz sind das gemessene 2,8:1,
-     und ein Text, den man erraten muss, ist keine Auskunft. Voll deckend sind
-     es 5,1:1, und einen Punkt kleiner tritt er trotzdem hinter das Wort. */
-  .register button i { font-style: normal; margin-left: 5px; font-size: 11px; }
-  /* Der Weg hinaus schließt an die drei Blatt-Zungen an, statt am rechten Rand
-     zu stehen. Bei fünf Zungen brauchte er den Abstand — sonst hätte man ihn
-     mitten in der Reihe gesucht. Bei dreien steht er einfach dahinter, und die
-     Vierergruppe liest sich als das, was sie ist: alles, was das Register
-     kann.
+  /* Das aufgeschlagene Blatt: volle Kreide, dunkle Schrift — die Marke, die
+     `.reiter` für das gewählte Sieb benutzt. Kein `font-weight` dazu: gefüllt
+     gegen umrissen ist der Unterschied schon, und fett würde die Zunge um ein
+     paar Pixel breiter und schöbe die Reihe bei jedem Wechsel. */
+  .register button.an { background: var(--kreide); border-color: var(--kreide); color: #222a27; }
+  .register button.an:hover { background: #fff; color: #14181a; }
+  /* Der Zähler tritt zurück, aber nicht aus dem Bild: auf der umrissenen Pille
+     sind .65 Deckkraft gegen `--kreide-weg` noch lesbar, und er sitzt auf
+     Schiefer und nicht mehr auf Holz, wo dieselbe Zurücknahme einmal auf 2,8:1
+     fiel. Dieselbe Zahl wie an `.reiter button i`. */
+  .register button i { font-style: normal; opacity: .65; margin-left: 5px; }
 
-     Das `auto` links am ersten und rechts am letzten Element zentriert die
-     Gruppe. Kein `justify-content: center`: bei einer Reihe, die auf schmalen
-     Schirmen überläuft, schiebt `center` den Anfang nach links aus dem Bild —
-     und dorthin scrollt kein Mensch zurück. Zwei Auto-Ränder zentrieren
-     genauso und geben den Platz beim Überlaufen einfach wieder her. */
-  .register .zur-tafel { margin-right: auto; }
-
-  /* --- Das Register auf einem Handy ---------------------------------------
-     Sechs Zungen in voller Größe brauchen 592 px, ein Handy hat 390. Vorher
-     lag der Rest hinter dem rechten Rand: „Protokoll" und der Weg zur Tafel
-     waren nur durch Querscrollen zu erreichen, und dass es dort weitergeht,
-     sah man nicht.
-
-     Drei Griffe, in dieser Reihenfolge — jeder allein reicht nicht:
-
-       1. Aus „← zur Tafel" wird „←". Spart 58 px. Das Wort steht neben fünf
-          Substantiven ohnehin doppelt: die anderen fünf Zungen führen INS
-          Kontor, diese eine hinaus, und das sagt der Pfeil.
-       2. Schrift und Polsterung enger. Spart noch einmal rund 80 px. Die
-          ZÄHLER bleiben — sie sind der Grund, warum die Zungen überhaupt
-          Zahlen tragen: man soll sehen, dass etwas wartet, ohne hinzugehen.
-          Sie kosten die letzten 20 px, die zu einer einzigen Reihe auf dem
-          Handy fehlen, und sind es wert.
-       3. Und weil es dann immer noch nicht reicht, bricht die Reihe um,
-          statt abzuschneiden. `flex-wrap` regelt das selbst: eine Reihe,
-          solange sie passt, sonst zwei — kein zweiter Umschaltpunkt, den
-          jemand pflegen muss.
-
-     Gemessen: eine Reihe ab 470 px, darunter zwei (73 statt 40 px hoch),
-     Querscrollen bei keiner Breite mehr, auch nicht bei 320.
-
-     `overflow-x: visible` muss dazu: mit `auto` bliebe die Reihe eine
-     Scrollfläche und bräche nie um. Und das `margin-left: auto` der ersten
-     Zunge muss weg, sonst schöbe es die obere Reihe nach rechts — zentriert
-     wird nur, was in eine Zeile passt.
-
-     Die Grenze steht auf 480 px. Sie lag einmal bei 700, als hier noch sechs
-     Zungen standen und die volle Fassung 620 px brauchte — überall darunter
-     hätte sie überlaufen können, und außerhalb dieser Regeln gibt es kein
-     `flex-wrap`, das sie auffinge. Seit Protokoll und Rundmail auf der
-     Übersicht liegen, sind es vier Zungen und 412 px, also ist bei 480 reichlich
-     Luft. Der engere Schnitt ist wichtig: gestreckt gehören die Zungen aufs
-     Handy, und auf einem Tablet mit 700 px wären sie 188 px breite Bänder.
-     --------------------------------------------------------------------- */
-  @media (max-width: 480px) {
-    /* Der seitliche Rand bleibt der von oben: er hält die Zungen auf der
-       geraden Oberkante des Bretts, und den hier zu kürzen, um vier Pixel
-       Breite zu gewinnen, ließ sie über den Rahmen hinausragen. */
-    .register { flex-wrap: wrap; overflow-x: visible; row-gap: 3px; }
-    .register button, .register .zur-tafel { font-size: 11.5px; padding: 5px 9px 6px; }
-    /* Über die ganze Breite. Vier Zungen lassen bei 390 px rund 80 px übrig,
-       und die als Loch rechts stehen zu lassen, sähe aus, als fehlte dort noch
-       etwas. `1 1 auto` und nicht `1 1 0`: der Platz wird zu gleichen Teilen
-       VERTEILT, die Zungen bleiben aber unterschiedlich breit, wie ihre Wörter.
-       Gleich breit gemacht bekäme der Pfeil so viel Raum wie „Mitglieder", und
-       ein Knopf, der zu neun Zehnteln leer ist, sieht aus wie ein Fehler.
-
-       Die beiden `margin-left: auto` müssen dafür weg — ein automatischer Rand
-       schluckt den freien Platz, BEVOR `flex-grow` ihn verteilen darf, und die
-       Zungen blieben so schmal wie zuvor. Zentriert wird hier ohnehin nichts
-       mehr: was die volle Breite füllt, hat keine Mitte zu suchen. */
-    /* BEIDE Auto-Ränder müssen weg, nicht nur der linke: ein automatischer
-       Rand schluckt den freien Platz, bevor `flex-grow` ihn verteilen darf,
-       und die Zungen blieben so schmal wie ihre Wörter. */
-    .register button, .register .zur-tafel { flex: 1 1 auto; margin-left: 0; margin-right: 0; }
-    /* Ohne das Wort bliebe vom Weg hinaus sonst ein Knopf von 30 px — schmaler
-       als jedes andere Ziel auf dieser Seite und schmaler, als ein Daumen
-       trifft. Die Obergrenze zieht die andere Linie: bricht die Reihe doch
-       einmal um (unter ~350 px), stünde der Pfeil sonst allein in der zweiten
-       Zeile und würde sich über deren volle Breite ziehen — ein handbreiter
-       Knopf für ein Zeichen. Mit der Grenze bleibt daneben Platz frei, und
-       `justify-content` schiebt ihn dorthin, wo er hingehört: nach rechts. */
-    .register { justify-content: flex-end; }
-    .register .zur-tafel {
-      min-width: 44px; max-width: 88px;
-      display: inline-flex; align-items: center; justify-content: center;
-    }
-    .register .zur-tafel .wort { display: none; }
-  }
+  /* Auf schmalen Schirmen bricht die Reihe um, statt abzuschneiden — das
+     besorgt `flex-wrap` von selbst, und es ist dieselbe Antwort, die die
+     Reiter weiter unten seit jeher geben. Der ganze Block, der hier stand
+     (engere Schrift, gestreckte Zungen, „← zur Tafel" auf „←" gekürzt), ist
+     damit gegenstandslos: er löste ein Platzproblem, das die hölzernen Zungen
+     hatten, weil sie eine Scrollfläche waren und nie umbrechen konnten. Die
+     Kreide-Pillen brechen einfach um. Gemessen bleiben im Blatt eines
+     390er-Handys 307 px nutzbare Breite; die vier Pillen brauchen 387 und
+     stehen dort in zwei Reihen. */
 
   /* Ein Blatt ist hier eine Tafel: Schiefer im Holzrahmen, wie das Brett der
      Hauptseite — samt Korn und den Schlieren vom letzten Wischen. Der Rahmen
@@ -688,9 +599,13 @@
 
   @media (hover: none), (pointer: coarse) {
     .wahl-ebene { align-items: flex-end; padding: 0; }
+    /* Ohne Rahmen. Am Rechner ist das Blatt eine Tafel, die im Raum hängt, und
+       eine Tafel hat einen Rahmen. Am Finger ist es ein Bogen, der von unten
+       hochkommt — da wäre der Holzbalken oben kein Rahmen mehr, sondern ein
+       Balken quer über der Oberkante, genau dort, wo der Griff liegt. */
     .wahl-blatt {
       width: 100%; max-width: 520px; margin: 0 auto;
-      border-width: 6px 0 0; border-radius: 10px 10px 0 0;
+      border-width: 0; border-radius: 10px 10px 0 0;
       padding-top: 0; animation: wahl-hoch .22s ease-out;
     }
     .wahl-griff { display: block; }
@@ -718,12 +633,6 @@
 </head>
 <body>
 
-<!-- Die Zungen. Leer, bis `laden()` weiß, ob überhaupt jemand hereindarf —
-     ein Register über dem Skelett verspräche fünf Blätter, die es vielleicht
-     gar nicht gibt, und über der verschlossenen Tür wären es fünf Türen, die
-     alle zu sind. -->
-<nav class="register" id="register" aria-label="Blätter des Kontors" hidden></nav>
-
 <div class="buch">
 
   <!-- Das einzige, was ohne `hidden` startet: bis der erste Abruf da ist, ist
@@ -739,8 +648,18 @@
   <!-- Die Übersicht. Titel und Anmeldung stehen hier oben und nicht in einer
        eigenen Leiste: eine Kopfleiste gab es zwischenzeitlich, sie war eine
        zweite Navigation neben dem Register und flog wieder raus. Der Weg
-       zurück zur Tafel hängt jetzt als letzte Zunge im Register. -->
+       zurück zur Tafel hängt als letzte Zunge im Register.
+
+       Das Register steht HIER im Markup und nicht mehr über dem Buch. Es
+       wandert von hier aus in das jeweils aufgeschlagene Blatt — das besorgt
+       `registerZeichnen()`, siehe dort. Im Markup muss es trotzdem irgendwo
+       stehen, und das erste Blatt ist auch das erste, das aufgeschlagen wird.
+       Leer bleibt es, bis `laden()`
+       weiß, ob überhaupt jemand hereindarf: ein Register über dem Skelett
+       verspräche Blätter, die es vielleicht gar nicht gibt, und in der
+       verschlossenen Tür wären es Türen, die alle zu sind. -->
   <section class="blatt" id="kopf-blatt" aria-label="Übersicht" hidden>
+    <nav class="register" id="register" aria-label="Blätter des Kontors" hidden></nav>
     <h1>Kontor</h1>
     <p class="unter" id="wer"></p>
     <div class="zahlen" id="zahlen"></div>
@@ -2173,8 +2092,23 @@
     ? String(stand.nutzer.filter(u => !u.entfernt).length)
     : null;
 
+  /* Das Register steht IM Blatt, und es gibt nur eines davon — also wandert
+     es beim Blättern mit. `prepend` setzt es vor die Überschrift, und weil ein
+     Element nur an einer Stelle im Dokument hängen kann, räumt derselbe Aufruf
+     es aus dem alten Blatt weg; ein zweites Entfernen braucht es nicht.
+
+     Der Umzug steht in DIESER Funktion und nicht in `blattAuf`, weil sie die
+     einzige ist, die beide Wege gehen: `blattAuf` beim Blättern, `laden()`
+     beim Aufschlagen und nach jeder Handlung. Ein Register in einem Blatt, das
+     gerade `hidden` ist, ist unsichtbar und nicht zu erreichen — hier kann das
+     nicht passieren, egal welcher Weg gerade lief.
+
+     Die Zuhörer an den Zungen überleben den Umzug — `prepend` verschiebt den
+     Knoten, es baut ihn nicht neu. Der Inhalt wird ohnehin gleich darunter
+     frisch gebaut. */
   function registerZeichnen() {
     const ziel = $('register');
+    $(offen).prepend(ziel);
     ziel.textContent = '';
     ZUNGEN.forEach(([id, titel]) => {
       const b = el('button', id === offen ? 'an' : null, titel);
@@ -2185,28 +2119,44 @@
       b.addEventListener('click', () => blattAuf(id));
       ziel.appendChild(b);
     });
-    /* Der Weg hinaus. Er stand bisher als Link oben im Kopf-Blatt; dort war er
+    /* Der Weg hinaus. Er stand einmal als Link oben im Kopf-Blatt; dort war er
        nur von der Übersicht aus zu sehen, und wer im Protokoll stand, kürzte
-       die Adresse von Hand. Als letzte Zunge gehört er zur Reihe, aber sein
-       eigenes `margin-left: auto` rückt ihn ans andere Ende — die fünf
-       Blatt-Zungen bleiben dadurch mittig.
+       die Adresse von Hand. Als letzte Zunge schließt er an die drei anderen
+       an — der Pfeil sagt, dass diese eine hinaus führt und die drei davor
+       hinein.
 
-       Der Pfeil steht für sich, das Wort hängt in einem eigenen `span`: auf
-       schmalen Schirmen blendet das Blatt es aus, und die sechs Zungen passen
-       dadurch in eine Reihe, wo sie sonst nicht hineinpassten. Der Name für
-       Vorleseprogramme bleibt in BEIDEN Fällen derselbe — er enthält den
-       sichtbaren Text, auch wenn der gerade nur ein Pfeil ist. */
-    const raus = el('a', 'zur-tafel', '←');
-    raus.appendChild(el('span', 'wort', ' zur Tafel'));
+       Das Wort hing hier einmal in einem eigenen `span`, damit die Handy-Regel
+       es ausblenden und aus der Zunge ein „←" machen konnte. Das war der Preis
+       dafür, sechs hölzerne Zungen in eine Reihe zu zwängen, die nicht
+       umbrechen konnte. Die Kreide-Pillen brechen um, also steht das Wort
+       wieder da — und der eigene `aria-label` fällt mit ihm weg, weil der
+       sichtbare Text jetzt immer der ganze ist. */
+    const raus = el('a', 'zur-tafel', '← zur Tafel');
     raus.href = './';
-    raus.setAttribute('aria-label', 'zurück zur Tafel');
     ziel.appendChild(raus);
   }
 
   function blattAuf(id) {
+    /* Wer mit der Tastatur blättert, verlöre sonst den Fokus. Zwei Dinge
+       nehmen ihn der gedrückten Zunge weg, und beide passieren gleich: die
+       Zeile darunter macht ihr Blatt `hidden` — ein Element in einem
+       `display: none` blurrt von selbst —, und `registerZeichnen()` wirft die
+       Zunge danach ohnehin weg und baut sie neu. Der Fokus landet auf
+       `<body>`, und man tabbt sich von ganz oben durch das ganze Blatt, um
+       zur nächsten Zunge zu kommen. (Gemessen; das galt schon, als das
+       Register noch aus Holz über dem Buch hing.)
+
+       Gefragt werden muss VOR dem `hidden`, denn danach steht die Antwort
+       nicht mehr zur Verfügung. Und nur, wenn der Fokus wirklich im Register
+       saß: die Querverweiskarten der Übersicht rufen `blattAuf` auch auf, und
+       wer von „zum Protokoll →" kommt, gehört danach nicht an eine Zunge.
+
+       `preventScroll`, weil die Zeile darunter selbst nach oben rollt. */
+    const vomRegister = $('register').contains(document.activeElement);
     offen = id;
     BLAETTER.forEach(b => { $(b).hidden = b !== id; });
     registerZeichnen();
+    if (vomRegister) $('register').querySelector('button.an')?.focus({ preventScroll: true });
     // Ein Tooltip aus dem Blatt, das gerade weggeklappt ist, stünde sonst
     // über dem neuen und zeigte auf nichts.
     Bilder.tippZu();

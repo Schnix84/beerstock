@@ -80,35 +80,38 @@
   .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
 
   /* --- Der Weg zurück ------------------------------------------------------
-     Eine Registerzunge am oberen Rand des Bretts, wie im Kontor: aus Holz,
-     mit derselben Maserung wie der Rahmen, auf dem sie sitzt. Sie stand
-     vorher als gestrichelter Link IM Blatt, über der Überschrift — dort war
-     sie das erste, was man las, obwohl sie das letzte ist, was man braucht.
+     Er hing eine Zeit lang als hölzerne Registerzunge über dem Brett, wie im
+     Kontor. Das Holz war dort aber der Rahmen einer Seite, die es nicht gibt:
+     diese Seite hat EIN Blatt, und ein Register über einem einzigen Blatt
+     registriert nichts. Übrig blieb ein brauner Reiter, der über dem Bild
+     stand und nichts sortierte.
 
-     Am rechten Rand, weil sie hinausführt: alles auf dieser Seite liest man
-     von links, und was wieder heraus führt, sammelt sich rechts. Und 8 px
-     weiter innen als das Brett — bündig stünde die eckige Zungenkante über
-     dessen 6-px-Rundung, mit einem Stück Hintergrund darunter.
+     Jetzt steht er auf der Tafel, in Kreide, auf der Zeile der Überschrift.
+     Rechts, weil er hinausführt: alles hier liest man von links, und was
+     wieder heraus führt, sammelt sich rechts. Auf der Zeile der Überschrift,
+     weil er dann nicht mehr das ERSTE ist, was man liest — genau der Vorwurf,
+     der ihn seinerzeit aus dem Blatt und aufs Holz getrieben hat.
+
+     Die Form ist der gestrichelte Link, den die verschlossene Tür weiter unten
+     ohnehin benutzt. Kein eigener Knopf dafür: was zweimal dasselbe tut, sieht
+     zweimal gleich aus.
+
+     `align-items: baseline` und nicht `center` — die Überschrift ist 36 px
+     hoch, der Link 13, und mittig ausgerichtet schwämme er in ihrer Mitte
+     statt auf ihrer Linie zu stehen. Die Drehung der Überschrift geht in die
+     Rechnung nicht ein (eine `transform` bewegt kein Layout), sie hebt nur
+     ihren Schwanz um gut zwei Pixel — das ist Handschrift und kein Versatz.
+
+     Der Abstand nach unten ist von der Überschrift auf die ZEILE gewandert:
+     an der Überschrift wäre er der Abstand eines Elements, das die Zeile nicht
+     mehr allein füllt, und der Link hinge über den Bildern.
      --------------------------------------------------------------------- */
-  .register {
-    display: flex; justify-content: flex-end;
-    max-width: 760px; margin: 0 auto; padding: 0 8px;
+  .kopfzeile {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 14px;
+    margin-bottom: 18px;
   }
-  .register .zur-tafel {
-    font: inherit; font-size: 12.5px; white-space: nowrap; text-decoration: none;
-    border: 1px solid #00000059; border-bottom: none;
-    border-radius: 6px 6px 0 0;
-    background:
-      repeating-linear-gradient(97deg, #ffffff08 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
-      linear-gradient(#3b2917, #31210f);
-    color: var(--kreide-weg);
-    padding: 6px 14px 7px;
-    transition: filter .15s, color .15s;
-  }
-  .register .zur-tafel:hover { filter: brightness(1.35); color: var(--kreide-matt); }
+  .kopfzeile .zurueck { margin-left: auto; white-space: nowrap; }
 
-  /* Der gestrichelte Link bleibt — die verschlossene Tür benutzt ihn weiter,
-     und dort ist er ein Satzende („meldet sich an") und keine Zunge. */
   .zurueck {
     display: inline-block; color: var(--kreide-weg); font-size: 13px;
     text-decoration: none; border-bottom: 1px dashed #ffffff2e; padding-bottom: 1px;
@@ -117,11 +120,7 @@
   h1 {
     font-family: var(--hand); font-weight: 400;
     font-size: clamp(26px, 7vw, 36px); line-height: 1.15;
-    /* Kein Abstand nach oben mehr: der stand für den Rückweg-Link, der hier
-       einmal darüber lag. Seit der als Zunge am Brett hängt, ist die
-       Überschrift das erste im Blatt und braucht nur die Polsterung der
-       Tafel. */
-    margin: 0 0 18px; transform: rotate(-.8deg); transform-origin: left;
+    margin: 0; transform: rotate(-.8deg); transform-origin: left;
   }
 
   /* --- Der Zeitraum ------------------------------------------------------- */
@@ -177,12 +176,12 @@
 </style>
 </head>
 <body>
-<nav class="register" aria-label="Weg zurück">
-  <a class="zur-tafel" href="./">← zur Tafel</a>
-</nav>
 <div class="brett">
   <div class="tafel">
-    <h1 class="kr">Statistiken</h1>
+    <div class="kopfzeile">
+      <h1 class="kr">Statistiken</h1>
+      <a class="zurueck" href="./">← zur Tafel</a>
+    </div>
 
     <div class="reiter" id="zeitraum" hidden></div>
 
