@@ -44,74 +44,46 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', ev => ev.waitUntil(self.clients.claim()));
 
-/* WebKit nimmt die Marke entgegen und tut nichts damit. Das ist kein Verdacht,
-   sondern ein offener Fehler: WebKit-Bug 258922, „Push notifications with same
-   tag do not replace each other", angelegt im Juli 2023 und im Juli 2026 immer
-   noch `NEW`. Auf dem iPhone stapeln sich damit drei Zettel zu einem dreimal
-   verschobenen Abend — genau das, was die Marke verhindern soll.
+/* WEBKIT IGNORIERT DIE MARKE, UND ES IST NICHT ZU UMGEHEN. Nicht vermutet,
+   sondern am iPhone gemessen (2026-08-07) — wer es noch einmal versuchen will,
+   liest bitte erst diese sechs Zeilen.
 
-   Das Gegenmittel steht im Bug-Thread selbst: die liegenden Meldungen mit
-   dieser Marke suchen und schließen, bevor die neue kommt. `getNotifications`
-   kann WebKit, nur das Zusammenfassen nicht.
+   Der Fehler ist bekannt: WebKit-Bug 258922, „Push notifications with same tag
+   do not replace each other", angelegt im Juli 2023, im Juli 2026 immer noch
+   `NEW`. WebKit nimmt `tag` entgegen und benutzt es nicht zum Zusammenfassen.
 
-   NUR AUF WEBKIT, und das ist der Grund für die hässliche Kennungsprüfung: wo
-   die Marke funktioniert, ersetzt der Browser lautlos. Erst schließen und dann
-   neu zeigen wäre dort eine NEUE Meldung — sie würde klingeln. Bei einem
-   Notruf, dessen Kreis erweitert wird, bekämen alle, die ihn schon haben, ein
-   zweites Mal Ton. Fällt der Bug irgendwann, kann diese ganze Funktion weg. */
-const WEBKIT_STAPELT = /AppleWebKit/.test(self.navigator.userAgent)
-  && !/Chrome|Chromium|Edg\//.test(self.navigator.userAgent);
+   Das Gegenmittel aus dem Bug-Thread — die liegenden Meldungen selbst suchen
+   und schließen — WURDE GEBAUT UND WIEDER AUSGEBAUT. Gemessen hat es der
+   Meldedienst selbst, indem er sein Ergebnis in die Meldung schrieb:
+   `getNotifications({tag})` FINDET die liegende Meldung (1 von 1), `close()`
+   läuft ohne Fehler — und danach steht sie immer noch da, auch aus Sicht des
+   Meldedienstes. `close()` ist dort schlicht folgenlos. Ein Wimpernschlag
+   Wartezeit dazwischen änderte nichts.
 
-async function marke_freiraeumen(marke) {
-  if (!WEBKIT_STAPELT || !marke) return;
-  try {
-    const liegen = await self.registration.getNotifications({ tag: marke });
-    liegen.forEach(n => n.close());
-  } catch { /* dann liegt eben eine zu viel — besser als gar keine */ }
-}
+   Damit gilt: auf Android ersetzt `tag` wie vorgesehen, auf dem iPhone stapeln
+   sich die Zettel. Drei Verschiebungen eines Abends sind dort drei Meldungen.
+   Das ist ärgerlich und derzeit die Wahrheit. Fällt 258922 irgendwann, wirkt
+   `tag` von selbst — es steht ja weiter dran, es wird nur nicht beachtet. */
 
 self.addEventListener('push', ev => {
   let d = {};
   try { d = ev.data ? ev.data.json() : {}; } catch { d = {}; }
 
-  ev.waitUntil((async () => {
-    /* ---- VORUEBERGEHENDE DIAGNOSE, wieder entfernen ----------------------
-       Zwei Fragen auf einmal, und die Antwort reist in der Meldung selbst
-       mit, weil ein Service Worker sonst niemandem etwas sagen kann:
-       WELCHE Fassung laeuft ueberhaupt (`sw4`), und SIEHT sie die liegende
-       Meldung (`tag:` mit Filter, `alle:` ohne). Daraus faellt heraus, ob
-       `getNotifications` auf iOS gar nichts liefert oder nur der Filter
-       danebengreift. -------------------------------------------------- */
-    let diagnose = '';
-    try {
-      const vorher = (await self.registration.getNotifications({ tag: d.tag })).length;
-      await marke_freiraeumen(d.tag);
-      /* Ein Wimpernschlag zwischen Schliessen und Zeigen: falls iOS das
-         Wegnehmen nur asynchron verbucht, faellt die neue Meldung sonst in
-         dieselbe Runde und der Sperrbildschirm behaelt beide. Kostet nichts,
-         wenn es nicht daran lag. */
-      await new Promise(r => setTimeout(r, 400));
-      const nachher = (await self.registration.getNotifications({ tag: d.tag })).length;
-      diagnose = `\n[sw5 · vorher: ${vorher} · nach dem Schliessen: ${nachher}]`;
-    } catch (e) {
-      diagnose = `\n[sw5 · wirft: ${e && e.name}]`;
-      await marke_freiraeumen(d.tag);
-    }
-    await self.registration.showNotification(d.titel || 'Wer hat kalt', {
-      body: (d.text || '') + diagnose,
-      /* Die Marke ersetzt eine liegende Meldung, statt sich danebenzustellen:
-         wer einen Abend dreimal verschiebt, hinterlässt sonst drei Zettel, von
-         denen zwei falsch sind. Vergeben wird sie im Worker (`stosse`) — und
-         auf WebKit räumt `marke_freiraeumen` von Hand vor. */
-      tag: d.tag || undefined,
-      icon: 'icon.png?v=3',    // liegt neben dieser Datei; `?v=` siehe index.html
-      /* Das Ziel reist an der Meldung mit und wird erst beim Antippen gebraucht.
-         Es ist immer eine vollständige Adresse (der Worker baut sie aus `SEITE`)
-         — eine relative würde sich gegen *diese Datei* auflösen und landete auf
-         `sw.js#los=41`. */
-      data: { url: d.url || self.registration.scope },
-    });
-  })());
+  ev.waitUntil(self.registration.showNotification(d.titel || 'Wer hat kalt', {
+    body: d.text || '',
+    /* Die Marke ersetzt eine liegende Meldung, statt sich danebenzustellen:
+       wer einen Abend dreimal verschiebt, hinterlässt sonst drei Zettel, von
+       denen zwei falsch sind. Vergeben wird sie im Worker (`stosse`).
+       Auf iOS wirkungslos, siehe oben — dort bleibt sie ein Versprechen an
+       einen Browser, der es noch nicht einlöst. */
+    tag: d.tag || undefined,
+    icon: 'icon.png?v=3',    // liegt neben dieser Datei; `?v=` siehe index.html
+    /* Das Ziel reist an der Meldung mit und wird erst beim Antippen gebraucht.
+       Es ist immer eine vollständige Adresse (der Worker baut sie aus `SEITE`)
+       — eine relative würde sich gegen *diese Datei* auflösen und landete auf
+       `sw.js#los=41`. */
+    data: { url: d.url || self.registration.scope },
+  }));
 });
 
 /* Angetippt. Der übliche Fall auf dem Handy ist: die Tafel liegt schon
