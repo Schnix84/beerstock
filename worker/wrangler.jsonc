@@ -54,6 +54,23 @@
     // `seitenStand` in src/index.js.
     "SEITE_REPO": "Schnix84/beerstock",
 
+    // Der oeffentliche VAPID-Schluessel fuer Web-Push (Schema 23). Kein
+    // Geheimnis - er steht ohnehin in jeder Antwort von GET /api/me, weil die
+    // Seite ihn braucht, um ein Abo anzulegen. Sein privates Gegenstueck
+    // liegt als Secret:
+    //     npx wrangler secret put VAPID_PRIVAT      (JWK-JSON, eine Zeile)
+    //
+    // DIE BEIDEN GEHOEREN ZUSAMMEN UND DUERFEN NIE EINZELN WECHSELN: ein Abo
+    // im Browser haengt fest an dem oeffentlichen Schluessel, mit dem es
+    // angelegt wurde. Wer hier ein neues Paar eintraegt, macht damit
+    // stillschweigend jedes bestehende Abo ungueltig - die Geraete melden
+    // sich beim naechsten Senden mit 403 ab, nicht mit 410, und die Zeilen
+    // bleiben stehen. Dann `DELETE FROM push_abos` von Hand hinterher.
+    //
+    // Fehlt eine der beiden Haelften, bleibt Push aus (siehe `pushBereit` in
+    // src/webpush.js); GET /api/health sagt es unter `push`.
+    "VAPID_PUBLIK": "BGNk4N5_iGu3F4dawi9J2-hNq21x8XfNAiSnPWyyhhuuXHReARQgd9xnqzevem8IRXQY51oHS7qWV8kc5OBy0R4",
+
     // Die oeffentliche Adresse des Bilder-Buckets, OHNE Schraegstrich am Ende.
     // Sie entsteht erst, wenn im Dashboard unter R2 > beerstock-bilder >
     // Settings die "Public Development URL" (r2.dev) eingeschaltet wird -

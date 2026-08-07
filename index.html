@@ -3,10 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kaltes Bier</title>
+<title>Wer hat kalt</title>
 <meta name="description" content="Wer gerade am meisten kaltes Bier hat — angeschrieben an der Kneipentafel.">
 <meta name="theme-color" content="#20262a">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
+<!-- Die Tafel als App auf dem Bildschirm — und das ist kein Selbstzweck:
+     iPhones geben Push-Meldungen NUR an Seiten heraus, die auf dem
+     Home-Bildschirm liegen (und erst ab iOS 16.4). Android braucht das nicht,
+     dort genügt der offene Tab. Wer nichts installiert, merkt von diesen vier
+     Zeilen nichts.
+
+     Drei Geschwisterdateien gehören dazu — `manifest.webmanifest`, `sw.js`
+     und `icon.png` —, und das ist die eine bewusste Ausnahme vom Grundsatz
+     „eine geschlossene Datei": ein Service Worker MUSS eine eigene Datei
+     gleicher Herkunft sein, und iOS nimmt für das App-Symbol keine
+     `data:`-Adresse an (dann steht dort nur ein Bildschirmfoto der Seite).
+     `og.png` liegt aus demselben Grund schon nebenan. Was NICHT passiert:
+     `sw.js` fasst die Auslieferung der Seite nicht an — kein Cache, kein
+     fetch-Zuhörer. Steht auch dort noch einmal.
+
+     `icon.png` bedient alle drei Stellen auf einmal: das Symbol auf dem
+     iPhone-Bildschirm, den Eintrag im Manifest (512×512 genügt Chrome als
+     Installkriterium) und das Bild in der Push-Meldung selbst.
+
+     Drei Dinge, die im Manifest NICHT stehen und dort auch nicht stehen
+     könnten (eine JSON-Datei trägt keine Kommentare):
+     · `start_url` und `scope` sind RELATIV (`./`). Sie lösen sich gegen die
+       Manifest-Adresse auf und stimmen damit hier wie unter `/beerstock/` —
+       ein fest eingetragenes `/beerstock/` wäre auf der Testinstanz falsch.
+     · `id` fehlt mit Absicht. Es löst sich als einziges Feld gegen die
+       HERKUNFT auf und nicht gegen das Manifest: `./` hieße dort
+       `schnix84.github.io/` und wäre auf einer geteilten Pages-Domain die
+       Kennung jeder anderen App daneben. Ohne Angabe gilt `start_url`.
+     · `orientation` fehlt ebenfalls. Die Tafel steht oft lange offen, auf
+       einem Tisch, auf einem Tablet — quer ist kein Fehlgriff. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Wer hat kalt">
+<link rel="apple-touch-icon" href="icon.png">
 <!-- Das Schild, das andere von dieser Seite sehen: WhatsApp, Signal, Telegram
      und die eigene Link-Vorschau im Kommentarfeld lesen den Kopf, nicht die
      Seite. Ohne `og:image` bleibt die Karte bildlos - das Favicon zaehlt dabei
@@ -19,8 +55,8 @@
      tun nur die Sammler. Adresse absolut, weil relative Angaben nur die
      Haelfte von ihnen aufloest. -->
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Kaltes Bier">
-<meta property="og:title" content="Kaltes Bier">
+<meta property="og:site_name" content="Wer hat kalt">
+<meta property="og:title" content="Wer hat kalt">
 <meta property="og:description" content="Wer gerade am meisten kaltes Bier hat — angeschrieben an der Kneipentafel.">
 <meta property="og:url" content="https://schnix84.github.io/beerstock/">
 <meta property="og:image" content="https://schnix84.github.io/beerstock/og.png">
@@ -1898,6 +1934,13 @@
      trotzdem (groessere Schrift im System), steht die Note als Unterzeile -
      das sieht ordentlich aus, kostet nur die 27 px wieder. */
   .tuer-note { font-size: 11.5px; line-height: 1.5; color: var(--kreide-weg); }
+  /* Dieselbe Note, aber als eigener Absatz über dem Einsetzfeld statt als
+     Beisatz in einer Kopfzeile — dort trägt sie keinen `margin`, hier braucht
+     sie einen. Die Trennlinie darüber sagt: das ist der ANDERE Weg herein,
+     nicht der zweite Schritt des Formulars darüber. */
+  #einsetz-note {
+    margin: 14px 0 10px; padding-top: 12px; border-top: 1px dashed #ffffff2e;
+  }
 
   /* --- Draussen ------------------------------------------------------------
      Wer nicht mitschreibt, sieht den Siegerplatz, das Glas und die Ampel -
@@ -2555,6 +2598,37 @@
             <button class="knopf" type="submit">Link schicken</button>
           </form>
 
+          <!-- Der zweite Weg herein, und es gibt ihn NUR in der installierten
+               App. Der Grund ist eine Eigenheit von iOS, die sonst niemand
+               bemerkt: eine Seite auf dem Home-Bildschirm hat ihren eigenen
+               Speicher — das Token aus Safari wandert beim Installieren nicht
+               mit —, und der Link in der Anmelde-Mail öffnet beim Antippen
+               IMMER Safari, nie diese App. Ohne dieses Feld bliebe die Tafel
+               auf dem iPhone-Bildschirm dauerhaft abgemeldet und könnte damit
+               auch nie abonnieren, wofür man sie überhaupt installiert hat.
+
+               Deshalb steht auf dem Zettel darüber „kopieren", nicht
+               „klicken": der Link gilt einmal und fünfzehn Minuten. Wer ihn
+               antippt, hat ihn in Safari verbraucht, und hier kommt dann nur
+               noch „Der Link gilt nicht mehr" an.
+
+               Dasselbe Formular wie darüber, dieselben Klassen: es ist
+               derselbe Vorgang, nur mit der Zwischenablage statt der
+               Adresszeile. -->
+          <form id="einsetz-form" hidden>
+            <p class="tuer-note" id="einsetz-note">
+              Schon einen Link im Postfach? In der App öffnet er sich nur über
+              den Umweg: gedrückt halten, „Kopieren“, hier einsetzen.
+            </p>
+            <div class="melde eins">
+              <label><span class="feld-label">Link aus der Mail</span>
+                <input class="feld" id="f-link" type="text" inputmode="url"
+                       autocomplete="off" autocapitalize="off" spellcheck="false"
+                       placeholder="hier einfügen" required></label>
+            </div>
+            <button class="knopf" type="submit">Anmelden</button>
+          </form>
+
           <p class="sagt" id="sagt" hidden></p>
         </div>
       </section>
@@ -2786,6 +2860,31 @@
         <button class="ko-tat" id="dk-laut" type="button">wieder anschalten</button>
       </p>
       <div id="dk-schalter"></div>
+
+      <!-- Push auf diesem Gerät. Ein siebter Schalter in derselben Form wie
+           die sechs darüber, und ausdrücklich KEIN eigener Kasten mit eigenem
+           Titel: die Frage „was will ich erfahren" ist oben beantwortet, hier
+           steht nur noch „auf welchem Weg" — und zwei Schalterreihen für
+           dieselbe Sache wären die sicherste Art, dass niemand die zweite
+           findet.
+
+           Er steht auf „aus", solange keiner läuft, und der Zustand kommt
+           nicht aus dem Speicher, sondern vom Browser selbst
+           (`pushManager.getSubscription()`): ein Abo lässt sich in den
+           Systemeinstellungen abstellen, ohne dass diese Seite je davon hört.
+
+           Der ganze Block bleibt weg, wenn der Worker kein Push kann
+           (`vapid: null`) — ein Schalter, der nichts tut, ist schlimmer als
+           keiner. Warum er auf dem iPhone erst nach dem Installieren
+           erscheint, steht dann in der Zeile darunter. -->
+      <div id="dk-push" hidden>
+        <label class="dk-schalter" id="dk-push-zeile">
+          <input type="checkbox" id="dk-push-box">
+          <span class="dk-kasten"></span>
+          <span class="dk-text">Zusätzlich sofort auf dieses Gerät</span>
+        </label>
+        <p class="dk-folge" id="dk-push-folge" hidden></p>
+      </div>
 
       <!-- Nur die Zahl und der eine Weg hinaus. Hier stand kurzzeitig eine
            Liste aller gültigen Token mit „zuletzt gesehen" und einem Knopf je
@@ -4749,6 +4848,11 @@
     $('name-form').hidden = !namenlos;
     $('tuersteher').hidden = drin || linkRaus;
     $('anmelde-form').hidden = drin || linkRaus;
+    /* Das Einsetzfeld hängt NICHT an `linkRaus`, anders als alles andere hier:
+       gerade dann, wenn der Link eben rausgegangen ist, wird es gebraucht. Und
+       nur in der installierten App — im Browser gibt es das Problem nicht, dort
+       öffnet der Link diese Seite. Siehe den Zettel am Formular. */
+    $('einsetz-form').hidden = drin || !ALS_APP;
     /* Rad, Abende und die lesbare Liste haengen an dieser einen Klasse. Dazu
        `inert`: die Unschaerfe ist nur Farbe, die Sternknoepfe in den Zeilen
        blieben sonst mit der Tabulatortaste erreichbar und oeffneten das
@@ -7858,6 +7962,11 @@
     termin_aendert: 'wenn ein Abend sich ändert',
     echo:           'wenn jemand mir antwortet',
     rundmail:       'gelegentliche Nachricht vom Wirt',
+    /* Kam mit dem Empfängerkreis dazu und stand hier noch nicht — im Deckel
+       las man deshalb den nackten Schlüssel „notruf" zwischen fünf ganzen
+       Sätzen. Der Rückfall in `deckelZeichnen` fängt das ab, gut aussehen tut
+       er nicht. */
+    notruf:         'wenn jemand Bier oder Gesellschaft braucht',
   };
   /* Die einzige Abwahl mit einer Folge, und die gehört im Klartext darunter —
      wer sie nicht kennt, wundert sich drei Stunden später über einen Abend,
@@ -7958,6 +8067,11 @@
     // `/api/me` trug die Rolle schon immer mit, nur hat sie hier nie jemand
     // gelesen. Verlässt sich nichts drauf: das Kontor prüft selbst.
     $('dk-kontor').hidden = d.rolle !== 'admin';
+
+    // Ohne `await`: der Zustand des Push-Schalters kommt vom Browser und
+    // braucht einen Wimpernschlag. Das Blatt soll darauf nicht warten — es
+    // steht schon, und der siebte Schalter rückt gleich nach.
+    pushLage();
   }
 
   /* Einzeln und sofort, ohne Speichern-Knopf: fünf Schalter mit
@@ -7978,6 +8092,182 @@
     } finally {
       box.disabled = false;
     }
+  }
+
+  /* --- Push auf dieses Gerät ------------------------------------------------
+     Der siebte Schalter im Deckel. Er beantwortet nicht, WAS jemand erfahren
+     will — das tun die sechs darüber, und sie gelten für beide Wege —, sondern
+     nur, ob dieses eine Gerät klopfen darf.
+
+     Ein Abo gehört dem BROWSER, nicht dieser Seite: es überlebt das Schließen
+     des Tabs, es lässt sich in den Systemeinstellungen abstellen, und es kann
+     vom Push-Dienst im Stillen gegen eine neue Adresse getauscht werden.
+     Deshalb wird der Zustand des Schalters nie gemerkt, sondern jedes Mal bei
+     `pushManager.getSubscription()` erfragt — und deshalb meldet die Seite ein
+     liegendes Abo bei jedem Start noch einmal an (der UPSERT im Worker ist
+     dafür gebaut). Ohne das wäre eine getauschte Adresse eine Karteileiche,
+     die niemandem auffällt, bis jemand fragt, warum es nicht mehr klopft.
+     ------------------------------------------------------------------------ */
+  const PUSH_KANN = 'serviceWorker' in navigator && 'PushManager' in window
+    && 'Notification' in window;
+
+  /* Auf dem iPhone gibt Safari Push NUR an eine Seite heraus, die auf dem
+     Home-Bildschirm liegt (und erst ab iOS 16.4). Das iPad meldet sich seit
+     Jahren als „MacIntel" — es hängt am Fingerzähler, nicht am Namen. */
+  const AUF_APPLE = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const ALS_APP = window.matchMedia('(display-mode: standalone)').matches
+    || navigator.standalone === true;
+  const APPLE_HINWEIS = 'Auf dem iPhone erst über Teilen → „Zum Home-Bildschirm“ '
+    + 'installieren; Safari selbst gibt keine Meldungen heraus.';
+
+  let swVersprechen = null;
+
+  /* Einmal registrieren, dann liegt es. `ready` und nicht das Ergebnis von
+     `register`: erst wenn ein Worker aktiv IST, hat er einen `pushManager`.
+     Scheitert es (kein HTTPS, alter Browser, Nutzer hat es verboten), bleibt
+     es bei `null` — die Tafel merkt davon nichts als einen fehlenden Schalter. */
+  function swAnwerfen() {
+    if (!PUSH_KANN) return Promise.resolve(null);
+    if (!swVersprechen) {
+      swVersprechen = navigator.serviceWorker.register('sw.js')
+        .then(() => navigator.serviceWorker.ready)
+        .catch(() => null);
+    }
+    return swVersprechen;
+  }
+
+  // base64url → Bytes. Der `applicationServerKey` will es roh.
+  function schluesselBytes(roh) {
+    const s = (roh + '='.repeat((4 - roh.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    const b = atob(s);
+    const u = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+    return u;
+  }
+
+  /* Was der Browser über das Abo weiß, in der Form, die der Worker erwartet.
+     Der Endpoint ist praktisch ein Geheimnis — wer ihn hat, kann diesem Gerät
+     zustellen. Er geht deshalb nur hier hinaus und steht in keiner Antwort. */
+  async function aboMelden(abo) {
+    const j = abo.toJSON();
+    await ruf('/api/push/abo', {
+      endpoint: j.endpoint,
+      schluessel: { p256dh: j.keys.p256dh, auth: j.keys.auth },
+    });
+  }
+
+  async function pushAn(vapid) {
+    /* Die Frage nach der Erlaubnis kommt HIER und nicht beim Aufbau der Seite:
+       ein Fenster, das ungefragt aufgeht, klickt man weg — und „abgelehnt"
+       lässt sich nur in den Browsereinstellungen zurücknehmen, nicht auf
+       dieser Seite. Deshalb erst der Schalter, dann die Frage.
+
+       UND SIE STEHT ALS ERSTE ZEILE, VOR JEDEM `await`. Das ist kein
+       Schönheitsfehler, den man später aufräumt: WebKit verwirft den
+       „das war ein Fingertipp"-Vermerk beim ersten `await`, und eine Frage
+       ohne diesen Vermerk beantwortet iOS von sich aus mit „abgelehnt" —
+       endgültig, nur noch in den Systemeinstellungen zurückzunehmen.
+       Ausgerechnet auf dem Gerät, für das es diese ganze Zugabe gibt. Ein
+       `async`-Rumpf läuft bis zu seinem ersten `await` synchron weiter, also
+       liegt diese Zeile noch im Tipp; alles danach nicht mehr. */
+    if (Notification.permission !== 'granted'
+        && await Notification.requestPermission() !== 'granted') {
+      throw new Error('Ohne Erlaubnis des Browsers geht es nicht.');
+    }
+    const reg = await swAnwerfen();
+    if (!reg) throw new Error('Dieser Browser kann das nicht.');
+    const abo = await reg.pushManager.subscribe({
+      // Ein Versprechen, kein Wunsch: wer still zustellt, verliert sein Abo.
+      // Siehe sw.js — dort zeigt jede Zustellung eine Meldung.
+      userVisibleOnly: true,
+      applicationServerKey: schluesselBytes(vapid),
+    });
+    await aboMelden(abo);
+  }
+
+  /* Erst beim Browser abmelden, dann beim Worker. Andersherum bliebe bei einem
+     Netzfehler ein Abo im Browser liegen, das der nächste Seitenaufbau brav
+     wieder anmeldet — der Schalter wäre dann nicht abzustellen. So herum ist
+     der schlimmste Fall eine Zeile, die beim nächsten Senden mit 410 antwortet
+     und dabei von selbst verschwindet. */
+  async function pushAus() {
+    const reg = await swAnwerfen();
+    const abo = reg && await reg.pushManager.getSubscription();
+    if (!abo) return;
+    const endpoint = abo.endpoint;
+    await abo.unsubscribe().catch(() => {});
+    try { await ruf('/api/push/weg', { endpoint }); } catch {}
+  }
+
+  /* Den Schalter stellen. Sechs Gründe, aus denen er nicht bedienbar ist, und
+     jeder sagt in der Zeile darunter, warum — ein ausgegrauter Schalter ohne
+     Begründung ist die schlechteste Auskunft von allen. */
+  async function pushLage() {
+    const kasten = $('dk-push'), box = $('dk-push-box');
+    const zeile = $('dk-push-zeile'), folge = $('dk-push-folge');
+    const d = deckelStand;
+
+    // Kann der Worker gar kein Push, gibt es den Schalter nicht. Kein Hinweis,
+    // keine Erklärung: das ist nichts, woran der Nutzer etwas ändern könnte.
+    kasten.hidden = !d || !d.vapid;
+    if (kasten.hidden) return;
+
+    const sagtDazu = text => { folge.textContent = text || ''; folge.hidden = !text; };
+    const zu = grund => {
+      box.checked = false;
+      box.disabled = true;
+      zeile.setAttribute('aria-disabled', 'true');
+      sagtDazu(grund);
+    };
+
+    if (d.mail_stumm) return zu('Du hast dich ganz abgemeldet — dann klopft auch hier nichts.');
+    if (AUF_APPLE && !ALS_APP) return zu(APPLE_HINWEIS);
+    if (!PUSH_KANN) return zu('Dieser Browser kann keine Meldungen aufs Gerät schicken.');
+    if (Notification.permission === 'denied') {
+      return zu('Meldungen sind für diese Seite im Browser abgestellt — zurücknehmen lässt sich das nur dort.');
+    }
+
+    const reg = await swAnwerfen();
+    if (!reg) return zu('Der Meldedienst ließ sich nicht einrichten.');
+    const abo = await reg.pushManager.getSubscription().catch(() => null);
+    // Zwischenzeitlich zugeklappt: dann gehört das Blatt schon jemand anderem.
+    if (!deckelOffen) return;
+
+    box.disabled = false;
+    zeile.removeAttribute('aria-disabled');
+    box.checked = !!abo;
+    sagtDazu(abo ? '' : 'Los und Notruf haben eine Frist. Eine Mail liegt so lange im '
+      + 'Postfach, wie es dem Postfach gefällt.');
+  }
+
+  async function pushSchalten(box) {
+    const an = box.checked;
+    box.disabled = true;
+    dkSagt('');
+    try {
+      if (an) await pushAn(deckelStand.vapid); else await pushAus();
+    } catch (e) {
+      dkSagt(e.message || 'Das ging nicht.', true);
+    } finally {
+      box.disabled = false;
+      // Nicht auf den eigenen Klick verlassen, sondern nachsehen: der Browser
+      // hat hier das letzte Wort, nicht dieser Tab.
+      await pushLage();
+    }
+  }
+
+  /* Beim Start: liegt ein Abo, wird es still noch einmal angemeldet. Das ist
+     der ganze Sinn des UPSERT im Worker — Push-Dienste tauschen Endpoints aus,
+     ohne jemanden zu fragen. Fehler bleiben stumm: wer die Tafel aufschlägt,
+     hat nicht nach seinem Meldeweg gefragt. */
+  async function pushAbgleich() {
+    if (!PUSH_KANN || !merke()) return;
+    try {
+      const reg = await swAnwerfen();
+      const abo = reg && await reg.pushManager.getSubscription();
+      if (abo) await aboMelden(abo);
+    } catch { /* dann eben beim nächsten Mal */ }
   }
 
   /* Hier stand einmal ein Rueckfall auf status.json - der eigene Kuehlschrank
@@ -8214,6 +8504,10 @@
   $('dk-schalter').addEventListener('change', ev => {
     if (ev.target.dataset.art) deckelSchalten(ev.target);
   });
+
+  // Der siebte steht fest im Blatt und wird nicht neu gebaut — er darf seinen
+  // eigenen Zuhörer haben.
+  $('dk-push-box').addEventListener('change', ev => pushSchalten(ev.target));
 
   $('dk-name-form').addEventListener('submit', async ev => {
     ev.preventDefault();
@@ -8935,6 +9229,34 @@
     }
   });
 
+  /* Der eingesetzte Link. Aus dem Text wird nur das Muster gefischt, das der
+     Magic Link trägt — was jemand aus einer Mail kopiert, bringt gern eine
+     Zeile Text davor und einen Zeilenumbruch dahinter mit, und ein Feld, das
+     daran scheitert, wäre für genau die Lage gebaut, in der es niemand
+     braucht. Auch das nackte Token allein wird angenommen: wer den Link von
+     Hand kürzt, meint dasselbe.
+
+     Danach derselbe Weg wie beim Hash-Einstieg — bis auf die Seite, die hier
+     nicht neu aufgebaut wird (in Safari lud der Klick auf den Link sie ohnehin
+     frisch). Also von Hand nachziehen: Formular umstellen und die Tafel holen. */
+  $('einsetz-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const knopf = ev.target.querySelector('button[type=submit]');
+    const treffer = /(?:anmelden=)?([a-f0-9]{32,})/i.exec($('f-link').value || '');
+    if (!treffer) { sagt('Darin steckt kein Anmeldelink.', true); return; }
+    knopf.disabled = true; sagt('');
+    try {
+      if (!await magicSenden(treffer[1])) return;
+      $('f-link').value = '';
+      linkRaus = false;
+      formular();
+      await hole();
+      pushAbgleich();
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
   /* Der Name fuer die Liste, einmalig nach dem ersten Link. */
   $('name-form').addEventListener('submit', async ev => {
     ev.preventDefault();
@@ -8979,7 +9301,14 @@
   $('abmelden').addEventListener('click', async () => {
     /* Nur DIESES Geraet. Die anderen bleiben angemeldet, und der Eintrag in der
        Liste bleibt sowieso - abmelden ist kein Austritt aus dem Wettbewerb.
-       Der Ruf raus darf scheitern, das Token fliegt hier trotzdem weg. */
+       Der Ruf raus darf scheitern, das Token fliegt hier trotzdem weg.
+
+       Das Push-Abo geht mit, und zwar VOR dem Token: `/api/push/weg` braucht
+       es noch, um zu wissen, wessen Zeile gemeint ist. Ohne diese Zeile klopfte
+       es auf einem abgemeldeten Gerät weiter — dieselbe Überlegung wie bei
+       „alle abmelden", nur hier auf der Seite, weil nur der Browser weiß,
+       welches der Endpoints seiner ist. */
+    await pushAus().catch(() => {});
     try { await ruf('/api/abmelden', {}); } catch {}
     wirf();
     meinName = null;
@@ -9012,8 +9341,14 @@
   async function magicEinloesen() {
     const treffer = /[#&]anmelden=([a-f0-9]{32,})/i.exec(location.hash || '');
     if (!treffer) return;
-    const roh = treffer[1];
     history.replaceState(null, '', location.pathname + location.search);
+    await magicSenden(treffer[1]);
+  }
+
+  /* Das Einlösen selbst, getrennt vom Ablesen der Adresszeile: es gibt einen
+     zweiten Weg herein, und der kommt aus der Zwischenablage statt aus dem
+     Fragment (siehe `einsetz-form`). */
+  async function magicSenden(roh) {
     try {
       const r = await fetch(API + '/api/magic', {
         method: 'POST',
@@ -9021,7 +9356,7 @@
         body: JSON.stringify({ token: roh }),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) { sagt(d.fehler || 'Der Link hat nicht funktioniert.', true); return; }
+      if (!r.ok) { sagt(d.fehler || 'Der Link hat nicht funktioniert.', true); return false; }
       nimm(d.token);
       meinName = d.name;
       brauchtNamen = !!d.braucht_namen;
@@ -9034,8 +9369,10 @@
         : brauchtNamen
         ? 'Drin. Wie sollst du in der Liste heißen?'
         : 'Willkommen zurück, ' + d.name + '.');
+      return true;
     } catch {
       sagt('Der Link ließ sich gerade nicht einlösen. Netz weg?', true);
+      return false;
     }
   }
 
@@ -9076,6 +9413,62 @@
     history.replaceState(null, '', location.pathname + location.search);
     losMail = { los: Number(treffer[1]), t: treffer[2] };
     $('losmail').hidden = false;
+  }
+
+  /* --- Die drei Wege aus einer Push-Meldung ---------------------------------
+     `#los=<id>`, `#termin=<id>`, `#notruf`. Sie kommen NICHT aus einer Mail,
+     sondern von einer angetippten Meldung auf demselben Gerät — und darum
+     tragen sie keine Signatur: wer den Push bekommt, ist hier angemeldet, das
+     Abo hängt an seinem Konto. In eine Push-Nutzlast gehört nie ein Token,
+     auch nicht ein kurzlebiges.
+
+     UND SIE HÖREN AUF `hashchange`, nicht nur auf den Seitenaufbau. Das ist
+     der eigentliche Fall, nicht der Sonderfall: liegt die Tafel schon offen,
+     holt `sw.js` sie nach vorn und schickt sie auf die Marke — eine
+     Fragmentnavigation, ohne Neuladen. Die drei älteren Einstiege
+     (`#anmelden=`, `#stumm=`, das signierte `#los=…&t=…`) werden genau
+     einmal beim Start gelesen und wären hier stumm geblieben.
+
+     Die Marke fliegt sofort aus der Adresszeile — wie bei den anderen dreien,
+     und hier zusätzlich aus einem eigenen Grund: zweimal dieselbe Meldung
+     antippen ergäbe sonst zweimal dieselbe Adresse, und darauf meldet der
+     Browser gar nichts mehr.
+     ------------------------------------------------------------------------ */
+  function pushEinstieg() {
+    const h = location.hash || '';
+    const los = /^#los=(\d+)$/.exec(h);
+    const termin = /^#termin=(\d+)$/.exec(h);
+    if (!los && !termin && h !== '#notruf') return;
+    history.replaceState(null, '', location.pathname + location.search);
+    // Ohne Anmeldung gibt es keins der drei Blätter zu sehen. Das passiert:
+    // die App liegt auf dem Bildschirm, das Token ist weg (siehe Einsetzfeld).
+    if (!drinnen()) return;
+
+    if (los) {
+      // Dasselbe Blatt wie aus der Mail, nur ohne Marke — beantwortet wird es
+      // dann über das Geräte-Token, und der Worker prüft es genauso.
+      losMail = { los: Number(los[1]), t: null };
+      $('losmail').hidden = false;
+      return;
+    }
+    if (termin) {
+      /* Den Namen des Abends nimmt der Faden aus derselben Zeile, die auch ein
+         Fingertipp auf der Tafel getroffen hätte — sonst hieße derselbe Abend
+         je nach Weg anders. Steht die Zeile nicht mehr da (abgesagt, vorbei),
+         bleibt der schlichte Titel. */
+      const id = Number(termin[1]);
+      const zeile = document.querySelector('[data-ziel="termin:' + id + '"]');
+      const t = letzteTermine.find(x => x.id === id);
+      flyAuf('termin:' + id, zeile ? zeile.dataset.name
+        : t ? (t.titel || 'Bierabend bei ' + t.gastgeber) : 'Der Abend');
+      return;
+    }
+    /* Zum Notruf gibt es kein eigenes Blatt: fremde Notrufe STEHEN auf der
+       Tafel, mit Karte und Weg. Also wird dorthin gescrollt und nichts
+       aufgeklappt — ein Blatt, das dieselbe Karte noch einmal zeigt, wäre
+       eine zweite Wahrheit für dieselbe Sache. */
+    const block = $('notruf-block');
+    if (!block.hidden) block.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function losMailZu() {
@@ -9269,14 +9662,29 @@
      davor: sie lesen dasselbe Fragment, und `magicEinloesen` räumt es weg. */
   stummEinloesen();
   losAusMail();
+  /* Der Meldedienst wird immer angeworfen, auch ohne Anmeldung: er macht die
+     Tafel installierbar, und auf dem iPhone kommt genau in dieser Reihenfolge
+     — erst installieren, dann anmelden, dann Push. Er fasst die Auslieferung
+     der Seite nicht an (siehe sw.js), kostet also nichts als eine Zeile. */
+  swAnwerfen();
+  // Angetippte Meldungen bei OFFENER Tafel: sie ändern nur das Fragment.
+  window.addEventListener('hashchange', pushEinstieg);
+
   magicEinloesen()
     .then(() => merke() && !meinName && !brauchtNamen ? werBinIch() : null)
     // Ohne den Pfeil bekäme `hole` die Antwort von `werBinIch` als `still` —
     // und der erste Aufbau dürfte dann bei einem Fehler nicht mehr zurückfallen.
     .then(() => hole())
     // Nach `hole`, nicht davor: `vonDraussen` steht erst danach fest, und
-    // `drinnen()` fragt danach.
+    // `drinnen()` fragt danach. Für `#termin=` gilt dasselbe noch einmal
+    // schärfer: der Name des Abends steht in einer Zeile, die es vorher gar
+    // nicht gibt.
     .then(() => wrappedAusAdresse())
+    .then(() => pushEinstieg())
+    // Ganz zum Schluss und ohne `await`: ein liegendes Abo noch einmal
+    // anmelden, falls der Push-Dienst seine Adresse getauscht hat. Das eilt
+    // nicht und darf den Aufbau nicht aufhalten.
+    .then(() => { pushAbgleich(); })
     .then(nachfassen);
 
 </script>

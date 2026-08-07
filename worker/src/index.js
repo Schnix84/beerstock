@@ -18,6 +18,11 @@
 import { Tafel } from './tafel.js';
 export { Tafel };
 
+// Web-Push: VAPID und die Verschluesselung der Nutzlast, in purem WebCrypto.
+// Die Datei weiss nichts von Nutzern und Datenbank - sie schickt EINE Meldung
+// an EIN Abo. Wer wen bekommt, entscheidet `stosse()` weiter unten.
+import { pushSenden, pushBereit } from './webpush.js';
+
 /* Nur die eigene Seite darf die API im Browser aufrufen. Der Kopf schuetzt
    nicht davor, dass jemand mit curl vorbeikommt - das tut kein CORS-Kopf -,
    aber er verhindert, dass eine fremde Seite den Browser eines Angemeldeten
@@ -907,11 +912,40 @@ function kreisSetzen(env, notrufId, ids) {
    muss. Nebenwirkung, die richtig ist: wer weggenommen und wieder dazugenommen
    wird, bekommt keine zweite Mail - er bekommt die Karte zurueck, und die ist
    der lebende Teil der Auskunft. */
-function notrufPost(env, ctx, ich, notrufId, art, lat, lon, empfaenger) {
+function notrufPost(env, ctx, ich, notrufId, art, lat, lon, empfaenger, bis = null) {
   const wohin = mapsLink(lat, lon);
   const was = art === 'bier' ? `${ich.name} braucht Bier`
     : art === 'kamerad' ? `${ich.name} sucht Gesellschaft`
     : `${ich.name} braucht Bier und Gesellschaft`;
+
+  /* Das Klopfen an der Tuer, an derselben Stelle und an denselben Kreis. Fuer
+     den Notruf ist es der wichtigere der beiden Wege: er gilt neunzig Minuten,
+     und so lange liegt eine Mail gern ungelesen.
+
+     Die Haltbarkeit ist die RESTLAUFZEIT, nicht die volle Frist - beim
+     Dazunehmen ist der Notruf schon eine Weile alt. Ein Push, den der
+     Push-Dienst laenger aufhebt als den Notruf selbst, weckt jemanden zu
+     einem Hilferuf, den es nicht mehr gibt. Eine Minute Untergrenze, damit
+     ein knapp erloschener nicht mit TTL 0 rausgeht (das hiesse "nur
+     zustellen, wenn das Geraet gerade wach ist" - hier waere es schlicht ein
+     Rechenfehler, der wie Absicht aussieht).
+
+     Dieselbe Marke wie beim ersten Ruf: nimmt der Rufende spaeter jemanden
+     dazu, ersetzt die neue Meldung auf den Geraeten des alten Kreises die
+     liegende, statt sich danebenzustellen. Das Gatter, das bei der Mail der
+     UNIQUE-Index auf `mail_ausgang` uebernimmt, ist hier also der `tag`. */
+  const rest = bis
+    ? Math.max(60, Math.round((Date.parse(utc(bis)) - Date.now()) / 1000))
+    : NOTRUF_MINUTEN * 60;
+  stosse(env, ctx, 'notruf', empfaenger, {
+    titel: was,
+    text: `Auf der Tafel steht der Notruf noch ${Math.round(rest / 60)} Minuten.`,
+    url: `${env.SEITE}#notruf`,
+    tag: `notruf-${notrufId}`,
+    ttl: rest,
+    dringend: true,
+  });
+
   benachrichtige(env, ctx, 'notruf', empfaenger, {
     bezug: `notruf:${notrufId}`,
     betreff: was,
@@ -1276,9 +1310,9 @@ async function ogLesen(antwort, basis) {
     } })
     /* `head > title`, NICHT `title`: ein Inline-SVG bringt eigene `<title>`
        mit (Barrierefreiheit), und die traf der nackte Selektor mit. Die
-       Beerstock-Seite selbst war der Beweis - aus `<title>Kaltes Bier</title>`
+       Beerstock-Seite selbst war der Beweis - aus `<title>Wer hat kalt</title>`
        plus dem `<title>` im Bierglas-SVG wurde ein zusammengeklebtes
-       "Kaltes BierBierglas: Fuellstand nach Bestand …". Der Dokumenttitel ist
+       "Wer hat kaltBierglas: Fuellstand nach Bestand …". Der Dokumenttitel ist
        immer ein direktes Kind von `<head>`, ein SVG-Titel nie. */
     .on('head > title', {
       element(e) {
@@ -2009,8 +2043,18 @@ async function schickeLink(env, empfaenger, link) {
 ${link}
 
 Der Link gilt ${LINK_MINUTEN} Minuten und genau einmal. Hast du ihn nicht
-angefordert, ist nichts passiert - dann wirf die Mail einfach weg.`;
+angefordert, ist nichts passiert - dann wirf die Mail einfach weg.
 
+Liegt die Tafel schon als App auf deinem iPhone-Bildschirm: den Link NICHT
+antippen - er oeffnet dann Safari und ist verbraucht. Stattdessen gedrueckt
+halten, "Kopieren", und in der App unten ins Feld "Link aus der Mail"
+einsetzen.`;
+
+  /* Der Absatz zum Einsetzen ist kein Beiwerk. Auf iOS hat eine Seite auf dem
+     Home-Bildschirm ihren EIGENEN Speicher, und ein angetippter Link oeffnet
+     immer Safari - wer die Tafel dort installiert hat (und nur so gibt iOS
+     Push heraus), kaeme ohne diesen Umweg nie hinein. Er steht bewusst in
+     beiden Fassungen der Mail und nicht nur im HTML-Teil. */
   const html =
 `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
   <p>Hier entlang, dann bist du drin:</p>
@@ -2020,9 +2064,14 @@ angefordert, ist nichts passiert - dann wirf die Mail einfach weg.`;
   <p style="font-size:13px;color:#6f6653">Der Link gilt ${LINK_MINUTEN} Minuten und genau
      einmal. Hast du ihn nicht angefordert, ist nichts passiert &ndash; dann wirf
      die Mail einfach weg.</p>
+  <p style="font-size:13px;color:#6f6653">Liegt die Tafel schon als App auf deinem
+     iPhone-Bildschirm: den Knopf <strong>nicht antippen</strong> &ndash; er &ouml;ffnet
+     Safari und ist danach verbraucht. Stattdessen gedr&uuml;ckt halten,
+     &bdquo;Kopieren&ldquo;, und in der App unten ins Feld &bdquo;Link aus der
+     Mail&ldquo; einsetzen.</p>
 </div>`;
 
-  await schickeMail(env, empfaenger, 'Dein Link zum Bierranking', text, html);
+  await schickeMail(env, empfaenger, 'Dein Link zu „Wer hat kalt“', text, html);
 }
 
 /* Der Mailwechsel, beide Haelften. Der Link geht an die NEUE Adresse - erst
@@ -2057,7 +2106,7 @@ passiert nichts.`;
 function warneAlteAdresse(env, ctx, alt, neu) {
   if (!ctx || !alt) return;
   const text =
-`Jemand hat gerade angefordert, dass das Bierranking dich kuenftig unter
+`Jemand hat gerade angefordert, dass "Wer hat kalt" dich kuenftig unter
 
     ${neu}
 
@@ -2069,7 +2118,7 @@ gilt diese Adresse hier weiter.`;
 
   const html =
 `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
-  <p>Jemand hat gerade angefordert, dass das Bierranking dich k&uuml;nftig unter
+  <p>Jemand hat gerade angefordert, dass &bdquo;Wer hat kalt&ldquo; dich k&uuml;nftig unter
      <strong>${nurText(neu)}</strong> anschreibt.</p>
   <p>Best&auml;tigt ist es noch nicht &ndash; dazu muss der Link in der Mail an die
      neue Adresse geklickt werden.</p>
@@ -2372,6 +2421,79 @@ function benachrichtige(env, ctx, art, empfaenger, opt) {
   })().catch(e => console.error('benachrichtige:', e && e.stack || e)));
 }
 
+/* Die Schwester des Verteilers: dasselbe an dieselben Leute, nur aufs Geraet
+   statt ins Postfach. Sie steht DANEBEN und nicht darin, aus einem Grund:
+   eine Mail ist ein Brief, ein Push ist ein Klopfen an der Tuer. Beides in
+   einer Schleife haette bedeutet, dass jede kuenftige Aenderung an der einen
+   Zustellart die andere anfasst - und die eine Stelle, an der ein Fehler alle
+   Meldungen auf allen Wegen erwischt, ist genau die, die es hier nicht geben
+   soll. Was BEIDE teilen, ist die Entscheidung, wer etwas bekommt; die steht
+   deshalb hier noch einmal in denselben Worten.
+
+   DREI DINGE ABSICHTLICH GLEICH:
+   - dieselben Ausschluesse (gesperrt, entfernt, ganz stumm gestellt),
+   - dieselben sechs Schalter aus dem Deckel (`mailWahl`). "Keine Termin-Post"
+     heisst keine, egal ueber welche Leitung - zwei Schalterreihen fuer
+     dieselbe Frage waeren die sicherste Art, dass der Nutzer eine davon nicht
+     findet,
+   - dieselbe Empfaengerliste, die der Aufrufer schon der Mail gibt.
+
+   EINS ABSICHTLICH ANDERS: `email IS NOT NULL` gilt hier NICHT. Wer nie eine
+   Adresse hinterlegt hat, ist bisher von jeder Meldung ausgeschlossen; auf
+   dem Geraet erreicht ihn eine.
+
+   UND EINS, DAS DIE MAIL AUFGEGEBEN HAT: `ausser`. Der Verteiler hat es
+   verloren, seit die Termin-Mails einen Kalendereintrag TRAGEN (siehe dort) -
+   ein Push traegt nichts, er meldet nur. Damit gilt fuer ihn wieder die alte
+   Regel: wer selbst gerade den Abend eingetragen hat, braucht darueber kein
+   Klopfen an der Tuer.
+
+   Kein Gegenstueck zu `mail_ausgang`: ein Push wird nicht protokolliert und
+   nicht gegen Doppelung gesperrt. Das Gatter dort ist ein UNIQUE-Index, und
+   der braucht eine Zeile je Empfaenger - fuer ein Klopfen, das nach ein paar
+   Stunden ohnehin verfaellt, waere das eine Buchhaltung ueber Rauch. Gegen
+   das Doppelte steht stattdessen `tag`: dieselbe Marke ersetzt die liegende
+   Meldung auf dem Geraet, statt sich danebenzustellen. */
+function stosse(env, ctx, art, empfaenger, opt) {
+  if (!ctx || !pushBereit(env)) return;
+  if (empfaenger && !empfaenger.length) return;
+  const { titel, text, url = '.', tag = null, ttl = 86400, dringend = false, ausser = null } = opt;
+
+  ctx.waitUntil((async () => {
+    const wo = ['u.gesperrt_am IS NULL', 'u.entfernt_am IS NULL', 'u.mail_stumm_am IS NULL'];
+    const werte = [];
+    if (empfaenger) {
+      wo.push(`u.id IN (${empfaenger.map(() => '?').join(',')})`);
+      werte.push(...empfaenger);
+    }
+    if (ausser) { wo.push('u.id <> ?'); werte.push(ausser); }
+
+    const abos = await env.DB.prepare(`
+      SELECT a.id, a.endpoint, a.p256dh, a.auth, u.mail_prefs
+      FROM push_abos a JOIN users u ON u.id = a.user_id
+      WHERE ${wo.join(' AND ')}
+    `).bind(...werte).all();
+
+    /* Alle auf einmal statt nacheinander: bei einem Notruf an sechs Leute mit
+       je zwei Geraeten waeren das sonst zwoelf Wartezeiten hintereinander -
+       und die letzte Meldung ginge Sekunden nach der ersten raus. `pushSenden`
+       wirft nie, ein einzelner Ausfall reisst also nichts mit. */
+    const ergebnis = await Promise.all(abos.results
+      .filter(a => mailWahl(a)[art])
+      .map(async a => ({ id: a.id, ...await pushSenden(env, a, { titel, text, url, tag }, ttl, dringend) })));
+
+    /* 404/410 heisst: dieses Geraet gibt es nicht mehr. Die Zeile faellt genau
+       hier weg und nirgends sonst - deshalb braucht diese Tabelle keinen
+       Aufraeumjob. Andere Fehler (503 vom Dienst, Netz weg) lassen sie
+       ausdruecklich stehen: eine Stoerung ist keine Abmeldung. */
+    const tot = ergebnis.filter(e => e.status === 404 || e.status === 410).map(e => e.id);
+    if (tot.length) {
+      await env.DB.prepare(
+        `DELETE FROM push_abos WHERE id IN (${tot.map(() => '?').join(',')})`).bind(...tot).run();
+    }
+  })().catch(e => console.error('stosse:', e && e.stack || e)));
+}
+
 /* Die einzelnen Anlaesse. Sie stehen hier beieinander und nicht in den
    Routen: eine Route soll entscheiden, WANN etwas rausgeht, nicht WIE es
    klingt - und die sechs Texte nebeneinander verraten sofort, wenn einer aus
@@ -2390,6 +2512,27 @@ function mailGewonnen(env, ctx, losId, gewinnerId) {
   // sich damit weder ein anderes Los beantworten noch als jemand anderes.
   const linkFuer = async u =>
     `${env.SEITE}#los=${losId}&t=${u.id}.${await sig(env, `los:${losId}`, u.id)}`;
+
+  /* Und dasselbe aufs Geraet. DAS IST DER ANLASS, aus dem es Push in diesem
+     Projekt ueberhaupt gibt: die Antwortfrist sind drei Stunden, und eine
+     Mail, die man am Abend liest, kommt fuer diesen Abend zu spaet.
+
+     Ohne Signatur im Link, anders als in der Mail: wer diesen Push bekommt,
+     ist auf dem Geraet angemeldet - das Abo haengt an seinem Konto. Eine
+     Marke gehoert in eine Nachricht, die ein fremdes Postfach durchquert,
+     nicht in eine, die schon am Ziel ist. In die Nutzlast kommt darum auch
+     nie ein Token, egal wie bequem es waere.
+
+     Die Haltbarkeit ist die Frist selbst: was danach ankaeme, beantwortet ein
+     Los, das schon verfallen ist. */
+  stosse(env, ctx, 'gewonnen', [gewinnerId], {
+    titel: 'Die Flasche zeigt auf dich',
+    text: `Heute Abend wärst du dran. Sag zu oder ab — sonst verfällt es in ${LOS_FRIST} Stunden.`,
+    url: `${env.SEITE}#los=${losId}`,
+    tag: `los-${losId}`,
+    ttl: LOS_FRIST * 3600,
+    dringend: true,
+  });
 
   benachrichtige(env, ctx, 'gewonnen', [gewinnerId], {
     bezug: `los:${losId}`,
@@ -2429,6 +2572,19 @@ function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen
   const eigen = wieEntstanden === 'zugesagt'
     ? 'Du hast zugesagt'
     : 'Du hast den Abend eingetragen';
+
+  /* Der Ausloeser bleibt beim Push AUSSEN VOR - und nur beim Push. Die Mail
+     nimmt ihn ausdruecklich mit, weil sie den Kalendereintrag TRAEGT (siehe
+     den Absatz darueber). Ein Push traegt nichts; wer den Abend gerade selbst
+     eingetragen hat, braucht darueber kein Klopfen an der Tuer. Genau
+     deshalb kennt `stosse` ein `ausser` und `benachrichtige` keines mehr. */
+  stosse(env, ctx, 'termin_neu', null, {
+    ausser: ausloeser,
+    titel: 'Ein Abend steht fest',
+    text: `${wann}${wo} wird getrunken.${termin.titel ? ` Es geht um: ${termin.titel}` : ''}`,
+    url: `${env.SEITE}#termin=${termin.id}`,
+    tag: `termin-${termin.id}`,
+  });
 
   benachrichtige(env, ctx, 'termin_neu', null, {
     bezug: `termin:${termin.id}`,
@@ -2476,6 +2632,20 @@ function mailTerminAendert(env, ctx, termin, ausloeser, was) {
     ? 'Der Anhang nimmt den Eintrag aus deinem Kalender.'
     : 'Der Anhang bringt deinen Kalendereintrag auf den neuen Stand.';
 
+  /* Ausloeser wieder draussen, aus demselben Grund wie beim neuen Abend.
+     Derselbe `tag` wie dort: die Meldung zum Abend ist EINE Meldung, die sich
+     aendert - drei liegende Zettel zu drei Verschiebungen desselben Abends
+     waeren drei Wahrheiten nebeneinander, von denen zwei falsch sind. Die
+     Mail darf sich das nicht leisten (sie traegt jedes Mal einen neuen
+     Kalendereintrag mit hoeherer SEQUENCE), das Klopfen schon. */
+  stosse(env, ctx, 'termin_aendert', null, {
+    ausser: ausloeser,
+    titel: wort,
+    text: kopf,
+    url: abgesagt ? env.SEITE : `${env.SEITE}#termin=${termin.id}`,
+    tag: `termin-${termin.id}`,
+  });
+
   benachrichtige(env, ctx, 'termin_aendert', null, {
     /* Kein fester Bezug auf den Termin allein: ein Abend darf mehrfach
        verschoben werden, und jede Verschiebung ist eine eigene Nachricht.
@@ -2500,6 +2670,24 @@ function mailTerminAendert(env, ctx, termin, ausloeser, was) {
 /* Die einzige Art, die von Haus aus AUS ist: an einem lebhaften Abend ist sie
    die, die eine Runde zumuellt. Wer sie will, schaltet sie ein. */
 function mailEcho(env, ctx, anWen, vonWem, worum, bezug) {
+  /* Auch hier von Haus aus AUS - derselbe Schalter, dieselbe Vorgabe. Und
+     dasselbe Ziel wie in der Mail: die Tafel, ohne Sprungmarke. Ein Echo
+     zeigt auf einen Faden, und in welchem Blatt der gerade steckt, weiss der
+     Verteiler nicht - die Mail loest das seit jeher mit "Nachlesen", und zwei
+     verschiedene Genauigkeiten fuer dieselbe Meldung waeren schlechter als
+     eine ehrliche.
+
+     Der `tag` ist der Bezug: wer in einem Faden dreimal angesprochen wird,
+     bekommt drei Meldungen (verschiedene Kommentar-Ids), wer eine Bewertung
+     nachbessert, ersetzt seine eigene (dieselbe Bewertungs-Id) - genau die
+     Trennung, die bei der Mail der UNIQUE-Index auf `bezug` zieht. */
+  stosse(env, ctx, 'echo', [anWen], {
+    titel: `${vonWem}: ${worum.kurz}`,
+    text: worum.lang,
+    url: env.SEITE,
+    tag: bezug,
+  });
+
   benachrichtige(env, ctx, 'echo', [anWen], {
     bezug,
     betreff: `${vonWem}: ${worum.kurz}`,
@@ -2585,6 +2773,13 @@ async function rundmailAbschicken(env, ctx, adminId, geprueft) {
   `).all();
   const wieViele = kreis.results.filter(u => mailWahl(u).rundmail).length;
 
+  /* KEIN PUSH. Bewusst die einzige der sechs Arten ohne Gegenstueck auf dem
+     Geraet: eine Rundmail ist Post vom Wirt, kein Alarm. Sie kommt
+     unangekuendigt, sie hat keine Frist, und sie hat schon einen Weg. Ein
+     Klopfen an der Tuer fuer "gelegentliche Nachricht" waere genau die Sorte
+     Meldung, wegen der Leute Push abschalten - und mit ihr dann auch das Los
+     und den Notruf. Der Schalter `rundmail` steht trotzdem weiter im Deckel;
+     er gilt eben nur fuer die Mail. */
   benachrichtige(env, ctx, 'rundmail', null, {
     betreff: geprueft.betreff,
     text: rundmailText(geprueft),
@@ -2744,6 +2939,14 @@ const ROUTEN = {
       // GIFs an Kommentaren: ohne Schluessel bleibt /api/gif ein 503, siehe
       // ideas/gifs-und-memes.md.
       giphy: env.GIPHY_KEY ? 'ok' : 'aus (GIPHY_KEY fehlt)',
+      /* Push aufs Geraet (Schema 23). Beide Haelften des VAPID-Paars muessen
+         da sein - und sie werden getrennt gesetzt (die eine als Secret, die
+         andere in wrangler.jsonc), also wird auch getrennt gemeldet, welche
+         fehlt. Ohne sie bleibt Push aus: die Schalter im Deckel erscheinen
+         gar nicht erst, Mails gehen weiter. */
+      push: pushBereit(env) ? 'ok'
+        : `aus (${!env.VAPID_PUBLIK && !env.VAPID_PRIVAT ? 'VAPID_PUBLIK und VAPID_PRIVAT fehlen'
+            : !env.VAPID_PUBLIK ? 'VAPID_PUBLIK fehlt' : 'VAPID_PRIVAT fehlt'})`,
       // Kommen als --var beim Deploy herein (siehe CLAUDE.md, Ausrollen),
       // nicht aus wrangler.jsonc - sie aendern sich ja bei jedem Deploy.
       // Lokal (wrangler dev) bleiben beide unbesetzt, das ist kein Fehler.
@@ -2955,6 +3158,12 @@ const ROUTEN = {
       mail: mailWahl(ich),
       mail_stumm: !!ich.mail_stumm_am,
       geraete: geraete ? geraete.n : 1,
+      /* Der oeffentliche VAPID-Schluessel. Er ist kein Geheimnis - der Browser
+         braucht ihn als `applicationServerKey`, um ueberhaupt ein Abo anlegen
+         zu koennen. `null` heisst schlicht "dieser Worker kann kein Push", und
+         die Seite laesst den Schalter dann weg, statt einen anzubieten, der
+         nichts tut. */
+      vapid: env.VAPID_PUBLIK || null,
     });
   },
 
@@ -3001,12 +3210,92 @@ const ROUTEN = {
 
   // -------------------------------------------------------------------------
   /* Das verlorene Handy. Wirft ALLE Geraete raus, auch das hier - wer diesen
-     Knopf drueckt, will nicht aussuchen, welches gemeint war. */
+     Knopf drueckt, will nicht aussuchen, welches gemeint war.
+
+     Die Push-Abos gehen mit. Das ist keine Zugabe, sondern der Kern der
+     Sache: ein Token nehmen und den Meldeweg auf demselben Geraet stehen
+     lassen hiesse, dass das verlorene Handy weiter mitliest, wer heute
+     gezogen wurde und wo jemand einen Notruf abgesetzt hat. Der Browser dort
+     hat dann noch ein Abo, das ins Leere zeigt - beim naechsten Aufruf raeumt
+     es die Seite selbst weg, und bis dahin kommt darueber nichts mehr. */
   'POST /api/geraete/alle-abmelden': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    const weg = await env.DB.prepare('DELETE FROM tokens WHERE user_id = ?').bind(ich.id).run();
+    const [weg] = await env.DB.batch([
+      env.DB.prepare('DELETE FROM tokens WHERE user_id = ?').bind(ich.id),
+      env.DB.prepare('DELETE FROM push_abos WHERE user_id = ?').bind(ich.id),
+    ]);
     return antwort(request, { ok: true, abgemeldet: weg.meta.changes });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Ein Geraet meldet sich zum Klopfen an (Schema 23). Was der Browser beim
+     `subscribe()` herausgibt, kommt hier unveraendert an: die Zustelladresse
+     und die zwei Schluessel, gegen die verschluesselt wird.
+
+     UPSERT AUF DEN ENDPOINT, nicht Einfuegen: die Seite ruft diese Route bei
+     JEDEM Start auf, wenn ein Abo im Browser liegt. Das ist Absicht - die
+     Push-Dienste tauschen Endpoints im Stillen aus, und ein Abo, das nur
+     einmal beim Einschalten geschrieben wuerde, waere irgendwann eine
+     Karteileiche, ohne dass es jemand merkt. Wandert dabei ein Geraet zu
+     einem anderen Konto (dasselbe Tablet, neue Anmeldung), wandert die Zeile
+     mit: dessen Meldungen sollen nicht beim Vorbesitzer klopfen.
+
+     Gesperrte duerfen nicht - `nutzer()` laesst sie an Schreibrouten ohnehin
+     nicht durch (siehe SPERRE_FREI). */
+  'POST /api/push/abo': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const endpoint = String(daten.endpoint ?? '').trim();
+    /* Gedeckelt und auf https festgenagelt. Die Laenge ist kein Geiz: dieser
+       Wert geht spaeter in ein `fetch` dieses Workers hinein, und was der
+       Nutzer schickt, entscheidet damit, wen der Worker anruft. Ein Endpoint
+       ist eine Dienstadresse mit einer langen Kennung - 1024 Zeichen sind
+       reichlich. */
+    if (!/^https:\/\/[^\s]+$/i.test(endpoint) || endpoint.length > 1024) {
+      return fehler(request, 'endpoint: eine https-Adresse');
+    }
+    const s = daten.schluessel;
+    if (!s || typeof s !== 'object') return fehler(request, 'schluessel: p256dh und auth');
+    const p256dh = String(s.p256dh ?? '');
+    const auth = String(s.auth ?? '');
+    /* Die Laengen sind vorgeschrieben, nicht geraten: der oeffentliche
+       Schluessel des Geraets sind 65 rohe Byte (87 Zeichen base64url), das
+       Auth-Geheimnis 16 (22 Zeichen). Was hier daneben liegt, laesst
+       `verschluesseln` spaeter beim Senden auflaufen - dort waere es ein
+       stiller Fehler ohne Absender, hier ist es eine Antwort. */
+    if (!/^[A-Za-z0-9_-]{80,90}$/.test(p256dh) || !/^[A-Za-z0-9_-]{20,26}$/.test(auth)) {
+      return fehler(request, 'schluessel: p256dh und auth als base64url');
+    }
+
+    await env.DB.prepare(`
+      INSERT INTO push_abos (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)
+      ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id,
+                                          p256dh  = excluded.p256dh,
+                                          auth    = excluded.auth
+    `).bind(ich.id, endpoint, p256dh, auth).run();
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Wieder ab. Nur die eigene Zeile - mit `user_id` in der Bedingung, obwohl
+     der Endpoint schon eindeutig ist: sonst koennte, wer fremde Endpoints
+     erraet, andere Leute stillstellen. Kein 404, wenn nichts wegging: das
+     Ergebnis ist dasselbe, und die Seite raeumt hier auch dann auf, wenn der
+     Browser sein Abo schon vergessen hat. */
+  'POST /api/push/weg': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const endpoint = String(daten.endpoint ?? '').trim();
+    if (!endpoint) return fehler(request, 'endpoint fehlt');
+    await env.DB.prepare('DELETE FROM push_abos WHERE endpoint = ? AND user_id = ?')
+      .bind(endpoint, ich.id).run();
+    return antwort(request, { ok: true });
   },
 
   // -------------------------------------------------------------------------
@@ -3273,7 +3562,7 @@ const ROUTEN = {
     const anWen = kreis.ids ?? (await env.DB.prepare(
       'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
       .bind(ich.id).all()).results.map(r => r.id);
-    notrufPost(env, ctx, ich, zeile.id, art, lat, lon, anWen);
+    notrufPost(env, ctx, ich, zeile.id, art, lat, lon, anWen, zeile.bis);
 
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
@@ -3402,7 +3691,7 @@ const ROUTEN = {
     const anWen = kreis.ids ?? (await env.DB.prepare(
       'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
       .bind(ich.id).all()).results.map(r => r.id);
-    notrufPost(env, ctx, ich, zeile.id, zeile.art, zeile.lat, zeile.lon, anWen);
+    notrufPost(env, ctx, ich, zeile.id, zeile.art, zeile.lat, zeile.lon, anWen, zeile.bis);
 
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
@@ -4885,10 +5174,18 @@ const ROUTEN = {
       if (ziel.gesperrt_am) return fehler(request, 'Der ist schon gesperrt', 409);
       const grund = String(daten.grund ?? '').trim().replace(/\s+/g, ' ').slice(0, GRUND_MAX);
       detail = grund || null;
-      await env.DB.prepare(`
-        UPDATE users SET gesperrt_am = datetime('now'), gesperrt_von = ?, gesperrt_grund = ?
-        WHERE id = ?
-      `).bind(ich.id, grund || null, ziel.id).run();
+      /* Die Push-Abos gehen mit. `stosse` filtert Gesperrte ohnehin heraus,
+         genau wie `benachrichtige` - die Zeile stehen zu lassen waere also
+         folgenlos, aber sie waere ein offener Zustellweg zu jemandem, der
+         gerade hinausgebeten wurde. Beim Entsperren kommt das Abo von selbst
+         zurueck: die Seite meldet es bei jedem Start neu an. */
+      await env.DB.batch([
+        env.DB.prepare(`
+          UPDATE users SET gesperrt_am = datetime('now'), gesperrt_von = ?, gesperrt_grund = ?
+          WHERE id = ?
+        `).bind(ich.id, grund || null, ziel.id),
+        env.DB.prepare('DELETE FROM push_abos WHERE user_id = ?').bind(ziel.id),
+      ]);
 
     } else if (aktion === 'entsperren') {
       await env.DB.prepare(`
@@ -4922,6 +5219,10 @@ const ROUTEN = {
           WHERE id = ?
         `).bind(ziel.id),
         env.DB.prepare('DELETE FROM tokens WHERE user_id = ?').bind(ziel.id),
+        // Und der Meldeweg dazu. Ein Entfernter, dem weiter aufs Handy
+        // geklopft wird, waere die haesslichste Art, das Wort "entfernt" zu
+        // widerlegen.
+        env.DB.prepare('DELETE FROM push_abos WHERE user_id = ?').bind(ziel.id),
       ]);
     }
 

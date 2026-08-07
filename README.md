@@ -237,13 +237,18 @@ Gemeldete Werte sind **ungeprüft**. Die einzige Ausnahme trägt die Marke
 
 Wer eine Adresse hinterlegt hat, bekommt Mail — je Anlass abwählbar:
 
-| Art | wann | Vorgabe |
-|---|---|---|
-| `gewonnen` | die Flasche hat einen getroffen | an |
-| `termin_neu` | ein Abend steht fest | an |
-| `termin_aendert` | ein Abend verschiebt sich, wird umbenannt oder fällt aus | an |
-| `echo` | jemand antwortet auf einen Beitrag oder gibt Sterne | **aus** |
-| `rundmail` | gelegentlich, vom Wirt | an |
+| Art | wann | Vorgabe | auch als Push |
+|---|---|---|---|
+| `gewonnen` | die Flasche hat einen getroffen | an | ja, dringend |
+| `termin_neu` | ein Abend steht fest | an | ja |
+| `termin_aendert` | ein Abend verschiebt sich, wird umbenannt oder fällt aus | an | ja |
+| `echo` | jemand antwortet auf einen Beitrag oder gibt Sterne | **aus** | ja |
+| `notruf` | jemand braucht Bier oder Gesellschaft | an | ja, dringend |
+| `rundmail` | gelegentlich, vom Wirt | an | **nein** |
+
+Der Schalter gilt für **beide** Wege: „keine Termin-Post" heißt keine, egal über
+welche Leitung. Zwei Schalterreihen für dieselbe Frage wären die sicherste Art,
+dass niemand die zweite findet.
 
 Zwei Regeln gelten für alle: Gesperrte und Entfernte bekommen gar keine (der
 gemessene Melder hat kein Postfach und fällt damit von selbst heraus), und der
@@ -271,8 +276,45 @@ Gewinners. Beide tragen eine **HMAC-Signatur statt einer Zeile in der Datenbank*
 klickt: Mailscanner laden Links vor, und ein `GET`, das zusagt, wäre binnen einer
 Woche einmal von einem Virenscanner beantwortet worden.
 
+### Push aufs Gerät
+
+Die Mail ist zu langsam für das, was eine Frist hat: der Gezogene hat drei
+Stunden zum Antworten, ein Notruf gilt neunzig Minuten, und eine Mail liegt so
+lange im Postfach, wie es dem Postfach gefällt. Deshalb geht dasselbe
+**zusätzlich** als Push aufs Gerät — nie statt der Mail, und nur, wenn man den
+siebten Schalter im Deckel umlegt. Wer nichts einschaltet, merkt davon nichts.
+
+Dafür ist die Tafel **installierbar**: `manifest.webmanifest`, `sw.js` und
+`icon.png` liegen als Geschwisterdateien neben `index.html`. Das ist die eine
+bewusste Ausnahme vom Grundsatz *eine geschlossene Datei* — ein Service Worker
+muss eine eigene Datei gleicher Herkunft sein, und iOS nimmt für das App-Symbol
+keine `data:`-Adresse an. **`sw.js` fasst die Auslieferung der Seite nicht an:
+kein `fetch`-Zuhörer, kein Cache.** Sonst klebte eine alte Tafel im Browser, und
+„der Deploy wirkt nicht" bekäme eine zweite Ursache neben der Edge-Karenz.
+
+Verschlüsselt wird nach **RFC 8291** (`aes128gcm`), ausgewiesen nach **RFC 8292**
+(VAPID) — beides in `worker/src/webpush.js`, purem WebCrypto, ohne
+Abhängigkeiten. Der Push-Dienst reicht die Meldung nur weiter; lesen kann er sie
+nicht. Ein totes Gerät antwortet mit 404 oder 410 und wird beim Senden aus
+`push_abos` gelöscht — die Tabelle räumt sich beim Benutzen auf, es gibt keinen
+Cron dafür. Der Endpoint eines Abos ist praktisch ein Geheimnis (wer ihn hat,
+kann diesem Gerät zustellen) und geht in **keiner** API-Antwort heraus.
+
+Was in der Nutzlast steht, ist absichtlich mager: Titel, ein Satz, eine
+Sprungmarke (`#los=<id>`, `#termin=<id>`, `#notruf`) und eine Marke zum
+Ersetzen liegender Meldungen. **Nie ein Token** — wer den Push bekommt, ist auf
+dem Gerät schon angemeldet.
+
+**Auf dem iPhone** gibt Safari Push nur an eine Seite heraus, die auf dem
+Home-Bildschirm liegt (ab iOS 16.4). Das hat eine Folge, die man erst merkt,
+wenn man davorsteht: eine solche App hat ihren **eigenen Speicher**, und der
+Anmeldelink aus der Mail öffnet beim Antippen immer Safari, nie die App. Darum
+gibt es in der installierten App ein Feld **„Link aus der Mail"** — Link
+gedrückt halten, kopieren, dort einsetzen. Antippen verbraucht ihn in Safari; er
+gilt einmal und fünfzehn Minuten. Die Anmelde-Mail sagt das auch.
+
 **Mein Deckel** (Flyout auf der Tafel) ist die Selbstverwaltung: Name ändern,
-Adresse wechseln, die fünf Schalter, alle Geräte abmelden. Der Adresswechsel ist
+Adresse wechseln, die sechs Mail-Schalter, der Push-Schalter, alle Geräte abmelden. Der Adresswechsel ist
 zweistufig — der Link geht an die neue Adresse, die alte bekommt eine Warnung und
 gilt weiter, bis dort geklickt wurde. Wer die Rolle `admin` hat, findet ganz
 unten den Knopf **Mitgliederverwaltung** — der einzige Wegweiser ins Kontor.
@@ -310,10 +352,19 @@ index.html           eine einzelne, in sich geschlossene Seite ohne externe Ress
 statistik.html       die Statistiken: die Bilder zur Runde — für jeden Angemeldeten
 admin.html           das Kontor: Nutzerverwaltung, Statistik, Rundmail — nur fuer Admins
 bilder.js            die Grafiken samt Tooltip; statistik.html und admin.html teilen sie
+sw.js                nimmt Push-Meldungen entgegen — sonst nichts, kein Cache
+manifest.webmanifest macht die Tafel installierbar (Name, Symbol, Vollbild)
+icon.png             das App-Symbol, 512×512 — und das Bild in der Push-Meldung
+og.png               das Schild für WhatsApp & Co. (1200×630, siehe Kopf von index.html)
 worker/              Cloudflare Worker + D1 + R2: Registrierung, Meldungen, Bestenliste
 worker/src/tafel.js  Durable Object: verteilt an alle offenen Seiten, was sich geändert hat
+worker/src/webpush.js  VAPID + RFC-8291-Verschlüsselung, purer WebCrypto
 worker/migrations/   das Schema, eine Datei je Schritt — die Reihenfolge ist die Geschichte
 ```
+
+Die vier Geschwisterdateien im Wurzelverzeichnis holt der Browser **nicht** beim
+Aufbau der Seite: `og.png` sehen nur Vorschau-Sammler, `manifest`/`sw.js`/`icon.png`
+nur, wer die Tafel installiert. „Eine geschlossene Datei" bleibt damit heil.
 
 `bilder.js` ist die einzige geteilte Datei, und sie ist es aus einem Grund: an
 einem Tooltip, der zweimal dasteht, ändert man beim zweiten Mal nichts mehr. Sie
@@ -335,8 +386,10 @@ flowchart LR
         Kontor["admin.html<br/>Kontor, nur Admin"]
         Statistik["statistik.html<br/>Statistik"]
         Bilder["bilder.js<br/>Grafiken + Tooltip"]
+        SW["sw.js<br/>nimmt Push entgegen"]
         Kontor -. "import" .-> Bilder
         Statistik -. "import" .-> Bilder
+        Tafel -. "register()" .-> SW
     end
 
     subgraph CF["Cloudflare"]
@@ -351,6 +404,7 @@ flowchart LR
     OSM["tile.openstreetmap.org"]
     HA["Home Assistant<br/>privates Repo"]
     Web["verlinkte Seiten<br/>beliebige Adressen"]
+    Push["Push-Dienst<br/>FCM · Apple · Mozilla"]
 
     Tafel -- "REST + WebSocket /api/strom" --> Worker
     Kontor -- "REST" --> Worker
@@ -369,6 +423,8 @@ flowchart LR
     Worker -- "GET Kachel, Proxy" --> OSM
     Worker -- "GET Seite + Vorschaubild<br/>nur durch das SSRF-Gatter" --> Web
     HA -- "POST /api/report, /api/los/antwort · Bearer" --> Worker
+    Worker -- "POST verschlüsselte Meldung<br/>VAPID + RFC 8291" --> Push
+    Push -- "push-Ereignis" --> SW
 ```
 
 Drei Dinge, die die Zeichnung festhält und die Prosa sonst verstreut sagt: die
@@ -455,11 +511,13 @@ Drei Dinge, die dazugehören:
 | `POST /api/anmelden` | `{email}` → schickt einen Magic Link |
 | `POST /api/magic` | `{token}` aus dem Link → Geräte-Token |
 | `POST /api/name` | Name für die Liste setzen |
-| `GET /api/me` 🔒 | wem das Token gehört: Name, Adresse, Rolle, Sperre, Mailschalter, Gerätezahl |
+| `GET /api/me` 🔒 | wem das Token gehört: Name, Adresse, Rolle, Sperre, Mailschalter, Gerätezahl, dazu `vapid` — der öffentliche Push-Schlüssel oder `null`, wenn der Worker kein Push kann |
 | `POST /api/report` | `{biere, temperatur}` mit `Bearer`-Token |
 | `POST /api/abmelden` | wirft nur dieses eine Gerät raus |
 | `POST /api/geraete/alle-abmelden` 🔒 | wirft **alle** raus, auch dieses — das verlorene Handy |
-| `POST /api/einstellungen` 🔒 | `{mail:{art:bool}}` und/oder `{stumm:bool}`; unbekannte Arten → 400 |
+| `POST /api/einstellungen` 🔒 | `{mail:{art:bool}}` und/oder `{stumm:bool}`; unbekannte Arten → 400. Gilt für Mail **und** Push |
+| `POST /api/push/abo` 🔒 | `{endpoint, schluessel:{p256dh, auth}}` — dieses Gerät zum Klopfen anmelden. UPSERT auf `endpoint`: die Seite ruft bei jedem Start, denn Push-Dienste tauschen Adressen im Stillen aus, und ein Gerät, an dem sich jemand anderes anmeldet, wandert mit |
+| `POST /api/push/weg` 🔒 | `{endpoint}` — nur die eigene Zeile; zweimal gerufen ist kein Fehler |
 | `POST /api/mail/aendern` 🔒 | neue Adresse; Link an die **neue**, Warnung an die **alte**, bis dahin gilt die alte |
 | `POST /api/mail/stumm` | `{id, sig}` aus dem Ein-Klick-Abmeldelink — ohne Anmeldung, per HMAC |
 | `POST /api/drehen` | die Flasche drehen; ein zweiter Ruf liefert dasselbe Los |
@@ -497,7 +555,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/admin/rundmail/geplant` 🔒 | die noch anstehenden und die fehlgeschlagenen geplanten Rundmails — nur Admin |
 | `POST /api/admin/rundmail/geplant/aendern` 🔒 | `{id, ...Felder}` ändert eine geplante Rundmail, `{id, verwerfen:true}` löscht sie — geht nur, solange sie noch `geplant` ist |
 | `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
-| `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM`, `GIPHY_KEY`; dazu **zwei Stände**, die das Kontor unter der Ampel nebeneinanderstellt: `version`/`deployed_at` vom letzten Worker-Deploy und `seite_version`/`seite_deployed_at`/`seite_stand` vom letzten Commit auf `main` (bei GitHub erfragt, eine Viertelstunde gecacht) |
+| `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM`, `GIPHY_KEY`, `push` (beide VAPID-Hälften); dazu **zwei Stände**, die das Kontor unter der Ampel nebeneinanderstellt: `version`/`deployed_at` vom letzten Worker-Deploy und `seite_version`/`seite_deployed_at`/`seite_stand` vom letzten Commit auf `main` (bei GitHub erfragt, eine Viertelstunde gecacht) |
 
 🔒 heißt: braucht den `Bearer`-Token, sonst 401. Für die `POST`-Routen gilt das
 ohnehin — sie schreiben; die beiden Ausnahmen sind `/api/anmelden` und
