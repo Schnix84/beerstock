@@ -2042,33 +2042,43 @@ async function schickeLink(env, empfaenger, link) {
 
 ${link}
 
-Der Link gilt ${LINK_MINUTEN} Minuten und genau einmal. Hast du ihn nicht
-angefordert, ist nichts passiert - dann wirf die Mail einfach weg.
+Der Link oeffnet nur die Tafel; angemeldet wird erst mit dem Knopf, der
+dort steht. Er gilt ${LINK_MINUTEN} Minuten. Hast du ihn nicht angefordert,
+ist nichts passiert - dann wirf die Mail einfach weg.
 
-Liegt die Tafel schon als App auf deinem iPhone-Bildschirm: den Link NICHT
-antippen - er oeffnet dann Safari und ist verbraucht. Stattdessen gedrueckt
-halten, "Kopieren", und in der App unten ins Feld "Link aus der Mail"
-einsetzen.`;
+Liegt die Tafel schon als App auf deinem iPhone-Bildschirm: den Link nicht
+antippen, er oeffnet sonst Safari. Stattdessen gedrueckt halten, "Kopieren",
+und in der App unten ins Feld "Link aus der Mail" einsetzen.`;
 
-  /* Der Absatz zum Einsetzen ist kein Beiwerk. Auf iOS hat eine Seite auf dem
-     Home-Bildschirm ihren EIGENEN Speicher, und ein angetippter Link oeffnet
-     immer Safari - wer die Tafel dort installiert hat (und nur so gibt iOS
-     Push heraus), kaeme ohne diesen Umweg nie hinein. Er steht bewusst in
-     beiden Fassungen der Mail und nicht nur im HTML-Teil. */
+  /* Zwei Saetze, die beide teuer erkauft sind.
+
+     "Der Link oeffnet nur die Tafel": seit dem 2026-08-07 loest er sich nicht
+     mehr selbst ein, sondern schlaegt ein Blatt mit einem Knopf auf. Vorher
+     genuegte die VORSCHAU von iOS Mail (langer Druck auf einen Link rendert
+     die Seite samt Skript), um das Token zu verbrennen - der Nutzer hatte die
+     Finger noch nicht bewegt. Dieselbe Ueberlegung stand seit jeher am
+     Gewinner-Link ("Vorschaudienste laden Links vor"), nur nicht hier.
+
+     Der Absatz zum Einsetzen ist ebenfalls kein Beiwerk. Auf iOS hat eine
+     Seite auf dem Home-Bildschirm ihren EIGENEN Speicher, und ein angetippter
+     Link oeffnet immer Safari - wer die Tafel dort installiert hat (und nur
+     so gibt iOS Push heraus), kaeme ohne diesen Umweg nie hinein.
+
+     Beides steht bewusst in beiden Fassungen der Mail, nicht nur im HTML. */
   const html =
 `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
   <p>Hier entlang, dann bist du drin:</p>
   <p><a href="${link}" style="display:inline-block;background:#2f5d4a;color:#e3d8c1;
      padding:12px 22px;border-radius:3px;text-decoration:none;letter-spacing:.15em;
      text-transform:uppercase;font-size:13px">Anmelden</a></p>
-  <p style="font-size:13px;color:#6f6653">Der Link gilt ${LINK_MINUTEN} Minuten und genau
-     einmal. Hast du ihn nicht angefordert, ist nichts passiert &ndash; dann wirf
+  <p style="font-size:13px;color:#6f6653">Der Knopf &ouml;ffnet nur die Tafel;
+     angemeldet wird erst mit dem Knopf, der dort steht. Er gilt ${LINK_MINUTEN}
+     Minuten. Hast du ihn nicht angefordert, ist nichts passiert &ndash; dann wirf
      die Mail einfach weg.</p>
   <p style="font-size:13px;color:#6f6653">Liegt die Tafel schon als App auf deinem
-     iPhone-Bildschirm: den Knopf <strong>nicht antippen</strong> &ndash; er &ouml;ffnet
-     Safari und ist danach verbraucht. Stattdessen gedr&uuml;ckt halten,
-     &bdquo;Kopieren&ldquo;, und in der App unten ins Feld &bdquo;Link aus der
-     Mail&ldquo; einsetzen.</p>
+     iPhone-Bildschirm: den Knopf <strong>nicht antippen</strong>, er &ouml;ffnet sonst
+     Safari. Stattdessen gedr&uuml;ckt halten, &bdquo;Kopieren&ldquo;, und in der App
+     unten ins Feld &bdquo;Link aus der Mail&ldquo; einsetzen.</p>
 </div>`;
 
   await schickeMail(env, empfaenger, 'Dein Link zu „Wer hat kalt“', text, html);
@@ -2081,23 +2091,25 @@ einsetzen.`;
    ihn ueberhaupt noch erreichen kann. */
 async function schickeWechselLink(env, empfaenger, link) {
   const text =
-`Du willst kuenftig hierunter angeschrieben werden. Ein Klick, dann gilt es:
+`Du willst kuenftig hierunter angeschrieben werden. Der Link oeffnet die
+Tafel, dort steht ein Knopf, und der macht es gueltig:
 
 ${link}
 
-Der Link gilt ${LINK_MINUTEN} Minuten und genau einmal. Bis dahin bleibt
-deine alte Adresse in Kraft. Warst du das nicht, wirf die Mail weg - dann
-passiert nichts.`;
+Er gilt ${LINK_MINUTEN} Minuten. Bis der Knopf gedrueckt ist, bleibt deine
+alte Adresse in Kraft. Warst du das nicht, wirf die Mail weg - dann passiert
+nichts.`;
 
   const html =
 `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
-  <p>Du willst k&uuml;nftig hierunter angeschrieben werden. Ein Klick, dann gilt es:</p>
+  <p>Du willst k&uuml;nftig hierunter angeschrieben werden. Der Link &ouml;ffnet die
+     Tafel, dort steht ein Knopf, und der macht es g&uuml;ltig:</p>
   <p><a href="${link}" style="display:inline-block;background:#2f5d4a;color:#e3d8c1;
      padding:12px 22px;border-radius:3px;text-decoration:none;letter-spacing:.15em;
      text-transform:uppercase;font-size:13px">Adresse best&auml;tigen</a></p>
-  <p style="font-size:13px;color:#6f6653">Der Link gilt ${LINK_MINUTEN} Minuten und genau
-     einmal. Bis dahin bleibt deine alte Adresse in Kraft. Warst du das nicht, wirf
-     die Mail weg &ndash; dann passiert nichts.</p>
+  <p style="font-size:13px;color:#6f6653">Er gilt ${LINK_MINUTEN} Minuten. Bis der
+     Knopf gedr&uuml;ckt ist, bleibt deine alte Adresse in Kraft. Warst du das nicht,
+     wirf die Mail weg &ndash; dann passiert nichts.</p>
 </div>`;
 
   await schickeMail(env, empfaenger, 'Bestätige deine neue Adresse', text, html);

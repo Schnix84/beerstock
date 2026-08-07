@@ -269,6 +269,17 @@ Eintrag, statt einen zweiten daneben zu legen, und eine Absage räumt ihn per
 eine Einladung und zeigt im Postfach Zusagen-/Absagen-Knöpfe, deren Antwort an
 ein Postfach ginge, das niemand liest. Zugesagt wird auf der Tafel.
 
+**Kein Link aus einer Mail tut etwas von selbst** — sie führen auf die Seite, und
+dort löst erst ein Knopf aus. Das galt lange nur für die Antwort des Gewinners
+(„Mailscanner und Vorschaudienste laden Links vor; ein `GET`, das zusagt, wäre
+binnen einer Woche einmal von einem Virenscanner beantwortet worden"), seit dem
+7. August 2026 auch für den **Anmeldelink**: iOS Mail rendert beim langen Druck
+auf einen Link die Seite samt JavaScript, und das reichte, um das Token zu
+verbrennen, bevor der Nutzer die Finger bewegt hatte. Wer die Tafel auf dem
+iPhone-Bildschirm liegen hat, kam damit gar nicht mehr herein. Der Link schlägt
+jetzt ein Blatt mit einem Knopf auf; ein Aufbau der Seite ist kein Mensch, der
+sich anmelden will.
+
 Zwei Links kommen ohne Anmeldung aus: das Abmelden und die Antwort des
 Gewinners. Beide tragen eine **HMAC-Signatur statt einer Zeile in der Datenbank**
 — sie steht nirgends, sie wird gerechnet, und ein Rundumschlag ist ein neues

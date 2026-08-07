@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wer hat kalt</title>
-<meta name="description" content="Wer gerade am meisten kaltes Bier hat — angeschrieben an der Kneipentafel.">
+<meta name="description" content="Kaltes Bier und mehr.">
 <meta name="theme-color" content="#20262a">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
 <!-- Die Tafel als App auf dem Bildschirm — und das ist kein Selbstzweck:
@@ -57,7 +57,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Wer hat kalt">
 <meta property="og:title" content="Wer hat kalt">
-<meta property="og:description" content="Wer gerade am meisten kaltes Bier hat — angeschrieben an der Kneipentafel.">
+<meta property="og:description" content="Kaltes Bier und mehr.">
 <meta property="og:url" content="https://schnix84.github.io/beerstock/">
 <meta property="og:image" content="https://schnix84.github.io/beerstock/og.png">
 <meta property="og:image:type" content="image/png">
@@ -2947,6 +2947,43 @@
              placeholder="Warum nicht? (freiwillig)">
 
       <p class="sagt" id="lm-sagt" hidden></p>
+    </div>
+  </div>
+
+  <!-- ============ Der Anmeldelink =====================================
+       Derselbe Bau wie das Losblatt darüber, und aus demselben Grund: der
+       Link aus der Mail ZEIGT nur, gehandelt wird erst hier.
+
+       Das war lange nicht so, und es hat sich gerächt. Die Tafel löste den
+       Link beim Aufbau selbst ein — bequem, solange man annimmt, dass eine
+       Seite nur dann geladen wird, wenn ein Mensch sie sehen will. iOS Mail
+       nimmt diese Annahme auseinander: der lange Druck auf einen Link öffnet
+       eine Vorschau, und die rendert die Seite samt Skript. Das Token war
+       verbraucht, bevor der Nutzer „Kopieren" auch nur antippen konnte, und
+       das Geräte-Token dazu lag in einem Fenster, das sich gleich darauf
+       schloss. Wer die Tafel auf dem iPhone-Bildschirm liegen hat, kam damit
+       überhaupt nicht mehr herein.
+
+       Am Gewinner-Link stand die Begründung dafür seit jeher da („Mailscanner
+       und Vorschaudienste laden Links vor"); sie galt hier genauso, nur hatte
+       sie niemand angewendet. Jetzt schon.
+       ============================================================= -->
+  <div class="flyout" id="anmeldelink" hidden>
+    <div class="fly-schirm" id="al-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="al-titel" aria-modal="true">
+      <div class="fly-kopf">
+        <div>
+          <div class="fly-titel kr" id="al-titel">Dein Link liegt an</div>
+          <div class="fly-unter" id="al-unter">einmal tippen, dann gilt er</div>
+        </div>
+        <button class="fly-zu" id="al-zu" type="button" aria-label="Schließen">×</button>
+      </div>
+
+      <div class="lm-knoepfe">
+        <button class="knopf" id="al-los" type="button">Anmelden</button>
+      </div>
+
+      <p class="sagt" id="al-sagt" hidden></p>
     </div>
   </div>
 
@@ -9338,17 +9375,67 @@
      deshalb dort und nicht als Suchparameter. Direkt nach dem Einloesen fliegt
      es aus der Adresszeile, damit ein Screenshot oder ein zurueckgeblaettertes
      Fenster ihn nicht weiterreicht (er ist dann ohnehin verbraucht). */
-  async function magicEinloesen() {
+  let anmeldeLink = null;   // das Token aus dem Fragment, bis jemand tippt
+
+  function magicEinloesen() {
     const treffer = /[#&]anmelden=([a-f0-9]{32,})/i.exec(location.hash || '');
     if (!treffer) return;
     history.replaceState(null, '', location.pathname + location.search);
-    await magicSenden(treffer[1]);
+    /* HIER WIRD NICHT EINGELÖST, hier wird nur aufgeschlagen. Ein Aufbau der
+       Seite ist kein Mensch, der sich anmelden will: iOS Mail rendert für die
+       Vorschau beim langen Druck die ganze Seite samt Skript, und ein `POST`
+       an dieser Stelle verbrannte das Token, bevor der Nutzer die Finger auch
+       nur bewegt hatte. Dasselbe gilt für jeden Mailscanner und jede
+       Sicherheitssoftware, die Links vorlädt — am Gewinner-Link steht genau
+       dieser Satz seit jeher, er galt hier nur nie. */
+    anmeldeLink = treffer[1];
+    alSagt('');
+    $('anmeldelink').hidden = false;
+  }
+
+  function alSagt(text, schlecht) {
+    const p = $('al-sagt');
+    p.textContent = text || '';
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  /* Zumachen ohne einzulösen ist erlaubt und verliert nichts: das Token gilt
+     seine fünfzehn Minuten weiter, und wer die Mail noch hat, kommt darüber
+     wieder her. Ein Blatt, das man nicht schließen kann, wäre eine Falle. */
+  function anmeldeLinkZu() {
+    anmeldeLink = null;
+    $('anmeldelink').hidden = true;
+    alSagt('');
+  }
+
+  async function anmeldeLinkLos() {
+    if (!anmeldeLink) return;
+    const knopf = $('al-los');
+    knopf.disabled = true;
+    alSagt('');
+    try {
+      // Klagt ins Blatt, nicht auf die Seite dahinter — dort liegt der Vorhang.
+      if (!await magicSenden(anmeldeLink, alSagt)) return;
+      anmeldeLinkZu();
+      /* Von Hand nachziehen, was sonst der nächste Aufbau erledigt hätte: die
+         Seite wird hier ja nicht neu geladen. Erst das Formular (der
+         Türsteher muss weg), dann die Tafel, dann das Push-Abo. */
+      formular();
+      await hole();
+      pushAbgleich();
+    } finally {
+      knopf.disabled = false;
+    }
   }
 
   /* Das Einlösen selbst, getrennt vom Ablesen der Adresszeile: es gibt einen
      zweiten Weg herein, und der kommt aus der Zwischenablage statt aus dem
      Fragment (siehe `einsetz-form`). */
-  async function magicSenden(roh) {
+  /* `klagt` ist die Stelle, an der ein Fehlschlag zu lesen ist. Voreinstellung
+     ist die Meldezeile der Seite; steht ein Blatt darüber offen, gehört sie
+     dorthin — eine Fehlermeldung hinter einem Vorhang ist keine. */
+  async function magicSenden(roh, klagt = sagt) {
     try {
       const r = await fetch(API + '/api/magic', {
         method: 'POST',
@@ -9356,7 +9443,7 @@
         body: JSON.stringify({ token: roh }),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) { sagt(d.fehler || 'Der Link hat nicht funktioniert.', true); return false; }
+      if (!r.ok) { klagt(d.fehler || 'Der Link hat nicht funktioniert.', true); return false; }
       nimm(d.token);
       meinName = d.name;
       brauchtNamen = !!d.braucht_namen;
@@ -9371,7 +9458,7 @@
         : 'Willkommen zurück, ' + d.name + '.');
       return true;
     } catch {
-      sagt('Der Link ließ sich gerade nicht einlösen. Netz weg?', true);
+      klagt('Der Link ließ sich gerade nicht einlösen. Netz weg?', true);
       return false;
     }
   }
@@ -9624,6 +9711,10 @@
   $('lm-ja').addEventListener('click', () => losMailAntwort(true));
   $('lm-nein').addEventListener('click', () => losMailAntwort(false));
 
+  $('al-zu').addEventListener('click', anmeldeLinkZu);
+  $('al-schirm').addEventListener('click', anmeldeLinkZu);
+  $('al-los').addEventListener('click', anmeldeLinkLos);
+
   /* Der Weg aus dem Kontor: `?wrapped=2026` schlägt den Rückblick für dieses
      Jahr auf. Das Kontor kann ihn nicht selbst zeigen — die Kacheln stehen
      hier, und sie ein zweites Mal zu bauen hieße, sie beim nächsten Mal an
@@ -9667,10 +9758,33 @@
      — erst installieren, dann anmelden, dann Push. Er fasst die Auslieferung
      der Seite nicht an (siehe sw.js), kostet also nichts als eine Zeile. */
   swAnwerfen();
-  // Angetippte Meldungen bei OFFENER Tafel: sie ändern nur das Fragment.
-  window.addEventListener('hashchange', pushEinstieg);
+  /* ALLE Wege aus dem Fragment noch einmal, wenn sich nur das Fragment ändert.
 
-  magicEinloesen()
+     Das galt zuerst nur den Push-Marken, und das war zu eng gedacht. Ein Sprung
+     von `…/beerstock/` auf `…/beerstock/#anmelden=…` lädt die Seite NICHT neu —
+     der Browser bewegt bloß das Fragment, das Skript läuft kein zweites Mal.
+     Genau das passiert, wenn die Tafel in Safari schon offen liegt und man den
+     Link in der Mail antippt: das Anmeldeblatt wäre nie erschienen, und man
+     hätte auf eine Seite gestarrt, die den Türsteher zeigt, obwohl der Link
+     gerade angekommen ist. Aufgefallen an der Probe, nicht am Gerät.
+
+     Jede der vier steigt von selbst wieder aus, wenn ihr Muster nicht dasteht —
+     sie hier alle zu rufen kostet vier fehlgeschlagene Vergleiche. */
+  window.addEventListener('hashchange', () => {
+    stummEinloesen();
+    losAusMail();
+    magicEinloesen();
+    pushEinstieg();
+  });
+
+  /* `magicEinloesen` schlägt nur noch das Blatt auf und wartet auf einen
+     Fingertipp — es ist deshalb nicht mehr asynchron, und die Kette darunter
+     hängt nicht mehr an ihm. Der Aufbau läuft durch, als läge kein Link an;
+     tippt jemand dann auf „Anmelden", zieht `anmeldeLinkLos` Formular und
+     Tafel von Hand nach. */
+  magicEinloesen();
+
+  Promise.resolve()
     .then(() => merke() && !meinName && !brauchtNamen ? werBinIch() : null)
     // Ohne den Pfeil bekäme `hole` die Antwort von `werBinIch` als `still` —
     // und der erste Aufbau dürfte dann bei einem Fehler nicht mehr zurückfallen.

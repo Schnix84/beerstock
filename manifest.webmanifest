@@ -1,7 +1,7 @@
 {
   "name": "Wer hat kalt",
   "short_name": "Wer hat kalt",
-  "description": "Wer gerade am meisten kaltes Bier hat — angeschrieben an der Kneipentafel.",
+  "description": "Kaltes Bier und mehr.",
   "lang": "de",
   "dir": "ltr",
   "start_url": "./",
