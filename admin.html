@@ -139,18 +139,33 @@
      Zunge muss weg, sonst schöbe es die obere Reihe nach rechts — zentriert
      wird nur, was in eine Zeile passt.
 
-     Die Grenze steht auf 700 px und nicht knapper: die VOLLE Fassung braucht
-     620 px, und ab dort darf sie nicht mehr überlaufen können — außerhalb
-     dieser Regeln gibt es kein `flex-wrap`, das sie auffinge.
+     Die Grenze steht auf 480 px. Sie lag einmal bei 700, als hier noch sechs
+     Zungen standen und die volle Fassung 620 px brauchte — überall darunter
+     hätte sie überlaufen können, und außerhalb dieser Regeln gibt es kein
+     `flex-wrap`, das sie auffinge. Seit Protokoll und Rundmail auf der
+     Übersicht liegen, sind es vier Zungen und 412 px, also ist bei 480 reichlich
+     Luft. Der engere Schnitt ist wichtig: gestreckt gehören die Zungen aufs
+     Handy, und auf einem Tablet mit 700 px wären sie 188 px breite Bänder.
      --------------------------------------------------------------------- */
-  @media (max-width: 700px) {
+  @media (max-width: 480px) {
     .register { flex-wrap: wrap; overflow-x: visible; padding: 10px 10px 0; row-gap: 3px; }
-    .register button:first-child { margin-left: 0; }
     .register button, .register .zur-tafel { font-size: 11.5px; padding: 5px 9px 6px; }
-    /* Ohne das Wort bliebe vom Weg hinaus ein Knopf von 30 px — schmaler als
-       jedes andere Ziel auf dieser Seite und schmaler, als ein Daumen trifft.
-       Die 14 px, die er dazubekommt, kosten nichts: er steht am Ende einer
-       Reihe, und dort ist Platz übrig. */
+    /* Über die ganze Breite. Vier Zungen lassen bei 390 px rund 80 px übrig,
+       und die als Loch rechts stehen zu lassen, sähe aus, als fehlte dort noch
+       etwas. `1 1 auto` und nicht `1 1 0`: der Platz wird zu gleichen Teilen
+       VERTEILT, die Zungen bleiben aber unterschiedlich breit, wie ihre Wörter.
+       Gleich breit gemacht bekäme der Pfeil so viel Raum wie „Mitglieder", und
+       ein Knopf, der zu neun Zehnteln leer ist, sieht aus wie ein Fehler.
+
+       Die beiden `margin-left: auto` müssen dafür weg — ein automatischer Rand
+       schluckt den freien Platz, BEVOR `flex-grow` ihn verteilen darf, und die
+       Zungen blieben so schmal wie zuvor. Zentriert wird hier ohnehin nichts
+       mehr: was die volle Breite füllt, hat keine Mitte zu suchen. */
+    .register button, .register .zur-tafel { flex: 1 1 auto; margin-left: 0; }
+    /* Ohne das Wort bliebe vom Weg hinaus sonst ein Knopf von 30 px — schmaler
+       als jedes andere Ziel auf dieser Seite und schmaler, als ein Daumen
+       trifft. Er wächst jetzt ohnehin mit, die Untergrenze steht für den Fall,
+       dass die Reihe doch einmal umbricht. */
     .register .zur-tafel {
       min-width: 44px; display: inline-flex; align-items: center; justify-content: center;
     }
@@ -1417,28 +1432,45 @@
       ziel.appendChild(querKarte('Jahresrückblick', i, 'Dein Jahr öffnen →', jahrWahlAuf));
     }
 
-    /* 2 — Was zuletzt verwaltet wurde. Drei Zeilen, mehr passt nicht in eine
-       drittel Karte, und mehr beantwortet die Frage auch nicht. */
-    if (logZeilen && logZeilen.length) {
-      const ml = el('ul', 'mini-log');
-      logZeilen.slice(0, 3).forEach(z => ml.appendChild(logZeile(z, true)));
-      ziel.appendChild(querKarte('Zuletzt im Protokoll', ml,
-        'zum Protokoll →', () => blattAuf('log-blatt')));
-    }
+    /* 2 und 3 — Protokoll und Rundmail. Diese beiden Karten stehen IMMER da,
+       auch wenn sie nichts zu berichten haben, und das ist keine Vorliebe:
+       seit die beiden Blätter keine eigene Zunge mehr im Register haben, sind
+       diese Karten der einzige Weg dorthin. Eine Karte, die sich bei leerem
+       Inhalt wegräumt, räumte den Weg mit weg — und man käme an die Rundmail
+       nur noch heran, solange schon eine geplant ist.
 
-    /* 3 — Die nächste geplante Rundmail. Steht keine an, fehlt die Karte:
-       „nichts geplant" mit einem Knopf darunter wäre eine Aufforderung, und
-       das Kontor fordert nichts. */
+       Der Jahresrückblick oben darf dagegen fehlen: dorthin führt kein Blatt,
+       nur ein Overlay, und ohne Jahre gibt es nichts zu zeigen. */
+
+    // 2 — Was zuletzt verwaltet wurde. Drei Zeilen, mehr passt nicht in eine
+    //     drittel Karte, und mehr beantwortet die Frage auch nicht.
+    let inhalt;
+    if (logZeilen && logZeilen.length) {
+      inhalt = el('ul', 'mini-log');
+      logZeilen.slice(0, 3).forEach(z => inhalt.appendChild(logZeile(z, true)));
+    } else {
+      inhalt = el('p', 'leer-hinweis', 'Noch hat niemand etwas verwaltet.');
+    }
+    ziel.appendChild(querKarte('Zuletzt im Protokoll', inhalt,
+      'zum Protokoll →', () => blattAuf('log-blatt')));
+
+    // 3 — Die nächste geplante Rundmail.
     const naechste = geplant
       .filter(g => g.status === 'geplant')
       .sort((a, b) => new Date(a.versand_am) - new Date(b.versand_am))[0];
+    const rm = el('div');
     if (naechste) {
-      const i = el('div');
-      i.appendChild(el('div', 'k-name', naechste.betreff));
-      i.appendChild(el('p', 'k-mail', 'geplant für ' + datum(naechste.versand_am)));
-      ziel.appendChild(querKarte('Nächste Rundmail', i,
-        'zur Rundmail →', () => blattAuf('rund-blatt')));
+      rm.appendChild(el('div', 'k-name', naechste.betreff));
+      rm.appendChild(el('p', 'k-mail', 'geplant für ' + datum(naechste.versand_am)));
+    } else {
+      // Kein Werbesatz und keine Aufforderung — nur die Auskunft, dass hier
+      // gerade nichts wartet. Der Knopf darunter bleibt trotzdem, er ist der
+      // Weg zum Blatt.
+      rm.appendChild(el('div', 'k-name', 'Nichts geplant'));
+      rm.appendChild(el('p', 'k-mail', 'Es steht keine Rundmail aus.'));
     }
+    ziel.appendChild(querKarte('Nächste Rundmail', rm,
+      'zur Rundmail →', () => blattAuf('rund-blatt')));
   }
 
   // ==========================================================================
@@ -1916,6 +1948,18 @@
   // und wer eine Rundmail schrieb, hatte die Mitgliederliste über sich, die
   // ihn nichts anging.
   //
+  // ZUNGEN trägt aber nur DREI davon. Protokoll und Rundmail haben auf der
+  // Übersicht ohnehin schon eine Karte, die sagt, was dort wartet — und wer
+  // dort steht, klickt den Knopf auf der Karte und nicht die Zunge darüber.
+  // Zwei Wege zum selben Blatt sind einer zuviel, und die Karte ist der
+  // bessere: sie beantwortet die Frage schon, für die man sonst erst
+  // hingehen müsste. Was bleibt, sind die drei Blätter, die man ansteuert,
+  // ohne vorher etwas gelesen zu haben.
+  //
+  // Steht eines der beiden zungenlosen Blätter offen, ist KEINE Zunge
+  // hervorgehoben. Das ist richtig so — es lügt nicht, und der Weg zurück ist
+  // „Übersicht", die erste Zunge, die dann ohnehin dasteht.
+  //
   // Die Blätter selbst sind unverändert geblieben — das Register schaltet nur
   // `hidden`. Es zeichnet auch nichts nach: was aufgeschlagen war, bleibt es
   // beim Nachladen nach einer Handlung, sonst spränge man nach jedem Sperren
@@ -1926,24 +1970,17 @@
     ['kopf-blatt',  'Übersicht'],
     ['runde-blatt', 'Mitglieder'],
     ['stat-blatt',  'Statistiken'],
-    ['rund-blatt',  'Rundmail'],
-    ['log-blatt',   'Protokoll'],
   ];
   let offen = 'kopf-blatt';
 
   /* Die Zahl an einer Zunge sagt, was einen dort erwartet. Nur dort, wo sie
      etwas beantwortet: „Statistiken (11)" wäre die Anzahl der Grafiken und
-     damit eine Auskunft über die Seite, nicht über die Runde. */
-  const zungenZahl = id => {
-    if (id === 'runde-blatt') {
-      return stand ? String(stand.nutzer.filter(u => !u.entfernt).length) : null;
-    }
-    if (id === 'rund-blatt') {
-      const n = geplant.filter(g => g.status === 'geplant').length;
-      return n ? String(n) : null;
-    }
-    return null;
-  };
+     damit eine Auskunft über die Seite, nicht über die Runde. Die Zahl der
+     geplanten Rundmails ist damit nicht weg — sie steht als Betreff und
+     Zeitpunkt auf der Karte, und das ist mehr als eine Ziffer. */
+  const zungenZahl = id => id === 'runde-blatt' && stand
+    ? String(stand.nutzer.filter(u => !u.entfernt).length)
+    : null;
 
   function registerZeichnen() {
     const ziel = $('register');
