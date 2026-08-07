@@ -84,14 +84,19 @@ self.addEventListener('push', ev => {
        danebengreift. -------------------------------------------------- */
     let diagnose = '';
     try {
-      const mitMarke = await self.registration.getNotifications({ tag: d.tag });
-      const ohneMarke = await self.registration.getNotifications();
-      diagnose = `\n[sw4 · gleiche Marke: ${mitMarke.length} · insgesamt: ${ohneMarke.length}]`;
+      const vorher = (await self.registration.getNotifications({ tag: d.tag })).length;
+      await marke_freiraeumen(d.tag);
+      /* Ein Wimpernschlag zwischen Schliessen und Zeigen: falls iOS das
+         Wegnehmen nur asynchron verbucht, faellt die neue Meldung sonst in
+         dieselbe Runde und der Sperrbildschirm behaelt beide. Kostet nichts,
+         wenn es nicht daran lag. */
+      await new Promise(r => setTimeout(r, 400));
+      const nachher = (await self.registration.getNotifications({ tag: d.tag })).length;
+      diagnose = `\n[sw5 · vorher: ${vorher} · nach dem Schliessen: ${nachher}]`;
     } catch (e) {
-      diagnose = `\n[sw4 · getNotifications wirft: ${e && e.name}]`;
+      diagnose = `\n[sw5 · wirft: ${e && e.name}]`;
+      await marke_freiraeumen(d.tag);
     }
-
-    await marke_freiraeumen(d.tag);
     await self.registration.showNotification(d.titel || 'Wer hat kalt', {
       body: (d.text || '') + diagnose,
       /* Die Marke ersetzt eine liegende Meldung, statt sich danebenzustellen:
