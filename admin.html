@@ -135,10 +135,18 @@
      und ein Text, den man erraten muss, ist keine Auskunft. Voll deckend sind
      es 5,1:1, und einen Punkt kleiner tritt er trotzdem hinter das Wort. */
   .register button i { font-style: normal; margin-left: 5px; font-size: 11px; }
-  /* Der Weg hinaus gehört zur Reihe, aber nicht zu den Blättern — deshalb ein
-     eigenes `auto` an der linken Seite, das ihn ans andere Ende schiebt und
-     die fünf Zungen trotzdem mittig lässt. */
-  .register .zur-tafel { margin-left: auto; }
+  /* Der Weg hinaus schließt an die drei Blatt-Zungen an, statt am rechten Rand
+     zu stehen. Bei fünf Zungen brauchte er den Abstand — sonst hätte man ihn
+     mitten in der Reihe gesucht. Bei dreien steht er einfach dahinter, und die
+     Vierergruppe liest sich als das, was sie ist: alles, was das Register
+     kann.
+
+     Das `auto` links am ersten und rechts am letzten Element zentriert die
+     Gruppe. Kein `justify-content: center`: bei einer Reihe, die auf schmalen
+     Schirmen überläuft, schiebt `center` den Anfang nach links aus dem Bild —
+     und dorthin scrollt kein Mensch zurück. Zwei Auto-Ränder zentrieren
+     genauso und geben den Platz beim Überlaufen einfach wieder her. */
+  .register .zur-tafel { margin-right: auto; }
 
   /* --- Das Register auf einem Handy ---------------------------------------
      Sechs Zungen in voller Größe brauchen 592 px, ein Handy hat 390. Vorher
@@ -194,7 +202,10 @@
        schluckt den freien Platz, BEVOR `flex-grow` ihn verteilen darf, und die
        Zungen blieben so schmal wie zuvor. Zentriert wird hier ohnehin nichts
        mehr: was die volle Breite füllt, hat keine Mitte zu suchen. */
-    .register button, .register .zur-tafel { flex: 1 1 auto; margin-left: 0; }
+    /* BEIDE Auto-Ränder müssen weg, nicht nur der linke: ein automatischer
+       Rand schluckt den freien Platz, bevor `flex-grow` ihn verteilen darf,
+       und die Zungen blieben so schmal wie ihre Wörter. */
+    .register button, .register .zur-tafel { flex: 1 1 auto; margin-left: 0; margin-right: 0; }
     /* Ohne das Wort bliebe vom Weg hinaus sonst ein Knopf von 30 px — schmaler
        als jedes andere Ziel auf dieser Seite und schmaler, als ein Daumen
        trifft. Die Obergrenze zieht die andere Linie: bricht die Reihe doch
@@ -236,6 +247,8 @@
        `currentTime` 0 und `opacity` 0 bei jedem Klick auf eine Zunge). Jeder
        Registerwechsel hätte also 0,28 s Warten gekostet — auf einer Seite,
        deren ganzer Zweck es ist, schneller zwischen den Blättern zu kommen. */
+  }
+
   /* Das Korn der Tafel. Liegt über allem und fängt nichts ab. */
   .blatt::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;

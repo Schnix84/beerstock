@@ -79,7 +79,36 @@
   .tafel > * { position: relative; z-index: 1; }
   .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
 
-  /* --- Der Kopf ----------------------------------------------------------- */
+  /* --- Der Weg zurück ------------------------------------------------------
+     Eine Registerzunge am oberen Rand des Bretts, wie im Kontor: aus Holz,
+     mit derselben Maserung wie der Rahmen, auf dem sie sitzt. Sie stand
+     vorher als gestrichelter Link IM Blatt, über der Überschrift — dort war
+     sie das erste, was man las, obwohl sie das letzte ist, was man braucht.
+
+     Am rechten Rand, weil sie hinausführt: alles auf dieser Seite liest man
+     von links, und was wieder heraus führt, sammelt sich rechts. Und 8 px
+     weiter innen als das Brett — bündig stünde die eckige Zungenkante über
+     dessen 6-px-Rundung, mit einem Stück Hintergrund darunter.
+     --------------------------------------------------------------------- */
+  .register {
+    display: flex; justify-content: flex-end;
+    max-width: 760px; margin: 0 auto; padding: 0 8px;
+  }
+  .register .zur-tafel {
+    font: inherit; font-size: 12.5px; white-space: nowrap; text-decoration: none;
+    border: 1px solid #00000059; border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background:
+      repeating-linear-gradient(97deg, #ffffff08 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
+      linear-gradient(#3b2917, #31210f);
+    color: var(--kreide-weg);
+    padding: 6px 14px 7px;
+    transition: filter .15s, color .15s;
+  }
+  .register .zur-tafel:hover { filter: brightness(1.35); color: var(--kreide-matt); }
+
+  /* Der gestrichelte Link bleibt — die verschlossene Tür benutzt ihn weiter,
+     und dort ist er ein Satzende („meldet sich an") und keine Zunge. */
   .zurueck {
     display: inline-block; color: var(--kreide-weg); font-size: 13px;
     text-decoration: none; border-bottom: 1px dashed #ffffff2e; padding-bottom: 1px;
@@ -88,7 +117,11 @@
   h1 {
     font-family: var(--hand); font-weight: 400;
     font-size: clamp(26px, 7vw, 36px); line-height: 1.15;
-    margin: 12px 0 18px; transform: rotate(-.8deg); transform-origin: left;
+    /* Kein Abstand nach oben mehr: der stand für den Rückweg-Link, der hier
+       einmal darüber lag. Seit der als Zunge am Brett hängt, ist die
+       Überschrift das erste im Blatt und braucht nur die Polsterung der
+       Tafel. */
+    margin: 0 0 18px; transform: rotate(-.8deg); transform-origin: left;
   }
 
   /* --- Der Zeitraum ------------------------------------------------------- */
@@ -144,9 +177,11 @@
 </style>
 </head>
 <body>
+<nav class="register" aria-label="Weg zurück">
+  <a class="zur-tafel" href="./">← zurück zur Tafel</a>
+</nav>
 <div class="brett">
   <div class="tafel">
-    <a class="zurueck" href="./">← zurück zur Tafel</a>
     <h1 class="kr">Statistiken</h1>
 
     <div class="reiter" id="zeitraum" hidden></div>
