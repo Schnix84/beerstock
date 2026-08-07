@@ -107,11 +107,12 @@ Kommende stehen oben, Gewesenes darunter. Abgesagt wird weich: die Zeile bleibt
 durchgestrichen stehen, damit die Kommentare darunter ihren Zusammenhang behalten.
 
 Nicht jeder Abend ist bei jemandem. Unter den Namen steht **„Auswärts …"**, und wer
-das wählt, schreibt statt eines Gastgebers einen Ort hin — „beim Italiener", „im
-Park". Die Präposition gehört mit ins Feld; der Abend heißt danach überall so, auf
-der Tafel wie im Kalendereintrag der Mail. Ein Abend auswärts zählt für niemanden
-als Gastgeberschaft, dafür darf ihn jeder bewerten, auch der, der ihn ausgemacht
-hat — bewertet wird ja der Italiener und nicht er.
+das wählt, schreibt statt eines Gastgebers einen Ort hin — „Schlemmen am Turm", „im
+Park". Der Ort ist dann der **Name** des Abends: so heißt die Zeile auf der Tafel,
+so heißt der Kalendereintrag in der Mail. Ein „Bierabend" kommt nicht davor — vor
+einem Eigennamen stünde sonst ein Wort, das niemand raten kann. Ein Abend auswärts
+zählt für niemanden als Gastgeberschaft, dafür darf ihn jeder bewerten, auch der,
+der ihn ausgemacht hat — bewertet wird ja der Laden und nicht er.
 
 Die Liste reicht zwei Wochen zurück, sonst wüchse sie mit jedem Abend, den es je
 gab. Alles davor steht in der **Chronik** hinter dem Knopf am Kopf der Sektion:

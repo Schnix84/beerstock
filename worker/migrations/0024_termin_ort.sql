@@ -9,11 +9,18 @@
 -- sie steht nirgends doppelt: kein Schalter daneben, der dasselbe noch einmal
 -- behauptet und irgendwann etwas anderes sagt.
 --
--- Was der Text drin ist, schreibt der Eintragende: "beim Italiener", "im
--- Park". Die Praeposition steht MIT drin, weil der Worker sie nicht raten
--- kann - "bei Italiener" waere Kauderwelsch, und eine Liste von Praepositionen
--- je Ortsart waere ein Woerterbuch, das niemand pflegt. Ueberall, wo bisher
--- " bei <Name>" stand, steht jetzt " <ort>".
+-- Was der Text drin ist, schreibt der Eintragende: "Schlemmen am Turm", "im
+-- Park". DER ORT IST DER NAME DES ABENDS - es kommt kein Wort davor. Der
+-- erste Anlauf haengte ihn an "Bierabend" wie einen Gastgeber und verlangte
+-- dafuer die Praeposition im Feld; wer einen Eigennamen hinschrieb, bekam
+-- "Bierabend Schlemmen am Turm". Welches Wort davor gehoerte, weiss niemand
+-- ausser dem Eintragenden, und eine Liste von Praepositionen je Ortsart waere
+-- ein Woerterbuch, das niemand pflegt.
+--
+-- Fuer Saetze heisst das: " bei <Name>" haengt sich mitten hinein, ein
+-- Eigenname muss ans ENDE ("... wird getrunken - Schlemmen am Turm"). Die drei
+-- erlaubten Formen stehen im Worker bei `terminBei` / `terminOrtEnde` /
+-- `terminOrtKomma`; eine vierte erfindet man nicht.
 --
 -- `gastgeber_id` BLEIBT NOT NULL - der Umbau auf NULL waere in SQLite ein
 -- Neubau der Tabelle samt Index und UNIQUE, an Daten, die schon leben. Bei

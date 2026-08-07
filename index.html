@@ -2516,10 +2516,13 @@
             <label><span class="feld-label">Tag</span>
               <input class="feld" id="t-datum" type="date" required></label>
           </div>
-          <!-- Nur für „auswärts" — bis dahin ist der Gastgeber der Ort. Das
-               `required` setzt `terminOrtZeigen()` mit der Sichtbarkeit: ein
-               verstecktes Pflichtfeld lässt sich nicht anspringen, und der
-               Browser bricht das Abschicken dann wortlos ab.
+          <!-- Nur für „auswärts" — bis dahin ist der Gastgeber der Ort. Was
+               hier steht, IST der Name des Abends; der Platzhalter zeigt
+               deshalb einen Eigennamen und nicht „beim Italiener", was zu
+               „Bierabend beim Italiener" verführte, als noch ein Wort davor
+               stand. Das `required` setzt `terminOrtZeigen()` mit der
+               Sichtbarkeit: ein verstecktes Pflichtfeld lässt sich nicht
+               anspringen, und der Browser bricht das Abschicken wortlos ab.
 
                Das Feld heißt `t-wohin` und NICHT `t-ort`, obwohl die Spalte
                dahinter `ort` heißt: „Ort" ist in der deutschen Autofill-
@@ -2531,7 +2534,7 @@
           <div class="melde eins" id="t-wohin-zeile" hidden>
             <label><span class="feld-label">Wo</span>
               <input class="feld" id="t-wohin" maxlength="60" autocomplete="off"
-                     placeholder="beim Italiener"></label>
+                     placeholder="Schlemmen am Turm"></label>
           </div>
           <div class="melde">
             <label><span class="feld-label">Von</span>
@@ -3475,13 +3478,18 @@
 
   /* Wo ein Abend ist, und wie er heißt, wenn ihm niemand einen Namen gegeben
      hat. Zwei Zeilen, aber an sechs Stellen gebraucht — Liste, Blatt, Chronik,
-     Rückmeldung nach dem Eintragen, Wrapped —, und die Regel dahinter ist
-     nicht offensichtlich: auswärts trägt der Ort seine Präposition SELBST
-     („beim Italiener"), bei einem Gastgeber steht sie davor. Der Worker
-     schickt `gastgeber: null`, sobald `ort` steht (siehe migrations/0024), ein
-     „bei null" fiele also sofort auf. */
+     Rückmeldung nach dem Eintragen, Wrapped.
+
+     Auswärts IST der Ort der Name: „Schlemmen am Turm", nicht „Bierabend
+     Schlemmen am Turm". Ein Eigenname verträgt kein Wort davor, und welches
+     es sein müsste, weiß niemand — „beim Italiener" will ein anderes als
+     „Schlemmen am Turm". Bei einem Gastgeber bleibt es beim „Bierabend bei
+     Maike", da trägt die Präposition der Satz.
+
+     Der Worker schickt `gastgeber: null`, sobald `ort` steht (siehe
+     migrations/0024) — ein „bei null" fiele also sofort auf. */
   const terminWo = t => t.ort || 'bei ' + t.gastgeber;
-  const terminName = t => t.titel || 'Bierabend ' + terminWo(t);
+  const terminName = t => t.titel || t.ort || 'Bierabend bei ' + t.gastgeber;
 
   const VARIANTE = {
     kopf(p, modus) {
@@ -9289,7 +9297,7 @@
       $('termin-form').hidden = true;
       $('termin-neu').textContent = 'eintragen';
       zeichneTermine(d.termine || letzteTermine);
-      terminSagt('Eingetragen — Bierabend ' + (d.ort || 'bei ' + d.gastgeber) + '.');
+      terminSagt('Eingetragen — ' + (d.ort || 'Bierabend bei ' + d.gastgeber) + '.');
     } catch (e) {
       terminSagt(e.message, true);
     } finally {

@@ -2327,16 +2327,27 @@ function icsFalten(zeile) {
 // ohne VTIMEZONE: das ist die eine Form, die jeder Client gleich versteht.
 const icsZeit = dbZeit => String(dbZeit).replace(/[-:]/g, '').replace(' ', 'T') + 'Z';
 
-/* Wo der Abend ist - mit fuehrendem Leerzeichen, damit es sich ueberall
-   anhaengen laesst: "Bierabend bei Maike", "Bierabend beim Italiener".
-   Auswaerts steht die Praeposition IM Ort und nicht davor (migrations/0024).
-   Der eine Ort fuer diese Entscheidung: Kalendereintrag, Mail und Push haben
-   sie sonst je einmal, und drei Fassungen laufen auseinander. */
-const terminWo = termin =>
-  termin.ort ? ` ${termin.ort}` : termin.gastgeber ? ` bei ${termin.gastgeber}` : '';
+/* Wie der Abend heisst, wenn ihm niemand einen Namen gegeben hat: auswaerts
+   nach seinem ORT, sonst nach seinem Gastgeber. Der Ort ist dort der Name und
+   bekommt kein "Bierabend" davor - das gab "Bierabend Schlemmen am Turm". */
+const terminName = termin =>
+  termin.ort || `Bierabend${termin.gastgeber ? ` bei ${termin.gastgeber}` : ''}`;
+
+/* Und der Ort IN einem Satz. Drei Fassungen, und das ist keine Willkuer,
+   sondern Grammatik: " bei Maike" traegt seine Praeposition und haengt sich
+   mitten in einen Satz, ohne ihn zu zerreissen. Ein Eigenname kann das nicht
+   - "Sonntag um 20:00 Schlemmen am Turm wird getrunken" ist kein Satz.
+   Auswaerts muss der Ort deshalb ans ENDE, und wo schon ein Gedankenstrich
+   steht (Betreffzeilen), trennt ihn ein Komma statt eines zweiten Strichs.
+
+   Wer eine vierte Stelle baut, an der ein Ort in Text kommt, nimmt eine
+   dieser drei und erfindet keine weitere Form. */
+const terminBei      = termin => (termin.ort ? '' : termin.gastgeber ? ` bei ${termin.gastgeber}` : '');
+const terminOrtEnde  = termin => (termin.ort ? ` — ${termin.ort}` : '');
+const terminOrtKomma = termin => (termin.ort ? `, ${termin.ort}` : '');
 
 function icsBauen(env, termin, abgesagt) {
-  const titel = termin.titel || `Bierabend${terminWo(termin)}`;
+  const titel = termin.titel || terminName(termin);
   const zeilen = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -2623,12 +2634,16 @@ Tag ist wieder frei.`,
    Betreff und Text hier Funktionen des Empfaengers. */
 function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen') {
   const wann = alsText(termin.beginnt_am);
-  const wo = terminWo(termin);
+  const bei = terminBei(termin), ende = terminOrtEnde(termin), komma = terminOrtKomma(termin);
   const was = termin.titel ? `\n\nEs geht um: ${termin.titel}` : '';
   const selbst = u => u.id === ausloeser;
   const eigen = wieEntstanden === 'zugesagt'
     ? 'Du hast zugesagt'
     : 'Du hast den Abend eingetragen';
+  /* Doppelpunkt und nicht Gedankenstrich, obwohl hier lange einer stand: den
+     Strich braucht auswaerts der Ort am Satzende, und zwei davon in einem Satz
+     sind einer zu viel. */
+  const eigenSatz = `${eigen}: ${wann}${bei}${ende}.`;
 
   /* Der Ausloeser bleibt beim Push AUSSEN VOR - und nur beim Push. Die Mail
      nimmt ihn ausdruecklich mit, weil sie den Kalendereintrag TRAEGT (siehe
@@ -2638,7 +2653,7 @@ function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen
   stosse(env, ctx, 'termin_neu', null, {
     ausser: ausloeser,
     titel: 'Ein Abend steht fest',
-    text: `${wann}${wo} wird getrunken.${termin.titel ? ` Es geht um: ${termin.titel}` : ''}`,
+    text: `${wann}${bei} wird getrunken${ende}.${termin.titel ? ` Es geht um: ${termin.titel}` : ''}`,
     url: `${env.SEITE}#termin=${termin.id}`,
     tag: `termin-${termin.id}`,
   });
@@ -2647,15 +2662,15 @@ function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen
     bezug: `termin:${termin.id}`,
     anhaenge: icsAnhang(env, termin, false),
     betreff: u => selbst(u)
-      ? `Für deinen Kalender: ${wann}${wo}`
-      : `Ein Abend steht fest: ${wann}${wo}`,
+      ? `Für deinen Kalender: ${wann}${bei}${komma}`
+      : `Ein Abend steht fest: ${wann}${bei}${komma}`,
     text: u => (selbst(u)
-        ? `${eigen} — ${wann}${wo}.${was}\n\nIm Anhang liegt er für deinen Kalender.`
-        : `${wann}${wo} wird getrunken.${was}\n\nIm Anhang liegt der Kalendereintrag.`)
+        ? `${eigenSatz}${was}\n\nIm Anhang liegt er für deinen Kalender.`
+        : `${wann}${bei} wird getrunken${ende}.${was}\n\nIm Anhang liegt der Kalendereintrag.`)
       + `\n\nSteht auf der Tafel: ${env.SEITE}`,
     html: u => (selbst(u)
-        ? `<p>${nurText(eigen)} &ndash; <strong>${nurText(wann)}</strong>${nurText(wo)}.</p>`
-        : `<p><strong>${nurText(wann)}</strong>${nurText(wo)} wird getrunken.</p>`)
+        ? `<p>${nurText(eigen)}: <strong>${nurText(wann)}</strong>${nurText(bei + ende)}.</p>`
+        : `<p><strong>${nurText(wann)}</strong>${nurText(bei)} wird getrunken${nurText(ende)}.</p>`)
       + (termin.titel ? `<p>Es geht um: ${nurText(termin.titel)}</p>` : '')
       + '<p style="font-size:13px;color:#6f6653">'
       + (selbst(u) ? 'Im Anhang liegt er für deinen Kalender.' : 'Im Anhang liegt der Kalendereintrag.')
@@ -2670,19 +2685,32 @@ function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen
    neuen - das schlechteste aller Ergebnisse. */
 function mailTerminAendert(env, ctx, termin, ausloeser, was) {
   const wann = alsText(termin.beginnt_am);
-  const wo = terminWo(termin);
+  const bei = terminBei(termin), ende = terminOrtEnde(termin), komma = terminOrtKomma(termin);
   const abgesagt = was === 'abgesagt';
   const selbst = u => u.id === ausloeser;
 
-  const kopf = abgesagt ? `Der Abend am ${wann}${wo} fällt aus.`
+  /* Beim Umbenennen steht der Ort NICHT am Satzende - dort steht der neue
+     Name, und "heißt jetzt: Tatort — Schlemmen am Turm" laese sich wie ein
+     zweiteiliger Name. Auswaerts wird der Abend deshalb bei seinem alten
+     Namen gerufen, und das ist ja gerade der Ort. */
+  const neuerName = termin.titel || 'nichts Bestimmtes';
+  const kopf = abgesagt ? `Der Abend am ${wann}${bei} fällt aus${ende}.`
     : was === 'umbenannt'
-      ? `Der Abend am ${wann}${wo} heißt jetzt: ${termin.titel || 'nichts Bestimmtes'}.`
-      : `Der Abend${wo} ist jetzt am ${wann}.`;
+      ? (termin.ort
+          ? `„${termin.ort}" am ${wann} heißt jetzt: ${neuerName}.`
+          : `Der Abend am ${wann}${bei} heißt jetzt: ${neuerName}.`)
+      : (termin.ort
+          ? `Der Abend ist jetzt am ${wann}${ende}.`
+          : `Der Abend${bei} ist jetzt am ${wann}.`);
   // Dem Ausloeser wird nichts mitgeteilt, was er selbst gerade getan hat.
-  const eigen = abgesagt ? `Du hast den Abend am ${wann}${wo} abgesagt.`
+  const eigen = abgesagt ? `Du hast den Abend am ${wann}${bei} abgesagt${ende}.`
     : was === 'umbenannt'
-      ? `Du hast den Abend am ${wann}${wo} umbenannt.`
-      : `Du hast den Abend${wo} auf ${wann} gelegt.`;
+      ? (termin.ort
+          ? `Du hast „${termin.ort}" am ${wann} umbenannt.`
+          : `Du hast den Abend am ${wann}${bei} umbenannt.`)
+      : (termin.ort
+          ? `Du hast den Abend auf ${wann} gelegt${ende}.`
+          : `Du hast den Abend${bei} auf ${wann} gelegt.`);
 
   const wort = abgesagt ? 'Fällt aus' : was === 'umbenannt' ? 'Neuer Anlass' : 'Verschoben';
   const nachsatz = abgesagt
@@ -2714,8 +2742,8 @@ function mailTerminAendert(env, ctx, termin, ausloeser, was) {
        METHOD:CANCEL und raeumt ihn weg. */
     anhaenge: icsAnhang(env, termin, abgesagt),
     betreff: u => selbst(u)
-      ? `Für deinen Kalender: ${wort.toLowerCase()} — ${wann}${wo}`
-      : `${wort}: ${wann}${wo}`,
+      ? `Für deinen Kalender: ${wort.toLowerCase()} — ${wann}${bei}${komma}`
+      : `${wort}: ${wann}${bei}${komma}`,
     text: u => `${selbst(u) ? eigen : kopf}\n\n${nachsatz}\n\n`
         + `Steht auf der Tafel: ${env.SEITE}`,
     html: u => `<p>${nurText(selbst(u) ? eigen : kopf)}</p>`
