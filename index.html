@@ -26,6 +26,16 @@
      iPhone-Bildschirm, den Eintrag im Manifest (512×512 genügt Chrome als
      Installkriterium) und das Bild in der Push-Meldung selbst.
 
+     Das `?v=` an den Bildern und am Manifest ist kein Zierrat. Ein neues
+     Symbol unter alter Adresse holt sich niemand: die Pages-Edge liefert zehn
+     Minuten die alte Fassung, der Browser länger, und die Sammler von
+     `og.png` cachen nach Adresse und teils monatelang. Wer das Bild
+     austauscht, zählt die Zahl hoch — an ALLEN fünf Stellen, auch am
+     `manifest.webmanifest` selbst. Steckt das Manifest im Cache, sieht
+     Android die neue Symboladresse nie, und der Tausch wirkt nur halb.
+     (Was auch das nicht heilt: ein Symbol, das schon auf dem iOS-Homescreen
+     liegt, wird nie aktualisiert — nur Löschen und neu Hinzufügen.)
+
      Drei Dinge, die im Manifest NICHT stehen und dort auch nicht stehen
      könnten (eine JSON-Datei trägt keine Kommentare):
      · `start_url` und `scope` sind RELATIV (`./`). Sie lösen sich gegen die
@@ -37,33 +47,35 @@
        Kennung jeder anderen App daneben. Ohne Angabe gilt `start_url`.
      · `orientation` fehlt ebenfalls. Die Tafel steht oft lange offen, auf
        einem Tisch, auf einem Tablet — quer ist kein Fehlgriff. -->
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest?v=2">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Wer hat kalt">
-<link rel="apple-touch-icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png?v=2">
 <!-- Das Schild, das andere von dieser Seite sehen: WhatsApp, Signal, Telegram
      und die eigene Link-Vorschau im Kommentarfeld lesen den Kopf, nicht die
      Seite. Ohne `og:image` bleibt die Karte bildlos - das Favicon zaehlt dabei
      nicht, kein Sammler sieht es an.
 
-     `og.png` ist ein echtes PNG neben dieser Datei, 1200x630, das 🍺 auf dem
-     Grau der Tafel. Es MUSS eine Datei sein: `data:`-Adressen holt kein
-     Sammler, und `bildTyp()` im Worker prueft ohnehin die Bytes. Der Grundsatz
-     „eine geschlossene Datei" bleibt heil - der Browser holt hier nichts, das
-     tun nur die Sammler. Adresse absolut, weil relative Angaben nur die
-     Haelfte von ihnen aufloest. -->
+     `og.png` ist ein echtes PNG neben dieser Datei, 1200x630, dasselbe Motiv
+     wie `icon.png` auf dem Blau des Logos — nur breit statt quadratisch, und
+     ohne die Sicherheitszone, die es hier nicht braucht: eine Vorschaukarte
+     wird beschnitten, aber nicht maskiert. Es MUSS eine Datei sein:
+     `data:`-Adressen holt kein Sammler, und `bildTyp()` im Worker prueft
+     ohnehin die Bytes. Der Grundsatz „eine geschlossene Datei" bleibt heil -
+     der Browser holt hier nichts, das tun nur die Sammler. Adresse absolut,
+     weil relative Angaben nur die Haelfte von ihnen aufloest. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Wer hat kalt">
 <meta property="og:title" content="Wer hat kalt">
 <meta property="og:description" content="Kaltes Bier und mehr.">
 <meta property="og:url" content="https://schnix84.github.io/beerstock/">
-<meta property="og:image" content="https://schnix84.github.io/beerstock/og.png">
+<meta property="og:image" content="https://schnix84.github.io/beerstock/og.png?v=2">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Ein volles Bierglas auf dunklem Grund">
+<meta property="og:image:alt" content="Ein offener Kuehlschrank voller kalter Flaschen auf dunkelblauem Grund">
 <meta name="twitter:card" content="summary_large_image">
 <style>
   /* ==========================================================================
