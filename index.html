@@ -2107,23 +2107,6 @@
   .wr-bild svg { display: block; width: 100%; height: auto; }
   .wr-bild-kopf { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
   .wr-bild-kopf h2 { font-family: var(--hand); font-weight: 400; font-size: 14.5px; margin: 0; letter-spacing: .04em; }
-  .wr-klein-knopf {
-    font: inherit; font-size: 11.5px; cursor: pointer; margin-left: auto;
-    color: var(--kreide-weg); background: none; border: 0; padding: 3px 6px;
-    text-decoration: underline; text-underline-offset: 3px; text-decoration-style: dotted;
-  }
-  .wr-klein-knopf:hover { color: var(--kreide-matt); }
-  .wr-klein-knopf[aria-pressed="true"] { color: var(--gelb); text-decoration-style: solid; }
-
-  .wr-zahlen { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
-  .wr-zahlen td, .wr-zahlen th {
-    padding: 3px 6px; border-bottom: 1px dashed #ffffff1a; text-align: left;
-    color: var(--kreide-matt); font-weight: 400;
-  }
-  .wr-zahlen td:last-child, .wr-zahlen th:last-child {
-    text-align: right; font-variant-numeric: tabular-nums; color: var(--kreide);
-  }
-
   .wr-paare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 14px; }
   .wr-paar { border: 1px dashed #ffffff26; border-radius: 4px; padding: 10px 12px; background: #ffffff05; }
   .wr-paar .wr-wert {
@@ -2154,24 +2137,30 @@
   }
   .wr-knopf:hover { background: #ffffff1a; border-color: var(--gelb); }
   .wr-knopf:disabled { opacity: .35; cursor: default; }
-  /* Nur das Zeichen, kein Kasten. Gelb war er einmal, und gelb ist auf dieser
-     Tafel die Farbe des Ersten und der großen Zahl — ein Knopf, der sie trägt,
-     ruft lauter als das, worüber er steht. Der Rahmen ging mit: er war die
-     Einfassung, die den Knopf von den beiden Blätter-Knöpfen daneben abgrenzte,
-     und die stehen nicht mehr da. Übrig bleibt das Zeichen, das jedes Handy
-     ohnehin ohne Kasten zeigt. */
+  /* Derselbe Ring wie am × oben (`.wr-zu`): dünne helle Linie, kaum gefüllt,
+     rund. Die beiden sind die einzigen zwei Knöpfe der Karte und stehen sich
+     über Eck gegenüber — was oben rechts wegräumt und was unten rechts
+     weitergibt, soll aussehen wie aus einem Satz.
+
+     Nicht gelb, und der eckige Kasten von `.wr-knopf` ist es auch nicht mehr:
+     gelb ist auf dieser Tafel die Farbe des Ersten und der großen Zahl, und der
+     Kasten war die Einfassung gegen die beiden Blätter-Knöpfe daneben — die
+     stehen seit dem Selbstlauf nicht mehr da.
+
+     44 px und nicht die 30 des ×: hier liegt der Daumen, dort der Mauszeiger. */
   .wr-teilen {
     margin-left: auto;
     display: flex; align-items: center; justify-content: center;
-    width: 44px; padding: 0; border: none; background: none;
+    width: 44px; height: 44px; min-height: 0; padding: 0;
+    border: 1px solid #ffffff33; border-radius: 999px; background: #ffffff0d;
   }
-  .wr-teilen:hover { background: #ffffff14; }
+  .wr-teilen:hover { background: #ffffff1a; border-color: #ffffff66; }
   .wr-teilen svg {
     width: 20px; height: 20px; fill: none; stroke: currentColor;
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
   }
   .wr-teilen:disabled { opacity: .35; }
-  .wr-knopf:focus-visible, .wr-zu:focus-visible, .wr-klein-knopf:focus-visible, .ch-jahrgang:focus-visible {
+  .wr-knopf:focus-visible, .wr-zu:focus-visible, .ch-jahrgang:focus-visible {
     outline: 2px solid var(--gelb); outline-offset: 3px; border-radius: 2px;
   }
 
@@ -7080,36 +7069,20 @@
     return svg;
   }
 
-  function wrZahlenTabelle(paare) {
-    const t = el('table', 'wr-zahlen');
-    paare.forEach(([was, wert]) => {
-      const tr = el('tr');
-      tr.appendChild(el('td', null, was));
-      tr.appendChild(el('td', null, wert));
-      t.appendChild(tr);
-    });
-    t.hidden = true;
-    return t;
-  }
-
-  function wrBildKarte(titel, svg, tabelle) {
+  /* Ein Knopf „Zahlen" stand hier einmal und klappte unter der Säulengrafik
+     eine Tabelle mit allen zwölf Monatswerten auf. Er stammt aus der Zeit, als
+     man den Rückblick durchklickte und auf einer Kachel bleiben konnte, so
+     lange man wollte. Seit sie von selbst weiterläuft, ist er zweierlei im
+     Weg: er frisst den Tipp, mit dem man blättert, und was er aufklappt, ist
+     nach sieben Sekunden ohnehin fort. Die Grafik allein erzählt, was die
+     Kachel erzählen soll — der Rückblick ist kein Nachschlagewerk, die Zahlen
+     stehen im Verlauf. */
+  function wrBildKarte(titel, svg) {
     const wrap = el('div', 'wr-bild');
     const kopf = el('div', 'wr-bild-kopf');
     kopf.appendChild(el('h2', 'kr', titel));
-    if (tabelle) {
-      const k = el('button', 'wr-klein-knopf', 'Zahlen');
-      k.type = 'button';
-      k.setAttribute('aria-pressed', 'false');
-      k.addEventListener('click', () => {
-        const zu = tabelle.hidden;
-        tabelle.hidden = !zu; svg.style.display = zu ? 'none' : '';
-        k.setAttribute('aria-pressed', String(zu));
-      });
-      kopf.appendChild(k);
-    }
     wrap.appendChild(kopf);
     wrap.appendChild(svg);
-    if (tabelle) wrap.appendChild(tabelle);
     return wrap;
   }
 
@@ -7186,8 +7159,7 @@
         k.appendChild(el('div', 'wr-hero', wrZahl(m.summe)));
         k.appendChild(el('p', 'wr-satz',
           `Mal hat die Runde in diesem Jahr an die Tafel geschrieben. ${WR_MONATE[spitzeI]} war der fleißigste Monat.`));
-        const tab = wrZahlenTabelle(m.monat.map((w, i) => [WR_MONATE[i], wrZahl(w)]));
-        k.appendChild(wrBildKarte('Meldungen je Monat', wrSaeulen(m.monat, 'Meldungen'), tab));
+        k.appendChild(wrBildKarte('Meldungen je Monat', wrSaeulen(m.monat, 'Meldungen')));
       } });
     }
 
@@ -7633,27 +7605,6 @@
       y += 4;
     }
 
-    function malTabelle(t) {
-      y += 6;
-      [...t.rows].forEach(tr => {
-        const links = tr.cells[0]?.textContent || '', rechts = tr.cells[1]?.textContent || '';
-        const grund = y + 20;
-        zuege.push(ctx => {
-          ctx.font = schrift(20, false, false);
-          ctx.fillStyle = MATT; ctx.fillText(links, R + 4, grund);
-          ctx.textAlign = 'right'; ctx.fillStyle = KREIDE;
-          ctx.fillText(rechts, R + INNEN - 4, grund);
-          ctx.textAlign = 'left';
-          ctx.save();
-          ctx.strokeStyle = '#ffffff1a'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
-          ctx.beginPath(); ctx.moveTo(R, grund + 8.5); ctx.lineTo(R + INNEN, grund + 8.5); ctx.stroke();
-          ctx.restore();
-        });
-        y += 32;
-      });
-      y += 6;
-    }
-
     function svgAlsBild(svg, b, h) {
       return new Promise(fertig => {
         const klon = svg.cloneNode(true);
@@ -7677,10 +7628,6 @@
       const titel = box.querySelector('.wr-bild-kopf h2');
       if (titel) malAbsatz(laeufe(titel, KREIDE, 24, true), INNEN, R, 18, 4);
       const svg = box.querySelector('svg');
-      const tab = box.querySelector('.wr-zahlen');
-      // „Zahlen" umgelegt? Dann steht die Tabelle auf dem Schirm, nicht die
-      // Grafik — und dann steht sie auch auf dem Bild.
-      if (tab && !tab.hidden) { malTabelle(tab); return; }
       if (!svg) return;
       const vb = (svg.getAttribute('viewBox') || '0 0 330 132').split(/[\s,]+/).map(Number);
       const h = Math.round(INNEN * ((vb[3] || 132) / (vb[2] || 330)));
@@ -7797,23 +7744,35 @@
      kommt darum als Klick hier an: die Karte spränge eine Seite weiter, weil
      man sie zumachen wollte. `wrGezogen` merkt sich, dass der Finger unterwegs
      war, und verschluckt genau diesen Klick. */
+  /* Links heißt zunächst „nochmal", nicht „zurück". Wer nach links geht, hat
+     meistens etwas nicht zu Ende gelesen, und das steht auf DIESER Kachel —
+     die vorige wäre eine Antwort auf eine Frage, die niemand gestellt hat.
+     Erst wer gleich nochmal drückt, während die Seite noch am Anfang steht,
+     will wirklich eine zurück; dieselbe Staffelung wie am Status-Bild und am
+     Titelsprung jedes Musikspielers.
+
+     Eine Funktion für alle drei Wege dorthin — Tipp, Klick, Pfeiltaste. Sie
+     lag einmal nur im Klick, und die Pfeiltaste sprang deshalb sofort zurück:
+     dieselbe Bewegung, zwei Antworten, je nachdem womit man sie macht.
+
+     Läuft gar keine Uhr (`prefers-reduced-motion`), gibt es nichts
+     neuzustarten — dann führt der erste Druck direkt zurück. */
+  function wrLinks() {
+    const verstrichen = wrVerstrichen();
+    wrappedZeigen(verstrichen === null || verstrichen < WR_NOCHMAL ? wrWo - 1 : wrWo);
+  }
+
   $('wr-buehne').addEventListener('click', ev => {
     const gezogen = wrGezogen; wrGezogen = false;
     if (gezogen) return;
-    if (ev.target.closest('svg, button, a, table')) return;
+    /* Grafik und Tabelle standen hier einmal mit auf der Ausnahmeliste — die
+       Grafik wegen ihres Tooltips, die Tabelle wegen des Knopfes, der sie
+       aufklappte. Beide Gründe sind fort: der Knopf ist weg, und ein Tooltip
+       nimmt niemandem etwas, wenn dieselbe Berührung blättert. Ausgenommen
+       bleibt allein, was einen eigenen Weg woandershin hat. */
+    if (ev.target.closest('a')) return;
     const b = $('wr-buehne').getBoundingClientRect();
-    if (ev.clientX - b.left >= b.width * .3) { wrappedZeigen(wrWo + 1); return; }
-    /* Links heißt zunächst „nochmal", nicht „zurück". Wer nach links tippt,
-       hat meistens etwas nicht zu Ende gelesen, und das steht auf DIESER
-       Kachel — die vorige wäre eine Antwort auf eine Frage, die niemand
-       gestellt hat. Erst wer gleich nochmal tippt, während die Seite noch am
-       Anfang steht, will wirklich eine zurück; dieselbe Staffelung wie am
-       Status-Bild und am Titelsprung jedes Musikspielers.
-
-       Läuft gar keine Uhr (`prefers-reduced-motion`), gibt es nichts
-       neuzustarten — dann führt der erste Tipp direkt zurück. */
-    const verstrichen = wrVerstrichen();
-    wrappedZeigen(verstrichen === null || verstrichen < WR_NOCHMAL ? wrWo - 1 : wrWo);
+    if (ev.clientX - b.left >= b.width * .3) wrappedZeigen(wrWo + 1); else wrLinks();
   });
   /* Der Wisch quer blättert — und seit die Karte sich auch nach unten
      wegschieben lässt, muss er die Achse mitprüfen. Ohne das schöbe ein
@@ -7834,14 +7793,14 @@
   }, { passive: true });
   // Pfeiltasten nur, solange Wrapped offen ist - Escape läuft im gemeinsamen
   // Zuhörer weiter unten mit, zusammen mit allen anderen Ebenen. Die
-  // Leertaste NUR, wenn kein Knopf den Fokus hält - sonst schluckt sie
-  // dessen eigene Aktivierung ("Zahlen" öffnet dann nie die Tabelle, und auf
-  // "zurück" blättert Space nach VORNE statt zu klicken).
+  // Leertaste NUR, wenn kein Knopf den Fokus hält - sonst schluckt sie dessen
+  // eigene Aktivierung, und auf dem Teilen-Knopf blättert Space nach VORNE,
+  // statt das Bild zu bauen.
   document.addEventListener('keydown', ev => {
     if ($('wrapped').hidden) return;
     if (ev.key === ' ' && ev.target.closest('button')) return;
     if (ev.key === 'ArrowRight' || ev.key === ' ') { ev.preventDefault(); wrappedZeigen(wrWo + 1); }
-    if (ev.key === 'ArrowLeft') { ev.preventDefault(); wrappedZeigen(wrWo - 1); }
+    if (ev.key === 'ArrowLeft') { ev.preventDefault(); wrLinks(); }
   });
 
   /* --- Mein Deckel ---------------------------------------------------------
