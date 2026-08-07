@@ -5931,14 +5931,18 @@
     }
   }
 
-  /* Die Vorgabe im Zusage-Formular rechnet mit der Uhr, statt fest auf 19:00
-     zu stehen: wer spät dreht, bekäme sonst einen Abend vorgesetzt, der beim
-     Zusagen schon vorbei ist — genau das ist einmal passiert (Drehung 22:07,
-     Termin 19–21, 2026-08-07). Vorbelegt wird die nächste halbe Stunde,
-     frühestens 19:00; nach Mitternacht wäre 19:00 aber die Vergangenheit von
-     gestern, darum gilt die Untergrenze erst ab morgens. Das Ende liegt vier
-     Stunden dahinter wie bei der alten Spanne 19–23 — rutscht es über
-     Mitternacht, versteht `endeUTC` das ohnehin als nächsten Morgen. */
+  /* Die Vorgabe im Zusage-Formular: die nächste halbe Stunde ab JETZT,
+     tagsüber aber frühestens 19:00 — wer vor 19 Uhr dreht und antwortet, sieht
+     also den gewohnten Abend von 19 bis 23. Fest auf 19:00 stand das Feld
+     früher immer, und wer um 22:07 drehte, bekam einen Abend vorgesetzt, der
+     beim Zusagen schon vorbei war (Termin 19–21, 2026-08-07). An der DREHZEIT
+     hängt die Vorgabe bewusst nicht: lief die Flasche 18:53 und die Zusage
+     kommt erst 20:30, hieße „seit 19 Uhr" ein Abend, zu dem vor der Zusage
+     niemand kommen konnte — und Sperre wie Bewertung hängen am Anfang. Nach
+     Mitternacht entfällt die Untergrenze, 19:00 läge da schon wieder zurück.
+     Das Ende liegt vier Stunden hinter dem Anfang wie bei der alten Spanne
+     19–23 — rutscht es über Mitternacht, versteht `endeUTC` das ohnehin als
+     nächsten Morgen. */
   function losZeitVorbelegen() {
     const j = new Date();
     let von = Math.ceil((j.getHours() * 60 + j.getMinutes()) / 30) * 30;
