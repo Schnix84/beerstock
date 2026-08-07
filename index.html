@@ -9647,7 +9647,8 @@
     const h = location.hash || '';
     const los = /^#los=(\d+)$/.exec(h);
     const termin = /^#termin=(\d+)$/.exec(h);
-    if (!los && !termin && h !== '#notruf') return;
+    const nutzer = /^#nutzer=(\d+)$/.exec(h);
+    if (!los && !termin && !nutzer && h !== '#notruf') return;
     history.replaceState(null, '', location.pathname + location.search);
     // Ohne Anmeldung gibt es keins der drei Blätter zu sehen. Das passiert:
     // die App liegt auf dem Bildschirm, das Token ist weg (siehe Einsetzfeld).
@@ -9670,6 +9671,19 @@
       const t = letzteTermine.find(x => x.id === id);
       flyAuf('termin:' + id, zeile ? zeile.dataset.name
         : t ? terminName(t) : 'Der Abend');
+      return;
+    }
+    if (nutzer) {
+      /* Das Blatt eines Melders — dasselbe, das ein Tipp auf seine Zeile in
+         der Rangliste öffnet, und darum wird der Name auch von dort geholt.
+         Wer nie gemeldet hat, steht in keiner Zeile; dann bleibt es beim
+         schlichten Wort, und der Rest kommt ohnehin beim Laden des Blattes.
+
+         Hierher zeigt das Echo: „Sterne für dich" führt auf die eigene Seite,
+         „Antwort auf deinen Beitrag" in den Faden, in dem sie steht. */
+      const id = Number(nutzer[1]);
+      const zeile = document.querySelector('[data-ziel="user:' + id + '"]');
+      flyAuf('user:' + id, zeile ? zeile.dataset.name : 'Der Melder');
       return;
     }
     /* Zum Notruf gibt es kein eigenes Blatt: fremde Notrufe STEHEN auf der
