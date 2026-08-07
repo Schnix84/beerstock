@@ -912,11 +912,17 @@ function kreisSetzen(env, notrufId, ids) {
    muss. Nebenwirkung, die richtig ist: wer weggenommen und wieder dazugenommen
    wird, bekommt keine zweite Mail - er bekommt die Karte zurueck, und die ist
    der lebende Teil der Auskunft. */
-function notrufPost(env, ctx, ich, notrufId, art, lat, lon, empfaenger, bis = null) {
+function notrufPost(env, ctx, ich, notrufId, art, lat, lon, empfaenger, bis = null, live = false) {
   const wohin = mapsLink(lat, lon);
   const was = art === 'bier' ? `${ich.name} braucht Bier`
     : art === 'kamerad' ? `${ich.name} sucht Gesellschaft`
     : `${ich.name} braucht Bier und Gesellschaft`;
+  /* Dasselbe ohne den Namen davor. Die Mail traegt ihn im Betreff, der Push
+     hat ihn schon im Titel - und dort ist er auch besser aufgehoben, siehe
+     unten. */
+  const wasKurz = art === 'bier' ? 'Braucht Bier'
+    : art === 'kamerad' ? 'Sucht Gesellschaft'
+    : 'Braucht Bier und Gesellschaft';
 
   /* Das Klopfen an der Tuer, an derselben Stelle und an denselben Kreis. Fuer
      den Notruf ist es der wichtigere der beiden Wege: er gilt neunzig Minuten,
@@ -937,9 +943,33 @@ function notrufPost(env, ctx, ich, notrufId, art, lat, lon, empfaenger, bis = nu
   const rest = bis
     ? Math.max(60, Math.round((Date.parse(utc(bis)) - Date.now()) / 1000))
     : NOTRUF_MINUTEN * 60;
+
+  /* DER NAME STEHT IM TITEL, DIE NOT IN DER ZEILE DARUNTER - und das ist am
+     echten Geraet entschieden worden, nicht am Schreibtisch. `Schnix braucht
+     Bier und Gesellschaft` ist als Titel zu lang: das Handy schnitt es zu
+     "Schnix braucht Bier und Gesellsc..." ab, und damit fiel ausgerechnet
+     weg, WAS fehlt. Ein Titel muss in eine Zeile passen; "Notruf von Schnix"
+     tut das immer, egal wie lang der Name ist.
+
+     Der Satz "Auf der Tafel steht der Notruf noch 90 Minuten" ist ganz
+     entfallen. Er sagte nichts, was der Empfaenger tun koennte - dass ein
+     Notruf auf der Tafel steht, ist der Normalfall und keine Nachricht.
+
+     Die Restlaufzeit steht jetzt nur noch bei LIVE-Notrufen da, und dort
+     bedeutet sie etwas anderes: nicht "der Ruf gilt noch so lange", sondern
+     "der Standort wandert so lange mit". Das ist der Unterschied, der fuer
+     den, der sich auf den Weg macht, zaehlt.
+
+     DAS `\n` IST ABSICHT UND ES TRAEGT - am iPhone nachgesehen, nicht
+     geglaubt. Ein weicher Umbruch riss die Angabe mittendurch ("90 Min."
+     oben, "live" unten), und dagegen half weder Kuerzen noch ein geschuetztes
+     Leerzeichen zuverlaessig: wo eine Zeile endet, entscheidet die
+     Systemschriftgroesse, nicht wir. Mit dem harten Umbruch steht die
+     Trennung da, wo sie hingehoert, und die Angabe darf wieder ausgeschrieben
+     sein. Wer hier kuerzt, um "Platz zu sparen", macht es schlechter. */
   stosse(env, ctx, 'notruf', empfaenger, {
-    titel: was,
-    text: `Auf der Tafel steht der Notruf noch ${Math.round(rest / 60)} Minuten.`,
+    titel: `Notruf von ${ich.name}`,
+    text: wasKurz + (live ? `\nlive für ${Math.round(rest / 60)} Minuten` : ''),
     url: `${env.SEITE}#notruf`,
     tag: `notruf-${notrufId}`,
     ttl: rest,
@@ -3574,7 +3604,7 @@ const ROUTEN = {
     const anWen = kreis.ids ?? (await env.DB.prepare(
       'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
       .bind(ich.id).all()).results.map(r => r.id);
-    notrufPost(env, ctx, ich, zeile.id, art, lat, lon, anWen, zeile.bis);
+    notrufPost(env, ctx, ich, zeile.id, art, lat, lon, anWen, zeile.bis, !!zeile.live);
 
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
@@ -3703,7 +3733,7 @@ const ROUTEN = {
     const anWen = kreis.ids ?? (await env.DB.prepare(
       'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
       .bind(ich.id).all()).results.map(r => r.id);
-    notrufPost(env, ctx, ich, zeile.id, zeile.art, zeile.lat, zeile.lon, anWen, zeile.bis);
+    notrufPost(env, ctx, ich, zeile.id, zeile.art, zeile.lat, zeile.lon, anWen, zeile.bis, !!zeile.live);
 
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
