@@ -9011,6 +9011,58 @@
      und weiter unten stünde sie in der zeitlichen Totzone. */
   let dkHausSicher = false;
 
+  /* --- Der Weg aus dem Deckel hinaus, und zurück ----------------------------
+     Kontor und Hausanschluss sind eigene Seiten, und beide sind AUSSCHLIESSLICH
+     durch den offenen Deckel zu erreichen. Wer von dort zurückkommt — über den
+     Pfeil drüben oder über den Zurück-Knopf des Browsers — stand also gerade in
+     seinem Deckel und nicht auf der Tafel. Ihn dort abzusetzen hieße, ihn den
+     einen Griff, den er ohnehin gleich wieder tut, noch einmal tun zu lassen.
+
+     Eine Marke im sessionStorage und kein `?deckel=1`: sie gehört diesem einen
+     Tab und diesem einen Weg (dieselbe Überlegung wie bei LIVE_TAB_SPEICHER,
+     weiter oben). Ein Suchparameter ließe sich weitergeben, stünde nach einem
+     Neuladen wieder da — und für den, der `admin.html` von Hand tippt, wäre er
+     ohnehin nicht da; der soll auch keinen Deckel vorfinden.
+
+     `statistik.html` bekommt das bewusst NICHT: dorthin führt ein Knopf auf der
+     Tafel selbst (`verlauf-auf`), und wer von dort zurückkommt, kam von der
+     Tafel. */
+  const DECKEL_WEG_SPEICHER = 'beerstock-deckel-zurueck';
+  const deckelWegMerken = () => { try { sessionStorage.setItem(DECKEL_WEG_SPEICHER, '1'); } catch {} };
+  const deckelWegNehmen = () => {
+    try {
+      const da = !!sessionStorage.getItem(DECKEL_WEG_SPEICHER);
+      sessionStorage.removeItem(DECKEL_WEG_SPEICHER);
+      return da;
+    } catch { return false; }
+  };
+  function ausDemDeckel(ziel) { deckelWegMerken(); location.href = ziel; }
+
+  /* Beim Aufbau: kommt einer von drüben zurück, schlägt sein Deckel wieder auf.
+     Genommen wird die Marke IMMER, auch wenn daraus nichts folgt — sonst bliebe
+     sie nach „zur Tafel und anmelden" (homeassistant.html, ohne Anmeldung)
+     liegen und ginge irgendwann bei einem Aufbau hoch, der nichts damit zu tun
+     hat. `deckelAuf` sagt selbst nein, wenn niemand angemeldet ist.
+
+     Die eine Ausnahme ist der Rückblick: liegt der vorn, ist der Weg noch nicht
+     zu Ende — sein × führt ins Kontor zurück (`wrappedZu`), und erst von dort
+     geht es auf die Tafel. Die Marke bleibt liegen und gilt für die Ankunft
+     danach. */
+  function deckelAusMarke() {
+    if (!$('wrapped').hidden) return;
+    if (deckelWegNehmen()) deckelAuf();
+  }
+
+  /* Und der zweite Rückweg, den es tatsächlich gibt: holt der Browser die Tafel
+     aus seinem Vor-/Zurück-Speicher zurück, läuft das Skript KEIN zweites Mal.
+     Der Deckel liegt dann noch genau so offen, wie man ihn verlassen hat — es
+     ist nichts aufzuschlagen. Die Marke aber liegt auch noch, und die muss weg:
+     sonst ginge sie irgendwann bei einem Aufbau hoch, der mit diesem Weg nichts
+     zu tun hat. Gemessen, nicht vermutet — headless holt Chrome die Tafel auf
+     `history.back()` zurück (`ideas/pruefungen/deckel-rueckweg-probe.mjs`); auf
+     dem Gerät tut es das mal so, mal so. Beide Fälle sind jetzt bedient. */
+  window.addEventListener('pageshow', ev => { if (ev.persisted) deckelWegNehmen(); });
+
   function dkSagt(text, schlecht) {
     const p = $('dk-sagt');
     p.textContent = text;
@@ -9544,7 +9596,7 @@
     ev.preventDefault();
     if (ev.target.closest('.nr-zeile.meiner')) notrufAuf();
   });
-  $('dk-kontor').addEventListener('click', () => { location.href = 'admin.html'; });
+  $('dk-kontor').addEventListener('click', () => ausDemDeckel('admin.html'));
   $('ch-zu').addEventListener('click', chronikZu);
   $('ch-schirm').addEventListener('click', chronikZu);
   $('ch-mehr').addEventListener('click', chronikMehr);
@@ -9669,7 +9721,7 @@
      einmal sichtbar, und der Deckel ist ein Blatt, das man mit einem Wisch
      zumacht. Ein Geheimnis, das man einmal zu sehen bekommt, gehört nicht auf
      eine Fläche, die schon beim Danebentippen verschwindet. */
-  $('dk-haus-auf').addEventListener('click', () => { location.href = 'homeassistant.html'; });
+  $('dk-haus-auf').addEventListener('click', () => ausDemDeckel('homeassistant.html'));
 
   /* Widerrufen geht dagegen hier — es ist der eilige Griff. Mit derselben
      Rückfrage wie „alle abmelden" (zweiter Klick in derselben Zeile, kein
@@ -11146,6 +11198,10 @@
     // schärfer: der Name des Abends steht in einer Zeile, die es vorher gar
     // nicht gibt.
     .then(() => wrappedAusAdresse())
+    // Nach dem Rückblick, weil die Marke ihm den Vortritt lässt (siehe
+    // `deckelAusMarke`), und vor den Push-Einstiegen: deren Blätter gehören
+    // nach vorn, der Deckel gehört darunter.
+    .then(() => deckelAusMarke())
     .then(() => pushEinstieg())
     // Ganz zum Schluss und ohne `await`: ein liegendes Abo noch einmal
     // anmelden, falls der Push-Dienst seine Adresse getauscht hat. Das eilt

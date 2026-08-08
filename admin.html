@@ -2355,6 +2355,40 @@
     return Array.from({ length: heuer - erstes + 1 }, (_, i) => heuer - i);
   }
 
+  /* Der Rückweg. Der Rückblick liegt drüben, und sein × führt hierher zurück
+     (`wrappedZu` in `index.html`) — nur stand man beim Weggehen nicht im
+     Kontor, sondern in der Jahr-Wahl. Sie zugeklappt vorzufinden heißt, den
+     einen Griff noch einmal zu tun; wer ein zweites Jahr ansehen will, will
+     genau diese Liste.
+
+     Dieselbe Bauart wie der Rückweg aus dem Deckel drüben (`ausDemDeckel` in
+     `index.html`), und aus denselben Gründen: eine einmalige Marke im
+     sessionStorage, kein Suchparameter. Sie fängt beide Wege zurück — das ×
+     des Rückblicks und den Zurück-Knopf des Browsers. */
+  const JAHRWAHL_SPEICHER = 'beerstock-kontor-jahrwahl';
+  const jahrWahlMerken = () => { try { sessionStorage.setItem(JAHRWAHL_SPEICHER, '1'); } catch {} };
+  const jahrWahlNehmen = () => {
+    try {
+      const da = !!sessionStorage.getItem(JAHRWAHL_SPEICHER);
+      sessionStorage.removeItem(JAHRWAHL_SPEICHER);
+      return da;
+    } catch { return false; }
+  };
+
+  /* Am Ende von `laden()` gerufen, nicht davor: die Jahre kommen aus
+     `letzteStat`, und die steht erst, seit `statistik()` gelaufen ist. Die
+     zweite Bedingung ist kein Zierrat — die Marke schlägt die Liste sonst auch
+     dann auf, wenn gar kein Jahr darin stünde. */
+  function jahrWahlAusMarke() {
+    if (jahrWahlNehmen() && rueckblickJahre().length) jahrWahlAuf();
+  }
+
+  /* Und der Fall, in dem das Skript kein zweites Mal läuft: holt der Browser
+     das Kontor aus seinem Vor-/Zurück-Speicher zurück, steht die Liste noch
+     offen, wie man sie verlassen hat. Dann ist nichts aufzuschlagen — aber die
+     Marke muss weg, sonst geht sie beim nächsten Aufbau hoch. */
+  window.addEventListener('pageshow', ev => { if (ev.persisted) jahrWahlNehmen(); });
+
   function jahrWahlAuf() {
     const liste = $('jahr-liste');
     liste.textContent = '';
@@ -2369,7 +2403,10 @@
         : 'abgeschlossen'));
       // Gleicher Tab: der Rückblick ist kein Nachschlagewerk, das man neben
       // dem Kontor offen hält, sondern etwas, das man einmal durchblättert.
-      b.addEventListener('click', () => { location.href = './?wrapped=' + jahr; });
+      b.addEventListener('click', () => {
+        jahrWahlMerken();   // damit die Liste beim Zurückkommen wieder aufliegt
+        location.href = './?wrapped=' + jahr;
+      });
       liste.appendChild(b);
     });
     $('wahl-ebene').hidden = false;
@@ -3105,6 +3142,10 @@
        Die Querverweise auf der Übersicht hängen an denselben Daten. */
     querZeichnen(log.verwaltet);
     registerZeichnen();
+    // Ganz zuletzt: wer aus dem Rückblick zurückkommt, findet seine Jahr-Wahl
+    // wieder aufgeschlagen. Die Marke ist einmalig — beim Nachladen nach einer
+    // Handlung ist sie längst weg und hier passiert nichts.
+    jahrWahlAusMarke();
   }
 
   laden().catch(e => zeigeTuer('Das Kontor ließ sich nicht aufschlagen: ' + e.message));
