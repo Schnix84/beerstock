@@ -467,7 +467,11 @@
      bildschirmfuellenden Auftritt fehlten. Wer hier wieder auflockert, schiebt
      ihn aus dem Bild. */
   .hero-striche { margin: clamp(8px, 2.4vw, 14px) 0 4px; }
-  .hero-striche svg { width: 100%; height: auto; display: block; }
+  /* `overflow: visible` gegen die eigene Kante des <svg>: der Querstrich der
+     Fuenfergruppe setzt bei x = 1 an und haengt mit seiner runden Kappe links
+     hinaus, der Kreidesaum ringsum ebenso. Die Viewbox dafuer zu verbreitern
+     waere der teurere Weg - sie ist hier der Nenner der Skalierung. */
+  .hero-striche svg { width: 100%; height: auto; display: block; overflow: visible; }
 
   /* --- Das Glas, mit Kreide gezeichnet ------------------------------------
      Uebernommen von der Live-Seite; hier nur andere Farben, weil auf einer
@@ -2227,7 +2231,7 @@
   .z-unter > * { white-space: nowrap; }
   .z-unter .wort { font-family: var(--hand); font-size: 12.5px; letter-spacing: 0; }
   .z-striche { margin-top: 7px; height: 18px; }
-  .z-striche svg { height: 18px; width: auto; display: block; }
+  .z-striche svg { height: 18px; width: auto; display: block; overflow: visible; }
 
   /* Die Punktreihe der Speisekarte: sie führt das Auge vom Namen zur Zahl. */
   .z-rechts { display: flex; align-items: baseline; gap: 8px; }
@@ -2349,10 +2353,42 @@
     /* Keine stroke-width hier: CSS schlaegt das Praesentationsattribut, und die
        Zeilenfassung braucht duennere Striche als der Kopf. */
     stroke: var(--kreide); stroke-linecap: round;
-    stroke-dasharray: 82; stroke-dashoffset: 82;
-    animation: schreiben .3s ease-out forwards;
+    /* Die Luecke ist DOPPELT so lang wie der Strich, und das ist kein Zierrat.
+       Bei `stroke-dasharray: 82` (Strich 82, Luecke 82) wiederholt sich das
+       Muster alle 164 Einheiten: mit `dashoffset: 82` faengt der NAECHSTE
+       Strich der Kette genau bei Weglaenge 82 an - also exakt am Ende der
+       Linie. Das ist ein Segment der Laenge null, und `stroke-linecap: round`
+       setzt ihm trotzdem seine runde Kappe auf: ein Punkt am unteren Ende
+       jedes noch ungezeichneten Striches (beim Querstrich unten links).
+       Safari zeichnet diese Kappe, Chrome laesst sie weg - im Schuss also
+       nicht zu sehen. Mit `82 164` liegt die naechste Wiederholung bei 164
+       und damit hinter dem Ende der Linie; kein Nullsegment, kein Punkt.
+       Am Ablauf aendert sich nichts: 82 -> 0 deckt die Linie genauso auf. */
+    stroke-dasharray: 82 164; stroke-dashoffset: 82;
+    /* Ein Strich nach dem anderen, nicht vier auf einmal: die Dauer ist
+       DIESELBE Zahl, die `striche()` als Versatz je Strich verteilt, und steht
+       darum dort und nicht hier - sonst laufen Dauer und Takt beim naechsten
+       Aendern auseinander und die Kette ueberlappt wieder. `linear`, weil
+       `ease-out` jeden Strich am Ende ausrollen laesst und die Uebergabe an
+       den naechsten dadurch stockt. */
+    animation: schreiben var(--zug, .1s) linear forwards;
   }
   .strich.quer { stroke: var(--rot); }
+  /* Der Saum von `.kr` fuer die Gruppe statt fuer jeden Strich einzeln - sonst
+     24 Schattendurchlaeufe im vollen Kopf.
+
+     NUR die Zeilenfassung nimmt ihn hier als CSS-Filter. Der Kopf bekommt
+     stattdessen Korn UND Saum aus einem Stueck, als `filter="url(…)"` direkt
+     am <g> (siehe `striche()`): `filter: url(#id) drop-shadow(…)` in EINER
+     CSS-Liste laesst Safari die ganze Kette fallen - die Striche standen dort
+     blank da, waehrend Chrome sie gekoernt zeichnete.
+
+     Warum das Korn der Zeile fehlt: bei ~2px Strichstaerke hat es keinen Platz
+     mehr und wird zu Schmutz, genau wie Chalkduster selbst unter dieser
+     Groesse seine Textur verliert. */
+  .strich-gruppe.klein {
+    filter: drop-shadow(0 0 1px #ffffff5c) drop-shadow(0 1px 2px #00000055);
+  }
   @keyframes schreiben { to { stroke-dashoffset: 0; } }
   .wort-gross {
     font-family: var(--hand); font-size: 34px; fill: var(--kreide-matt);
@@ -3736,10 +3772,75 @@
     const reihen = Math.ceil(gruppen / proReihe);
     const breite = proReihe * B.g + (proReihe - 1) * B.a;
     const hoehe = reihen * B.zeile;
+    /* Die Viewbox bleibt bei der reinen Strichbreite. Der Querstrich beginnt
+       bei `x0 + 1` und ragt mit seiner runden Kappe darueber hinaus - dass er
+       nicht abgeschnitten wird, besorgt `overflow: visible` am <svg>, nicht
+       ein Zuschlag hier: die Viewbox-Breite ist im Kopf der Nenner der
+       Skalierung (`width: 100%`), ein Zuschlag haette die ganze Strichliste
+       verkleinert und um ~20 px eingerueckt - und zwar je nach Bierzahl
+       verschieden weit. */
     svg.setAttribute('viewBox', '0 0 ' + breite + ' ' + hoehe);
     if (gross) { svg.setAttribute('width', '100%'); svg.setAttribute('preserveAspectRatio', 'xMinYMid meet'); }
     else svg.setAttribute('height', 18);
 
+    if (gross) {
+      /* Die Kornung steht im selben SVG-Wurzelelement wie die Gruppe, die sie
+         referenziert - stand sie in einem GETRENNTEN <svg> (erster Anlauf: ein
+         einziges, global im <body>), verlor Safari die Verbindung und zeichnete
+         die Striche ungefiltert. Nur `gross` legt den Block an, und davon gibt
+         es je Seite genau einen Aufrufer (`hero-striche`) - eine feste ID
+         kollidiert darum nicht.
+
+         Der Saum steckt als zwei `feDropShadow` MIT DRIN und nicht daneben in
+         der CSS-Filterliste: `filter: url(#id) drop-shadow(…)` ist die Form,
+         an der Safari die ganze Kette fallen laesst. Erst aufrauen, dann den
+         Saum drueberlegen, damit er der aufgerauten Silhouette folgt; die
+         Werte sind die von `.kr` (Zeile 387), Blur als halbe Streuung. */
+      const filter = s_el('filter', {
+        id: 'kreide-strich', x: '-15%', y: '-15%', width: '130%', height: '130%',
+        'color-interpolation-filters': 'sRGB',
+      });
+      filter.appendChild(s_el('feTurbulence', {
+        type: 'fractalNoise', baseFrequency: 0.9, numOctaves: 2, seed: 7, result: 'rauschen',
+      }));
+      filter.appendChild(s_el('feDisplacementMap', {
+        in: 'SourceGraphic', in2: 'rauschen', scale: 3,
+        xChannelSelector: 'R', yChannelSelector: 'G', result: 'rau',
+      }));
+      filter.appendChild(s_el('feDropShadow', {
+        in: 'rau', dx: 0, dy: 0, stdDeviation: 0.5,
+        'flood-color': '#ffffff', 'flood-opacity': 0.36, result: 'saum',
+      }));
+      filter.appendChild(s_el('feDropShadow', {
+        in: 'saum', dx: 0, dy: 1, stdDeviation: 1,
+        'flood-color': '#000000', 'flood-opacity': 0.33,
+      }));
+      const defs = s_el('defs', {});
+      defs.appendChild(filter);
+      svg.appendChild(defs);
+    }
+
+    /* Saum und Kornung haengen an der Gruppe, nicht an jedem einzelnen Strich.
+       Der Kopf holt sich beides als Praesentationsattribut aus `#kreide-strich`
+       (Safari, siehe oben), die Zeile nur den Saum aus `.strich-gruppe.klein`
+       im Stylesheet. */
+    const gruppe = s_el('g', { class: 'strich-gruppe ' + (gross ? 'gross' : 'klein') });
+    if (gross) gruppe.setAttribute('filter', 'url(#kreide-strich)');
+    svg.appendChild(gruppe);
+
+    /* Der Takt der Feder, und zugleich die Dauer EINES Striches (`--zug`, von
+       `.strich` gelesen): beides dieselbe Zahl, damit ein Strich fertig ist,
+       bevor der naechste ansetzt - die Bewegung soll wie eine Hand aussehen,
+       die anschreibt, nicht wie fuenf Striche, die zugleich aufgehen. Der
+       Preis ist die Gesamtdauer: sie waechst mit dem Bestand, beim vollen
+       Kopf (28 Striche) auf knapp drei Sekunden. */
+    const ZUG = 0.1;
+    gruppe.style.setProperty('--zug', ZUG + 's');
+
+    /* Die Reihenfolge steckt in dieser Schleife und ist die des Wirts: die
+       vier Striche eines Buendels der Reihe nach, dann sein Querstrich, dann
+       das naechste Buendel. `stift` zaehlt ueber Buendel- und Zeilengrenzen
+       hinweg einfach weiter. */
     let stift = 0;
     for (let gi = 0; gi < gruppen; gi++) {
       const imBund = Math.min(5, anzahl - gi * 5);
@@ -3747,19 +3848,29 @@
       const x0 = spalte * (B.g + B.a), y = reihe * B.zeile + B.zeile / 2;
       for (let s = 0; s < Math.min(imBund, 4); s++) {
         const l = s_el('line', {
-          class: 'strich', 'stroke-width': B.w,
+          // `pathLength` bindet den `stroke-dasharray: 82` der Klasse an eine
+          // feste Skala - unabhaengig von der wirklichen, geometrischen
+          // Laenge dieser Linie (die je nach `gross`/`klein` variiert).
+          class: 'strich', 'stroke-width': B.w, pathLength: 82,
+          // Von oben nach unten: der Strich beginnt an `x1,y1`, und das ist
+          // der obere Punkt. Die Zeichenrichtung haengt allein daran, welches
+          // Ende zuerst genannt wird - `stroke-dashoffset` laeuft vom Anfang.
           x1: x0 + B.w + s * B.s, y1: y - B.h, x2: x0 + B.w + 4 + s * B.s, y2: y + B.h,
         });
-        l.style.animationDelay = (stift++ * 0.07) + 's';
-        svg.appendChild(l);
+        l.style.animationDelay = (stift++ * ZUG) + 's';
+        gruppe.appendChild(l);
       }
       if (imBund === 5) {
         const l = s_el('line', {
-          class: 'strich quer', 'stroke-width': B.w,
+          class: 'strich quer', 'stroke-width': B.w, pathLength: 82,
+          // Der einzige Strich, der NICHT von oben nach unten laeuft: von
+          // unten links nach oben rechts, wie ein Wirt durchstreicht. Die
+          // Gerade ist dieselbe, egal herum - nur das zuerst genannte Ende
+          // entscheidet, wo `stroke-dashoffset` zu laufen anfaengt.
           x1: x0 + 1, y1: y + B.h - 2, x2: x0 + B.g - 8, y2: y - B.h + 2,
         });
-        l.style.animationDelay = (stift++ * 0.07) + 's';
-        svg.appendChild(l);
+        l.style.animationDelay = (stift++ * ZUG) + 's';
+        gruppe.appendChild(l);
       }
     }
     return svg;
