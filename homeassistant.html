@@ -291,6 +291,35 @@
   .kopfzeile .zur-tafel:hover {
     background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
   }
+
+  /* --- Der Griff: am Finger wischt man hinaus ------------------------------
+     WORTGLEICH von `statistik.html` — dort steht die lange Begründung (warum
+     ein <button>, warum ohne Hintergrund, warum nur vom Griff aus und nicht
+     bei Scrollstand 0), und zwei Fassungen davon wären eine zu viel. */
+  .raus-griff {
+    display: none; width: 100%; padding: 13px 0 11px;
+    border: none; background: none; cursor: pointer;
+    touch-action: none;
+  }
+  .raus-griff::before {
+    content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
+    border-radius: 999px; background: #ffffff38;
+  }
+  .raus-griff:active::before { background: #ffffff5c; }
+  .raus-griff:focus-visible { outline: 2px solid var(--gelb); outline-offset: 2px; }
+
+  @media (hover: none), (pointer: coarse) {
+    .kopfzeile .zur-tafel { display: none; }
+    .raus-griff { display: block; }
+    .tafel { padding-top: 0; }
+  }
+
+  /* Kein `overflow: hidden` am `html`, während gezogen wird — warum nicht,
+     steht in `statistik.html`. */
+  .brett { transition: transform .22s ease-out; }
+  html.zieht .brett { transition: none; }
+  @media (prefers-reduced-motion: reduce) { .brett { transition: none; } }
+
   .zurueck {
     display: inline-block; color: var(--kreide-weg); font-size: 13px;
     text-decoration: none; border-bottom: 1px dashed #ffffff2e; padding-bottom: 1px;
@@ -446,6 +475,10 @@
   </div>
 
   <div class="tafel">
+    <!-- Der Weg hinaus am Finger. Er steht VOR der Kopfzeile, weil er an den
+         oberen Rand gehört; warum es ihn gibt, steht bei `.raus-griff`. -->
+    <button class="raus-griff" type="button" aria-label="zurück zur Tafel"></button>
+
     <div class="kopfzeile">
       <h1 class="kr">Home Assistant</h1>
       <a class="zur-tafel" href="./" aria-label="zurück zur Tafel">←</a>
@@ -785,6 +818,71 @@
       sagt('Dein Zugang ist gesperrt — solange das so ist, gibt es hier keinen '
          + 'neuen Schlüssel.', true);
     }
+  }
+
+  /* --- Runterwischen führt hinaus -------------------------------------------
+     WORTGLEICH von `statistik.html` — dort steht das Original samt der drei
+     Unterschiede zum Bogen der Tafel und der Falle mit dem synthetischen
+     Klick. Diese Seite ist der zweite von zwei Wegen, die nur aus dem offenen
+     Deckel heraus erreichbar sind; dass der Deckel beim Zurückkommen wieder
+     aufgeht, besorgt weiterhin die Marke im `sessionStorage` drüben — hier
+     ändert sich daran nichts, weil auch die Geste am Ende nur die vorhandene
+     Pille anklickt.
+     --------------------------------------------------------------------- */
+  {
+    const ZUG_AUF = 92, ZUG_SCHLUPF = 8, ZUG_VORSPRUNG = 1.5, ZUG_TAKT = 220;
+    const ohneTakt = matchMedia('(prefers-reduced-motion: reduce)');
+    const griff = document.querySelector('.raus-griff');
+    const zieher = document.querySelector('.brett');
+    let zug = null, gezogen = false;
+
+    const raus = () => document.querySelector('.zur-tafel').click();
+
+    function zurueckfedern() {
+      document.documentElement.classList.remove('zieht');
+      zieher.style.transform = '';
+      zug = null;
+    }
+
+    griff.addEventListener('click', () => {
+      if (gezogen) { gezogen = false; return; }
+      raus();
+    });
+
+    griff.addEventListener('touchstart', ev => {
+      zug = null; gezogen = false;
+      if (ev.touches.length !== 1) return;
+      zug = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, achse: null, weg: 0 };
+    }, { passive: true });
+
+    griff.addEventListener('touchmove', ev => {
+      if (!zug) return;
+      const t = ev.touches[0];
+      const dx = t.clientX - zug.x, dy = t.clientY - zug.y;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) gezogen = true;
+      if (zug.achse === null) {
+        if (Math.abs(dx) > ZUG_SCHLUPF && Math.abs(dx) > Math.abs(dy)) { zug = null; return; }
+        if (dy < -ZUG_SCHLUPF) { zug = null; return; }
+        if (dy <= ZUG_SCHLUPF || dy <= Math.abs(dx) * ZUG_VORSPRUNG) return;
+        zug.achse = 'runter';
+        document.documentElement.classList.add('zieht');
+      }
+      ev.preventDefault();
+      zug.weg = Math.max(0, dy - ZUG_SCHLUPF);
+      zieher.style.transform = 'translateY(' + zug.weg + 'px)';
+    }, { passive: false });
+
+    griff.addEventListener('touchend', () => {
+      if (!zug || zug.achse !== 'runter' || zug.weg < ZUG_AUF) { zurueckfedern(); return; }
+      zug = null;
+      document.documentElement.classList.remove('zieht');
+      if (navigator.vibrate) navigator.vibrate(12);
+      if (ohneTakt.matches) { zurueckfedern(); raus(); return; }
+      zieher.style.transform = 'translateY(' + window.innerHeight + 'px)';
+      setTimeout(raus, ZUG_TAKT);
+    }, { passive: true });
+
+    griff.addEventListener('touchcancel', zurueckfedern, { passive: true });
   }
 
   laden();

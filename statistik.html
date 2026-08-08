@@ -336,6 +336,72 @@
     background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
   }
 
+  /* --- Der Griff: am Finger wischt man hinaus ------------------------------
+     Am Zeigergerät führt die Pille hinaus. Am Finger tut es der Balken oben:
+     ein Zug nach unten schiebt die Seite weg. Dieselbe Geste, mit der auf der
+     Tafel die Bögen von unten zugehen (`.fly-griff` in `index.html`) und im
+     Kontor das Jahr-Blatt — diese Seite wird ja aus derselben Hand heraus
+     verlassen. Beides nebeneinander zu zeigen hieße, zwei Wege anzubieten,
+     von denen sich je einer falsch anfühlt; also tauscht die Medienabfrage
+     sie gegeneinander aus.
+
+     Er ist ausdrücklich ein <button> und kein Strich aus einem <div>: nimmt
+     man dem Handy die Pille weg und legt den Rückweg ganz in eine Geste, hat
+     VoiceOver sonst keinen Weg mehr von dieser Seite herunter. Als Knopf
+     führt er auch beim bloßen Antippen hinaus — für jeden, der das Wischen
+     nicht errät.
+
+     OHNE Hintergrund, anders als der Griff an den Bögen. Dort klebt er oben
+     und muss abdecken, was unter ihm durchscrollt; hier fährt er mit dem
+     Blatt und hat nichts zu verbergen. Kleben KANN er hier ohnehin nicht:
+     `.tafel` trägt `overflow: hidden` und ist damit selbst ein Scrollkasten,
+     an dem sich ein `sticky` festmacht statt am Fenster. Das ist kein
+     Rückschritt — die Pille scrollt heute genauso weg.
+
+     `touch-action: none` nimmt dem Browser die Geste ganz ab, und das ist der
+     Grund, warum nur VOM GRIFF aus gezogen wird und nicht von überall bei
+     Scrollstand 0: dort gehört der Zug nach unten dem Zum-Neuladen-Ziehen von
+     Chrome, und gegen das gewinnt ein `preventDefault` nicht zuverlässig. Ein
+     Rückweg, der stattdessen neu lädt, wäre schlechter als der Knopf.
+     --------------------------------------------------------------------- */
+  .raus-griff {
+    display: none; width: 100%; padding: 13px 0 11px;
+    border: none; background: none; cursor: pointer;
+    touch-action: none;
+  }
+  .raus-griff::before {
+    content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
+    border-radius: 999px; background: #ffffff38;
+  }
+  .raus-griff:active::before { background: #ffffff5c; }
+  .raus-griff:focus-visible { outline: 2px solid var(--gelb); outline-offset: 2px; }
+
+  @media (hover: none), (pointer: coarse) {
+    .kopfzeile .zur-tafel { display: none; }
+    .raus-griff { display: block; }
+    /* Der Griff bringt seine eigene Polsterung mit. Ohne das stünde er 20 px
+       unter der Oberkante, und ein Balken mitten im Blatt ist kein Rand. */
+    .tafel { padding-top: 0; }
+  }
+
+  /* Gezogen wird ohne Überblendung, die Rückfahrt und der Abgang mit ihr —
+     wie an den Bögen der Tafel.
+
+     HIER STAND EINMAL `html.zieht { overflow: hidden }`, gegen die Seite, die
+     sich unter dem weggeschobenen Brett verlängert. Die Zeile war schlimmer
+     als das, was sie verhindern sollte: `overflow` am Wurzelelement schlägt
+     auf das Fenster durch, macht es unscrollbar — und setzt den Scrollstand
+     dabei auf 0. Wer den Griff aus ein paar gescrollten Pixeln heraus fasste,
+     dem sprang die Seite im ersten Millimeter der Bewegung nach oben. Ohne
+     die Zeile wächst die Seite kurz nach unten, und das sieht am Finger
+     niemand: der Daumen liegt auf dem Griff, gescrollt wird nicht, und 220 ms
+     später ist die Seite ohnehin weg. Gemessen in
+     `ideas/pruefungen/raus-griff-probe.mjs`, Abschnitt „Gewischt aus dem
+     Scrollstand". */
+  .brett { transition: transform .22s ease-out; }
+  html.zieht .brett { transition: none; }
+  @media (prefers-reduced-motion: reduce) { .brett { transition: none; } }
+
   /* Der gestrichelte Link bleibt — die verschlossene Tür benutzt ihn weiter,
      und dort ist er ein Satzende („meldet sich an") und keine Pille. */
   .zurueck {
@@ -436,6 +502,10 @@
   </div>
 
   <div class="tafel">
+    <!-- Der Weg hinaus am Finger. Er steht VOR der Kopfzeile, weil er an den
+         oberen Rand gehört; warum es ihn gibt, steht bei `.raus-griff`. -->
+    <button class="raus-griff" type="button" aria-label="zurück zur Tafel"></button>
+
     <div class="kopfzeile">
       <h1 class="kr">Statistiken</h1>
       <a class="zur-tafel" href="./" aria-label="zurück zur Tafel">←</a>
@@ -661,6 +731,103 @@
     // Erst jetzt weg: fünf leere Kästen mit Überschriften sind keine Auskunft.
     $('skelett').hidden = true;
     zeichnen(s);
+  }
+
+  /* --- Runterwischen führt hinaus -------------------------------------------
+     Dieselbe Geste wie an den Bögen der Tafel („Runterwischen schließt" in
+     `index.html`), dieselben vier Schwellen und dieselbe Uhr am Ende. HIER
+     steht die Fassung für eine ganze Seite; `homeassistant.html` und
+     `admin.html` tragen die Kopie davon, mit einem Verweis hierher.
+
+     Drei Unterschiede zum Bogen, alle drei aus demselben Grund — eine Seite
+     ist kein Blatt, das über etwas liegt:
+
+     1. Gezogen wird NUR vom Griff aus. Am Bogen geht es zusätzlich von überall
+        bei Scrollstand 0, weil dort das Blatt selbst der Scroller ist. Hier
+        scrollt das Fenster, und ein Zug nach unten am oberen Anschlag gehört
+        Chrome (Zum-Neuladen-Ziehen). Der Griff nimmt ihm die Geste per
+        `touch-action: none` ganz ab; siehe den Stil.
+     2. Kein Schirm blasst ab. Unter der Seite liegt nichts, was freizugeben
+        wäre — ein Verlauf ins Nichts wäre eine Bewegung ohne Aussage.
+     3. Der Abgang fährt um eine FENSTERHÖHE, nicht um die Höhe des Gezogenen.
+        Das Brett ist auf dieser Seite ein paar tausend Pixel hoch; dieselbe
+        Zahl wie am Bogen ergäbe in 220 ms einen Schmierstreifen.
+
+     Hinausgeführt wird über den Klick auf die vorhandene, nur unsichtbare
+     Pille — dieselbe Trennung wie drüben am ×. Damit gibt es genau EIN Ziel
+     im Markup, und die Marke, die den Deckel auf der Tafel wieder aufschlägt
+     (`beerstock-deckel-zurueck`), läuft unverändert weiter, denn für sie ist
+     das ein ganz gewöhnlicher Aufruf von `./`.
+
+     DER KLICK MUSS VERSCHLUCKT WERDEN. Ein kurzer Zug, der die Schwelle nicht
+     erreicht, federt zurück — und der Browser schickt hinterher den
+     synthetischen Klick auf den Griff, der dann doch hinausführte. Genau die
+     Falle, die am Rückblick zwei Anläufe gekostet hat. `gezogen` fängt ihn;
+     der nächste `touchstart` setzt den Merker wieder zurück.
+     --------------------------------------------------------------------- */
+  {
+    const ZUG_AUF = 92, ZUG_SCHLUPF = 8, ZUG_VORSPRUNG = 1.5, ZUG_TAKT = 220;
+    const ohneTakt = matchMedia('(prefers-reduced-motion: reduce)');
+    const griff = document.querySelector('.raus-griff');
+    const zieher = document.querySelector('.brett');
+    let zug = null, gezogen = false;
+
+    const raus = () => document.querySelector('.zur-tafel').click();
+
+    function zurueckfedern() {
+      document.documentElement.classList.remove('zieht');
+      zieher.style.transform = '';
+      zug = null;
+    }
+
+    griff.addEventListener('click', () => {
+      if (gezogen) { gezogen = false; return; }
+      raus();
+    });
+
+    /* Die Zuhörer hängen unbedingt, nicht nur am Finger: ein Notebook mit
+       Berührungsschirm meldet `pointer: fine` und hat trotzdem einen. Was die
+       Medienabfrage entscheidet, ist allein, was zu SEHEN ist — dort die
+       Pille, hier der Balken. Von einer Maus kommt ohnehin kein `touch`. */
+    griff.addEventListener('touchstart', ev => {
+      zug = null; gezogen = false;
+      if (ev.touches.length !== 1) return;
+      zug = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, achse: null, weg: 0 };
+    }, { passive: true });
+
+    // `passive: false`, weil das Gummiband des Browsers weg muss, sobald die
+    // Bewegung uns gehört. Vorher NICHT — solange die Achse offen ist, könnte
+    // es noch ein Querwisch werden.
+    griff.addEventListener('touchmove', ev => {
+      if (!zug) return;
+      const t = ev.touches[0];
+      const dx = t.clientX - zug.x, dy = t.clientY - zug.y;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) gezogen = true;
+      if (zug.achse === null) {
+        if (Math.abs(dx) > ZUG_SCHLUPF && Math.abs(dx) > Math.abs(dy)) { zug = null; return; }
+        if (dy < -ZUG_SCHLUPF) { zug = null; return; }
+        if (dy <= ZUG_SCHLUPF || dy <= Math.abs(dx) * ZUG_VORSPRUNG) return;
+        zug.achse = 'runter';
+        document.documentElement.classList.add('zieht');
+      }
+      ev.preventDefault();
+      zug.weg = Math.max(0, dy - ZUG_SCHLUPF);
+      zieher.style.transform = 'translateY(' + zug.weg + 'px)';
+    }, { passive: false });
+
+    griff.addEventListener('touchend', () => {
+      if (!zug || zug.achse !== 'runter' || zug.weg < ZUG_AUF) { zurueckfedern(); return; }
+      zug = null;
+      document.documentElement.classList.remove('zieht');   // erst die Überblendung zurück, dann das Ziel
+      if (navigator.vibrate) navigator.vibrate(12);
+      if (ohneTakt.matches) { zurueckfedern(); raus(); return; }
+      zieher.style.transform = 'translateY(' + window.innerHeight + 'px)';
+      /* Eine Uhr, kein `transitionend`: fällt das Ereignis einmal aus, bliebe
+         die Seite weggeschoben und leer stehen, ohne dass jemand hinauskäme. */
+      setTimeout(raus, ZUG_TAKT);
+    }, { passive: true });
+
+    griff.addEventListener('touchcancel', zurueckfedern, { passive: true });
   }
 
   laden();

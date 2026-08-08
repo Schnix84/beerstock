@@ -227,6 +227,55 @@
     .register button { padding: 4px 8px; }
   }
 
+  /* --- Der Griff: am Finger wischt man hinaus ------------------------------
+     WORTGLEICH von `statistik.html` — dort steht die lange Begründung (warum
+     ein <button>, warum ohne Hintergrund, warum nur vom Griff aus und nicht
+     bei Scrollstand 0). Zwei Zutaten sind hier eigen:
+
+     Der negative Rand holt ihn in die Polsterung des Blattes hinauf, damit der
+     Balken an der Innenkante des Holzes liegt und nicht 18 px darunter. Am
+     Bogen der Tafel ging genau das NICHT, weil der Griff dort klebt und ein
+     `sticky`-Kasten seinen Inhaltsrahmen nicht verlassen darf; hier klebt
+     nichts, also wirkt er. Links 20, rechts 16 — die Polsterung des Blattes
+     ist ungleich, und mit `width: 100%` läge der Balken zwei Pixel neben der
+     Mitte.
+
+     Die Pille im Register wird am Finger ausgeblendet, nicht entfernt: die
+     Geste klickt sie an (unsichtbar geht das). Nebenbei stehen dort dann drei
+     Zungen statt vier — die Breite, um die es in „Nachlese zum Register"
+     ging, wird also nicht enger. Die Schwelle bei 430 px bleibt trotzdem
+     stehen: ein schmales Fenster am Rechner ist kein Finger. */
+  .raus-griff {
+    /* Die Breite steht ausdrücklich da: ein <button> ist auch als `block`
+       eine Schrumpfform und wäre sonst 38 px breit — so breit wie der Balken
+       darin, und damit ein Ziel, das ein Daumen nicht findet (gemessen). Die
+       36 sind die beiden negativen Ränder, siehe darunter. */
+    display: none; width: calc(100% + 36px);
+    margin: -18px -16px 0 -20px; padding: 13px 0 11px;
+    border: none; background: none; cursor: pointer;
+    touch-action: none;
+  }
+  .raus-griff::before {
+    content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
+    border-radius: 999px; background: #ffffff38;
+  }
+  .raus-griff:active::before { background: #ffffff5c; }
+  .raus-griff:focus-visible { outline: 2px solid var(--gelb); outline-offset: 2px; }
+
+  @media (hover: none), (pointer: coarse) {
+    .register .zur-tafel { display: none; }
+    .raus-griff { display: block; }
+  }
+
+  /* Gezogen wird das BUCH, nicht das Blatt: das Holz gehört zur Seite, und
+     eine Schiefertafel, die aus ihrem Rahmen nach unten herausführe, wäre
+     eine zerlegte Seite statt einer weggeschobenen. Ohne Überblendung
+     gezogen, die Rückfahrt und der Abgang mit ihr. Kein `overflow: hidden` am
+     `html` dabei — warum nicht, steht in `statistik.html`. */
+  .buch { transition: transform .22s ease-out; }
+  html.zieht .buch { transition: none; }
+  @media (prefers-reduced-motion: reduce) { .buch { transition: none; } }
+
   /* Protokoll und Rundmail bekommen erst am Rechner eine Zunge. Auf dem Handy
      bleibt es bei drei plus Pfeil — dort ist die Reihe bis auf wenige Pixel
      ausgereizt (278 von 293 bei 375 px), zwei weitere Pillen brächen sie in
@@ -3062,6 +3111,13 @@
   function registerZeichnen() {
     const ziel = $('register');
     $(offen).prepend(ziel);
+    /* Der Griff wandert mit. NACH dem Register geprependet, damit er DAVOR
+       steht: er gehört an den oberen Rand des Blattes. `prepend` verschiebt
+       den Knoten, es baut ihn nicht neu — sein Zuhörer überlebt den Umzug,
+       genau wie der der Zungen. Und weil er nur hier hereinkommt, fehlt er
+       bei der verschlossenen Tür von selbst; dort führt der grüne Link
+       hinaus, keine Pille, die anzuklicken wäre. */
+    $(offen).prepend(GRIFF);
     ziel.textContent = '';
     ZUNGEN.forEach(([id, titel, nurBreit]) => {
       const b = el('button',
@@ -3202,6 +3258,81 @@
     // wieder aufgeschlagen. Die Marke ist einmalig — beim Nachladen nach einer
     // Handlung ist sie längst weg und hier passiert nichts.
     jahrWahlAusMarke();
+  }
+
+  /* --- Runterwischen führt hinaus -------------------------------------------
+     WORTGLEICH von `statistik.html` — dort steht das Original samt der drei
+     Unterschiede zum Bogen der Tafel und der Falle mit dem synthetischen
+     Klick. Zwei Dinge sind hier eigen:
+
+     Gezogen wird das BUCH; die Blätter liegen darin und tragen ihr eigenes
+     Holz. Und der Griff steht nicht im Markup, sondern wandert mit dem
+     Register ins aufgeschlagene Blatt (siehe `registerZeichnen`) — deshalb
+     wird er hier gebaut und nicht gesucht. Die Pille dagegen wird bei JEDEM
+     Umblättern neu gebaut; eine gemerkte Fassung wäre nach der ersten Zunge
+     ein Knoten, der nirgends mehr hängt. Also erst im Augenblick des Klicks
+     nachschlagen.
+     --------------------------------------------------------------------- */
+  const GRIFF = el('button', 'raus-griff');
+  {
+    const ZUG_AUF = 92, ZUG_SCHLUPF = 8, ZUG_VORSPRUNG = 1.5, ZUG_TAKT = 220;
+    const ohneTakt = matchMedia('(prefers-reduced-motion: reduce)');
+    const zieher = document.querySelector('.buch');
+    let zug = null, gezogen = false;
+
+    GRIFF.type = 'button';
+    GRIFF.setAttribute('aria-label', 'zurück zur Tafel');
+
+    function raus() {
+      const weg = document.querySelector('.zur-tafel');
+      if (weg) weg.click();
+    }
+
+    function zurueckfedern() {
+      document.documentElement.classList.remove('zieht');
+      zieher.style.transform = '';
+      zug = null;
+    }
+
+    GRIFF.addEventListener('click', () => {
+      if (gezogen) { gezogen = false; return; }
+      raus();
+    });
+
+    GRIFF.addEventListener('touchstart', ev => {
+      zug = null; gezogen = false;
+      if (ev.touches.length !== 1) return;
+      zug = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, achse: null, weg: 0 };
+    }, { passive: true });
+
+    GRIFF.addEventListener('touchmove', ev => {
+      if (!zug) return;
+      const t = ev.touches[0];
+      const dx = t.clientX - zug.x, dy = t.clientY - zug.y;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) gezogen = true;
+      if (zug.achse === null) {
+        if (Math.abs(dx) > ZUG_SCHLUPF && Math.abs(dx) > Math.abs(dy)) { zug = null; return; }
+        if (dy < -ZUG_SCHLUPF) { zug = null; return; }
+        if (dy <= ZUG_SCHLUPF || dy <= Math.abs(dx) * ZUG_VORSPRUNG) return;
+        zug.achse = 'runter';
+        document.documentElement.classList.add('zieht');
+      }
+      ev.preventDefault();
+      zug.weg = Math.max(0, dy - ZUG_SCHLUPF);
+      zieher.style.transform = 'translateY(' + zug.weg + 'px)';
+    }, { passive: false });
+
+    GRIFF.addEventListener('touchend', () => {
+      if (!zug || zug.achse !== 'runter' || zug.weg < ZUG_AUF) { zurueckfedern(); return; }
+      zug = null;
+      document.documentElement.classList.remove('zieht');
+      if (navigator.vibrate) navigator.vibrate(12);
+      if (ohneTakt.matches) { zurueckfedern(); raus(); return; }
+      zieher.style.transform = 'translateY(' + window.innerHeight + 'px)';
+      setTimeout(raus, ZUG_TAKT);
+    }, { passive: true });
+
+    GRIFF.addEventListener('touchcancel', zurueckfedern, { passive: true });
   }
 
   laden().catch(e => zeigeTuer('Das Kontor ließ sich nicht aufschlagen: ' + e.message));
