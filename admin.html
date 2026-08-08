@@ -57,6 +57,25 @@
       radial-gradient(130% 45% at 50% -8%, #e8c76614, transparent 60%),
       radial-gradient(120% 90% at 50% 0%, #1f2629, #14181a 52%, #0c0f11 100%);
     background-color: #0c0f11;
+    /* BEIDES ist noetig, und beides gegen denselben Fehler.
+
+       `no-repeat`: der Hintergrund des `body` wird auf die Leinwand
+       durchgereicht und dort ueber die GANZE Seite gemalt — der Ausschnitt,
+       nach dem er sich richtet, bleibt aber der body-Kasten. Mit der Vorgabe
+       `repeat` faengt der Verlauf deshalb alle body-Hoehen von vorne an. Bei
+       einer Seite, die kuerzer ist als das Fenster oder laenger als ihr
+       eigener Kasten, lief so eine harte waagerechte Kante quer ueber alles,
+       auch ueber den Holzrahmen (gemessen: +16 Helligkeitsstufen, in WebKit
+       wie in Chromium, alle 346 px im Kontor). Ohne Wiederholung uebernimmt
+       unterhalb schlicht die Hintergrundfarbe — und weil der Verlauf genau
+       in ihr endet, ist der Uebergang nicht zu sehen.
+
+       `min-height: 100svh`: sonst waere der Raum auf einer kurzen Seite in
+       die obersten paar hundert Pixel gequetscht und der Rest flach schwarz.
+       Nicht `100%` — das rechnet gegen ein `html` ohne Hoehe und faellt auf
+       `auto` zurueck, tut also gar nichts. */
+    background-repeat: no-repeat;
+    min-height: 100svh;
     color: var(--kreide);
     font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     -webkit-text-size-adjust: 100%;
