@@ -229,6 +229,43 @@
     .register button { padding: 4px 8px; }
   }
 
+  /* Protokoll und Rundmail bekommen erst am Rechner eine Zunge. Auf dem Handy
+     bleibt es bei drei plus Pfeil — dort ist die Reihe bis auf wenige Pixel
+     ausgereizt (278 von 293 bei 375 px), zwei weitere Pillen brächen sie in
+     zwei Zeilen, und der Weg zu den beiden Blättern führt dort weiter über
+     ihre Karten auf der Übersicht.
+
+     AUSGEBLENDET, NICHT WEGGELASSEN: `display: none` nimmt den Knopf auch aus
+     dem Zugänglichkeitsbaum und aus der Tabreihenfolge — ein Vorleseprogramm
+     auf dem Handy findet also keine Zunge, die es nicht gibt. Das ist der
+     Grund, warum hier `display: none` steht und nicht `visibility` oder eine
+     Breite von null.
+
+     DIE SCHWELLE IST GEMESSEN, nicht gegriffen. Die fünf Pillen plus Pfeil
+     messen zusammen 458 px (82,9 + 95,1 + 85,6 + 75,9 + 78,3 + 40), dazu
+     5 × 6 px Zwischenraum: **488 px** braucht die Reihe. Nutzbar sind im Blatt
+     rund 90 px weniger als das Fenster — nachgemessen und NICHT konstant, der
+     Abzug wächst von 86 px bei 460 auf 94 px bei 700, weshalb hier eine
+     gemessene Reihe steht und keine Rechnung aus den Polsterungswerten.
+
+     Bei 600 px stehen damit 508 px zur Verfügung, und die Reihe misst dort
+     eine Zeile (Höhe 31 px = Höhe einer Pille; die Zahl der Zeilen über die
+     Höhe zu prüfen und nicht über `top` ist wichtig — der Pfeil ist als
+     `inline-flex` vertikal zentriert und hat auch einreihig einen anderen
+     `top` als seine Nachbarn, was eine `top`-Zählung zweizeilig lesen lässt).
+
+     Die 20 px Luft tragen auch den einzigen Teil der Reihe, der wachsen kann:
+     die Zahl an „Mitglieder". Drei Stellen kosten gemessen 12,9 px (95,1 →
+     108,0) — es bliebe eine Zeile.
+
+     Ein Umbruch wäre hier ohnehin kein Schaden (die Reihe hat `flex-wrap`),
+     aber eine Navigationsleiste, die auf dem Laptop zweizeilig steht, sieht
+     nach Versehen aus. */
+  .register .nur-breit { display: none; }
+  @media (min-width: 600px) {
+    .register .nur-breit { display: inline-block; }
+  }
+
   /* Ein Blatt ist hier eine Tafel: Schiefer im Holzrahmen, wie das Brett der
      Hauptseite — samt Korn und den Schlieren vom letzten Wischen. Der Rahmen
      hat bewusst dieselbe Breite und Maserung wie `.brett` in `index.html`;
@@ -1689,10 +1726,13 @@
 
     /* 2 und 3 — Protokoll und Rundmail. Diese beiden Karten stehen IMMER da,
        auch wenn sie nichts zu berichten haben, und das ist keine Vorliebe:
-       seit die beiden Blätter keine eigene Zunge mehr im Register haben, sind
-       diese Karten der einzige Weg dorthin. Eine Karte, die sich bei leerem
-       Inhalt wegräumt, räumte den Weg mit weg — und man käme an die Rundmail
-       nur noch heran, solange schon eine geplant ist.
+       AUF DEM HANDY sind sie der einzige Weg zu den beiden Blättern, deren
+       Zungen dort nicht mitlaufen (`.nur-breit`, siehe das Register). Eine
+       Karte, die sich bei leerem Inhalt wegräumt, räumte den Weg mit weg —
+       und man käme an die Rundmail nur noch heran, solange schon eine geplant
+       ist. Am Rechner gibt es die Zunge daneben; die Karte bleibt trotzdem,
+       weil sie etwas anderes tut als hinführen — sie sagt vorher, ob dort
+       etwas wartet.
 
        Der Jahresrückblick oben darf dagegen fehlen: dorthin führt kein Blatt,
        nur ein Overlay, und ohne Jahre gibt es nichts zu zeigen. */
@@ -2288,17 +2328,42 @@
   // und wer eine Rundmail schrieb, hatte die Mitgliederliste über sich, die
   // ihn nichts anging.
   //
-  // ZUNGEN trägt aber nur DREI davon. Protokoll und Rundmail haben auf der
-  // Übersicht ohnehin schon eine Karte, die sagt, was dort wartet — und wer
-  // dort steht, klickt den Knopf auf der Karte und nicht die Zunge darüber.
-  // Zwei Wege zum selben Blatt sind einer zuviel, und die Karte ist der
-  // bessere: sie beantwortet die Frage schon, für die man sonst erst
-  // hingehen müsste. Was bleibt, sind die drei Blätter, die man ansteuert,
-  // ohne vorher etwas gelesen zu haben.
+  // ZUNGEN trägt alle fünf — aber nur, wo Platz ist. Auf dem Handy stehen
+  // weiter drei da, am Rechner fünf.
   //
-  // Steht eines der beiden zungenlosen Blätter offen, ist KEINE Zunge
-  // hervorgehoben. Das ist richtig so — es lügt nicht, und der Weg zurück ist
-  // „Übersicht", die erste Zunge, die dann ohnehin dasteht.
+  // Das war einmal anders begründet und die Begründung hat nicht gehalten.
+  // Sie lautete: Protokoll und Rundmail haben auf der Übersicht ohnehin eine
+  // Karte, zwei Wege zum selben Blatt seien einer zuviel, und die Karte sei
+  // der bessere Weg, weil sie die Frage schon beantwortet. Das stimmt für
+  // den, der auf der Übersicht steht. Für jeden anderen war es ein Umweg:
+  // wer in den Statistiken saß und ins Protokoll wollte, musste erst zurück
+  // auf die Übersicht, dort die Karte suchen und ihren Knopf drücken — drei
+  // Handgriffe für ein Blatt, das nebenan liegt.
+  //
+  // Was die Reihe wirklich beschränkt hat, war nie das Argument, sondern die
+  // BREITE: im Blatt eines 390er-Handys bleiben 307 px, und schon vier Pillen
+  // brauchten dort zwei Reihen (siehe den Kommentar an `.register`). Wo diese
+  // Grenze nicht gilt, gilt auch der Verzicht nicht. `.nur-breit` blendet die
+  // beiden darum unterhalb der gemessenen Schwelle aus, statt sie gar nicht
+  // erst zu bauen — eine Reihe, die je nach Fensterbreite anders lang ist,
+  // ist eine CSS-Frage und keine, für die man auf ein `resize`-Ereignis
+  // horchen müsste.
+  //
+  // DIE KARTEN BLEIBEN, auf beiden Breiten. Auf dem Handy sind sie weiterhin
+  // der einzige Weg zu den zwei Blättern; am Rechner sind sie kein zweiter
+  // Weg zum selben Ziel, sondern etwas anderes — die Zunge führt hin, die
+  // Karte sagt vorher, ob sich das lohnt („geplant für Freitag", die letzten
+  // drei Handlungen). Das ist der Unterschied, an dem sich die alte Sorge vor
+  // dem doppelten Weg auflöst.
+  //
+  // Reihenfolge: die zwei neuen stehen in derselben Folge wie ihre Karten auf
+  // der Übersicht (erst Protokoll, dann Rundmail) und nicht in der von
+  // `BLAETTER` — wer beide Ansichten kennt, soll nicht umlernen. Und die
+  // Rundmail steht zuletzt, weil sie als einzige nicht zum Lesen da ist.
+  //
+  // Steht auf dem HANDY eines der beiden ausgeblendeten Blätter offen, ist
+  // keine Zunge hervorgehoben. Das ist richtig so — es lügt nicht, und der
+  // Weg zurück ist „Übersicht", die erste Zunge, die dann ohnehin dasteht.
   //
   // Die Blätter selbst sind unverändert geblieben — das Register schaltet nur
   // `hidden`. Es zeichnet auch nichts nach: was aufgeschlagen war, bleibt es
@@ -2306,10 +2371,13 @@
   // zurück auf die Übersicht.
   // ==========================================================================
   const BLAETTER = ['kopf-blatt', 'runde-blatt', 'stat-blatt', 'rund-blatt', 'log-blatt'];
+  // [Blatt, Aufschrift, nur auf breiten Fenstern]
   const ZUNGEN = [
     ['kopf-blatt',  'Übersicht'],
     ['runde-blatt', 'Mitglieder'],
     ['stat-blatt',  'Statistiken'],
+    ['log-blatt',   'Protokoll', true],
+    ['rund-blatt',  'Rundmail',  true],
   ];
   let offen = 'kopf-blatt';
 
@@ -2340,8 +2408,10 @@
     const ziel = $('register');
     $(offen).prepend(ziel);
     ziel.textContent = '';
-    ZUNGEN.forEach(([id, titel]) => {
-      const b = el('button', id === offen ? 'an' : null, titel);
+    ZUNGEN.forEach(([id, titel, nurBreit]) => {
+      const b = el('button',
+        [id === offen ? 'an' : null, nurBreit ? 'nur-breit' : null].filter(Boolean).join(' ') || null,
+        titel);
       b.type = 'button';
       b.setAttribute('aria-current', id === offen ? 'page' : 'false');
       const n = zungenZahl(id);
@@ -2380,12 +2450,23 @@
        saß: die Querverweiskarten der Übersicht rufen `blattAuf` auch auf, und
        wer von „zum Protokoll →" kommt, gehört danach nicht an eine Zunge.
 
-       `preventScroll`, weil die Zeile darunter selbst nach oben rollt. */
+       `preventScroll`, weil die Zeile darunter selbst nach oben rollt.
+
+       Die gewählte Zunge kann seit `.nur-breit` UNSICHTBAR sein: auf dem
+       Handy trägt „Protokoll" die Marke `an`, steht aber in einem
+       `display: none`. Ein `focus()` darauf tut schlicht nichts, und der
+       Fokus fiele auf `<body>` — genau das, was diese Zeile verhindern soll.
+       `offsetParent` ist der Test darauf (null bei `display: none`); ist die
+       Zunge nicht da, bekommt die erste sichtbare den Fokus. */
     const vomRegister = $('register').contains(document.activeElement);
     offen = id;
     BLAETTER.forEach(b => { $(b).hidden = b !== id; });
     registerZeichnen();
-    if (vomRegister) $('register').querySelector('button.an')?.focus({ preventScroll: true });
+    if (vomRegister) {
+      const an = $('register').querySelector('button.an');
+      (an && an.offsetParent ? an : $('register').querySelector('button'))
+        ?.focus({ preventScroll: true });
+    }
     // Ein Tooltip aus dem Blatt, das gerade weggeklappt ist, stünde sonst
     // über dem neuen und zeigte auf nichts.
     Bilder.tippZu();
