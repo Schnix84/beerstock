@@ -241,6 +241,77 @@ Gemeldete Werte sind **ungeprüft**. Die einzige Ausnahme trägt die Marke
 *gemessen*: dieser Bestand kommt aus einer Kühlschrank-Inventur in Home Assistant
 (Kassenbon × Foto × KI), die Temperatur von einem Sensor im Kühlschrank.
 
+### Selbst aus Home Assistant melden
+
+Das kann jeder, ohne dass hier etwas geändert werden muss: `POST /api/report`
+nimmt jede Meldung entgegen, egal ob sie aus dem Browser kommt oder von einem
+Server. Die Herkunftsprüfung greift nur, wenn ein `Origin`-Kopf mitkommt — ein
+Aufruf aus Home Assistant hat keinen, und CORS gilt ohnehin nur im Browser.
+
+**Erst den eigenen Token holen.** Am Rechner die Tafel öffnen, angemeldet
+sein, die Entwicklerwerkzeuge aufmachen und in der Konsole:
+
+```js
+localStorage.getItem('beerstock-token')
+```
+
+Heraus kommt eine 64 Zeichen lange Zeile — ohne die Anführungszeichen
+kopieren. (Ohne Konsole: *Application* bzw. *Speicher* → *Local Storage* →
+`https://schnix84.github.io` → `beerstock-token`.)
+
+**Dann in Home Assistant.** Der Token gehört in `secrets.yaml`, **mit dem Wort
+`Bearer` davor** — der Kopf muss vollständig `Bearer <token>` lauten:
+
+```yaml
+# secrets.yaml
+beerstock_token: "Bearer 3f9a…"
+```
+
+```yaml
+# configuration.yaml
+rest_command:
+  beerstock:
+    url: https://beerstock-api.mc-schneider84.workers.dev/api/report
+    method: POST
+    headers:
+      Authorization: !secret beerstock_token
+    content_type: application/json
+    payload: '{"biere": {{ biere }}, "temperatur": {{ grad }} }'
+```
+
+Aufgerufen wird er wie jeder andere Dienst:
+
+```yaml
+action: rest_command.beerstock
+data:
+  biere: "{{ states('sensor.kuehlschrank_flaschen') | int }}"
+  grad: "{{ states('sensor.kuehlschrank_temperatur') | float }}"
+```
+
+`biere` ist eine ganze Zahl von 0 bis 999, `temperatur` eine Zahl von −30 bis
+30, Komma erlaubt. Mehr als **eine Meldung je Minute** und derselbe Nutzer
+bekommt einen 429er — das ist keine Abwehr, sondern der Schutz vor dem
+Freund, der den Knopf zehnmal drückt, weil er nichts passieren sieht.
+
+**Drei Dinge, die man wissen sollte:**
+
+- **Der Token ist der Zugang, nicht bloß ein Melderecht.** Wer ihn hat, kann
+  im eigenen Namen schreiben, kommentieren und alles sehen. Er gehört nicht in
+  ein Repo, das jemand anders lesen kann.
+- **Jedes Einlösen eines Anmeldelinks legt einen neuen Token an**, alte bleiben
+  gültig. Man kann sich also gefahrlos einmal extra am Rechner anmelden, nur um
+  einen für Home Assistant zu holen — das Handy bleibt angemeldet.
+- **„Alle Geräte abmelden" im Deckel wirft auch diesen Token weg.** Danach
+  meldet Home Assistant ins Leere, bis ein neuer eingetragen ist.
+
+**Die Marke *gemessen* kommt dabei nicht mit.** Die hängt an
+`users.quelle = 'ha'`, einer Spalte in der Datenbank, für die es keinen
+Schalter gibt. Und das ist Absicht: die Marke behauptet Bestand aus
+Kassenbon × Foto × KI *und* Temperatur aus einem Sensor. Wer nur einen Fühler
+hat und die Flaschen von Hand zählt, verspräche damit mehr, als er hält. Wenn
+das mehrere so machen wollen, gehört die Marke geteilt, bevor sie vergeben
+wird.
+
 ## Post vom Wirt, mein Deckel, das Kontor
 
 Wer eine Adresse hinterlegt hat, bekommt Mail — je Anlass abwählbar:
