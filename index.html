@@ -91,8 +91,6 @@
   :root {
     --schiefer:    #262c2e;
     --schiefer-t:  #191d1f;
-    --holz:        #6b4a2c;
-    --holz-t:      #3f2a17;
     --kreide:      #eef1ea;
     --kreide-matt: #cfd6cd;
     --kreide-weg:  #93a09a;   /* halb weggewischt: Nebentext            */
@@ -168,47 +166,199 @@
   }
 
   /* --- Der Holzrahmen -----------------------------------------------------
-     Vier Schichten, jede mit einer Aufgabe: die Maserung (ein horizontal
-     gestrecktes fraktales Rauschen als eingebettetes SVG - kein Netz, die
-     Seite bleibt eine geschlossene Datei), darueber die groben Jahresringe
-     wie gehabt, der Grundverlauf, und ganz oben die Lichtkante. */
+     VIER LEISTEN, nicht eine Flaeche. Der alte Rahmen war ein einziger Kasten
+     mit einem Hintergrund darauf; das ging an drei Stellen schief. Die
+     Jahresringe hatten eine feste Periode von 23 px - gleicher Abstand,
+     gleiche Staerke, endlos, und genau das hat kein Holz. Die Maserung lief
+     ueber alle vier Seiten in DERSELBEN Richtung, auf der Oberleiste also quer
+     statt laengs; die Gehrungsnaht war zwar aufgemalt, aber die Faser drehte
+     sich an ihr nicht - und daran erkennt das Auge eine Fuge. Und ein einziger
+     160-Grad-Verlauf machte daraus eine Kachel statt vier Hoelzer unter einem
+     Licht von oben.
+
+     Jetzt malt `.rh` das Holz - ein Kind hinter der Tafel, darin vier
+     `<i>`, jedes per `clip-path` auf sein Trapez beschnitten. Dadurch ist die
+     Gehrung eine echte Kante zwischen zwei Flaechen, jede Leiste hat ihre
+     eigene Faserrichtung (laengs, wie ein aus der Leiste gefraestes Profil sie
+     hat) und ihre eigene Beleuchtung. Dazu die Fase aussen und der Falz innen.
+
+     Abgesegnet am Mock (ideas/mocks/mock-n-rahmen.html, Variante A).
+
+     WARUM VIER ELEMENTE UND NICHT VIER HINTERGRUNDSCHICHTEN: eine Schicht mit
+     `background-size: 100% 15px` deckt die Oberleiste MITSAMT der beiden
+     Eckquadrate ab, die Seitenleiste ebenso - in den Ecken gewinnt dann
+     schlicht die obere Schicht, und man bekommt einen stumpfen Stoss statt
+     einer Gehrung. Erst der Zuschnitt auf ein Trapez legt die 45-Grad-Kante
+     wirklich zwischen zwei Flaechen. */
   .brett {
+    /* Eine Zahl, vier Verwendungen: Polsterung, die vier Trapeze, die Naht,
+       der Falz. */
+    --r: clamp(9px, 2.4vw, 15px);
+    /* Der Ton des Holzes. `--holz`/`--holz-t` gibt es nicht mehr: alle vier
+       Seiten und die Wrapped-Karte tragen jetzt denselben Rahmen, damit war
+       das alte Paar tot. Diese vier Werte stehen wortgleich an jeder Stelle,
+       an der ein Rahmen haengt. */
+    --h-hell:   #f8ecd2;
+    --h-mitte:  #eed5a6;
+    --h-dunkel: #d0b284;
+    --h-tief:   #a98a5e;
+    --fase-hell: .38;
+    --fase-dunkel: .55;
     position: relative;
-    max-width: 520px; margin: 0 auto; border-radius: 7px;
-    padding: clamp(9px, 2.4vw, 15px);
-    background:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='120'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.011 0.18' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.02 0 0 0 0 0 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='420' height='120' filter='url(%23m)'/%3E%3C/svg%3E"),
-      repeating-linear-gradient(97deg, #ffffff08 0 2px, transparent 2px 9px, #00000042 9px 10px, transparent 10px 23px),
-      linear-gradient(160deg, #7a5636, var(--holz) 30%, var(--holz-t) 68%, #2c1c0f);
+    max-width: 520px; margin: 0 auto;
+    /* Knapper gerundet als bisher (7 px -> 4). Eine gegehrte Leiste laeuft in
+       der Ecke spitz zu; je runder die Silhouette, desto mehr sieht der Rahmen
+       nach Gehaeuse aus und desto weniger nach Holz. */
+    border-radius: 4px;
+    padding: var(--r);
+    /* Der aeussere Haarstrich war `#1a1007` und legte einen orangen Faden um
+       alles; jetzt entsaettigt. */
     box-shadow:
       0 42px 70px -30px #000e,
       0 14px 30px -18px #000c,
-      0 1px 0 #ffffff2e inset,
-      0 -2px 0 #0009 inset,
-      0 0 0 1px #1a100788;
+      0 0 0 1px #14110d;
   }
-  /* Die Gehrung: je Ecke eine diagonale Naht von der Aussen- zur Innenkante,
-     45 Grad, wie sie ein Rahmen wirklich hat. Vier no-repeat-Verlaeufe in
-     einem Pseudo; Kantenlaenge = Rahmenbreite. */
-  .brett::before {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
-    border-radius: inherit; opacity: .6;
-    --naht: 22px;
+  /* `overflow` sitzt hier und nicht auf `.brett`: auf `.brett` schnitte es
+     alles ab, was aus der Tafel herausragen darf. */
+  .rh {
+    position: absolute; inset: 0; border-radius: inherit;
+    overflow: hidden; pointer-events: none;
+  }
+  .rh-l { position: absolute; inset: 0; }
+  .rh-o { clip-path: polygon(0 0, 100% 0, calc(100% - var(--r)) var(--r), var(--r) var(--r)); }
+  .rh-u { clip-path: polygon(0 100%, var(--r) calc(100% - var(--r)), calc(100% - var(--r)) calc(100% - var(--r)), 100% 100%); }
+  .rh-li { clip-path: polygon(0 0, var(--r) var(--r), var(--r) calc(100% - var(--r)), 0 100%); }
+  .rh-re { clip-path: polygon(100% 0, 100% 100%, calc(100% - var(--r)) calc(100% - var(--r)), calc(100% - var(--r)) var(--r)); }
+
+  /* --- Die Maserung -------------------------------------------------------
+     DER KERN, und er ist nicht offensichtlich: gefiltertes Rauschen wird NIE
+     eine Ader. `feTurbulence` mittelt sich weg - egal wie weit man den
+     Kontrast spreizt, es bleibt Dunst. Am Mock sind zwei Anlaeufe genau daran
+     gescheitert (gemessen: die Streuung laengs der Leiste FIEL auf 10, statt
+     zu steigen).
+
+     Was traegt: eine GESTREIFTE Vorlage (`<pattern>`, ungleich breite Baender
+     in sechs Toenen), verschoben von einer `feDisplacementMap`. Die Streifen
+     bleiben durchgehende Linien und werden wellig - genau das, was eine Faser
+     tut. `scale='30'` ist der Ausschlag: darunter wird es Kord, darueber
+     Marmor. Im selben Bild darueber zwei Wolken (breite dunkle Zonen,
+     gebleichte Zonen), als eigene Schicht der Flaum des Saegeschnitts.
+
+     Zwei Bilder, nicht vier: liegend fuer Ober- und Unterleiste, stehend fuer
+     die Seiten - dort stehen die Streifen und die Frequenzen sind getauscht.
+     Die Bilder sind DECKEND und tragen die Farbe; die Verlaeufe darueber
+     machen nur noch Licht.
+
+     UND SIE SIND WARM, alle drei Stellen zugleich: Palette, Lichtkanten
+     (`#ffe4bb` statt reinem Weiss) und Schatten (`#2b1805` statt Schwarz).
+     Neutrale Kanten waschen jede Holzfarbe zurueck ins Beige - nur die
+     Palette zu waermen bringt sichtbar nichts. */
+  .rh-l {
+    --rh-bild-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='60'%3E%3Cdefs%3E%3Cpattern id='s' width='600' height='15' patternUnits='userSpaceOnUse'%3E%3Crect width='600' height='15' fill='%23eed5a6'/%3E%3Crect y='0' width='600' height='1.5' fill='%23a8825a'/%3E%3Crect y='3.5' width='600' height='0.8' fill='%2386633c'/%3E%3Crect y='6' width='600' height='3' fill='%23e4c48c'/%3E%3Crect y='10' width='600' height='1.2' fill='%23bd9a6c'/%3E%3Crect y='12.5' width='600' height='2' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.025' numOctaves='3' seed='5' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='13' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='26' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='720' height='180' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='600' height='60' filter='url(%23z)'/%3E%3Crect width='600' height='60' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-bild-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='600'%3E%3Cdefs%3E%3Cpattern id='s' width='15' height='600' patternUnits='userSpaceOnUse'%3E%3Crect width='15' height='600' fill='%23eed5a6'/%3E%3Crect x='0' width='1.5' height='600' fill='%23a8825a'/%3E%3Crect x='3.5' width='0.8' height='600' fill='%2386633c'/%3E%3Crect x='6' width='3' height='600' fill='%23e4c48c'/%3E%3Crect x='10' width='1.2' height='600' fill='%23bd9a6c'/%3E%3Crect x='12.5' width='2' height='600' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.025 0.006' numOctaves='3' seed='17' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='25' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='38' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='180' height='720' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='60' height='600' filter='url(%23z)'/%3E%3Crect width='60' height='600' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-flaum:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cfilter id='f1'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='3' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.22 0 0 0 0 0.14 0 0 0 0 0.06 0 0 0 0.3 0'/%3E%3C/filter%3E%3Cfilter id='f2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='41' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.95 0 0 0 0 0.84 0 0 0 0.26 0'/%3E%3C/filter%3E%3Crect width='60' height='60' filter='url(%23f1)'/%3E%3Crect width='60' height='60' filter='url(%23f2)'/%3E%3C/svg%3E");
+    --licht-v: linear-gradient(180deg, #ffe4bb28, #ffe4bb00 26%, #2b18051a);
+  }
+  /* WICHTIG: jede Leiste liegt zwar ueber der ganzen Flaeche (`inset: 0`) und
+     zeigt davon nur ihr Trapez - ihre Verlaeufe muessen aber ueber die LEISTE
+     laufen, nicht ueber das Brett. Ohne die `/ 100% var(--r)`-Angaben spannt
+     ein 180-Grad-Verlauf ueber die volle Bretthoehe, und von der Oberleiste
+     bleiben die obersten zwei Prozent davon uebrig: eine glatte Flaeche. */
+  .rh-o {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      linear-gradient(180deg, #ffe4bb3d, #ffe4bb00 42%, #2b180536) 0 0 / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 0 no-repeat,
+      var(--h-mitte);
+  }
+  /* Die Unterleiste liegt im Eigenschatten: oben nimmt ihr die Tafel das
+     Licht, nach unten hin hellt nur auf, was vom Boden zurueckkommt - und das
+     ist WENIG. Der helle Stopp steht erst bei 82 %: sonst ist die Unterleiste
+     am Ende heller als die obere, und das Licht kaeme von unten. */
+  .rh-u {
+    background:
+      var(--rh-flaum) 0 100% repeat,
+      linear-gradient(180deg, #2b18054f, #2b18051a 60%, #2b180500 82%, #ffe4bb22) 0 100% / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 100% no-repeat,
+      var(--h-dunkel);
+  }
+  /* Die Seitenleisten zeigen sonst den blassesten Streifen des stehenden
+     Bildes; darum der Versatz. */
+  .rh-li {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      var(--licht-v) 0 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #ffe4bb30, #2b180536) 0 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) -21px 0 no-repeat,
+      var(--h-mitte);
+  }
+  /* Rechts ist eine Spur dunkler als links: das Licht steht leicht links ueber
+     der Tafel, sonst stuende sie in einem Fotostudio. */
+  .rh-re {
+    background:
+      var(--rh-flaum) 100% 0 repeat,
+      var(--licht-v) 100% 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #2b18053e, #2b180520) 100% 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) calc(100% + 19px) 0 no-repeat,
+      var(--h-dunkel);
+  }
+
+  /* Die Gehrungsfuge entsteht schon dadurch, dass an ihr die Faserrichtung
+     springt. Der Haarstrich macht sie nur lesbar - dunkel auf der einen, ein
+     Hauch Licht auf der anderen Seite, wie an einer Fuge, in der sich Staub
+     haelt. */
+  .rh-naht {
+    position: absolute; inset: 0; opacity: .5;
     background-image:
-      linear-gradient(45deg,  transparent 48.5%, #00000066 49.5%, #ffffff1c 51%, transparent 52.5%),
-      linear-gradient(-45deg, transparent 48.5%, #00000066 49.5%, #ffffff1c 51%, transparent 52.5%),
-      linear-gradient(-135deg,transparent 48.5%, #00000066 49.5%, #ffffff14 51%, transparent 52.5%),
-      linear-gradient(135deg, transparent 48.5%, #00000066 49.5%, #ffffff14 51%, transparent 52.5%);
-    background-size: var(--naht) var(--naht);
+      linear-gradient(45deg,  transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-45deg, transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-135deg,transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%),
+      linear-gradient(135deg, transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%);
+    background-size: var(--r) var(--r);
     background-position: left top, right top, right bottom, left bottom;
     background-repeat: no-repeat;
+  }
+  /* Die Aussenfase: zwei Haarstriche, keine Verlaeufe. Die vier Kanten duerfen
+     NICHT dasselbe tun - ein umlaufender heller Ring (`0 0 0 1px`) legt auch
+     unten und rechts eine Lichtkante an, wo das Licht von oben links gerade
+     nicht hinkommt. Also einzeln: oben und links hell, unten und rechts
+     dunkel. */
+  .rh-fase {
+    position: absolute; inset: 0; border-radius: inherit;
+    box-shadow:
+      0 1px 0 rgb(255 232 197 / var(--fase-hell)) inset,
+      1px 0 0 rgb(255 232 197 / calc(var(--fase-hell) * .6)) inset,
+      0 -1px 0 rgb(43 24 5 / var(--fase-dunkel)) inset,
+      -1px 0 0 rgb(43 24 5 / calc(var(--fase-dunkel) * .8)) inset;
+  }
+  /* Der Falz: die Tafel liegt HINTER dem Holz, nicht darauf. Sichtbar wird das
+     an drei Pixeln - der Lippe, die zwei Pixel weiter aussen als die Tafel
+     steht, ihrer Lichtkante, und dem Schatten, den das Holz auf den Stein
+     wirft (der sitzt als `inset` an `.tafel` selbst).
+
+     Der weiche Schatten MUSS mit der Rahmenbreite rechnen. Eine feste
+     `0 0 14px 4px`-Wolke verschluckt eine neun Pixel schmale Leiste komplett -
+     dann ist der ganze Rahmen nur noch eine dunkle Rinne. */
+  .rh-falz {
+    position: absolute; inset: calc(var(--r) - 2px); border-radius: 3px;
+    box-shadow:
+      0 1px calc(var(--r) * .45) #2b180552,
+      0 0 0 1px #17100a,
+      0 1px 0 rgb(255 232 197 / var(--fase-hell));
   }
   .tafel {
     position: relative; border-radius: 3px; overflow: hidden;
     padding: clamp(18px, 5vw, 30px) clamp(15px, 4.5vw, 26px) clamp(18px, 4vw, 26px);
     background:
       radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
-    box-shadow: 0 0 0 1px #000a inset, 0 16px 34px -14px #000b inset, 0 -10px 26px -18px #0009 inset;
+    /* Die erste Zeile ist der Schatten, den die Falzlippe des Rahmens auf den
+       Stein wirft. Ohne sie stimmt der Falz von aussen und ist von innen nicht
+       zu sehen. */
+    box-shadow:
+      0 7px 12px -6px #000a inset,
+      0 0 0 1px #000a inset,
+      0 16px 34px -14px #000b inset,
+      0 -10px 26px -18px #0009 inset;
   }
   /* Schiefer ist nie glatt. Zwei Rauschschichten statt des alten
      4/6-px-Punktrasters: hell gesprenkelt und dunkel gewoelkt, beide
@@ -2248,20 +2398,27 @@
     --wr-takt: 7s;
   }
   .wr-schirm { position: absolute; inset: 0; background: #050807f0; }
+  /* Dasselbe Holz wie am Brett, nur schmaler: dieselbe `.rh`-Einlage, dieselben
+     Tokens, nur ein kleineres `--r`. Ein zweiter Rahmen mit eigener Machart
+     waere genau die halbe Baustelle, die man spaeter sieht. */
   .wr-rahmen {
-    position: relative; width: min(390px, 100%); border-radius: 6px;
-    padding: clamp(7px, 1.6vw, 12px);
-    background:
-      repeating-linear-gradient(97deg, #ffffff0a 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
-      linear-gradient(160deg, var(--holz), var(--holz-t) 60%, #2c1c0f);
-    box-shadow: 0 30px 60px -24px #000d, 0 1px 0 #ffffff22 inset, 0 -2px 0 #0008 inset;
+    --r: clamp(7px, 1.6vw, 12px);
+    --h-hell:   #f8ecd2;
+    --h-mitte:  #eed5a6;
+    --h-dunkel: #d0b284;
+    --h-tief:   #a98a5e;
+    --fase-hell: .38;
+    --fase-dunkel: .55;
+    position: relative; width: min(390px, 100%); border-radius: 4px;
+    padding: var(--r);
+    box-shadow: 0 30px 60px -24px #000d, 0 0 0 1px #14110d;
   }
   .wr-brett {
     position: relative; border-radius: 3px; overflow: hidden;
     height: min(700px, calc(100dvh - 60px)); min-height: 420px;
     display: flex; flex-direction: column; padding: 10px 16px 12px;
     background: radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
-    box-shadow: 0 0 0 1px #0009 inset, 0 14px 30px -14px #000a inset;
+    box-shadow: 0 7px 12px -6px #000a inset, 0 0 0 1px #0009 inset, 0 14px 30px -14px #000a inset;
   }
   .wr-brett::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
@@ -2474,6 +2631,15 @@
      einmal lesbar auf. -->
 <body class="draussen">
   <div class="brett">
+
+    <!-- Das Holz. Vier Leisten, jede auf ihr Trapez beschnitten - erst dadurch
+         dreht die Faser an der Gehrung. Reine Zeichnung, nichts zu lesen und
+         nichts zu bedienen; darum `aria-hidden`. -->
+    <div class="rh" aria-hidden="true">
+      <i class="rh-l rh-o"></i><i class="rh-l rh-u"></i><i class="rh-l rh-li"></i><i class="rh-l rh-re"></i>
+      <i class="rh-naht"></i><i class="rh-fase"></i><i class="rh-falz"></i>
+    </div>
+
     <div class="tafel">
 
       <!-- ============ Das Schild ========================================
@@ -3440,6 +3606,10 @@
   <div class="wr-ebene" id="wrapped" hidden>
     <div class="wr-schirm" id="wr-schirm"></div>
     <div class="wr-rahmen">
+      <div class="rh" aria-hidden="true">
+        <i class="rh-l rh-o"></i><i class="rh-l rh-u"></i><i class="rh-l rh-li"></i><i class="rh-l rh-re"></i>
+        <i class="rh-naht"></i><i class="rh-fase"></i><i class="rh-falz"></i>
+      </div>
       <!-- `tabindex="-1"`, damit der Fokus beim Aufschlagen auf dem Blatt selbst
            landen kann und nicht auf dem ×. Er lag dort, und am Rechner sah man
            sofort einen gelben Ring um den Schließknopf — als hätte die Karte
