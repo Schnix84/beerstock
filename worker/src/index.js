@@ -988,10 +988,12 @@ function notrufPost(env, ctx, ich, notrufId, art, lat, lon, empfaenger, bis = nu
     tag: `notruf-${notrufId}`,
     ttl: rest,
     dringend: true,
+    ausloeser: ich.id,
   });
 
   benachrichtige(env, ctx, 'notruf', empfaenger, {
     bezug: `notruf:${notrufId}`,
+    ausloeser: ich.id,
     betreff: was,
     text: `${was}.\n\nHin geht es hier: ${wohin}`
       + `\n\nAuf der Tafel steht der Notruf ${NOTRUF_MINUTEN} Minuten lang: ${env.SEITE}`,
@@ -2041,12 +2043,52 @@ const statistikRunde = (ergebnis) => {
    `benachrichtige`, `warneAlteAdresse`, `meldeNeuenNutzer`) oder in einer
    Route, die ohnehin auf den Versand wartet. Ein zweites drumherum brachte
    nur eine zweite Stelle, an der die Zeile verloren gehen kann. */
-function notiereVersand(env, weg, art, bezug, anzahl, kaputt = 0) {
+function notiereVersand(env, weg, art, bezug, anzahl, kaputt = 0, wer = {}) {
   return env.DB.prepare(`
-    INSERT INTO versand_ausgang (weg, art, bezug, anzahl, kaputt)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(weg, art, bezug, anzahl, kaputt).run()
+    INSERT INTO versand_ausgang
+      (weg, art, bezug, anzahl, kaputt, ausloeser_id, empfaenger)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(weg, art, bezug, anzahl, kaputt,
+          wer.ausloeser ?? null, empfaengerListe(wer.namen))
+    .run()
     .catch(e => console.error('Versandprotokoll:', e && e.stack || e));
+}
+
+/* Die Empfaengerliste fuers Protokoll (migrations/0026). Namen, nie Adressen.
+
+   DIE GRENZE STEHT HIER UND NICHT IM SCHEMA: sie ist eine Frage der
+   Lesbarkeit einer Protokollzeile, keine der Datenhaltung. Bei fuenf Leuten
+   steht die Runde da, bei dreissig stuende eine Namenswand in einer Zeile,
+   die daneben "30 Mails" sagt - dieselbe Auskunft, nur unlesbar. Ab
+   `EMPFAENGER_NAMEN` bricht es darum auf "Micha, Basti und 12 weitere" um.
+
+   Die Reihenfolge ist die des Verteilers und wird NICHT sortiert: sie ist die
+   Reihenfolge, in der die Mails tatsaechlich rausgingen, und wenn die dritte
+   scheiterte, ist das eine Auskunft. Alphabetisch waere hier Kosmetik ueber
+   einer Tatsache. */
+const EMPFAENGER_NAMEN = 6;
+
+function empfaengerListe(namen) {
+  if (!namen || !namen.length) return null;
+  return protokollNamen(namen.filter(Boolean).join(', '));
+}
+
+/* Dieselbe Regel auf der LESESEITE. `versand_ausgang` bringt die Liste fertig
+   gekuerzt mit (sie wurde beim Schreiben durch `empfaengerListe` gedreht),
+   `mail_ausgang` dagegen setzt sie bei jeder Abfrage frisch aus den Zeilen
+   zusammen - dort kann sie beliebig lang werden, weil ein `group_concat` kein
+   LIMIT kennt. Beide Wege enden darum hier.
+
+   Zweimal gekuerzt schadet nicht: eine schon gekuerzte Liste endet auf "und 12
+   weitere" und hat damit hoechstens `EMPFAENGER_NAMEN + 1` Glieder, die
+   Funktion laesst sie durch. */
+function protokollNamen(roh) {
+  if (!roh) return null;
+  const namen = String(roh).split(', ').filter(Boolean);
+  if (!namen.length) return null;
+  if (namen.length <= EMPFAENGER_NAMEN) return namen.join(', ');
+  const rest = namen.length - EMPFAENGER_NAMEN;
+  return namen.slice(0, EMPFAENGER_NAMEN).join(', ') + ' und ' + rest + ' weitere';
 }
 
 /* Dasselbe um einen Mailversand herumgelegt, fuer die fuenf Mails, die an
@@ -2058,15 +2100,116 @@ function notiereVersand(env, weg, art, bezug, anzahl, kaputt = 0) {
    Der Fehler wird protokolliert UND weitergeworfen: was der Aufrufer bisher
    mit einem gescheiterten Versand tat (502 an der Anmeldung, stilles Log bei
    der Warnung), soll er weiter tun. */
-async function mitProtokoll(env, art, senden) {
+async function mitProtokoll(env, art, senden, wer = {}) {
   try {
     await senden();
   } catch (e) {
-    await notiereVersand(env, 'mail', art, null, 1, 1);
+    await notiereVersand(env, 'mail', art, null, 1, 1, wer);
     throw e;
   }
-  await notiereVersand(env, 'mail', art, null, 1, 0);
+  await notiereVersand(env, 'mail', art, null, 1, 0, wer);
 }
+
+/* Die drei Quellen des Protokolls als SQL, hier statt in der Route: die
+   Blaetterabfrage, die Zaehlung und die Uebersichtskarte brauchen dieselben
+   Spalten, und drei Abschriften desselben SELECT sind drei Stellen, an denen
+   sich eine davon still veraendert. Die Begruendung fuer den Zuschnitt steht
+   bei `GET /api/admin/protokoll`. */
+const PROTOKOLL_SEITE     = 20;
+const PROTOKOLL_SEITE_MAX = 50;
+const PROTOKOLL_QUELLEN   = new Set(['admin', 'mail', 'push']);
+
+/* Das Zeitfenster, in dem eine Rundmail im Ausgang zu ihrer Log-Zeile gehoert.
+   Gedeckt durch die Stundensperre - siehe den Kopf der Route.
+
+   ACHTUNG, DAS BRUCHSTUECK IST NICHT FUER SICH ALLEIN LAUFFAEHIG: es setzt
+   `l` als Alias auf `admin_log` und `m` als Alias des Unterausdrucks voraus.
+   Beides steht in `PROTOKOLL_ADMIN_SELECT`, also in einer ANDEREN Zeichenkette
+   - wer das hier woanders einsetzt, bekommt einen Fehler ueber eine unbekannte
+   Spalte und sucht ihn an der falschen Stelle. */
+const RUNDMAIL_FENSTER = `
+  m.art = 'rundmail'
+  AND m.gesendet_am BETWEEN datetime(l.erstellt, '-5 minutes')
+                        AND datetime(l.erstellt, '+5 minutes')`;
+
+const PROTOKOLL_ADMIN_SELECT = `
+  SELECT l.erstellt AS wann, 'admin' AS quelle, l.aktion AS aktion,
+         coalesce(a.name, 'Ehemaliger') AS wer,
+         coalesce(z.name, l.detail, '—') AS wen,
+         l.detail AS detail,
+         CASE WHEN l.aktion = 'rundmail' THEN
+           (SELECT count(*) FROM mail_ausgang m WHERE ${RUNDMAIL_FENSTER})
+         END AS anzahl,
+         CASE WHEN l.aktion = 'rundmail' THEN
+           (SELECT sum(m.fehler IS NOT NULL) FROM mail_ausgang m
+             WHERE ${RUNDMAIL_FENSTER})
+         END AS kaputt,
+         /* Der Ausloeser ist bei der Verwaltung derselbe wie die Spalte davor
+            (wer): ihn ein zweites Mal danebenzustellen hiesse "schnix hat
+            gesperrt, ausgeloest von schnix". NULL heisst hier also nicht
+            "unbekannt", sondern "steht schon da".
+
+            KEINE BACKTICKS IN DIESEN SQL-KOMMENTAREN. Der ganze Block ist ein
+            JS-Template-Literal - ein Backtick beendet es mitten im SQL, und
+            der Rest wird als JavaScript gelesen. "node --check" merkt davon
+            nichts (die Datei bleibt gueltig), erst der Build bricht ab. */
+         NULL AS ausloeser,
+         CASE WHEN l.aktion = 'rundmail' THEN
+           (SELECT group_concat(u3.name, ', ') FROM mail_ausgang m
+             JOIN users u3 ON u3.id = m.user_id WHERE ${RUNDMAIL_FENSTER})
+         END AS empfaenger
+  FROM admin_log l
+  LEFT JOIN users a ON a.id = l.admin_id
+  LEFT JOIN users z ON z.id = l.ziel_id`;
+
+const PROTOKOLL_UNION = `
+  ${PROTOKOLL_ADMIN_SELECT}
+
+  UNION ALL
+
+  /* EIN JOIN, KEINE UNTERABFRAGE. Der erste Entwurf holte die Namen mit einer
+     korrelierten Unterabfrage je Gruppe ("WHERE m2.art = mail_ausgang.art
+     AND coalesce(m2.bezug, ...) = coalesce(...)") - und legte den lokalen
+     Worker still lahm: auf "coalesce(bezug, strftime(...))" gibt es keinen
+     Index, also scannte SQLite fuer JEDE Gruppe die ganze Tabelle. Bei 116
+     Zeilen dauerte "/api/health" schon ueber zwei Minuten. Der JOIN laeuft
+     einmal durch und gruppiert mit, wie es die Zaehlung daneben ohnehin tut.
+
+     "min(...)" ueber "au.name": alle Zeilen einer Gruppe stammen aus einem
+     Versandstoss und tragen denselben Ausloeser - die Aggregatfunktion sagt
+     SQLite nur, dass hier keine Willkuer im Spiel ist. Alte Zeilen (vor 0026)
+     haben NULL, dann bleibt die Stelle im Kontor leer.
+
+     "group_concat(u.name, ', ')" ohne ORDER BY: SQLite haelt hier die
+     Scanreihenfolge, und die ist die der "id" - also die des Verteilers. Ein
+     "ORDER BY" im Aggregat ginge erst ab 3.44, und Workers D1 ist darunter. */
+  SELECT min(m.gesendet_am), 'mail', m.art, NULL, NULL, m.bezug,
+         count(*), sum(m.fehler IS NOT NULL),
+         min(au.name), group_concat(u.name, ', ')
+  FROM mail_ausgang m
+  LEFT JOIN users u  ON u.id  = m.user_id
+  LEFT JOIN users au ON au.id = m.ausloeser_id
+  WHERE m.art <> 'rundmail'
+  GROUP BY m.art, coalesce(m.bezug, strftime('%Y-%m-%d %H:%M', m.gesendet_am))
+
+  UNION ALL
+
+  SELECT v.erstellt, v.weg, v.art, NULL, NULL, v.bezug, v.anzahl, v.kaputt,
+         coalesce(au.name, CASE WHEN v.ausloeser_id IS NOT NULL
+                                THEN 'Ehemaliger' END),
+         v.empfaenger
+  FROM versand_ausgang v
+  LEFT JOIN users au ON au.id = v.ausloeser_id`;
+
+/* Die Marke, an der das Blaettern ansetzt. Warum nicht `wann`: siehe Route.
+   Ausloeser und Empfaenger gehen NICHT hinein: der Schluessel muss nur zwei
+   Zeilen derselben Sekunde trennen, und das leisten Quelle, Art, Anzahl und
+   Betroffener bereits. Jede weitere Spalte macht ihn nur laenger - und laenger
+   heisst hier: in jeder Antwort, an jeder Zeile. */
+const PROTOKOLL_SK = `
+  wann || '|' || quelle || '|' || aktion || '|' ||
+  coalesce(cast(anzahl AS text), '') || '|' || coalesce(wen, '') || '|' ||
+  coalesce(detail, '')`;
 
 // ---------------------------------------------------------------------------
 // Mailversand ueber AgentMail. Reine HTTP-API, kein SMTP.
@@ -2179,7 +2322,7 @@ und in der App unten ins Feld "Link aus der Mail" einsetzen.`;
    erfaehrt davon, ohne etwas tun zu muessen: wer den Wechsel nicht war, weiss
    dann, dass jemand an seinem Konto sitzt. Das ist die einzige Warnung, die
    ihn ueberhaupt noch erreichen kann. */
-async function schickeWechselLink(env, empfaenger, link) {
+async function schickeWechselLink(env, empfaenger, link, ich = null) {
   const text =
 `Du willst kuenftig hierunter angeschrieben werden. Der Link oeffnet die
 Tafel, dort steht ein Knopf, und der macht es gueltig:
@@ -2202,11 +2345,17 @@ nichts.`;
      wirf die Mail weg &ndash; dann passiert nichts.</p>
 </div>`;
 
+  /* Ausloeser und Empfaenger sind derselbe Mensch - wer seine Adresse
+     wechselt, schreibt sich selbst an. Die neue Adresse steht NICHT im
+     Protokoll, nur der Name: 0025 verbietet Adressen, und diese hier waere
+     die heikelste von allen (sie gehoert zu einem Wechsel, der noch nicht
+     bestaetigt ist). */
   await mitProtokoll(env, 'mailwechsel', () =>
-    schickeMail(env, empfaenger, 'Bestätige deine neue Adresse', text, html));
+    schickeMail(env, empfaenger, 'Bestätige deine neue Adresse', text, html),
+    ich ? { ausloeser: ich.id, namen: [ich.name] } : {});
 }
 
-function warneAlteAdresse(env, ctx, alt, neu) {
+function warneAlteAdresse(env, ctx, alt, neu, ich = null) {
   if (!ctx || !alt) return;
   const text =
 `Jemand hat gerade angefordert, dass "Wer hat kalt" dich kuenftig unter
@@ -2233,7 +2382,8 @@ gilt diese Adresse hier weiter.`;
   // Warnung an die alte Adresse nicht ankommt (sie kann tot sein - das ist
   // oft genau der Grund fuer den Wechsel).
   ctx.waitUntil(mitProtokoll(env, 'mailwechsel_warnung', () =>
-    schickeMail(env, alt, 'Deine Adresse soll sich ändern', text, html))
+    schickeMail(env, alt, 'Deine Adresse soll sich ändern', text, html),
+    ich ? { ausloeser: ich.id, namen: [ich.name] } : {})
     .catch(e => console.error('Wechsel-Warnung:', e && e.stack || e)));
 }
 
@@ -2269,8 +2419,12 @@ Angemeldet: ${wann} UTC`;
   </p>
 </div>`;
 
+    /* Der Neue ist der Ausloeser, der Betreiber der Empfaenger - und der
+       steht als "der Wirt" da und nicht mit Namen: `MELDE_AN` ist eine
+       Adresse aus der Konfiguration, hinter der kein Konto stehen muss. */
     await mitProtokoll(env, 'neuer_melder', () =>
-      schickeMail(env, env.MELDE_AN, `Neu dabei: ${neu.name}`, text, html));
+      schickeMail(env, env.MELDE_AN, `Neu dabei: ${neu.name}`, text, html),
+      { ausloeser: neu.id ?? null, namen: ['der Wirt'] });
   })().catch(e => console.error('Neu-Meldung:', e && e.stack || e)));
 }
 
@@ -2479,7 +2633,7 @@ const mailKnopf = (link, wort) =>
 function benachrichtige(env, ctx, art, empfaenger, opt) {
   if (!ctx || !env.AGENTMAIL_KEY) return;
   if (empfaenger && !empfaenger.length) return;
-  const { betreff, text, html, bezug = null, anhaenge = null } = opt;
+  const { betreff, text, html, bezug = null, anhaenge = null, ausloeser = null } = opt;
 
   ctx.waitUntil((async () => {
     /* Die drei Bedingungen aus dem Plan, an einer Stelle: keine Adresse,
@@ -2507,9 +2661,12 @@ function benachrichtige(env, ctx, art, empfaenger, opt) {
          Bezug und duerfen darum beliebig oft gehen. */
       let zeile;
       try {
-        zeile = await env.DB.prepare(
-          'INSERT INTO mail_ausgang (user_id, art, bezug) VALUES (?, ?, ?) RETURNING id')
-          .bind(u.id, art, bezug).first();
+        // `ausloeser_id` seit 0026 - wer den Vorgang angestossen hat, NULL wo
+        // ihn niemand angestossen hat (Cron, Frist, Erinnerung).
+        zeile = await env.DB.prepare(`
+          INSERT INTO mail_ausgang (user_id, art, bezug, ausloeser_id)
+          VALUES (?, ?, ?, ?) RETURNING id`)
+          .bind(u.id, art, bezug, ausloeser).first();
       } catch (e) {
         if (String(e.message || '').includes('UNIQUE')) continue;   // ging schon raus
         throw e;
@@ -2581,7 +2738,8 @@ function benachrichtige(env, ctx, art, empfaenger, opt) {
 function stosse(env, ctx, art, empfaenger, opt) {
   if (!ctx || !pushBereit(env)) return;
   if (empfaenger && !empfaenger.length) return;
-  const { titel, text, url = '.', tag = null, ttl = 86400, dringend = false, ausser = null } = opt;
+  const { titel, text, url = '.', tag = null, ttl = 86400, dringend = false,
+          ausser = null, ausloeser = null } = opt;
 
   ctx.waitUntil((async () => {
     const wo = ['u.gesperrt_am IS NULL', 'u.entfernt_am IS NULL', 'u.mail_stumm_am IS NULL'];
@@ -2592,8 +2750,11 @@ function stosse(env, ctx, art, empfaenger, opt) {
     }
     if (ausser) { wo.push('u.id <> ?'); werte.push(ausser); }
 
+    /* `u.name` und `u.id` kommen seit 0026 mit: die Namen fuers Protokoll,
+       die Id, um sie je MENSCH zu zaehlen und nicht je Geraet. Wer zwei
+       Geraete hat, steht sonst zweimal in der Liste. */
     const abos = await env.DB.prepare(`
-      SELECT a.id, a.endpoint, a.p256dh, a.auth, u.mail_prefs
+      SELECT a.id, a.endpoint, a.p256dh, a.auth, u.id AS user_id, u.name, u.mail_prefs
       FROM push_abos a JOIN users u ON u.id = a.user_id
       WHERE ${wo.join(' AND ')}
     `).bind(...werte).all();
@@ -2602,9 +2763,10 @@ function stosse(env, ctx, art, empfaenger, opt) {
        je zwei Geraeten waeren das sonst zwoelf Wartezeiten hintereinander -
        und die letzte Meldung ginge Sekunden nach der ersten raus. `pushSenden`
        wirft nie, ein einzelner Ausfall reisst also nichts mit. */
-    const ergebnis = await Promise.all(abos.results
-      .filter(a => mailWahl(a)[art])
-      .map(async a => ({ id: a.id, ...await pushSenden(env, a, { titel, text, url, tag }, ttl, dringend) })));
+    const gewaehlt = abos.results.filter(a => mailWahl(a)[art]);
+    const ergebnis = await Promise.all(gewaehlt
+      .map(async a => ({ id: a.id, user_id: a.user_id, name: a.name,
+                         ...await pushSenden(env, a, { titel, text, url, tag }, ttl, dringend) })));
 
     /* 404/410 heisst: dieses Geraet gibt es nicht mehr. Die Zeile faellt genau
        hier weg und nirgends sonst - deshalb braucht diese Tabelle keinen
@@ -2630,9 +2792,19 @@ function stosse(env, ctx, art, empfaenger, opt) {
 
        `tag` ist der Bezug: er traegt beim Notruf schon die Id ('notruf-15')
        und beim Echo den Kommentarbezug - dieselbe Auskunft, die die Mail in
-       ihrer `bezug`-Spalte fuehrt, nur in der Schreibweise des Geraets. */
+       ihrer `bezug`-Spalte fuehrt, nur in der Schreibweise des Geraets.
+
+       DIE NAMEN JE MENSCH, DIE ZAHL JE GERAET (0026). `anzahl` bleibt die
+       Geraetezahl - sie beantwortet "wie oft hat es geklopft" und steht als
+       "3 Geraete" in der Zeile. Die Namensliste daneben zaehlt Koepfe: wer
+       zwei Geraete hat, stuende sonst zweimal darin, und "Micha, Micha,
+       Basti" liest sich wie ein Fehler. Beide Zahlen duerfen darum
+       auseinandergehen, und das ist richtig so - "2 Geraete · an Micha" ist
+       die genauere Auskunft, nicht die widerspruechliche. */
     if (ergebnis.length) {
-      await notiereVersand(env, 'push', art, tag, ergebnis.length, tot.length);
+      const namen = [...new Map(ergebnis.map(e => [e.user_id, e.name])).values()];
+      await notiereVersand(env, 'push', art, tag, ergebnis.length, tot.length,
+                           { ausloeser, namen });
     }
   })().catch(e => console.error('stosse:', e && e.stack || e)));
 }
@@ -2727,6 +2899,7 @@ function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen
      deshalb kennt `stosse` ein `ausser` und `benachrichtige` keines mehr. */
   stosse(env, ctx, 'termin_neu', null, {
     ausser: ausloeser,
+    ausloeser,
     titel: 'Ein Abend steht fest',
     text: `${wann}${bei} wird getrunken${ende}.${termin.titel ? ` Es geht um: ${termin.titel}` : ''}`,
     url: `${env.SEITE}#termin=${termin.id}`,
@@ -2735,6 +2908,7 @@ function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen
 
   benachrichtige(env, ctx, 'termin_neu', null, {
     bezug: `termin:${termin.id}`,
+    ausloeser,
     anhaenge: icsAnhang(env, termin, false),
     betreff: u => selbst(u)
       ? `Für deinen Kalender: ${wann}${bei}${komma}`
@@ -2800,6 +2974,7 @@ function mailTerminAendert(env, ctx, termin, ausloeser, was) {
      Kalendereintrag mit hoeherer SEQUENCE), das Klopfen schon. */
   stosse(env, ctx, 'termin_aendert', null, {
     ausser: ausloeser,
+    ausloeser,
     titel: wort,
     text: kopf,
     url: abgesagt ? env.SEITE : `${env.SEITE}#termin=${termin.id}`,
@@ -2812,6 +2987,7 @@ function mailTerminAendert(env, ctx, termin, ausloeser, was) {
        Der Zeitstempel im Bezug trennt sie - der doppelte Ruf innerhalb
        derselben Sekunde bleibt gebremst, der ehrliche zweite Umzug nicht. */
     bezug: `termin:${termin.id}:${was}:${Date.now()}`,
+    ausloeser,
     /* Dieselbe UID wie beim ersten Mal, aber eine hoehere SEQUENCE - damit
        ersetzt der Anhang den vorhandenen Eintrag. Bei der Absage traegt er
        METHOD:CANCEL und raeumt ihn weg. */
@@ -2842,7 +3018,7 @@ const zielMarke = ziel => !ziel ? ''
   : ziel.art === 'user' ? `#nutzer=${ziel.id}`
   : '';
 
-function mailEcho(env, ctx, anWen, vonWem, worum, bezug, ziel = null) {
+function mailEcho(env, ctx, anWen, vonWem, worum, bezug, ziel = null, vonWemId = null) {
   /* WOHIN das Echo zeigt. Hier stand lange nur `env.SEITE`, mit der
      Begruendung, der Verteiler wisse nicht, in welchem Blatt der Faden
      steckt. Das stimmte fuer DIESE Funktion - sie bekommt nur Text und
@@ -2866,10 +3042,12 @@ function mailEcho(env, ctx, anWen, vonWem, worum, bezug, ziel = null) {
     text: worum.lang,
     url: wohin,
     tag: bezug,
+    ausloeser: vonWemId,
   });
 
   benachrichtige(env, ctx, 'echo', [anWen], {
     bezug,
+    ausloeser: vonWemId,
     betreff: `${vonWem}: ${worum.kurz}`,
     text: `${worum.lang}\n\nNachlesen: ${wohin}`,
     html: `<p>${nurText(worum.lang)}</p>` + mailKnopf(wohin, 'Nachlesen'),
@@ -2961,6 +3139,7 @@ async function rundmailAbschicken(env, ctx, adminId, geprueft) {
      und den Notruf. Der Schalter `rundmail` steht trotzdem weiter im Deckel;
      er gilt eben nur fuer die Mail. */
   benachrichtige(env, ctx, 'rundmail', null, {
+    ausloeser: adminId,
     betreff: geprueft.betreff,
     text: rundmailText(geprueft),
     html: rundmailHtml(geprueft),
@@ -3374,7 +3553,7 @@ const ROUTEN = {
     anstoss(request, env, ctx, 'tafel');
     // Und fuer den Gastgeber ein Neuer. Nur beim ERSTEN Namen: wer sich
     // spaeter umbenennt, hatte schon einen.
-    if (!ich.name) meldeNeuenNutzer(env, ctx, { name, email: ich.email });
+    if (!ich.name) meldeNeuenNutzer(env, ctx, { id: ich.id, name, email: ich.email });
     return antwort(request, { ok: true, name });
   },
 
@@ -3599,12 +3778,12 @@ const ROUTEN = {
     `).bind(await hash(token), email, `+${LINK_MINUTEN} minutes`, ich.id).run();
 
     try {
-      await schickeWechselLink(env, email, `${env.SEITE}#anmelden=${token}`);
+      await schickeWechselLink(env, email, `${env.SEITE}#anmelden=${token}`, ich);
     } catch (e) {
       console.error('Mailversand:', e.message);
       return fehler(request, 'Die Mail ging nicht raus. Das liegt an uns, nicht an dir.', 502);
     }
-    warneAlteAdresse(env, ctx, ich.email, email);
+    warneAlteAdresse(env, ctx, ich.email, email, ich);
 
     return antwort(request, { ok: true, wartet_auf: email });
   },
@@ -4502,7 +4681,7 @@ const ROUTEN = {
       mailEcho(env, ctx, bewerteter, ich.name, ziel.art === 'user'
         ? { kurz: 'Sterne für dich', lang: `${ich.name} hat dir Sterne gegeben.` }
         : { kurz: 'Sterne für deinen Abend', lang: `${ich.name} hat deinen Abend bewertet.` },
-        `bewertung:${b.id}`, ziel);
+        `bewertung:${b.id}`, ziel, ich.id);
     }
 
     /* Zwei Marken: der Schnitt steht auch in der Liste bzw. am Termin, der
@@ -4895,7 +5074,7 @@ const ROUTEN = {
       mailEcho(env, ctx, angesprochen, ich.name, {
         kurz: 'Antwort auf deinen Beitrag',
         lang: `${ich.name} hat dir geantwortet: „${text.slice(0, 200)}${text.length > 200 ? ' …' : ''}"`,
-      }, `kommentar:${neu.id}`, ziel);
+      }, `kommentar:${neu.id}`, ziel, ich.id);
     }
 
     /* Steht ein Link im Text, holt der Worker im Nachgang die Vorschaukarte
@@ -6069,13 +6248,16 @@ const ROUTEN = {
      einem Praefix im Betreff, damit sie im Postfach nicht mit einer echten
      verwechselt wird.
 
-     SEIT 0025 WIRD SIE DOCH GEZAEHLT, unter eigener Art `test`. Hier stand
-     vorher "kein `mail_ausgang` (sonst zaehlte sie in der Mail-Statistik
-     mit)" - die Sorge war, dass eine Probe die Rundmail-Zahl aufblaeht. Mit
-     einer eigenen Art tut sie das nicht: sie steht als eigener Balken
-     daneben, und dass Proben gelaufen sind, ist eine Auskunft und keine
-     Verfaelschung. In `mail_ausgang` landet sie weiterhin nicht - dort haengt
-     die Doppel-Sperre, und die hat eine Testmail nicht verdient. */
+     SEIT 0025 WIRD SIE DOCH GEZAEHLT, unter eigener Art `testmail`. Hier
+     stand vorher "kein `mail_ausgang` (sonst zaehlte sie in der
+     Mail-Statistik mit)" - die Sorge war, dass eine Probe die Rundmail-Zahl
+     aufblaeht. Mit einer eigenen Art tut sie das nicht: sie steht als eigener
+     Balken daneben, und dass Proben gelaufen sind, ist eine Auskunft und
+     keine Verfaelschung. In `mail_ausgang` landet sie weiterhin nicht - dort
+     haengt die Doppel-Sperre, und die hat eine Testmail nicht verdient.
+
+     Im Protokoll traegt genau diese Art eine rote Marke "Test" (`istProbe` in
+     `admin.html`). Wer sie hier umbenennt, nimmt sie dort still ab. */
   'POST /api/admin/rundmail/test': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
@@ -6088,9 +6270,13 @@ const ROUTEN = {
     const geprueft = rundmailPruefen(daten);
     if (geprueft.fehler) return fehler(request, geprueft.fehler);
 
+    /* Ausloeser und Empfaenger sind hier derselbe Mensch, und beide stehen
+       trotzdem da: im Protokoll liest sich "schnix -> TESTMAIL -> an schnix"
+       genau richtig - eine Probe an sich selbst ist, was es ist. */
     await mitProtokoll(env, 'testmail', () =>
       schickeMail(env, ich.email, `[Test] ${geprueft.betreff}`,
-        rundmailText(geprueft), mailRumpf(rundmailHtml(geprueft))));
+        rundmailText(geprueft), mailRumpf(rundmailHtml(geprueft))),
+      { ausloeser: ich.id, namen: [ich.name] });
 
     return antwort(request, { ok: true, email: ich.email }, 200, KEIN_FREMDER_CACHE);
   },
@@ -6200,11 +6386,7 @@ const ROUTEN = {
      nebenbei die Stundensperre traegt).
 
      `quelle` unterscheidet die drei, und zwar fuer die Seite: sie waehlt
-     danach das Zeichen und den Satzbau, und die Uebersichtskarte siebt
-     danach wieder auf das Verwaltete zurueck.
-
-     ZWEI ABFRAGEN, NICHT EINE, und der Grund steht in der zweiten: die
-     gemischte Liste kann die Verwaltungszeilen wegdruecken.
+     danach das Zeichen und den Satzbau, und das Sieb darueber siebt danach.
 
      DIE MAILS WERDEN GEBUENDELT. Ein Notruf sind sechs Zeilen in
      `mail_ausgang` (eine je Empfaenger, das Gatter gegen die Doppelmail
@@ -6221,40 +6403,59 @@ const ROUTEN = {
      trennen, was zusammengehoert, aber sehr wohl einen Stoss zerreissen, der
      zufaellig ueber eine Minutengrenze rutscht.
 
-     Ohne Bezug (die Rundmail, als einzige) faellt diese Sicherung weg - sie
-     darf beliebig oft gehen. Dort gruppiert die Minute, und dort ist der
-     seltene Doppeleintrag an der Grenze auch harmlos: die Rundmail hat im
-     `admin_log` ohnehin ihre eigene Zeile mit Absender und Betreff. */
+     DIE RUNDMAIL HAT NUR NOCH EINE ZEILE. Bis 2026-08-08 hatte sie zwei -
+     "schnix -> rundmail „Betreff"" aus dem `admin_log` und "Mail -> rundmail
+     · 5 Mails" aus dem Ausgang. Das war als zwei Auskuenfte gedacht (wer, und
+     wie viele) und wurde als Doppelung gelesen, zu Recht: es ist EIN Vorgang,
+     zwei Sekunden auseinander gebucht. Jetzt haengt die Zahl an der
+     Verwaltungszeile, und der Ausgang laesst `rundmail` aus.
+
+     Das Fenster von fuenf Minuten in dem Unterausdruck ist nicht geraten,
+     sondern gedeckt: `rundmailAbschicken` legt die `admin_log`-Zeile selbst
+     als Stundensperre aus, zwei Rundmails koennen also nie naeher als eine
+     Stunde beieinander liegen. Die Mails wiederum stehen ein paar Sekunden
+     NACH der Log-Zeile (`benachrichtige` laeuft ungewartet los, der INSERT
+     kommt danach) - deshalb greift das Fenster in beide Richtungen.
+
+     BLAETTERN STATT ABSCHNEIDEN. Vorher `LIMIT 60` und fertig; die aeltere
+     Geschichte war schlicht nicht erreichbar, und ein Sieb auf der Seite
+     siebte nur diese 60. Jetzt kommt eine Seite (`limit`, Vorgabe 20), ein
+     `sk` als Marke fuer die naechste und `zaehler` ueber die GANZE Geschichte
+     - erst damit sagt "verwaltet 3" ueber dem Blatt die Wahrheit und nicht
+     "3 in den letzten 60 Zeilen".
+
+     WARUM `sk` UND NICHT `wann`. Ein Zeitstempel taugt nicht als Marke: zwei
+     Zeilen koennen auf dieselbe Sekunde fallen (ein Terminstoss und ein Push
+     dazu tun das regelmaessig), und `wann < marke` verschluckte dann beim
+     Blaettern die zweite. `sk` haengt Quelle, Art, Anzahl und Betroffenen an
+     den Zeitstempel; die Sortierung bleibt chronologisch, weil alle drei
+     Quellen ihre Zeit im selben Format 'YYYY-MM-DD HH:MM:SS' fuehren und
+     lexikografisch damit gleich chronologisch ist. */
   'GET /api/admin/protokoll': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
-    const [alles, verwaltet] = await env.DB.batch([
+    const p = new URL(request.url).searchParams;
+    const quelle = PROTOKOLL_QUELLEN.has(p.get('quelle')) ? p.get('quelle') : null;
+    const marke = p.get('vor') || null;
+    const limit = Math.min(Math.max(1, Number(p.get('limit')) || PROTOKOLL_SEITE),
+                           PROTOKOLL_SEITE_MAX);
+
+    /* Eine Zeile mehr holen als gezeigt wird: sie wird nicht ausgeliefert,
+       sie beantwortet nur "gibt es noch was". Ein zweiter `count(*)` fuer
+       dieselbe Frage waere eine zweite Abfrage fuer ein Ja/Nein. */
+    const [seite, zaehler, verwaltet] = await env.DB.batch([
       env.DB.prepare(`
-        SELECT * FROM (
-          SELECT l.erstellt AS wann, 'admin' AS quelle, l.aktion AS aktion,
-                 coalesce(a.name, 'Ehemaliger') AS wer,
-                 coalesce(z.name, l.detail, '—') AS wen,
-                 l.detail AS detail, NULL AS anzahl, NULL AS kaputt
-          FROM admin_log l
-          LEFT JOIN users a ON a.id = l.admin_id
-          LEFT JOIN users z ON z.id = l.ziel_id
-
-          UNION ALL
-
-          SELECT min(gesendet_am), 'mail', art, NULL, NULL, bezug,
-                 count(*), sum(fehler IS NOT NULL)
-          FROM mail_ausgang
-          GROUP BY art,
-                   coalesce(bezug, strftime('%Y-%m-%d %H:%M', gesendet_am))
-
-          UNION ALL
-
-          SELECT erstellt, weg, art, NULL, NULL, bezug, anzahl, kaputt
-          FROM versand_ausgang
-        )
-        ORDER BY wann DESC LIMIT 60
+        SELECT * FROM (SELECT *, ${PROTOKOLL_SK} AS sk FROM (${PROTOKOLL_UNION}))
+        WHERE (?1 IS NULL OR quelle = ?1) AND (?2 IS NULL OR sk < ?2)
+        ORDER BY sk DESC LIMIT ?3
+      `).bind(quelle, marke, limit + 1),
+      /* Die Zahlen an den Sieben, ueber alles. Sie kosten einen vollen
+         Durchlauf der Union - vertretbar, weil das Protokoll in Zeilen misst,
+         die ein Mensch ausloest, und nicht in Messwerten. */
+      env.DB.prepare(`
+        SELECT quelle, count(*) AS n FROM (${PROTOKOLL_UNION}) GROUP BY quelle
       `),
       /* Dieselbe Frage wie frueher, eigens noch einmal gestellt: die
          Uebersichtskarte heisst "Zuletzt im Protokoll" und meint die
@@ -6264,24 +6465,31 @@ const ROUTEN = {
          verwaltet", obwohl gestern jemand gesperrt wurde. Drei Zeilen
          kosten weniger als dieser Irrtum. */
       env.DB.prepare(`
-        SELECT l.erstellt AS wann, 'admin' AS quelle, l.aktion AS aktion,
-               coalesce(a.name, 'Ehemaliger') AS wer,
-               coalesce(z.name, l.detail, '—') AS wen, l.detail AS detail
-        FROM admin_log l
-        LEFT JOIN users a ON a.id = l.admin_id
-        LEFT JOIN users z ON z.id = l.ziel_id
-        ORDER BY l.id DESC LIMIT 3
+        SELECT * FROM (${PROTOKOLL_ADMIN_SELECT})
+        ORDER BY wann DESC LIMIT 3
       `),
     ]);
 
     const form = z => ({
       quelle: z.quelle, aktion: z.aktion, wer: z.wer, wen: z.wen,
       detail: z.detail, anzahl: z.anzahl, kaputt: z.kaputt,
-      wann: utc(z.wann),
+      ausloeser: z.ausloeser || null,
+      empfaenger: protokollNamen(z.empfaenger),
+      wann: utc(z.wann), sk: z.sk,
     });
 
+    const mehr = seite.results.length > limit;
+    const zeilen = seite.results.slice(0, limit).map(form);
+    const gezaehlt = { alle: 0, admin: 0, mail: 0, push: 0 };
+    for (const z of zaehler.results) {
+      gezaehlt[z.quelle] = z.n;
+      gezaehlt.alle += z.n;
+    }
+
     return antwort(request, {
-      zeilen: alles.results.map(form),
+      zeilen, mehr, zaehler: gezaehlt,
+      // Die Marke fuer die naechste Seite - null, wenn es keine gibt.
+      weiter: mehr && zeilen.length ? zeilen[zeilen.length - 1].sk : null,
       verwaltet: verwaltet.results.map(form),
     }, 200, KEIN_FREMDER_CACHE);
   },

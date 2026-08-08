@@ -724,12 +724,70 @@
   }
   .log li:last-child { border-bottom: none; }
   .log time { font-size: 11px; color: var(--kreide-weg); flex: 0 0 92px; }
-  .log .was { font-weight: 600; }
+  /* Name und Pille stehen zusammen, und die PILLE beginnt in jeder Zeile an
+     derselben Linie. Das ist die Kante, der das Auge folgt — sie ist der
+     Grund, warum der Name eine eigene, rechtsbündige Spalte davor bekommt und
+     nicht einfach davorgesetzt wird.
+
+     DIE NAMENSSPALTE STEHT AUCH DA, WENN SIE LEER IST. Nur die Verwaltung hat
+     ein Wer, die Versandzeilen haben keins — ohne den leeren Platzhalter
+     begänne die Pille bei „schnix ⟨SPERREN⟩" um eine Namenslänge weiter
+     rechts als bei ⟨NOTRUF⟩ darunter. Ein paar leere Pixel sieht niemand,
+     eine Spalte, die von Zeile zu Zeile springt, sieht jeder.
+
+     `min-width` statt fester Breite: ein Name, der länger ist als die Spalte,
+     schiebt seine eigene Pille nach rechts und lässt die anderen in Ruhe. Das
+     ist die richtige Sorte Nachgeben — abschneiden hieße, einen Namen
+     unlesbar zu machen, damit eine Linie stimmt. */
+  .log .tat { display: flex; gap: 8px; align-items: center; }
+  .log .wer {
+    font-weight: 600; min-width: 68px; text-align: right; white-space: nowrap;
+  }
+  /* Der Weg statt eines Namens: dasselbe Feld, aber die Schrift des „ZEIGE"
+     am Sieb — klein, gesperrt, in Versalien. So steht „PUSH" da, ohne mit dem
+     Namen daneben um die Aufmerksamkeit zu ringen. */
+  .log .wer.weg {
+    font-weight: normal; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--kreide-weg);
+  }
+  /* Die Artpille. Baugleich zu `.marke` an den Mitgliedskarten — dieselbe
+     Größe, dieselben Versalien, derselbe Umriss aus `currentColor`. Nicht
+     `.marke` selbst, weil sie hier auf ihrer Mitte sitzt statt auf der
+     Grundlinie und einen Boden braucht: „echo" und „mailwechsel warnung"
+     stehen untereinander, und ohne Mindestbreite ist die kurze eine Kapsel
+     und die lange ein Balken. */
+  .log .art {
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    border: 1px solid currentColor; border-radius: 999px; padding: 2px 9px;
+    color: var(--kreide-weg); white-space: nowrap;
+    min-width: 96px; text-align: center;
+  }
+  .log .art.rot { color: var(--rot); }
+  .log .art.gruen { color: var(--gruen); }
+  /* Auslöser und Empfänger. Grau und klein: sie stehen am Ende der Rangfolge
+     einer Zeile (siehe `logSpur`). `overflow-wrap` statt Abschneiden — eine
+     Namensliste, die mit „Yusuf, Mai…" endet, ist keine Auskunft; sie darf
+     umbrechen, sie ist ja das Letzte in der Zeile. */
+  .log .spur { font-size: 12px; color: var(--kreide-weg); overflow-wrap: anywhere; }
+  /* Auf dem Handy fallen beide Böden weg — dort ist jeder Pixel Breite einer
+     zu viel, und die Zeile bricht ohnehin um. Eine 250px-Spalte auf einem
+     375er-Gerät ist keine Spalte, sondern ein Umbruch mit Extraschritt. */
+  @media (max-width: 560px) {
+    /* Die Böden fallen weg — auf 375 px richtet sich die Pillenspalte ohnehin
+       nicht mehr aus, die Zeile bricht um, bevor sie es könnte. */
+    .log .wer { min-width: 0; }
+    .log .art { min-width: 0; }
+  }
   .log .zeichen {
     flex: 0 0 17px; text-align: center; color: var(--kreide-weg); font-size: 13px;
   }
   .log .zeichen.rot { color: var(--rot); }
   .log .zeichen.gruen { color: var(--gruen); }
+  /* Der Fuß der Liste. Kein Trennstrich darüber und keine eigene Farbe: er ist
+     das Ende der Rolle, nicht ein weiterer Eintrag. Mittig, weil er zu keiner
+     Spalte gehört. */
+  .log li.log-fuss { justify-content: center; border-bottom: none; padding-top: 12px; }
+  .log li.log-fuss button { font-size: 12px; padding: 4px 14px; border-radius: 999px; }
 
   .sagt {
     margin: 13px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 13px;
@@ -958,7 +1016,11 @@
 
   <section class="blatt" id="log-blatt" aria-label="Protokoll" hidden>
     <h2>Protokoll</h2>
+    <div class="werkzeug">
+      <span class="reiter" id="log-filter"></span>
+    </div>
     <ul class="log" id="log"></ul>
+    <p class="sagt" id="log-sagt" hidden></p>
   </section>
 
   <div class="blatt tuer" id="tuer" hidden>
@@ -1616,13 +1678,14 @@
   /* Das Protokoll führt seit dem Versandprotokoll drei Quellen, und `quelle`
      entscheidet die Darstellung — nicht `aktion`. Der Grund ist eine Falle:
      „rundmail" ist BEIDES, eine Verwaltungshandlung im `admin_log` und eine
-     Mailart im Ausgang. Ein Versand durchs Kontor erzeugt darum zwei Zeilen —
-     „Schnix → rundmail „Betreff"" und „Post → rundmail · 6 Mails" —, und das
-     ist keine Doppelung, sondern zwei Auskünfte: wer sie losgeschickt hat und
-     wie viele tatsächlich rausgingen. Über `aktion` allein wären sie nicht
-     auseinanderzuhalten.
+     Mailart im Ausgang. Ein Versand durchs Kontor erzeugte darum zwei Zeilen —
+     „schnix → rundmail „Betreff"" und „Mail → rundmail · 6 Mails". Gedacht war
+     das als zwei Auskünfte, gelesen wurde es als Doppelung, und die Lesart hat
+     recht: es ist EIN Vorgang. Seit dem 2026-08-08 hängt die Zahl an der
+     Verwaltungszeile, und der Worker lässt `rundmail` aus dem Mailteil der
+     Union heraus — hier ist davon nichts mehr zu tun.
 
-     Post und Klopfen teilen sich das ✉ nicht: eine Mail liegt im Postfach,
+     Mail und Klopfen teilen sich das ✉ nicht: eine Mail liegt im Postfach,
      ein Push klopft und ist wieder weg. */
   const QUELL_ZEICHEN = { mail: ['✉', ''], push: ['✦', ''] };
 
@@ -1630,31 +1693,95 @@
     ? (LOG_ZEICHEN[z.aktion] || ['·', ''])
     : (QUELL_ZEICHEN[z.quelle] || ['·', '']);
 
-  // Was in der Spalte „wer → was" steht. Beim Versand gibt es kein Wer: eine
-  // Notrufmail schickt niemand, sie fällt an.
-  const logWas = z => z.quelle === 'admin'
-    ? z.wer + ' → ' + z.aktion
-    : (z.quelle === 'mail' ? 'Post → ' : 'Push → ') + z.aktion.replace(/_/g, ' ');
+  /* Die Spalte vor der Pille beantwortet „von wem" — und die Antwort ist bei
+     der Verwaltung ein Mensch und beim Versand ein Weg.
+
+     ERST STAND DORT GAR NICHTS. „Mail →" und „Push →" waren mit dem Pfeil
+     verschwunden, weil der Weg ja schon im Zeichen ganz links steht (✉ oder
+     ✦) und im gewählten Reiter darüber. Das war eine Zumutung: ein Zeichen
+     ist kein Wort, und wer „3 Geräte" liest, muss aus einem vierzackigen
+     Stern schließen, dass es ein Push war. Jetzt steht der Weg wieder da —
+     klein und in Versalien wie das „ZEIGE" am Sieb, nicht mehr als
+     gleichrangiges fettes Wort mit Pfeil. */
+  const logWer = z => (z.quelle === 'admin' ? z.wer
+    : (z.quelle === 'push' ? 'Push' : 'Mail'));
+
+  /* Auslöser und Empfänger, seit migrations/0026 — die zwei Fragen, die ein
+     Mensch an eine Protokollzeile stellt, sobald er sie überhaupt lesen kann:
+     „PUSH · NOTRUF · 3 Geräte" beantwortete bis dahin weder von wem noch an
+     wen.
+
+     BEIDE STEHEN HINTER DER ZAHL, nicht davor, und sie sind grau. Die Zeile
+     hat eine Rangfolge: WAS ist passiert (die Pille), WIE VIELE hat es
+     betroffen (die Zahl), und erst dann wer und an wen. Wer die Liste
+     überfliegt, sucht das Erste; wer stehenbleibt, liest den Rest.
+
+     „von Jo" und nicht bloß „Jo": ohne das Wörtchen steht der Name
+     unvermittelt neben einer Namensliste, und man liest ihn als weiteren
+     Empfänger. Zwei Zeichen, die einen Satz aus einer Aufzählung machen.
+
+     FEHLT ETWAS, STEHT NICHTS DA — kein „von —", kein „an niemanden". Alte
+     Zeilen von vor 0026 kennen ihren Auslöser nicht, und der Anmeldelink hat
+     bewusst keinen Empfänger (siehe den Kopf von 0025: eine Adresse ist dort
+     verboten, und einen Namen gibt es noch nicht). Eine leere Stelle ist
+     ehrlicher als ein Gedankenstrich, der Auskunft vortäuscht. */
+  function logSpur(z) {
+    const stuecke = [];
+    if (z.ausloeser)  stuecke.push('von ' + z.ausloeser);
+    if (z.empfaenger) stuecke.push('an ' + z.empfaenger);
+    return stuecke.join(' · ');
+  }
 
   /* Wen oder was die Handlung betraf, in einem Satzstück. Beim Versand ist es
      die Zahl — und zwar in Stück, nicht als nackte Ziffer: „6" allein neben
      „notruf" liest sich wie eine Id. Die Fehlerzahl steht nur da, wenn es
      eine gibt; „0 kaputt" an jeder Zeile wäre eine Beruhigung, die man nach
      dem dritten Mal nicht mehr liest. */
-  function logWen(z) {
-    if (z.quelle === 'mail' || z.quelle === 'push') {
-      const stueck = z.quelle === 'mail'
-        ? (z.anzahl === 1 ? '1 Mail' : z.anzahl + ' Mails')
-        : (z.anzahl === 1 ? '1 Gerät' : z.anzahl + ' Geräte');
-      return stueck + (z.kaputt ? ' · ' + z.kaputt + ' nicht zugestellt' : '');
+  const versandStueck = z => (z.quelle === 'push'
+    ? (z.anzahl === 1 ? '1 Gerät' : z.anzahl + ' Geräte')
+    : (z.anzahl === 1 ? '1 Mail' : z.anzahl + ' Mails'))
+    + (z.kaputt ? ' · ' + z.kaputt + ' nicht zugestellt' : '');
+
+  function logWen(z, kurz) {
+    if (z.quelle === 'mail' || z.quelle === 'push') return versandStueck(z);
+    /* Die Rundmail trägt beides in EINER Zeile: den Betreff, weil er sagt
+       worum es ging, und die Zahl aus dem Ausgang, weil sie die einzige
+       Auskunft war, für die es früher eine zweite Zeile brauchte. `anzahl`
+       fehlt nur, wenn die Mails nicht aufzufinden waren — dann steht eben nur
+       der Betreff da und nicht „0 Mails", was nach einem Fehlschlag aussähe,
+       den es nicht gab.
+
+       In der Vorschaukarte bleibt die Zahl weg. Dort ist eine drittel Karte
+       breit, „Sommerpause" · 2 Mails · 1 nicht zugestellt" bricht auf zwei
+       Zeilen um, und die Frage dort ist ohnehin nur, OB etwas war. Dasselbe
+       Motiv wie beim „wer → was", das `kurz` schon weglässt. */
+    if (z.aktion === 'rundmail') {
+      return '„' + (z.detail || '') + '"'
+        + (z.anzahl && !kurz ? ' · ' + versandStueck(z) : '');
     }
-    return z.aktion === 'rundmail'
-      ? '„' + (z.detail || '') + '"'
-      : z.wen + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
+    return z.wen + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
   }
 
+  /* Die Art als Pille. EINE Pille je Zeile, nicht zwei: die Probe trug bis
+     eben ein rotes „Test" NEBEN dem Wort „testmail", und das sagte dasselbe
+     zweimal. Jetzt ist die Artpille selbst rot — die Tönung ist die Auskunft,
+     nicht ein zweites Schild.
+
+     DIE TÖNUNG FOLGT DEM ZEICHEN LINKS, sie erfindet keine zweite Ordnung:
+     rot, wo das Zeichen rot ist (sperren, entfernen), grün beim Entsperren,
+     sonst Kreide. Die Probe kommt dazu — sie ist die einzige Mailart, die
+     eine eigene Farbe verdient, weil sie als einzige nichts bewirkt hat.
+
+     KEINE FARBE JE QUELLE. Naheliegend wäre Mail in einem Ton, Push im
+     anderen; das Ergebnis wäre eine Liste, in der jede Zeile leuchtet, und
+     damit keine. Mail und Push trennt das Zeichen, und das genügt. */
+  const istProbe = z => z.quelle === 'mail' && z.aktion === 'testmail';
+
+  const logArtTon = z => istProbe(z) ? 'rot'
+    : (z.quelle === 'admin' ? (LOG_ZEICHEN[z.aktion] || ['', ''])[1] : '');
+
   /* EINE Zeile für zwei Orte: das Protokollblatt und die Vorschaukarte auf der
-     Übersicht. `kurz` lässt dort das „wer → was" weg — in einer drittel Karte
+     Übersicht. `kurz` lässt dort Name und Pille weg — in einer drittel Karte
      ist für drei Spalten kein Platz, und die Frage dort ist ohnehin nur, ob
      seit dem letzten Blick etwas passiert ist. */
   function logZeile(z, kurz) {
@@ -1667,21 +1794,229 @@
     // sonst auf dieser Seite, nicht als grauer Systemtooltip.
     Bilder.tippAm(t, { titel: datum(z.wann), zeilen: [] });
     li.appendChild(t);
-    if (!kurz) li.appendChild(el('span', 'was', logWas(z)));
-    li.appendChild(el('span', kurz ? 'wen' : null, logWen(z)));
+    if (!kurz) {
+      const tat = el('span', 'tat');
+      /* Beim Versand steht dort der Weg statt eines Namens, und der wird
+         leiser gesetzt: ein Mensch, der etwas getan hat, wiegt schwerer als
+         der Kanal, durch den etwas von selbst rausging. */
+      tat.appendChild(el('span', z.quelle === 'admin' ? 'wer' : 'wer weg',
+        logWer(z)));
+      // Die Unterstriche der Artnamen sind Schema, nicht Sprache:
+      // `mailwechsel_warnung` liest sich als „MAILWECHSEL WARNUNG".
+      tat.appendChild(el('span', ('art ' + logArtTon(z)).trim(),
+        z.aktion.replace(/_/g, ' ')));
+      li.appendChild(tat);
+    }
+    li.appendChild(el('span', kurz ? 'wen' : null, logWen(z, kurz)));
+    // In der Vorschaukarte nicht: dort ist für drei Spalten schon kein Platz.
+    if (!kurz) {
+      const spur = logSpur(z);
+      if (spur) li.appendChild(el('span', 'spur', spur));
+    }
     return li;
   }
 
-  function protokoll(zeilen) {
+  /* Das Sieb über dem Protokoll, wortgleich zu dem über der Runde — dieselben
+     Reiter, dieselben Zahlen, derselbe `.werkzeug`-Kasten. Es siebt nach
+     `quelle`, weil das die einzige Trennung ist, die ein Mensch im Kopf hat:
+     „hat jemand verwaltet", „ist Post rausgegangen", „hat es geklopft".
+
+     ES SIEBT IM WORKER, NICHT HIER — anders als das über der Runde. Dort liegt
+     die ganze Runde seit `laden()` im Speicher und ein Sieb ist eine
+     `filter()`-Zeile; hier liegt immer nur die geladene Seite da. Ein Sieb auf
+     der Seite hieße „mail 3 von den 20, die du gerade siehst", und das ist
+     keine Zahl, das ist ein Zufallswert. Die `zaehler` der Route zählen über
+     die ganze Geschichte.
+
+     `verwaltet` STEHT IMMER DA, auch mit einer Null — als einziger Reiter
+     neben `alle`. Die Regel in der Runde („leere Reiter stehen gar nicht erst
+     da") ist hier eine Falle: die Verwaltung ist die seltenste der drei
+     Quellen, und der Reiter verschwände genau in dem Moment, in dem man nach
+     ihm greift. Eine Null ist eine Auskunft, ein fehlender Reiter ist keine —
+     und seit die Zahlen über alles zählen, ist eine Null dort auch die
+     Wahrheit und nicht nur die Wahrheit über ein Fenster. */
+  const LOG_SIEBE = {
+    alle:      { titel: 'alle',      quelle: null },
+    verwaltet: { titel: 'verwaltet', quelle: 'admin' },
+    mail:      { titel: 'mail',      quelle: 'mail' },
+    push:      { titel: 'push',      quelle: 'push' },
+  };
+  const LOG_IMMER = ['alle', 'verwaltet'];
+  const LOG_ZAEHLER = { alle: 'alle', verwaltet: 'admin', mail: 'mail', push: 'push' };
+
+  let logSieb = 'alle';
+  let logZeilen = [];               // nur die geladenen Seiten
+  let logZaehler = null;            // über die ganze Geschichte, aus der Route
+  let logWeiter = null;             // Marke für die nächste Seite, null = Ende
+  let logLaedt = false;             // gegen zwei Nachladungen auf einmal
+  let logSpaeher = null;            // der IntersectionObserver am Fuß
+  let logAutoRest = 0;              // wie oft der Beobachter noch von selbst darf
+
+  function logFilterZeichnen() {
+    const ziel = $('log-filter');
+    ziel.textContent = '';
+    // Ein Sieb über einem leeren Buch siebt nichts. Der Satz darunter sagt
+    // schon alles, was es zu sagen gibt.
+    if (!logZaehler || !logZaehler.alle) return;
+    ziel.appendChild(el('span', 'wozu', 'zeige'));
+    Object.entries(LOG_SIEBE)
+      .map(([k, v]) => [k, v, logZaehler[LOG_ZAEHLER[k]] || 0])
+      .filter(([k, , n]) => n > 0 || LOG_IMMER.includes(k))
+      .forEach(([k, v, n]) => {
+        const b = el('button', k === logSieb ? 'an' : null, v.titel);
+        b.type = 'button';
+        b.appendChild(el('i', null, String(n)));
+        b.addEventListener('click', () => { if (k !== logSieb) logSiebWaehlen(k); });
+        ziel.appendChild(b);
+      });
+  }
+
+  /* Der Fuß der Liste. Er ist zugleich der Auslöser fürs Nachladen: kommt er
+     in Sicht, ist der Leser unten angekommen und will mehr. Ein Knopf stünde
+     an derselben Stelle und verlangte einen Klick für etwas, das ohnehin
+     jeder will — aber er bleibt als Rückfalltür stehen, weil ein Klick auf
+     „mehr" immer geht und ein Beobachter, den der Browser nicht kennt, nicht.
+
+     `rootMargin` zieht die Auslöselinie 300 px vor den Rand: so lädt die
+     nächste Seite, während man noch liest, und nicht erst, wenn man vor dem
+     Nichts steht.
+
+     VON SELBST GEHT ES NUR EIN STÜCK WEIT. Nach `LOG_AUTO` Nachladungen in
+     Folge hört der Beobachter auf und der Knopf bleibt allein zurück — dann
+     stehen hundert Zeilen da und der nächste Schritt will gewollt sein. Ohne
+     diese Grenze wäre es kein Nachladen, sondern ein Sog: wer den Finger auf
+     dem Rad liegen lässt, zöge das ganze Protokoll in den Speicher, und jede
+     dieser Zeilen bliebe dort auch liegen. Ein Klick setzt das Kontingent
+     zurück, man kommt also überall hin — nur nicht aus Versehen. */
+  const LOG_AUTO = 4;
+
+  function logFussZeichnen() {
+    if (logSpaeher) { logSpaeher.disconnect(); logSpaeher = null; }
+    /* Erst den alten wegräumen. `protokollZeichnen` leert die Liste ohnehin,
+       aber `logNachladen` ruft hier mitten im Lauf noch einmal rein, um „lädt…"
+       zu zeigen — ohne diese Zeile stünden dann zwei Füße untereinander. */
+    const alt = $('log').querySelector('.log-fuss');
+    if (alt) alt.remove();
+    if (!logWeiter) return;
+
+    const fuss = el('li', 'log-fuss');
+    const b = el('button', null, logLaedt ? 'lädt…' : 'mehr laden');
+    b.type = 'button';
+    b.disabled = logLaedt;
+    // Ein Klick ist eine Ansage und füllt das Kontingent wieder auf.
+    b.addEventListener('click', () => { logAutoRest = LOG_AUTO; logNachladen(); });
+    fuss.appendChild(b);
+    $('log').appendChild(fuss);
+
+    // Ist das Kontingent leer, bleibt der Knopf allein stehen — kein zweiter
+    // Beobachter, der beim nächsten Zeichnen doch wieder loslegt.
+    if (logAutoRest <= 0 || !('IntersectionObserver' in window)) return;
+    logSpaeher = new IntersectionObserver(eintraege => {
+      if (!eintraege.some(e => e.isIntersecting)) return;
+      /* Das Kontingent zahlt für GELADENE Seiten, nicht für Meldungen des
+         Beobachters. Der meldet mehrmals, während eine Seite noch unterwegs
+         ist — wurde damals gleich hier abgezogen, war es nach zwei Seiten
+         aufgebraucht statt nach vier (gemessen: Halt bei 60 Zeilen). Die
+         beiden Riegel von `logNachladen` stehen deshalb VOR dem Abzug. */
+      if (logLaedt || !logWeiter || logAutoRest <= 0) return;
+      logAutoRest--;
+      logNachladen();
+    }, { rootMargin: '300px' });
+    logSpaeher.observe(fuss);
+  }
+
+  /* Zwanzig je Seite. Nicht sechzig auf einmal wie bis 2026-08-08: das war
+     nicht „mehr Auskunft", sondern eine Rolle, an deren Ende die Geschichte
+     ohne Vorwarnung aufhörte. Zwanzig füllen ein Blatt und lassen den Fuß in
+     Reichweite. */
+  const LOG_SEITE = 20;
+
+  const logPfad = (vor) => '/api/admin/protokoll?limit=' + LOG_SEITE
+    + (LOG_SIEBE[logSieb].quelle ? '&quelle=' + LOG_SIEBE[logSieb].quelle : '')
+    + (vor ? '&vor=' + encodeURIComponent(vor) : '');
+
+  /* Ein Reiterwechsel ist eine neue Frage, keine Fortsetzung: die Liste geht
+     leer, die Marke auch, und die erste Seite kommt frisch. Die Zahlen an den
+     Reitern bleiben stehen, während geladen wird — sie ändern sich durch einen
+     Reiterwechsel ja nicht, und wegzunehmen was gleich wieder dasteht, ist
+     Flackern ohne Auskunft. */
+  async function logSiebWaehlen(k) {
+    logSieb = k;
+    logZeilen = [];
+    logWeiter = null;
+    logAutoRest = LOG_AUTO;
+    /* `logLaedt` steht hier nicht nur gegen den Doppelklick: es hält auch den
+       Satz „Unter diesem Sieb steht nichts" zurück, der sonst für den einen
+       Rundflug zur Datenbank aufblitzt und etwas behauptet, das noch niemand
+       weiß. */
+    logLaedt = true;
+    protokollZeichnen();
+    try {
+      protokoll(await ruf(logPfad(null)));
+    } catch (e) {
+      logLaedt = false;
+      protokollZeichnen();
+      sagt('log-sagt', e.message, true);
+    }
+  }
+
+  async function logNachladen() {
+    if (logLaedt || !logWeiter) return;
+    logLaedt = true;
+    logFussZeichnen();                       // der Fuß sagt „lädt…"
+    try {
+      const d = await ruf(logPfad(logWeiter));
+      logZeilen = logZeilen.concat(d.zeilen);
+      logWeiter = d.weiter;
+      logZaehler = d.zaehler;
+      logLaedt = false;
+      protokollZeichnen();
+    } catch (e) {
+      logLaedt = false;
+      /* Die schon geladenen Zeilen bleiben stehen — ein Fehler beim Nachladen
+         ist kein Grund, das Gelesene wegzuräumen. Nur der Fuß fällt weg, sonst
+         versucht der Beobachter es endlos weiter. */
+      logWeiter = null;
+      protokollZeichnen();
+      sagt('log-sagt', e.message, true);
+    }
+  }
+
+  function protokollZeichnen() {
+    logFilterZeichnen();
     const ziel = $('log');
     ziel.textContent = '';
-    if (!zeilen.length) {
-      // Nicht mehr „noch hat niemand etwas verwaltet": das Blatt zeigt seit
-      // dem Versandprotokoll auch, was von selbst rausging.
-      ziel.appendChild(el('li', 'leer-hinweis', 'Noch ist nichts passiert.'));
+    if (!logZeilen.length) {
+      /* Solange geladen wird, steht hier gar nichts — siehe `logSiebWaehlen`.
+         Sonst zwei Sätze, wie in der Runde: ein leeres Blatt unter einem
+         gewählten Sieb ist etwas anderes als ein leeres Blatt. „Noch ist
+         nichts passiert" wäre unter „push" schlicht gelogen. Und nicht mehr
+         „noch hat niemand etwas verwaltet": das Blatt zeigt seit dem
+         Versandprotokoll auch, was von selbst rausging. */
+      if (!logLaedt) {
+        ziel.appendChild(el('li', 'leer-hinweis', logSieb === 'alle'
+          ? 'Noch ist nichts passiert.'
+          : 'Unter diesem Sieb steht nichts.'));
+      }
       return;
     }
-    zeilen.forEach(z => ziel.appendChild(logZeile(z)));
+    logZeilen.forEach(z => ziel.appendChild(logZeile(z)));
+    logFussZeichnen();
+  }
+
+  /* Die erste Seite, aus `laden()`. Sie setzt alles zurück — auch nach einer
+     Verwaltungshandlung, denn danach ist die Geschichte eine andere und
+     nachgeladene Seiten von vorhin stünden schief darunter. Das gewählte Sieb
+     überlebt: `laden()` fragt die Route mit `logPfad(null)`, und wer im Blatt
+     „push" stand, will nach dem Entsperren nicht wieder bei „alle" landen. */
+  function protokoll(d) {
+    logZeilen = d.zeilen;
+    logZaehler = d.zaehler;
+    logWeiter = d.weiter;
+    logLaedt = false;
+    logAutoRest = LOG_AUTO;
+    sagt('log-sagt', '');
+    protokollZeichnen();
   }
 
   // ==========================================================================
@@ -2134,10 +2469,16 @@
     return kasten;
   }
 
-  // Testmail: geht nur an den eigenen Posteingang, an der Stundensperre
-  // vorbei und ohne im Protokoll oder in der Mail-Statistik aufzutauchen
-  // (siehe /api/admin/rundmail/test im Worker) - deshalb ohne den
-  // Zwei-Klick-Umweg über die Vorschau, das Risiko ist ja nur die eigene Post.
+  /* Testmail: geht nur an den eigenen Posteingang und an der Stundensperre
+     vorbei (siehe /api/admin/rundmail/test im Worker) — deshalb ohne den
+     Zwei-Klick-Umweg über die Vorschau, das Risiko ist ja nur die eigene Post.
+
+     Gezählt wird sie seit dem Versandprotokoll aber sehr wohl: eine Zeile im
+     Blatt und ein eigener Balken unter „Mails je Art", beide unter der Art
+     `testmail`, im Protokoll zusätzlich mit roter Marke. Hier stand vorher das
+     Gegenteil — „ohne im Protokoll oder in der Mail-Statistik aufzutauchen",
+     richtig bis 0025. Dass Proben gelaufen sind, ist eine Auskunft; eine
+     eigene Art hält sie aus den Zahlen der echten Post heraus. */
   $('r-test').addEventListener('click', async () => {
     const betreff = $('r-betreff').value.trim();
     const text = $('r-text').value.trim();
@@ -2508,7 +2849,8 @@
     const [leute, stat, log, geplantListe, health] = await Promise.all([
       ruf('/api/admin/nutzer'),
       ruf('/api/admin/statistik?tage=' + zeitraum),
-      ruf('/api/admin/protokoll'),
+      // Die ERSTE Seite, im gerade gewählten Sieb — nicht mehr die ganzen 60.
+      ruf(logPfad(null)),
       ruf('/api/admin/rundmail/geplant'),
       fetch(API + '/api/health', { cache: 'no-store' }).then(r => r.json()).catch(() => null),
     ]);
@@ -2532,7 +2874,7 @@
     kopfZeichnen(leute.kopf, mich, health, stat);
     runde(leute.nutzer);
     statistik(stat);
-    protokoll(log.zeilen);
+    protokoll(log);
     geplantZeichnen(geplantListe.zeilen);
     // Die Empfängerzahl auf dem Versandknopf kommt aus `stand` — vor dem
     // ersten Abruf stand dort eine Null.
