@@ -2502,7 +2502,10 @@
           <svg viewBox="0 0 100 172" role="img" aria-labelledby="glas-titel">
             <title id="glas-titel">Bierglas: Füllstand nach Bestand, Zustand nach Temperatur</title>
             <defs>
-              <path id="innenform" d="M27.5,20 C23,46 21.2,60 22,74 C23,99 29.5,130 31.5,150 L68.5,150 C70.5,130 77,99 78,74 C78.8,60 77,46 72.5,20 Z"/>
+              <!-- Ohne `Z`: als Clip-Pfad schliesst sich die Form beim Fuellen
+                   von selbst, als nachgezogene Linie (`.glas-innen`) haette der
+                   Schlussstrich dagegen quer durch die Glasoeffnung gelegen. -->
+              <path id="innenform" d="M27.5,20 C23,46 21.2,60 22,74 C23,99 29.5,130 31.5,150 L68.5,150 C70.5,130 77,99 78,74 C78.8,60 77,46 72.5,20"/>
               <clipPath id="innen"><use href="#innenform"/></clipPath>
               <!-- alles unterhalb des Bierspiegels; wandert mit dem Bestand -->
               <clipPath id="unterm-spiegel">
@@ -2527,8 +2530,14 @@
               </linearGradient>
             </defs>
 
-            <!-- Glaskoerper -->
-            <path class="glas-korpus" d="M24,17 C19,45 17,60 18,75 C19,101 26,133 28,153 Q28,157 32,157 L68,157 Q72,157 72,153 C74,133 81,101 82,75 C83,60 81,45 76,17 Z"/>
+            <!-- Glaskoerper. Oben schliesst die Flaeche nicht geradlinig,
+                 sondern ueber den HINTEREN Bogen der Randellipse (cx=50 cy=17
+                 rx=26 ry=5): sonst endete das Glasgrau auf der grossen Achse,
+                 also quer durch die halbe Oeffnung, und zwischen ihm und der
+                 weissen Wolbung darueber klaffte eine Linse. Der Bogen laeuft
+                 von 76,17 gegen den Uhrzeigersinn ueber 50,12 nach 24,17 -
+                 daher sweep-flag 0. -->
+            <path class="glas-korpus" d="M24,17 C19,45 17,60 18,75 C19,101 26,133 28,153 Q28,157 32,157 L68,157 Q72,157 72,153 C74,133 81,101 82,75 C83,60 81,45 76,17 A26,5 0 0 0 24,17 Z"/>
 
             <g clip-path="url(#innen)">
               <!-- Bier samt Krone: eine Gruppe, die mit dem Bestand sinkt. Die
@@ -2591,10 +2600,17 @@
             <ellipse class="kondens laeuft" cx="26" cy="52" rx="1.7" ry="2.5" style="animation-delay:-2s"/>
             <ellipse class="kondens laeuft" cx="76" cy="66" rx="1.4" ry="2.1" style="animation-delay:-6s"/>
 
-            <!-- Riss -->
-            <path class="glas-riss" d="M24,17 C19,45 17,60 18,75 C19,101 26,133 28,153 Q28,157 32,157 L68,157 Q72,157 72,153 C74,133 81,101 82,75 C83,60 81,45 76,17 Z"/>
-            <ellipse class="glas-riss" cx="50" cy="17" rx="26" ry="5"/>
+            <!-- Riss. Auch hier kein `Z`: der Schlussstrich waere von 76,17
+                 nach 24,17 gelaufen - genau die grosse Achse der Randellipse
+                 darunter, also eine Sehne quer durch die Oeffnung. Die offenen
+                 Enden liegen unter der Ellipse. -->
+            <path class="glas-riss" d="M24,17 C19,45 17,60 18,75 C19,101 26,133 28,153 Q28,157 32,157 L68,157 Q72,157 72,153 C74,133 81,101 82,75 C83,60 81,45 76,17"/>
+            <!-- Die Innenlinie VOR der Randellipse: ihre oberen Enden sitzen bei
+                 y=20, und die weisse Bahn deckt dort y=18,45 bis 20,55 ab. Lag
+                 sie darueber, stachen die Enden als graue Kerben in den Rand -
+                 jetzt laufen sie darunter aus. -->
             <use class="glas-innen" href="#innenform"/>
+            <ellipse class="glas-riss" cx="50" cy="17" rx="26" ry="5"/>
           </svg>
         </div>
       </div>
