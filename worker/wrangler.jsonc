@@ -83,6 +83,29 @@
     // Entscheidung ist ehrlich zu benennen - wer die URL hat, sieht das Bild,
     // auch ohne Anmeldung. Die Schluessel sind zufaellige UUIDs, also nicht zu
     // erraten. Fuer eine Runde, die sich kennt, ist das die richtige Abwaegung.
+    //
+    // ZWEITE Sache am selben Bucket, die NICHT in dieser Datei steht und darum
+    // hier vermerkt ist: seine CORS-Regel. Ein <img src> braucht keine, ein
+    // fetch() aus der Seite heraus schon - und genau das tut "Bild kopieren"
+    // im Kommentarmenue (`bildInDieAblage` in index.html), weil die Ablage
+    // einen Blob will und keine Adresse. Ohne Regel schickt r2.dev kein
+    // Access-Control-Allow-Origin, das fetch faellt aus, und der Kopierknopf
+    // legt statt des Bildes seine Adresse hinein - kein Fehler, nur weniger.
+    // Gesetzt wird sie einmal, sie gehoert zum Bucket und nicht zum Deploy -
+    // `wrangler deploy` fasst sie nicht an:
+    //
+    //   npx wrangler r2 bucket cors set beerstock-bilder --file cors-bilder.json -y
+    //   npx wrangler r2 bucket cors list beerstock-bilder     # zum Nachsehen
+    //
+    // Die Datei liegt daneben (worker/cors-bilder.json). Nur GET, nur die
+    // beiden Herkuenfte, die es gibt - dieselben wie in ERLAUBTE_HERKUNFT.
+    //
+    // ACHTUNG beim Format: Cloudflare will `{ "rules": [ { "allowed": {
+    // "origins": [], "methods": [] } } ] }` in Kleinschreibung, NICHT die
+    // S3-Schreibweise mit `CORSRules`/`AllowedOrigins`. Wrangler erkennt die
+    // falsche und bricht mit einem klaren Satz ab - aber erst beim Ausfuehren.
+    // Das `-y` ueberspringt die Rueckfrage; ohne es haengt der Aufruf, weil
+    // eine bestehende Regel ueberschrieben wuerde.
     "BILDER_URL": "https://pub-bfc67ecfa1c8457e98f8775506d4ad16.r2.dev"
   },
 

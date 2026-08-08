@@ -1522,10 +1522,13 @@
   }
   .ko-bar-k svg { display: block; }
   .ko-bar-k:hover, .ko-bar-k:focus-visible { color: var(--kreide); }
-  /* Offener Wähler: der Knopf bleibt gelb, solange darunter etwas aufsteht. */
-  .ko-bar-k.an { color: var(--gelb); }
-  /* Ein Trennstrich zwischen Reagieren und Zitieren — das eine klebt am
-     Kommentar, das andere macht einen neuen. */
+  /* Offener Wähler: der Knopf bleibt gelb, solange darunter etwas aufsteht.
+     `getan` ist derselbe Ruck für einen Augenblick — das Kopieren hat keinen
+     Zustand, den man sehen könnte, also bekommt es wenigstens ein Nicken. */
+  .ko-bar-k.an, .ko-bar-k.getan { color: var(--gelb); }
+  /* Ein Trennstrich hinter dem Wähler: davor steht alles, was am Kommentar
+     klebt (die Zeichen und das „+"), dahinter, was ihn verlässt — kopieren
+     trägt ihn nach draußen, antworten macht einen neuen. */
   .ko-bar .ko-re-auf { border-right: 1px solid #ffffff1f; border-radius: 999px 0 0 999px; }
 
   /* Auf dem Handy liegt gar nichts frei: keine Leiste, kein Wähler, kein
@@ -1539,19 +1542,25 @@
 
      Beides steht in `tippAn`/`tippZieht`; die offene Karte trägt `.ko-auf`.
 
-     Der Antwortpfeil IN der Leiste entfällt hier: der Wisch tut dasselbe, und
-     das Letzte in der Reihe soll der Wähler sein. Gebaut wird der Pfeil
-     trotzdem (siehe `koLeiste`) — ein Fenster, das breiter wird, hat ihn
-     samt Schwebeleiste sofort wieder. */
+     Unter der Leiste steht am Handy das Menü (`.ko-menu`) — zwei beschriftete
+     Zeilen, Antworten und Kopieren. Zeichen allein trügen das nicht: in der
+     Pille ist ein Zeichen von vier Nachbarn umgeben und wird von ihnen erklärt,
+     darunter stünde es allein und müsste geraten werden.
+
+     Die Zeichen für beides bleiben trotzdem in der Leiste (siehe `koLeiste`),
+     nur hier verborgen — ein Fenster, das breiter wird, hat sie samt
+     Schwebeleiste sofort wieder. */
   @media (hover: none), (pointer: coarse) {
     .ko-bar { display: none; }
     .ko.ko-auf > .ko-bar {
       display: flex; background: #303738; box-shadow: 0 3px 12px #0008;
     }
-    .ko.ko-auf > .ko-bar [data-antwort] { display: none; }
+    .ko.ko-auf > .ko-bar [data-antwort],
+    .ko.ko-auf > .ko-bar [data-kopieren] { display: none; }
     /* Der lange Druck gehört uns, nicht dem Textmarker und nicht dem
-       Bildmenü. Der Preis steht dazu: aus einem Kommentar lässt sich auf dem
-       Handy nichts mehr herauskopieren.
+       Bildmenü. Was er dem Finger nimmt, gibt das Menü darunter zurück:
+       markieren geht nicht mehr, kopieren dafür in einem Griff statt in
+       dreien.
 
        Das `-webkit-`-Präfix ist kein Beiwerk: unpräfixiertes `user-select`
        versteht Safari erst seit 17, davor markierte der lange Druck den Text
@@ -1570,6 +1579,45 @@
     .ko, .ko-antw { transition: transform .2s ease-out; }
     .ko.ko-zieht, .ko.ko-zieht > .ko-antw { transition: none; }
   }
+
+  /* --- Das Menü unter der Leiste, nach Art von WhatsApp ---------------------
+     Zwei Zeilen, beschriftet: Antworten und Kopieren. Es gibt sie NUR am
+     Handy — am Rechner tun dieselbe Sache zwei Zeichen in der Schwebeleiste,
+     und ein aufklappendes Menü neben einer Leiste, die schon beim Überfahren
+     kommt, wäre ein zweiter Weg für denselben Griff.
+
+     Gebaut wird es trotzdem immer (`koMenu`), wie die Leiste auch: der Baum
+     darf nicht davon abhängen, wie breit das Fenster gerade ist, und der
+     lange Druck kann ihn nicht neu bauen (siehe `langerDruck`).
+
+     Kein `position: absolute` — anders als die Leiste am Rechner steht das
+     Menü im Fluss unter der Karte und schiebt, was folgt, nach unten. Es liegt
+     als LETZTES im Knoten, unter dem Wähler: klappt jemand die ganze
+     Emojitafel auf, gehört sie an das „+", das sie geöffnet hat, und das Menü
+     rückt darunter. */
+  .ko-menu { display: none; }
+  @media (hover: none), (pointer: coarse) {
+    .ko.ko-auf > .ko-menu {
+      display: flex; flex-direction: column; width: max-content; min-width: 168px;
+      max-width: 100%; margin-top: 5px; padding: 4px;
+      border: 1px solid #ffffff22; border-radius: 12px;
+      background: #303738; box-shadow: 0 3px 12px #0008;
+      animation: re-auf .14s ease-out;
+    }
+  }
+  .ko-menu-k {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 11px; border: none; border-radius: 8px; background: none;
+    font: inherit; font-size: 13px; line-height: 1.3; text-align: left;
+    color: var(--kreide-weg); cursor: pointer;
+  }
+  .ko-menu-k:hover, .ko-menu-k:focus-visible { background: #ffffff12; color: var(--kreide); }
+  .ko-menu-k svg { display: block; flex: none; }
+  /* Der Vollzug steht an der Zeile, die ihn ausgelöst hat, nicht unten bei
+     `#fly-sagt` — das liegt hinter Thread und Schreibfeld und wäre bei einem
+     Abend mit ein paar Beiträgen außerhalb des Bildes. Dieselbe Regel wie beim
+     Absagen weiter oben: gemeldet wird da, wo gedrückt wurde. */
+  .ko-menu-k.getan { color: var(--gelb); }
 
   /* Der Pfeil, der beim Wischen hinter der Karte hervorkommt. Er ist ein Kind
      der Karte und wird gegenläufig verschoben — so bleibt er stehen, während
@@ -1612,10 +1660,14 @@
        langen Namen darauf, sichtbar erst beim Überfahren. Reserviert wird nur,
        gerückt wird nichts: die Kopfzeile ist linksbündig.
 
-       200 statt der früheren 170 px: mit dem fünften Schnellzeichen misst die
-       Leiste 199 px (headless gemessen, auf dem Mac mit Farb-Emoji eher 210).
-       Wächst SCHNELL noch einmal, wächst diese Zahl mit. */
-    .ko > .ko-kopf { padding-right: 200px; }
+       Die Zahl ist gewachsen, so oft die Leiste gewachsen ist: 170 → 200 (das
+       fünfte Schnellzeichen) → 264 (das Kopierzeichen). Headless misst die
+       Leiste jetzt 250 px; die 264 sind der Zuschlag für den Mac, wo die
+       Farb-Emoji breiter sitzen als die schwarzweißen der Prüfmaschine.
+       Wächst SCHNELL noch einmal, wächst diese Zahl mit — nachmessen mit
+       `ideas/pruefungen/ko-menu-rechner-probe.mjs`, das gibt Breite und
+       Reservierung nebeneinander aus. */
+    .ko > .ko-kopf { padding-right: 264px; }
   }
 
   /* Der Wähler: die ganze Tafel, ein Raster. Am Rechner hängt er unter der
@@ -4134,12 +4186,15 @@
       }
       z.appendChild(fuss);
 
-      /* Die Leiste und der aufgeschlagene Wähler stehen NACH dem Fuß im
-         Baum — auf dem Handy ist das ihre Reihenfolge auf dem Schirm, am
-         Rechner schwebt die Leiste ohnehin oben rechts. */
+      /* Die Leiste, der aufgeschlagene Wähler und das Menü stehen NACH dem Fuß
+         im Baum — auf dem Handy ist das ihre Reihenfolge auf dem Schirm, am
+         Rechner schwebt die Leiste ohnehin oben rechts und das Menü ist gar
+         nicht zu sehen. Der Wähler liegt zwischen beiden: er gehört an das
+         „+", das ihn aufmacht. */
       if (!k.geloescht) {
         z.appendChild(koLeiste(k));
         if (rePick === k.id) z.appendChild(koWaehler(k));
+        z.appendChild(koMenu(k));
       }
 
       if (k.antworten && k.antworten.length) {
@@ -4597,6 +4652,23 @@
     return s;
   };
 
+  /* Kopieren: zwei Blätter, das hintere lugt oben links hervor. Das Zeichen
+     ist so alt wie die Zwischenablage selbst und braucht darum kein Wort —
+     in der Leiste am Rechner steht es allein, im Menü am Handy mit
+     Beschriftung, weil dort die Nachbarn fehlen, die es erklären. */
+  const kopierIkon = () => {
+    const s = s_el('svg', {
+      width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none',
+      stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round',
+      'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false',
+    });
+    /* Das hintere Blatt nur als offene Ecke: ein zweites geschlossenes
+       Rechteck dahinter wird bei 15 px ein grauer Klecks. */
+    s.appendChild(s_el('path', { d: 'M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8' }));
+    s.appendChild(s_el('rect', { x: 8, y: 8, width: 12, height: 12, rx: 2 }));
+    return s;
+  };
+
   /* Drei Klappen am Thread, alle je Karte und höchstens eine offen: `rePick`
      ist die Id der Karte mit aufgeschlagener Emoji-Auswahl, `reWer` die Karte
      samt Art, deren Namen darunterstehen, `koAuf` die Karte, deren Leiste ein
@@ -4607,6 +4679,14 @@
   let rePick = null;
   let reWer = null;
   let koAuf = null;
+  /* Wie oft eine Leiste aufgegangen ist. Der Nachlauf, der nach dem Kopieren
+     zumacht (`koKopieren`), merkt sich den Stand beim Drücken und macht nur zu,
+     wenn er sich seither nicht gerührt hat. Ohne diesen Zähler löscht er, was
+     inzwischen ein zweiter langer Druck aufgemacht hat — auch an einer anderen
+     Karte, denn `koMenuZu` räumt den ganzen Baum ab. Die Id allein genügt
+     dafür nicht: derselbe lange Druck noch einmal auf dieselbe Karte lässt sie
+     unverändert und ginge durch. */
+  let koLauf = 0;
 
   /* Die Chips einer Karte in eine feste Reihenfolge bringen: die vier schnellen
      zuerst und immer an derselben Stelle, alles Weitere dahinter, so wie es der
@@ -4631,14 +4711,16 @@
     return p;
   }
 
-  /* Die Leiste, wie Teams sie über der Nachricht zeigt: vier Zeichen zum
-     Sofortdrücken, der Wähler für den Rest, der Antwortpfeil. Sie hängt an JEDER
-     Karte im Baum — auch an einem Foto, denn ein Foto IST hier ein Kommentar.
+  /* Die Leiste, wie Teams sie über der Nachricht zeigt: fünf Zeichen zum
+     Sofortdrücken, der Wähler für den Rest, Kopieren, Antworten. Sie hängt an
+     JEDER Karte im Baum — auch an einem Foto, denn ein Foto IST hier ein
+     Kommentar.
 
      Am Rechner erscheint sie beim Überfahren der Karte und schwebt oben rechts;
-     auf dem Handy legt der lange Druck sie frei, und der Antwortpfeil bleibt
-     dort verborgen, weil der Wisch ihn ersetzt. Beides ist eine Sache des
-     Stylesheets, nicht dieser Funktion — gebaut wird immer alles. */
+     auf dem Handy legt der lange Druck sie frei, und die beiden hinteren
+     Zeichen bleiben dort verborgen, weil das Menü darunter sie mit Worten
+     wiederholt (`koMenu`). Das ist eine Sache des Stylesheets, nicht dieser
+     Funktion — gebaut wird immer alles. */
   function koLeiste(k) {
     const bar = el('div', 'ko-bar');
     bar.setAttribute('role', 'group');
@@ -4654,6 +4736,14 @@
     auf.appendChild(reIkon());
     bar.appendChild(auf);
 
+    const kop = el('button', 'ko-bar-k');
+    kop.type = 'button';
+    kop.dataset.kopieren = k.id;
+    kop.title = kopierWort(k);
+    kop.setAttribute('aria-label', kopierWort(k));
+    kop.appendChild(kopierIkon());
+    bar.appendChild(kop);
+
     const zu = el('button', 'ko-bar-k');
     zu.type = 'button';
     zu.dataset.antwort = k.id;
@@ -4663,6 +4753,48 @@
     zu.appendChild(antwortIkon());
     bar.appendChild(zu);
     return bar;
+  }
+
+  /* Was am Kopieren hängt, hängt an der Karte: hat sie einen Satz, ist der
+     Satz gemeint; ist sie nichts als ein Foto, das Foto. Ein Kommentar mit
+     beidem gibt den Text — er ist das, was jemand geschrieben hat, und das
+     Bild steht ohnehin unter einer Adresse, die im Text mitkommt, sobald
+     jemand sie braucht. Zwei Einträge dafür wären ein Menü, dessen Länge von
+     der Karte abhängt, und niemand liest ein Menü zweimal. */
+  const kopierWort = k => ((k.text || '').trim() ? 'Text kopieren'
+                          : k.bild ? 'Bild kopieren'
+                          : 'Kopieren');
+
+  /* Das Menü unter der Leiste — nur am Handy sichtbar (siehe `.ko-menu` im
+     Stylesheet), gebaut wird es immer. Es steht als Letztes im Knoten, damit
+     der aufgeschlagene Wähler zwischen ihm und dem „+" liegt, das ihn
+     geöffnet hat.
+
+     „Antworten" steht hier ein zweites Mal neben dem Wisch nach rechts. Das
+     ist Absicht und widerspricht der alten Regel von den zwei Knöpfen für
+     einen Weg nur scheinbar: der Wisch ist unsichtbar: wer ihn nicht kennt,
+     findet ihn nie. Die Zeile im Menü ist sein sichtbarer Zwilling — nicht ein
+     zweiter Weg, sondern der erste, den man sieht. */
+  function koMenu(k) {
+    const m = el('div', 'ko-menu');
+    m.setAttribute('role', 'group');
+    m.setAttribute('aria-label', 'Antworten oder kopieren');
+
+    const ant = el('button', 'ko-menu-k');
+    ant.type = 'button';
+    ant.dataset.antwort = k.id;
+    ant.dataset.wer = k.autor;
+    ant.appendChild(antwortIkon());
+    ant.appendChild(el('span', null, 'Antworten'));
+    m.appendChild(ant);
+
+    const kop = el('button', 'ko-menu-k');
+    kop.type = 'button';
+    kop.dataset.kopieren = k.id;
+    kop.appendChild(kopierIkon());
+    kop.appendChild(el('span', null, kopierWort(k)));
+    m.appendChild(kop);
+    return m;
   }
 
   /* Der aufgeschlagene Wähler: die ganze Tafel, die vier schnellen darin
@@ -9100,6 +9232,7 @@
     const wahl = window.getSelection && getSelection();
     if (wahl && !wahl.isCollapsed) wahl.removeAllRanges();
     koAuf = id;
+    koLauf++;
     rePick = null;
     const t = $('fly-thread');
     t.querySelectorAll('.ko-repick').forEach(n => n.remove());
@@ -9162,7 +9295,7 @@
     if (ev.touches.length !== 1) return;
     /* Knöpfe behalten ihre eigene Bedeutung: wer ein Emoji zu lange hält,
        soll trotzdem das Emoji drücken und nicht die Leiste neu aufklappen. */
-    if (ev.target.closest('.ko-bar, .ko-repick, .ko-fuss, button, a')) return;
+    if (ev.target.closest('.ko-bar, .ko-repick, .ko-menu, .ko-fuss, button, a')) return;
     const karte = ev.target.closest('.ko');
     if (!karte) return;
     const id = Number(karte.dataset.id);
@@ -9225,15 +9358,148 @@
     if (matchMedia('(pointer: coarse)').matches) ev.preventDefault();
   });
 
-  /* Antworten — der eine Weg, den der Pfeil in der Leiste und der Wisch sich
-     teilen. Das Feld bleibt LEER: wer antwortet, schreibt seinen eigenen Satz;
-     wem die Antwort gilt, steht danach am Kopf der Karte und muss nicht in
-     ihrem Text stehen. */
+  /* Antworten — der eine Weg, den das Zeichen in der Leiste, die Zeile im Menü
+     und der Wisch sich teilen. Das Feld bleibt LEER: wer antwortet, schreibt
+     seinen eigenen Satz; wem die Antwort gilt, steht danach am Kopf der Karte
+     und muss nicht in ihrem Text stehen. */
   function koAntworten(id, wer) {
     flyModus = { art: 'antwort', id, wer };
     $('fly-feld').value = '';
     flyAnZeigen();
     $('fly-feld').focus();
+  }
+
+  /* Leiste und Menü zumachen, ohne den Baum anzufassen — derselbe Griff, den
+     der Klick-Zuhörer weiter unten tut, nur von Hand aufrufbar. */
+  function koMenuZu() {
+    koAuf = null;
+    $('fly-thread').querySelectorAll('.ko-auf').forEach(n => n.classList.remove('ko-auf'));
+  }
+
+  /* --- Kopieren ------------------------------------------------------------
+     Was am Handy verlorenging, als der lange Druck dem Textmarker weggenommen
+     wurde (siehe `user-select` im Stylesheet), kommt hier zurück — und für das
+     Foto sogar besser, als es der Textmarker je konnte.
+
+     Gemeldet wird AN DER ZEILE, die gedrückt wurde: `#fly-sagt` liegt hinter
+     Thread und Schreibfeld und wäre bei einem Abend mit ein paar Beiträgen
+     außerhalb des Bildes. Am Rechner trägt das Zeichen in der Leiste kein
+     Wort — dort meldet der `title`, und der Ruck der Farbe genügt.
+     --------------------------------------------------------------------- */
+  const KOPIERT_STEHT = 900;   // ms, so lange steht „Kopiert" an der Zeile
+
+  /* Ein Bild in die Ablage: holen, nach PNG wandeln, ablegen.
+
+     Alle drei Schritte können reihum ausfallen, und keiner davon ist ein
+     Fehler dieser Seite:
+
+       holen   — der Bilderbucket schickt kein `Access-Control-Allow-Origin`,
+                 solange dort keine CORS-Regel steht (siehe `wrangler.jsonc`)
+       wandeln — Safari und Chrome nehmen in der Ablage NUR `image/png`; hoch-
+                 geladen wird aber auch jpeg, webp und gif (`bildTyp` im
+                 Worker). Ein GIF verliert dabei seine Bewegung: was in der
+                 Ablage landet, ist sein erstes Bild. Ein bewegtes GIF gibt es
+                 in keiner Zwischenablage, die hier erreichbar wäre.
+       ablegen — `navigator.clipboard.write` fehlt in älteren Fassungen ganz
+
+     Fällt irgendetwas davon aus, wandert die ADRESSE als Text hinein. Das ist
+     kein stiller Rückzug: die Meldung sagt es, und eine Adresse, die man
+     weiterschicken kann, ist mehr als eine Fehlermeldung. */
+  async function bildInDieAblage(url) {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.write || !window.ClipboardItem) {
+        throw new Error('keine Ablage für Bilder');
+      }
+      /* Das Versprechen wird gebaut, aber NICHT abgewartet, und `write` läuft
+         im selben Zug wie der Druck. Das ist kein Stilmittel: Safari gibt die
+         Ablage nur her, solange die Hand des Nutzers noch am Werk ist, und
+         zwischen `await fetch(...)` und `write` liegt genau die Pause, die es
+         dafür zu lang findet. `ClipboardItem` nimmt darum ein Versprechen und
+         wartet selbst darauf — die Erlaubnis ist da schon erteilt. */
+      const png = (async () => {
+        const a = await fetch(url, { mode: 'cors', credentials: 'omit' });
+        if (!a.ok) throw new Error('Bild ' + a.status);
+        const blob = await a.blob();
+        return blob.type === 'image/png' ? blob : nachPng(blob);
+      })();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      return 'Bild kopiert';
+    } catch {
+      try {
+        await navigator.clipboard.writeText(url);
+        return 'Adresse kopiert';
+      } catch { return 'Ging nicht'; }
+    }
+  }
+
+  /* Umzeichnen über eine Leinwand. Die Quelle ist ein Blob und damit von
+     hier — die Leinwand bleibt sauber, und `toBlob` darf sie auslesen. Ein
+     `<img crossorigin>` an derselben Stelle täte es NICHT: das hinge wieder an
+     der CORS-Regel des Buckets, die der Blob schon hinter sich hat. */
+  async function nachPng(blob) {
+    const bild = await createImageBitmap(blob);
+    const c = document.createElement('canvas');
+    c.width = bild.width; c.height = bild.height;
+    c.getContext('2d').drawImage(bild, 0, 0);
+    if (bild.close) bild.close();
+    const png = await new Promise(f => c.toBlob(f, 'image/png'));
+    if (!png) throw new Error('Leinwand gab nichts her');
+    return png;
+  }
+
+  async function koKopieren(id, knopf) {
+    const k = flyFinden(id);
+    if (!k) return;
+    /* `k.text` und nicht der angezeigte Satz: der Anzeige fehlt bei einer
+       Linkvorschau der Link vorne (`ohneVorderenLink`), und genau den will,
+       wer einen Link kopiert. Kopiert wird, was jemand geschrieben hat. */
+    const satz = (k.text || '').trim();
+    let wort;
+    if (satz) {
+      try { await navigator.clipboard.writeText(satz); wort = 'Kopiert'; }
+      catch { wort = 'Ging nicht'; }
+    } else if (k.bild) {
+      wort = await bildInDieAblage(k.bild);
+    } else {
+      wort = 'Nichts da';
+    }
+
+    if (navigator.vibrate) navigator.vibrate(10);
+
+    /* Der Knopf kann in der Zwischenzeit aus dem Baum gefallen sein — eine
+       fremde Reaktion baut ihn neu, während das Bild noch geholt wird. Dann
+       gibt es nichts zu melden, und das ist in Ordnung: kopiert ist es
+       trotzdem.
+
+       Im Menü steht ein `span`, in der Leiste nicht: dort wechselt nur die
+       Farbe, und der `title` sagt das Wort für den, der stehen bleibt. */
+    /* Der Stand von JETZT, nicht von vorhin: das Holen des Bildes hat oben
+       gedauert, und in dieser Zeit kann schon ein anderer langer Druck gefallen
+       sein. Dann gehört die Leiste, die dann offen steht, nicht mehr zu diesem
+       Druck, und der Nachlauf lässt die Finger davon. */
+    const meinLauf = koLauf;
+    if (!knopf.isConnected) { if (meinLauf === koLauf) koMenuZu(); return; }
+    const wo = knopf.querySelector('span');
+    const vorherWort = wo && wo.textContent;
+    const vorherTitel = knopf.title;
+    const vorherHilfe = knopf.getAttribute('aria-label');
+    if (wo) wo.textContent = wort;
+    knopf.title = wort;
+    /* Der Vorleser bekommt dasselbe Wort wie das Auge. In der Leiste steht
+       kein Text, also trägt der Knopf ein `aria-label` — und solange das da
+       ist, liest der Vorleser den `title` gar nicht erst. Im Menü gibt es
+       keines: dort IST der ausgetauschte Text der Name des Knopfes. */
+    if (vorherHilfe !== null) knopf.setAttribute('aria-label', wort);
+    knopf.classList.add('getan');
+    setTimeout(() => {
+      if (knopf.isConnected) {
+        if (wo) wo.textContent = vorherWort;
+        knopf.title = vorherTitel;
+        if (vorherHilfe !== null) knopf.setAttribute('aria-label', vorherHilfe);
+        knopf.classList.remove('getan');
+      }
+      if (meinLauf === koLauf) koMenuZu();
+    }, KOPIERT_STEHT);
   }
 
   $('fly-thread').addEventListener('click', async ev => {
@@ -9260,10 +9526,15 @@
       });
     }
 
-    /* Dasselbe für die Leiste, die ein langer Druck aufgemacht hat: ein Tipp
-       daneben legt sie wieder weg. Am Rechner läuft das über den Zeiger und
-       diese Zeilen tun nichts. */
-    if (koAuf !== null && !ev.target.closest('.ko-bar, .ko-repick')) {
+    /* Dasselbe für die Leiste, die ein langer Druck aufgemacht hat, und für
+       das Menü darunter: ein Tipp daneben legt beide wieder weg. Am Rechner
+       läuft das über den Zeiger und diese Zeilen tun nichts.
+
+       `.ko-menu` MUSS in dieser Liste stehen: sonst räumt schon der Tipp auf
+       „Kopieren" die Klasse ab, und die Meldung „Kopiert" stünde an einer
+       Zeile, die es im selben Atemzug nicht mehr gibt. Zugemacht wird dann
+       weiter unten, von Hand, an der Stelle, die es angeht. */
+    if (koAuf !== null && !ev.target.closest('.ko-bar, .ko-repick, .ko-menu')) {
       koAuf = null;
       $('fly-thread').querySelectorAll('.ko-auf').forEach(n => n.classList.remove('ko-auf'));
     }
@@ -9304,11 +9575,21 @@
       return;
     }
 
-    /* Antworten: der Pfeil in der Leiste, am Rechner. Auf dem Handy liegt er
-       hinter dem Stylesheet, dort führt der Wisch hierher — beide durch
-       dieselbe Tür (`koAntworten`). */
+    /* Kopieren: das Zeichen in der Leiste am Rechner, die Zeile im Menü am
+       Handy. Es steht VOR dem Antworten, weil eine Kopierzeile im Menü auch
+       `[data-antwort]` treffen könnte, wenn hier je etwas verschachtelt
+       wird — die Reihenfolge kostet nichts und hält die Tür eng. */
+    const kop = ev.target.closest('[data-kopieren]');
+    if (kop) { koKopieren(Number(kop.dataset.kopieren), kop); return; }
+
+    /* Antworten: das Zeichen in der Leiste am Rechner, die Zeile im Menü und
+       der Wisch nach rechts am Handy — alle drei durch dieselbe Tür
+       (`koAntworten`). Zugemacht wird hier von Hand: das Menü hat sich oben
+       aus dem Schließzweig herausgenommen, und ein Menü, das nach seiner
+       eigenen Zeile stehen bleibt, wäre ein Menü, das nicht zugeht. */
     const ant = ev.target.closest('[data-antwort]');
     if (ant) {
+      koMenuZu();
       koAntworten(Number(ant.dataset.antwort), ant.dataset.wer);
       return;
     }
