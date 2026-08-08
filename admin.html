@@ -49,9 +49,14 @@
   }
 
   * { box-sizing: border-box; }
+  /* Kein `background-attachment: fixed` — das Kontor ist lang, und ein
+     fixierter Hintergrund ruckelt auf mobilem Safari beim Scrollen. */
   body {
     margin: 0; padding: 0 0 60px;
-    background: #14181a;
+    background:
+      radial-gradient(130% 45% at 50% -8%, #e8c76614, transparent 60%),
+      radial-gradient(120% 90% at 50% 0%, #1f2629, #14181a 52%, #0c0f11 100%);
+    background-color: #0c0f11;
     color: var(--kreide);
     font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     -webkit-text-size-adjust: 100%;
@@ -217,11 +222,13 @@
     border-radius: 6px;
     background:
       radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%) padding-box,
-      repeating-linear-gradient(97deg, #ffffff0a 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px) border-box,
-      linear-gradient(160deg, var(--holz), var(--holz-t) 60%, #2c1c0f) border-box;
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='120'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.011 0.18' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.02 0 0 0 0 0 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='420' height='120' filter='url(%23m)'/%3E%3C/svg%3E") border-box,
+      repeating-linear-gradient(97deg, #ffffff08 0 2px, transparent 2px 9px, #00000042 9px 10px, transparent 10px 23px) border-box,
+      linear-gradient(160deg, #7a5636, var(--holz) 30%, var(--holz-t) 68%, #2c1c0f) border-box;
     box-shadow:
-      0 30px 60px -24px #000d,
-      0 0 0 1px #0009 inset,
+      0 42px 70px -30px #000e,
+      0 14px 30px -18px #000c,
+      0 0 0 1px #000a inset,
       0 0 40px #0006 inset;
     padding: 18px 16px 20px 20px;
     /* KEINE Einblendung. Vorher lief hier ein `aufschlagen` von 0,28 s, aus
@@ -233,16 +240,40 @@
        deren ganzer Zweck es ist, schneller zwischen den Blättern zu kommen. */
   }
 
-  /* Das Korn der Tafel. Liegt über allem und fängt nichts ab. */
+  /* Das Korn der Tafel. Zwei fraktale Rauschschichten statt des alten
+     4/6-px-Punktrasters — aus der Nähe bleibt es damit Stein und wird kein
+     Gitter. Liegt über allem und fängt nichts ab.
+
+     `inset: 0` deckt genau den Schiefer und nicht das Holz: das Blatt trägt
+     seinen Rahmen als durchsichtigen `border`, und ein absolut gesetztes
+     Kind bezieht sich auf die PADDING-Box, also auf die Innenkante. */
   .blatt::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
     border-radius: 2px;
     background-image:
-      radial-gradient(#ffffff0d 1px, transparent 1.4px),
-      radial-gradient(#00000030 1px, transparent 1.6px);
-    background-size: 4px 4px, 6px 6px;
-    background-position: 0 0, 2px 3px;
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 0.97 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23k)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='340' height='340' filter='url(%23w)'/%3E%3C/svg%3E");
   }
+  /* Die Wischbahnen des letzten Abends, in EINER Schräge — niemand wischt
+     kreuzweise. Hier `inset: 0` und nicht `-8%` wie auf der Tafel drüben:
+     das Blatt hat kein `overflow: hidden`, ein überstehender Zug liefe also
+     über das Holz. */
+  .blatt::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .3;
+    border-radius: 2px;
+    background:
+      linear-gradient(112deg, transparent 12%, #ffffff12 22%, #ffffff26 30%, #ffffff0a 38%, transparent 46%),
+      linear-gradient(112deg, transparent 48%, #ffffff0e 58%, #ffffff1c 64%, transparent 74%),
+      linear-gradient(112deg, transparent 72%, #ffffff10 84%, transparent 94%),
+      radial-gradient(65% 30% at 24% 30%, #ffffff1f, transparent 70%),
+      radial-gradient(50% 22% at 74% 64%, #ffffff17, transparent 70%);
+    mix-blend-mode: screen;
+  }
+  /* Und der Inhalt darüber. Drüben (`index`, `statistik`) steht diese Regel
+     seit jeher; hier fehlte sie, weil das alte Korn dezent genug war, um
+     ohne sie durchzugehen. Eine aufhellende Wischschicht ist es nicht — sie
+     wüsche sonst die Schrift mit. */
+  .blatt > * { position: relative; z-index: 1; }
   .blatt[hidden] { display: none; }
 
   h1 {

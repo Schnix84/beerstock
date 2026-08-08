@@ -43,38 +43,70 @@
      Stelle daran zu denken. */
   [hidden] { display: none !important; }
   html, body { height: 100%; }
+  /* Kein `background-attachment: fixed` — diese Seite ist lang, und ein
+     fixierter Hintergrund ruckelt auf mobilem Safari beim Scrollen. */
   body {
     margin: 0; min-height: 100%;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     color: var(--kreide);
-    background: #14181a;
+    background:
+      radial-gradient(130% 55% at 50% -12%, #e8c76614, transparent 60%),
+      radial-gradient(120% 90% at 50% 0%, #1f2629, #14181a 52%, #0c0f11 100%);
+    background-color: #0c0f11;
     padding: clamp(10px, 3vw, 28px);
     -webkit-font-smoothing: antialiased;
   }
 
   /* --- Rahmen und Tafel: wortgleich von drüben ---------------------------- */
   .brett {
-    max-width: 760px; margin: 0 auto; border-radius: 6px;
+    position: relative;
+    max-width: 760px; margin: 0 auto; border-radius: 7px;
     padding: clamp(9px, 2.4vw, 15px);
     background:
-      repeating-linear-gradient(97deg, #ffffff0a 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
-      linear-gradient(160deg, var(--holz), var(--holz-t) 60%, #2c1c0f);
-    box-shadow: 0 30px 60px -24px #000d, 0 1px 0 #ffffff22 inset, 0 -2px 0 #0008 inset;
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='120'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.011 0.18' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.02 0 0 0 0 0 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='420' height='120' filter='url(%23m)'/%3E%3C/svg%3E"),
+      repeating-linear-gradient(97deg, #ffffff08 0 2px, transparent 2px 9px, #00000042 9px 10px, transparent 10px 23px),
+      linear-gradient(160deg, #7a5636, var(--holz) 30%, var(--holz-t) 68%, #2c1c0f);
+    box-shadow:
+      0 42px 70px -30px #000e, 0 14px 30px -18px #000c,
+      0 1px 0 #ffffff2e inset, 0 -2px 0 #0009 inset, 0 0 0 1px #1a100788;
+  }
+  .brett::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    border-radius: inherit; opacity: .6;
+    --naht: 22px;
+    background-image:
+      linear-gradient(45deg,  transparent 48.5%, #00000066 49.5%, #ffffff1c 51%, transparent 52.5%),
+      linear-gradient(-45deg, transparent 48.5%, #00000066 49.5%, #ffffff1c 51%, transparent 52.5%),
+      linear-gradient(-135deg,transparent 48.5%, #00000066 49.5%, #ffffff14 51%, transparent 52.5%),
+      linear-gradient(135deg, transparent 48.5%, #00000066 49.5%, #ffffff14 51%, transparent 52.5%);
+    background-size: var(--naht) var(--naht);
+    background-position: left top, right top, right bottom, left bottom;
+    background-repeat: no-repeat;
   }
   .tafel {
     position: relative; border-radius: 3px; overflow: hidden;
     padding: clamp(18px, 5vw, 30px) clamp(15px, 4.5vw, 26px) clamp(20px, 4vw, 28px);
     background:
       radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
-    box-shadow: 0 0 0 1px #0009 inset, 0 14px 30px -14px #000a inset;
+    box-shadow: 0 0 0 1px #000a inset, 0 16px 34px -14px #000b inset, 0 -10px 26px -18px #0009 inset;
   }
   .tafel::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
     background-image:
-      radial-gradient(#ffffff0d 1px, transparent 1.4px),
-      radial-gradient(#00000030 1px, transparent 1.6px);
-    background-size: 4px 4px, 6px 6px;
-    background-position: 0 0, 2px 3px;
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 0.97 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23k)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='340' height='340' filter='url(%23w)'/%3E%3C/svg%3E");
+  }
+  /* Die Wischbahnen. Neu auf dieser Seite — drüben gab es sie schon als
+     `::after`, hier ist der Platz bisher leer geblieben. */
+  .tafel::after {
+    content: ""; position: absolute; inset: -8%; pointer-events: none; opacity: .3;
+    background:
+      linear-gradient(112deg, transparent 12%, #ffffff12 22%, #ffffff26 30%, #ffffff0a 38%, transparent 46%),
+      linear-gradient(112deg, transparent 48%, #ffffff0e 58%, #ffffff1c 64%, transparent 74%),
+      linear-gradient(112deg, transparent 72%, #ffffff10 84%, transparent 94%),
+      radial-gradient(65% 30% at 24% 30%, #ffffff1f, transparent 70%),
+      radial-gradient(50% 22% at 74% 64%, #ffffff17, transparent 70%);
+    mix-blend-mode: screen;
   }
   .tafel > * { position: relative; z-index: 1; }
   .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }

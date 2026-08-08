@@ -128,55 +128,141 @@
 
   *, *::before, *::after { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
+  /* Der Raum, in dem die Tafel haengt: von oben faellt warmes Licht ein
+     (derselbe Bernstein wie die gelbe Kreide, kaum sichtbar - aber die Szene
+     wird warm), nach unten laeuft er ins Dunkel. Reine Deko: alles
+     Angeschriebene steht auf dem Schiefer, nicht auf dem Raum, Kontraste
+     ruehrt es also nicht an.
+
+     KEIN `background-attachment: fixed` - die Seite ist lang, und fixierte
+     Hintergruende ruckeln auf mobilem Safari beim Scrollen. */
   body {
     margin: 0; min-height: 100%;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     color: var(--kreide);
-    background: #14181a;
+    background:
+      radial-gradient(130% 55% at 50% -12%, #e8c76614, transparent 60%),
+      radial-gradient(120% 90% at 50% 0%, #1f2629, #14181a 52%, #0c0f11 100%);
+    background-color: #0c0f11;
     padding: clamp(10px, 3vw, 28px);
     -webkit-font-smoothing: antialiased;
   }
 
-  /* --- Der Holzrahmen ----------------------------------------------------- */
+  /* --- Der Holzrahmen -----------------------------------------------------
+     Vier Schichten, jede mit einer Aufgabe: die Maserung (ein horizontal
+     gestrecktes fraktales Rauschen als eingebettetes SVG - kein Netz, die
+     Seite bleibt eine geschlossene Datei), darueber die groben Jahresringe
+     wie gehabt, der Grundverlauf, und ganz oben die Lichtkante. */
   .brett {
-    max-width: 520px; margin: 0 auto; border-radius: 6px;
+    position: relative;
+    max-width: 520px; margin: 0 auto; border-radius: 7px;
     padding: clamp(9px, 2.4vw, 15px);
     background:
-      repeating-linear-gradient(97deg, #ffffff0a 0 2px, transparent 2px 7px, #0006 7px 8px, transparent 8px 19px),
-      linear-gradient(160deg, var(--holz), var(--holz-t) 60%, #2c1c0f);
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='120'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.011 0.18' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.02 0 0 0 0 0 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='420' height='120' filter='url(%23m)'/%3E%3C/svg%3E"),
+      repeating-linear-gradient(97deg, #ffffff08 0 2px, transparent 2px 9px, #00000042 9px 10px, transparent 10px 23px),
+      linear-gradient(160deg, #7a5636, var(--holz) 30%, var(--holz-t) 68%, #2c1c0f);
     box-shadow:
-      0 30px 60px -24px #000d,
-      0 1px 0 #ffffff22 inset,
-      0 -2px 0 #0008 inset;
+      0 42px 70px -30px #000e,
+      0 14px 30px -18px #000c,
+      0 1px 0 #ffffff2e inset,
+      0 -2px 0 #0009 inset,
+      0 0 0 1px #1a100788;
+  }
+  /* Die Gehrung: je Ecke eine diagonale Naht von der Aussen- zur Innenkante,
+     45 Grad, wie sie ein Rahmen wirklich hat. Vier no-repeat-Verlaeufe in
+     einem Pseudo; Kantenlaenge = Rahmenbreite. */
+  .brett::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    border-radius: inherit; opacity: .6;
+    --naht: 22px;
+    background-image:
+      linear-gradient(45deg,  transparent 48.5%, #00000066 49.5%, #ffffff1c 51%, transparent 52.5%),
+      linear-gradient(-45deg, transparent 48.5%, #00000066 49.5%, #ffffff1c 51%, transparent 52.5%),
+      linear-gradient(-135deg,transparent 48.5%, #00000066 49.5%, #ffffff14 51%, transparent 52.5%),
+      linear-gradient(135deg, transparent 48.5%, #00000066 49.5%, #ffffff14 51%, transparent 52.5%);
+    background-size: var(--naht) var(--naht);
+    background-position: left top, right top, right bottom, left bottom;
+    background-repeat: no-repeat;
   }
   .tafel {
     position: relative; border-radius: 3px; overflow: hidden;
     padding: clamp(18px, 5vw, 30px) clamp(15px, 4.5vw, 26px) clamp(18px, 4vw, 26px);
     background:
       radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
-    box-shadow: 0 0 0 1px #0009 inset, 0 14px 30px -14px #000a inset;
+    box-shadow: 0 0 0 1px #000a inset, 0 16px 34px -14px #000b inset, 0 -10px 26px -18px #0009 inset;
   }
-  /* Schiefer ist nie glatt: feines Korn plus die Schlieren vom letzten Wischen */
+  /* Schiefer ist nie glatt. Zwei Rauschschichten statt des alten
+     4/6-px-Punktrasters: hell gesprenkelt und dunkel gewoelkt, beide
+     fraktal - aus der Naehe bleibt es damit Stein und wird kein Gitter. */
   .tafel::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
     background-image:
-      radial-gradient(#ffffff0d 1px, transparent 1.4px),
-      radial-gradient(#00000030 1px, transparent 1.6px);
-    background-size: 4px 4px, 6px 6px;
-    background-position: 0 0, 2px 3px;
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 0.97 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23k)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='340' height='340' filter='url(%23w)'/%3E%3C/svg%3E");
   }
+  /* Die Wischbahnen des letzten Abends. Drei Zuege in DERSELBEN Schraege -
+     niemand wischt kreuzweise -, einer davon kraeftiger: der letzte.
+     `mix-blend: screen`, damit sie AUFHELLEN wie Kreidestaub, den der
+     Schwamm verteilt hat. `inset: -8%` laesst sie ueber den Rand laufen;
+     das `overflow: hidden` der Tafel schneidet sie sauber ab. */
   .tafel::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .22;
+    content: ""; position: absolute; inset: -8%; pointer-events: none; opacity: .3;
     background:
-      radial-gradient(60% 30% at 18% 34%, #ffffff28, transparent 70%),
-      radial-gradient(45% 22% at 76% 62%, #ffffff20, transparent 70%),
-      radial-gradient(70% 18% at 50% 88%, #ffffff14, transparent 70%);
+      linear-gradient(112deg, transparent 12%, #ffffff12 22%, #ffffff26 30%, #ffffff0a 38%, transparent 46%),
+      linear-gradient(112deg, transparent 48%, #ffffff0e 58%, #ffffff1c 64%, transparent 74%),
+      linear-gradient(112deg, transparent 72%, #ffffff10 84%, transparent 94%),
+      radial-gradient(65% 30% at 24% 30%, #ffffff1f, transparent 70%),
+      radial-gradient(50% 22% at 74% 64%, #ffffff17, transparent 70%);
     mix-blend-mode: screen;
   }
   .tafel > * { position: relative; z-index: 1; }
 
   /* Alles Angeschriebene bekommt denselben leichten Kreidesaum. */
   .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
+
+  /* --- Das Schild ----------------------------------------------------------
+     Der Name der Wirtschaft, klein und gesperrt, wie oben in eine Tafel
+     geritzt - und rechts, was ein Wirt eben dazuschreibt: der Tag.
+
+     Der Name ist damit von der Ueberschrift der Bestenliste HIERHER
+     gewandert; die heisst jetzt "Die Tafel". Zweimal "Wer hat kalt" auf
+     einem Brett waere die Sorte Wiederholung, die man erst sieht, wenn sie
+     steht. Aus demselben Grund traegt der Blockkopf unten kein Datum mehr,
+     sondern "Stand von heute" - das Datum steht jetzt hier oben.
+
+     Der Wirtshausname bricht nie in sich: wird es eng, faellt die rechte
+     Seite als Ganzes darunter und bleibt rechts. */
+  .schild-zeile {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: 2px 10px;
+    margin-bottom: clamp(10px, 3vw, 16px);
+  }
+  .schild {
+    font-family: var(--hand); font-size: 13px; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--kreide-matt); opacity: .85;
+    transform: rotate(-.4deg); white-space: nowrap;
+  }
+  .schild-rechts {
+    display: flex; align-items: baseline; gap: 9px; margin-left: auto;
+    font-family: var(--hand); font-size: 12px; color: var(--kreide-weg);
+    white-space: nowrap;
+  }
+  /* Der Punkt sagt die WAHRHEIT ueber die Leitung, er ist keine Zierde:
+     `stromStand()` haengt ihn an `stehtDieLeitung()`. Ein Punkt, der "live"
+     pulst, waehrend die WebSocket unten ist, waere derselbe Fehler wie ein
+     Notruf, der "live" behauptet und seit vierzig Minuten steht - und gegen
+     genau den ist hier eine ganze Dreizustands-Mechanik gebaut worden. */
+  /* Beide werden per `hidden` geschaltet und tragen deshalb ausdrücklich
+     ihre Regel dazu — die Hausregel aus dem Kontor-Umbau: wer `hidden`
+     benutzt, schreibt `[hidden] { display: none }` mit, sonst schlägt
+     irgendwann ein `display` von irgendwoher die Vorgabe des Browsers. */
+  .schild-strom[hidden], .schild-punkt[hidden] { display: none; }
+  .puls-punkt {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--gruen); box-shadow: 0 0 7px #7fc08c88;
+    animation: atmen 2.6s ease-in-out infinite; vertical-align: 1px; margin-right: 4px;
+  }
+  @keyframes atmen { 50% { opacity: .45; } }
 
   /* --- Kopf: der Erste ---------------------------------------------------- */
   .krone-zeile {
@@ -288,26 +374,52 @@
   .hero-fuss .pkt { opacity: .45; }
   .zahlen { font-variant-numeric: tabular-nums; }
 
-  /* Die gedruckte Skala von eiskalt bis pisswarm, mit Kreide nachgezogen:
-     sie macht sichtbar, warum das Wort daneben gerade so heißt. */
-  .skala {
-    position: relative; height: 5px; border-radius: 3px; margin: 10px 0 0;
-    opacity: .8;
-    background: linear-gradient(90deg,
-      #4f9ed6 0 10%, #6fb08a 10% 30%, #93b06a 30% 45%,
-      #d7bb6a 45% 60%, #dd9a63 60% 80%, #d9705f 80% 100%);
-    box-shadow: 0 0 0 1px #ffffff1f inset;
-  }
+  /* Die Skala von eiskalt bis pisswarm: sie macht sichtbar, warum das Wort
+     daneben gerade so heisst.
+
+     Sie war ein GEDRUCKTER Verlauf - der eine glatte Fremdkoerper auf einem
+     Brett, auf dem sonst alles von Hand steht. Jetzt sechs Zuege mit der
+     Breitseite der Kreide, jeder in seiner matten Farbe, keiner exakt auf
+     der Linie des Nachbarn.
+
+     Die Grenzen sind DIESELBEN wie vorher (10/30/45/60/80 Prozent), und das
+     ist keine Kosmetik: die Nadel steht bei `(temperatur / 20) * 100 %`, und
+     verschoebe man die Faerbung, zeigte sie auf die falsche Farbe. Die
+     runden Enden der Zuege reichen dabei bis rund 0,5 und 99,5 Prozent, die
+     Skala hat also weiterhin an beiden Anschlaegen Farbe. */
+  .skala { position: relative; margin: 10px 0 0; }
+  .skala svg { display: block; width: 100%; height: 13px; }
+  .skala-zug { stroke-linecap: round; opacity: .8; }
   .nadel {
-    position: absolute; top: -5px; left: 50%; width: 2px; height: 15px;
+    position: absolute; top: -4px; left: 50%; width: 2px; height: 17px;
     background: var(--kreide); border-radius: 2px; transform: translateX(-50%);
-    box-shadow: 0 0 4px #fff9; opacity: 0;
+    box-shadow: 0 0 5px #fff9, 0 0 12px #ffffff40; opacity: 0;
     transition: left .5s cubic-bezier(.2,.7,.3,1), opacity .4s;
   }
 
+  /* Der Trenner zwischen zwei Abschnitten war eine gerade Linie mit weichen
+     Enden. Ein Wirt zieht sie mit der Hand: leicht wellig, und keine zwei
+     gleich. Drei Pfadvarianten wechseln ueber `nth-of-type` durch.
+
+     Als Hintergrundbild und nicht als eingehaengtes SVG, damit im Markup
+     ueberall weiter schlicht `<div class="strich-linie">` steht - keine
+     einzige Stelle muss angefasst werden. */
   .strich-linie {
-    height: 1px; margin: clamp(12px, 3vw, 18px) 0 0;
-    background: linear-gradient(90deg, transparent, #ffffff40 8%, #ffffff40 92%, transparent);
+    height: 9px; margin: clamp(12px, 3vw, 18px) 0 0;
+    background: no-repeat center / 100% 100%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='9' preserveAspectRatio='none'%3E%3Cpath d='M4 5.5 C 60 3.5, 130 7, 200 4.5 S 320 6, 356 4' fill='none' stroke='%23ffffff' stroke-opacity='.24' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+  }
+  /* Die beiden anderen Pfade hängen am ELTERNBLOCK und nicht an
+     `:nth-of-type`. Der Grund ist, dass die drei Trenner keine Geschwister
+     sind: einer steht frei auf der Tafel, die anderen beiden schliessen je
+     einen Abschnitt ab. `nth-of-type` zaehlt aber nur unter Geschwistern —
+     gemessen kam damit dreimal derselbe Strich heraus, also gar keine
+     Variante. */
+  #rad-block .strich-linie {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='9' preserveAspectRatio='none'%3E%3Cpath d='M4 4 C 80 6.5, 150 3, 230 5.5 S 330 3.5, 356 5.5' fill='none' stroke='%23ffffff' stroke-opacity='.24' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+  }
+  #termin-block .strich-linie {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='9' preserveAspectRatio='none'%3E%3Cpath d='M4 6 C 50 4, 120 6.5, 190 4 S 300 6.5, 356 4.5' fill='none' stroke='%23ffffff' stroke-opacity='.24' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
   }
 
   /* --- Das Glücksrad: Flaschendrehen ---------------------------------------
@@ -829,7 +941,7 @@
      Also bleibt ein Ring stehen, statt zu verschwinden: derselbe Zustand,
      nur ohne Takt. Der zweite Ring und der Radararm gehen ganz. */
   @media (prefers-reduced-motion: reduce) {
-    .nr-marke-live::before { animation: none; }
+    .nr-marke-live::before, .puls-punkt { animation: none; }
     .karte-live .karte-streu::after,
     .karte-live .karte-nadel::after { display: none; }
     .karte-live .karte-nadel::before {
@@ -2274,6 +2386,22 @@
   <div class="brett">
     <div class="tafel">
 
+      <!-- ============ Das Schild ========================================
+           Der Name des Hauses, oben in die Tafel geritzt, und rechts der
+           Tag. Der Punkt daneben sagt, ob die Leitung steht — gesetzt von
+           `stromStand()`, nicht fest angeschrieben.
+           ============================================================= -->
+      <div class="schild-zeile">
+        <div class="schild kr">Wer hat kalt</div>
+        <div class="schild-rechts kr">
+          <span class="schild-strom" id="schild-strom" hidden>
+            <span class="puls-punkt" aria-hidden="true"></span>live</span>
+          <span class="schild-punkt" id="schild-punkt" aria-hidden="true" hidden
+                style="opacity:.45">·</span>
+          <span id="schild-datum"></span>
+        </div>
+      </div>
+
       <!-- ============ Der Siegerplatz =================================== -->
       <div class="hero-oben">
         <div class="hero-text">
@@ -2401,7 +2529,17 @@
         <span class="pkt">·</span>
         <span id="stand">wird geladen</span>
       </div>
-      <div class="skala" aria-hidden="true"><span class="nadel" id="nadel"></span></div>
+      <div class="skala" aria-hidden="true">
+        <svg viewBox="0 0 300 13" preserveAspectRatio="none">
+          <line class="skala-zug" x1="4"   y1="6.8" x2="30"  y2="6.2" stroke="#4f9ed6" stroke-width="5"/>
+          <line class="skala-zug" x1="33"  y1="6.1" x2="90"  y2="6.9" stroke="#6fb08a" stroke-width="5"/>
+          <line class="skala-zug" x1="93"  y1="7"   x2="135" y2="6.1" stroke="#93b06a" stroke-width="5"/>
+          <line class="skala-zug" x1="138" y1="6"   x2="180" y2="6.8" stroke="#d7bb6a" stroke-width="5"/>
+          <line class="skala-zug" x1="183" y1="6.9" x2="240" y2="6.2" stroke="#dd9a63" stroke-width="5"/>
+          <line class="skala-zug" x1="243" y1="6.2" x2="296" y2="7"   stroke="#d9705f" stroke-width="5"/>
+        </svg>
+        <span class="nadel" id="nadel"></span>
+      </div>
 
       <div class="strich-linie"></div>
 
@@ -2559,8 +2697,13 @@
 
       <!-- ============ Die Karte ========================================= -->
       <section class="block" id="block" hidden>
+        <!-- „Die Tafel" und nicht mehr „Wer hat kalt": der Name des Hauses
+             steht seit dem Schild ganz oben, und zweimal derselbe Name auf
+             einem Brett ist einer zu viel. Aus demselben Grund steht rechts
+             kein Datum mehr, sondern wofür die Liste steht — das Datum hat
+             das Schild übernommen. -->
         <div class="block-kopf kr">
-          <span class="titel">Wer hat kalt</span>
+          <span class="titel">Die Tafel</span>
           <span class="kopf-neben">
             <!-- Der Weg zu den Bildern. Er hängt an DIESEM Block, weil dieser
                  Block die Daten sind: die Bilder sind seine Vorgeschichte.
@@ -2568,7 +2711,7 @@
                  Ersten, ein Verlauf über Wochen ist Innenraum, und ein Link
                  auf lauter 401er wäre eine Einladung ins Leere. -->
             <button class="neben" id="verlauf-auf" type="button" hidden>Statistiken</button>
-            <span class="datum" id="block-datum"></span>
+            <span class="datum">Stand von heute</span>
           </span>
         </div>
 
@@ -3294,7 +3437,21 @@
      Ein Bogen je Melder, die Länge proportional zum Gewicht. 0° ist oben,
      dorthin zeigt der Flaschenhals im Ruhezustand; gerechnet wird im
      Uhrzeigersinn, in die Richtung, in die man eine Flasche anstößt. */
-  const RAD_KREIDE = ['#e8c766', '#cfd6cd', '#93a09a', '#e8c76699', '#cfd6cd88'];
+  /* Die Bögen tragen Farbe. Vorher waren sie gelbe und graue Kreide in vier
+     Abstufungen — bei fünf Meldern lagen zwei Grautöne nebeneinander, und
+     wer welchen Bogen hat, war nur noch am Namen abzulesen.
+
+     Genommen ist die im Sechs-Prüfungen-Lauf validierte Kreidereihe, wortgleich
+     und in derselben Ordnung wie `Bilder.aufsetzen({ reihe: … })` in
+     `statistik.html` und `admin.html`. Zwei verschiedene Grüns auf zwei
+     Schiefertafeln desselben Hauses wären ein Fehler.
+
+     Was das NICHT ist: eine feste Zuordnung Mensch → Farbe. Der Index kommt
+     hier aus der Reihenfolge des Feldes, drüben aus der Reihenfolge der
+     Kurven — dieselbe Person kann auf beiden Seiten verschieden gefärbt sein.
+     Das zu binden hieße, dem Worker einen stabilen Index abzuverlangen, und
+     das ist eine eigene Änderung. */
+  const RAD_KREIDE = ['#399c69', '#b29126', '#b15041', '#4c9bcb', '#994d96', '#8a938f'];
   let radFelder = [];   // Segmentgrenzen des zuletzt gezeichneten Rades
   let radStand = 0;     // aktueller Drehwinkel, damit die nächste Drehung anschließt
 
@@ -5008,8 +5165,6 @@
 
   function zeichneFeld(feld, los, termine, notrufe) {
     $('block').hidden = false;
-    $('block-datum').textContent =
-      new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
     letztesFeld = feld;
     heuteBei = los && los.gewinner || null;
     heuteStatus = los && los.status || null;
@@ -9895,6 +10050,7 @@
 
     s.addEventListener('open', () => {
       wsVersuch = 0;
+      stromStand();
       // Zwischen Abriss und Rückkehr kann etwas passiert sein, wovon keine
       // Marke mehr kommt: einmal nachziehen.
       hole(true);
@@ -9909,7 +10065,7 @@
       if (!d || !Array.isArray(d.marken) || d.von === TAB) return;
       angestossen(d.marken);
     });
-    s.addEventListener('close', () => { if (ws === s) { ws = null; planeStrom(); } });
+    s.addEventListener('close', () => { if (ws === s) { ws = null; stromStand(); planeStrom(); } });
     s.addEventListener('error', () => { try { s.close(); } catch {} });
   }
 
@@ -9922,6 +10078,19 @@
   }
 
   const stehtDieLeitung = () => !!ws && ws.readyState === WebSocket.OPEN;
+
+  /* Der Punkt im Schild. Er zeigt NUR, was wahr ist: steht die Leitung, steht
+     „live" da und der Punkt atmet; ist sie unten, verschwindet beides
+     wortlos. Kein „offline"-Wort — dass gerade nichts von selbst hereinkommt,
+     ist keine Nachricht, sondern die Abwesenheit einer.
+
+     Auch der Mittelpunkt geht mit: ohne ihn bliebe an einer stillen Leitung
+     ein „·" vor dem Datum stehen, das nichts mehr trennt. */
+  function stromStand() {
+    const an = stehtDieLeitung();
+    $('schild-strom').hidden = !an;
+    $('schild-punkt').hidden = !an;
+  }
 
   /* Die Seite steht oft lange offen - auf einem Tisch, auf einem Tablet. Also
      nachfassen, aber nur, solange jemand hinsieht: ein Hintergrundtab fragt
@@ -10063,6 +10232,21 @@
      tippt jemand dann auf „Anmelden", zieht die Tat im Blatt Formular und
      Tafel von Hand nach. */
   magicEinloesen();
+
+  /* Der Tag im Schild. Er steht SOFORT da und nicht erst mit den Daten:
+     das Schild ist die Aufschrift des Bretts, nicht sein Inhalt, und es ist
+     auch von draussen zu sehen. Mit Wochentag, weil man beim Blick auf eine
+     Kneipentafel „Freitag" wissen will und nicht „der Achte". */
+  {
+    /* In zwei Zügen und nicht in einem: `weekday: 'short'` liefert im
+       Deutschen „Sa.", mit Punkt, und in der zusammengesetzten Form obendrein
+       ein Komma dahinter („Sa., 8. August"). Auf einer Tafel steht „Sa · 8.
+       August" — der Punkt wandert weg, das Komma wird zum Trennpunkt. */
+    const heute = new Date();
+    $('schild-datum').textContent =
+      heute.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '') +
+      ' · ' + heute.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+  }
 
   Promise.resolve()
     .then(() => merke() && !meinName && !brauchtNamen ? werBinIch() : null)
