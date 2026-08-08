@@ -2624,6 +2624,55 @@
     color: var(--gelb); background: #e8c76614; border: 1px dashed #e8c76655; border-radius: 4px;
   }
   .ch-jahrgang:hover { background: #e8c7661f; }
+
+  /* --- Die Ankunft von den drei eigenen Seiten ------------------------------
+     Wer Statistiken, Kontor oder Hausanschluss am Finger nach unten wegwischt,
+     soll dabei sehen, was darunter zum Vorschein kommt — wie beim Deckel, den
+     man wegwischt. Nur liegt hier nichts darunter: die drei sind eigene
+     Dokumente, und was frei wurde, war bisher blanker Hintergrund.
+
+     Ein dokumentübergreifender View Transition legt die Tafel wirklich
+     darunter. Sie wird gerendert und bleibt STEHEN, das Blatt darüber fährt
+     allein die restliche Strecke nach unten. Der Schnappschuss der alten Seite
+     ist dabei genau so verschoben, wie der Finger sie hinterlassen hat — die
+     Bewegung läuft also ohne Absatz weiter, und drüben entfällt das eigene
+     Wegfahren.
+
+     EIN IFRAME WÄRE DER ANDERE WEG GEWESEN und war es nicht wert: die Tafel
+     öffnet beim Start einen WebSocket zum Verteiler und registriert den
+     Service Worker. Beides ein zweites Mal, auf jeder der drei Seiten, für
+     300 ms Bild — das zahlt der Verteiler, nicht die Optik.
+
+     SCHARF NUR FÜR DIESE EINE GESTE. `navigation: auto` fängt sonst jeden
+     gleichherkünftigen Aufruf dieser Seite, und der Weg VON der Tafel zu den
+     dreien, der Zurück-Knopf des Browsers und `./?wrapped=…` sollen nichts
+     davon abbekommen. Die Unterseite legt darum vor dem Aufruf eine einmalige
+     Marke in den `sessionStorage`; `pagereveal` im Skript nimmt sie, hängt
+     `.wischt-rein` ans `<html>` und bricht jeden Wechsel ohne Marke sofort ab.
+     Warum eine Marke im Speicher und nicht `viewTransition.types`, wie es die
+     Norm vorsieht: das Set kommt hier gemessen LEER an — die Begründung steht
+     drüben in `statistik.html` bei „Der Wechsel hinüber".
+
+     `mix-blend-mode: normal` an beiden Seiten ist Pflicht, keine Kosmetik: die
+     Vorgabe des Browsers ist `plus-lighter`, damit sich zwei ineinander
+     blendende Bilder sauber addieren. Hier soll aber gerade nichts durch-
+     scheinen — das Blatt liegt VOR der Tafel und deckt sie ab, bis es weg ist.
+     --------------------------------------------------------------------- */
+  @view-transition { navigation: auto; }
+
+  html.wischt-rein::view-transition-group(root) { animation: none; }
+  html.wischt-rein::view-transition-old(root),
+  html.wischt-rein::view-transition-new(root) {
+    mix-blend-mode: normal;
+  }
+  /* Die neue Seite liegt still darunter. */
+  html.wischt-rein::view-transition-new(root) {
+    animation: none; z-index: 1;
+  }
+  html.wischt-rein::view-transition-old(root) {
+    z-index: 2; animation: raus-runter .3s cubic-bezier(.32, .72, 0, 1) both;
+  }
+  @keyframes raus-runter { to { transform: translateY(100%); } }
 </style>
 </head>
 <!-- `draussen` steht von Anfang an da und faellt erst weg, wenn ein Token
@@ -9106,6 +9155,42 @@
      `history.back()` zurück (`ideas/pruefungen/deckel-rueckweg-probe.mjs`); auf
      dem Gerät tut es das mal so, mal so. Beide Fälle sind jetzt bedient. */
   window.addEventListener('pageshow', ev => { if (ev.persisted) deckelWegNehmen(); });
+
+  /* Das Sieb für den Wechsel von drüben. Das Bild dazu steht oben im Stil bei
+     `@view-transition`; hier wird nur entschieden, WANN es überhaupt gilt.
+
+     `navigation: auto` fängt jeden gleichherkünftigen Aufruf dieser Seite —
+     den Zurück-Knopf des Browsers, `./?wrapped=…`, den Weg von einer
+     Unterseite ohne Wisch. Alles ohne die Marke wird darum sofort abgebrochen
+     und sieht aus wie immer.
+
+     DIE MARKE WIRD IMMER GENOMMEN, auch wenn nichts daraus folgt — dieselbe
+     Regel wie beim Deckel gleich darüber, und aus demselben Grund: eine Marke,
+     die liegen bleibt, geht irgendwann bei einem Aufbau hoch, der mit diesem
+     Weg nichts zu tun hat. Und wie dort räumt `pageshow`/`persisted` sie weg,
+     denn holt der Browser die Tafel aus seinem Vor-/Zurück-Speicher, läuft
+     dieses Skript kein zweites Mal.
+
+     Die Klasse fällt nach dem Wechsel wieder ab. `finished` und nicht
+     `ready`: bis dahin laufen die Bahnen noch, und nähme man sie vorher weg,
+     stünde das Blatt mitten in der Fahrt. */
+  window.addEventListener('pageshow', ev => { if (ev.persisted) sessionStorage.removeItem('beerstock-wisch-raus'); });
+  window.addEventListener('pagereveal', ev => {
+    let gewischt = null;
+    try {
+      gewischt = sessionStorage.getItem('beerstock-wisch-raus');
+      sessionStorage.removeItem('beerstock-wisch-raus');
+    } catch (e) { /* Privatmodus */ }
+    if (!ev.viewTransition) return;
+    /* `ready` platzt mit einem AbortError, sobald abgebrochen wird — und eine
+       unbeachtete Ablehnung steht rot in der Konsole. Bei jedem Aufruf der
+       Tafel. Also ausdrücklich weggefangen, hier wie beim Abräumen unten. */
+    ev.viewTransition.ready.catch(() => {});
+    if (!gewischt) { ev.viewTransition.skipTransition(); return; }
+    const abraeumen = () => document.documentElement.classList.remove('wischt-rein');
+    document.documentElement.classList.add('wischt-rein');
+    ev.viewTransition.finished.then(abraeumen, abraeumen);
+  });
 
   function dkSagt(text, schlecht) {
     const p = $('dk-sagt');

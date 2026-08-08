@@ -320,6 +320,11 @@
   html.zieht .brett { transition: none; }
   @media (prefers-reduced-motion: reduce) { .brett { transition: none; } }
 
+  /* Beim Hinauswischen liegt die Tafel schon darunter. Das Bild dazu baut die
+     Ankunftsseite (`index.html`, `@view-transition`); hier steht nur die
+     Zustimmung. Ausführlicher in `statistik.html`. */
+  @view-transition { navigation: auto; }
+
   .zurueck {
     display: inline-block; color: var(--kreide-weg); font-size: 13px;
     text-decoration: none; border-bottom: 1px dashed #ffffff2e; padding-bottom: 1px;
@@ -838,6 +843,18 @@
 
     const raus = () => document.querySelector('.zur-tafel').click();
 
+    // Der Wechsel hinüber, samt der Marke, die ihn auf den Wisch eingrenzt —
+    // die lange Fassung steht in `statistik.html`, samt der Begründung, warum
+    // es eine Marke im Speicher ist und nicht `viewTransition.types`.
+    const kannWechseln = () => 'onpagereveal' in window && !ohneTakt.matches;
+    window.addEventListener('pagereveal', ev => {
+      if (!ev.viewTransition) return;
+      // `ready` platzt beim Abbrechen mit einem AbortError; unbeachtet stünde
+      // er rot in der Konsole. Dieselbe Zeile steht drüben in `index.html`.
+      ev.viewTransition.ready.catch(() => {});
+      ev.viewTransition.skipTransition();
+    });
+
     function zurueckfedern() {
       document.documentElement.classList.remove('zieht');
       zieher.style.transform = '';
@@ -878,6 +895,12 @@
       document.documentElement.classList.remove('zieht');
       if (navigator.vibrate) navigator.vibrate(12);
       if (ohneTakt.matches) { zurueckfedern(); raus(); return; }
+      // Die Verschiebung bleibt stehen, wo der Finger sie gelassen hat.
+      if (kannWechseln()) {
+        try { sessionStorage.setItem('beerstock-wisch-raus', '1'); } catch (e) { /* Privatmodus */ }
+        raus();
+        return;
+      }
       zieher.style.transform = 'translateY(' + window.innerHeight + 'px)';
       setTimeout(raus, ZUG_TAKT);
     }, { passive: true });

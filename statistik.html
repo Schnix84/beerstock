@@ -402,6 +402,14 @@
   html.zieht .brett { transition: none; }
   @media (prefers-reduced-motion: reduce) { .brett { transition: none; } }
 
+  /* Beim Hinauswischen liegt die Tafel schon darunter, statt dass blanker
+     Hintergrund frei wird — ein dokumentübergreifender View Transition. Das
+     Bild dazu baut die ANKUNFTSSEITE, denn dort läuft der Wechsel: siehe
+     `index.html` bei `@view-transition`. Hier steht nur die Zustimmung, ohne
+     die er gar nicht erst zustande käme, und im Skript die Marke, die ihn auf
+     diese eine Geste eingrenzt. */
+  @view-transition { navigation: auto; }
+
   /* Der gestrichelte Link bleibt — die verschlossene Tür benutzt ihn weiter,
      und dort ist er ein Satzende („meldet sich an") und keine Pille. */
   .zurueck {
@@ -774,6 +782,37 @@
 
     const raus = () => document.querySelector('.zur-tafel').click();
 
+    /* --- Der Wechsel hinüber ------------------------------------------------
+       Kann der Browser den dokumentübergreifenden Wechsel, übernimmt DER die
+       restliche Strecke: die Tafel liegt dann schon darunter, während das
+       Blatt wegfährt. Das eigene Wegfahren entfällt dabei — zwei Bewegungen
+       hintereinander wären eine zu viel, und der Schnappschuss der alten Seite
+       ist ohnehin genau so verschoben, wie der Finger sie hinterlassen hat.
+
+       Gesagt wird der Tafel das über eine **einmalige Marke im
+       `sessionStorage`**, genau wie beim Deckel-Rückweg (`ausDemDeckel` drüben).
+
+       DER NAHELIEGENDE WEG WAR EIN ANDERER und ging nicht: die Norm sieht dafür
+       `ev.viewTransition.types.add(…)` im `pageswap` vor, und das Set soll mit
+       hinüberwandern. Gemessen (Chrome, Aug 2026) kommt es drüben LEER an — die
+       Marke wurde nachweislich gesetzt (`wischtRaus=true`, `vt=true`), im
+       `pagereveal` der Tafel war `types` trotzdem leer. Eine Geste, die von
+       einer Norm abhängt, die der Browser halb umsetzt, ist keine; die Marke im
+       Speicher tut dasselbe und ist nachweisbar.
+
+       Ein Antippen des Griffs bleibt bewusst ohne Wechsel: was nicht gefahren
+       ist, soll auch nicht nachfahren. Und herein geht es weiter ohne Wechsel —
+       sonst bekäme der Weg VON der Tafel hierher die Vorgabe des Browsers, ein
+       Überblenden. */
+    const kannWechseln = () => 'onpagereveal' in window && !ohneTakt.matches;
+    window.addEventListener('pagereveal', ev => {
+      if (!ev.viewTransition) return;
+      // `ready` platzt beim Abbrechen mit einem AbortError; unbeachtet stünde
+      // er rot in der Konsole. Dieselbe Zeile steht drüben in `index.html`.
+      ev.viewTransition.ready.catch(() => {});
+      ev.viewTransition.skipTransition();
+    });
+
     function zurueckfedern() {
       document.documentElement.classList.remove('zieht');
       zieher.style.transform = '';
@@ -821,6 +860,13 @@
       document.documentElement.classList.remove('zieht');   // erst die Überblendung zurück, dann das Ziel
       if (navigator.vibrate) navigator.vibrate(12);
       if (ohneTakt.matches) { zurueckfedern(); raus(); return; }
+      /* Die Verschiebung bleibt stehen, wo der Finger sie gelassen hat: der
+         Wechsel drüben fährt von dort weiter. Siehe `kannWechseln` oben. */
+      if (kannWechseln()) {
+        try { sessionStorage.setItem('beerstock-wisch-raus', '1'); } catch (e) { /* Privatmodus */ }
+        raus();
+        return;
+      }
       zieher.style.transform = 'translateY(' + window.innerHeight + 'px)';
       /* Eine Uhr, kein `transitionend`: fällt das Ereignis einmal aus, bliebe
          die Seite weggeschoben und leer stehen, ohne dass jemand hinauskäme. */
