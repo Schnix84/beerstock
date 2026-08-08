@@ -2017,6 +2017,49 @@ const statistikRunde = (ergebnis) => {
 };
 
 // ---------------------------------------------------------------------------
+// Das Versandprotokoll
+// ---------------------------------------------------------------------------
+
+/* Eine Zeile ins Versandprotokoll (migrations/0025): wie viele, wozu, wann -
+   und ausdruecklich nicht, an wen.
+
+   WIRFT NIE. Das ist die ganze Vorsicht, die hier noetig ist: ein Protokoll,
+   das den Versand scheitern laesst, waere schlimmer als eine fehlende Zeile.
+   Der `.catch` steht deshalb hier drin und nicht bei den sieben Aufrufern -
+   sonst haengt es am Gedaechtnis des naechsten, der eine achte Meldung baut.
+
+   Kein `waitUntil`: die Aufrufer stehen alle schon in einem (`stosse`,
+   `benachrichtige`, `warneAlteAdresse`, `meldeNeuenNutzer`) oder in einer
+   Route, die ohnehin auf den Versand wartet. Ein zweites drumherum brachte
+   nur eine zweite Stelle, an der die Zeile verloren gehen kann. */
+function notiereVersand(env, weg, art, bezug, anzahl, kaputt = 0) {
+  return env.DB.prepare(`
+    INSERT INTO versand_ausgang (weg, art, bezug, anzahl, kaputt)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(weg, art, bezug, anzahl, kaputt).run()
+    .catch(e => console.error('Versandprotokoll:', e && e.stack || e));
+}
+
+/* Dasselbe um einen Mailversand herumgelegt, fuer die fuenf Mails, die an
+   `benachrichtige()` vorbeigehen (Anmeldelink, Adresswechsel in beiden
+   Richtungen, Betreibermeldung, Testmail). Sie tragen keine `mail_ausgang`-
+   Zeile, weil die eine `user_id` braucht und diese Mails teils an Adressen
+   gehen, hinter denen kein Nutzer steht - siehe den Kopf von 0025.
+
+   Der Fehler wird protokolliert UND weitergeworfen: was der Aufrufer bisher
+   mit einem gescheiterten Versand tat (502 an der Anmeldung, stilles Log bei
+   der Warnung), soll er weiter tun. */
+async function mitProtokoll(env, art, senden) {
+  try {
+    await senden();
+  } catch (e) {
+    await notiereVersand(env, 'mail', art, null, 1, 1);
+    throw e;
+  }
+  await notiereVersand(env, 'mail', art, null, 1, 0);
+}
+
+// ---------------------------------------------------------------------------
 // Mailversand ueber AgentMail. Reine HTTP-API, kein SMTP.
 // ---------------------------------------------------------------------------
 
@@ -2118,7 +2161,8 @@ und in der App unten ins Feld "Link aus der Mail" einsetzen.`;
      unten ins Feld &bdquo;Link aus der Mail&ldquo; einsetzen.</p>
 </div>`;
 
-  await schickeMail(env, empfaenger, 'Dein Link zu „Wer hat kalt“', text, html);
+  await mitProtokoll(env, 'anmeldelink', () =>
+    schickeMail(env, empfaenger, 'Dein Link zu „Wer hat kalt“', text, html));
 }
 
 /* Der Mailwechsel, beide Haelften. Der Link geht an die NEUE Adresse - erst
@@ -2149,7 +2193,8 @@ nichts.`;
      wirf die Mail weg &ndash; dann passiert nichts.</p>
 </div>`;
 
-  await schickeMail(env, empfaenger, 'Bestätige deine neue Adresse', text, html);
+  await mitProtokoll(env, 'mailwechsel', () =>
+    schickeMail(env, empfaenger, 'Bestätige deine neue Adresse', text, html));
 }
 
 function warneAlteAdresse(env, ctx, alt, neu) {
@@ -2178,7 +2223,8 @@ gilt diese Adresse hier weiter.`;
   // Stumm und nebenher: der Wechsel darf nicht daran scheitern, dass die
   // Warnung an die alte Adresse nicht ankommt (sie kann tot sein - das ist
   // oft genau der Grund fuer den Wechsel).
-  ctx.waitUntil(schickeMail(env, alt, 'Deine Adresse soll sich ändern', text, html)
+  ctx.waitUntil(mitProtokoll(env, 'mailwechsel_warnung', () =>
+    schickeMail(env, alt, 'Deine Adresse soll sich ändern', text, html))
     .catch(e => console.error('Wechsel-Warnung:', e && e.stack || e)));
 }
 
@@ -2214,7 +2260,8 @@ Angemeldet: ${wann} UTC`;
   </p>
 </div>`;
 
-    await schickeMail(env, env.MELDE_AN, `Neu dabei: ${neu.name}`, text, html);
+    await mitProtokoll(env, 'neuer_melder', () =>
+      schickeMail(env, env.MELDE_AN, `Neu dabei: ${neu.name}`, text, html));
   })().catch(e => console.error('Neu-Meldung:', e && e.stack || e)));
 }
 
@@ -2558,6 +2605,25 @@ function stosse(env, ctx, art, empfaenger, opt) {
     if (tot.length) {
       await env.DB.prepare(
         `DELETE FROM push_abos WHERE id IN (${tot.map(() => '?').join(',')})`).bind(...tot).run();
+    }
+
+    /* Und die Zeile fuers Kontor (migrations/0025). EINE je Stoss, mit der
+       Geraetezahl als Spalte - nicht eine je Geraet: das Gatter, das bei der
+       Mail eine Zeile je Empfaenger braucht, gibt es hier nicht.
+
+       NICHTS ZU MELDEN, WENN NICHTS RAUSGING. Hatte niemand im Kreis ein Abo
+       (oder haben alle diese Art abgewaehlt), bleibt `ergebnis` leer und es
+       entsteht keine Zeile. Das ist dieselbe Regel wie bei `mail_ausgang`:
+       protokolliert wird ein VERSUCH, und ohne Empfaenger gab es keinen.
+       Andernfalls stuende hinter jedem Abend, an dem gerade niemand Push
+       eingeschaltet hat, eine Null im Protokoll - eine Zeile, die etwas
+       gemeldet zu haben behauptet.
+
+       `tag` ist der Bezug: er traegt beim Notruf schon die Id ('notruf-15')
+       und beim Echo den Kommentarbezug - dieselbe Auskunft, die die Mail in
+       ihrer `bezug`-Spalte fuehrt, nur in der Schreibweise des Geraets. */
+    if (ergebnis.length) {
+      await notiereVersand(env, 'push', art, tag, ergebnis.length, tot.length);
     }
   })().catch(e => console.error('stosse:', e && e.stack || e)));
 }
@@ -5188,9 +5254,17 @@ const ROUTEN = {
         LEFT JOIN users g ON g.id = u.gesperrt_von
         ORDER BY u.entfernt_am IS NOT NULL, u.name IS NULL, u.name COLLATE NOCASE
       `),
+      /* Die Kachel "Mails, 24 h". Dieselben zwei Toepfe wie in der Statistik
+         (siehe dort Abfrage 7): sonst nennt der Kopf eine kleinere Zahl als
+         das Bild darunter, und beide haetten recht. */
       env.DB.prepare(`
-        SELECT count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
-        FROM mail_ausgang WHERE gesendet_am > datetime('now','-1 day')
+        SELECT sum(n) AS n, sum(kaputt) AS kaputt FROM (
+          SELECT count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
+          FROM mail_ausgang WHERE gesendet_am > datetime('now','-1 day')
+          UNION ALL
+          SELECT sum(anzahl), sum(kaputt) FROM versand_ausgang
+          WHERE weg = 'mail' AND erstellt > datetime('now','-1 day')
+        )
       `),
     ]);
 
@@ -5415,19 +5489,51 @@ const ROUTEN = {
        waeren zwei Rundfluege zur Datenbank fuer eine einzige Seitenansicht. */
     const ergebnis = await env.DB.batch([
       ...statistikAbfragen(env, fenster),
-      // 7 — Mails je Art, Fehler daneben.
+      /* 7 — Mails je Art, Fehler daneben. AUS ZWEI TOEPFEN seit 0025:
+         `mail_ausgang` fuehrt die Meldungen des Verteilers (eine Zeile je
+         Empfaenger, darum `count(*)`), `versand_ausgang` die fuenf, die daran
+         vorbeigehen - Anmeldelink, Adresswechsel hin und zurueck,
+         Betreibermeldung, Testmail (eine Zeile je Vorgang, darum
+         `sum(anzahl)`). Die aeussere Gruppierung faellt beides auf dieselbe
+         Art zusammen, falls je eine Meldung beide Wege nimmt. */
       env.DB.prepare(`
-        SELECT art, count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
-        FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
-        GROUP BY art ORDER BY n DESC
+        SELECT art, sum(n) AS n, sum(kaputt) AS kaputt FROM (
+          SELECT art, count(*) AS n, sum(fehler IS NOT NULL) AS kaputt
+          FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
+          GROUP BY art
+          UNION ALL
+          SELECT art, sum(anzahl), sum(kaputt)
+          FROM versand_ausgang
+          WHERE weg = 'mail' AND erstellt > datetime('now', ?1)
+          GROUP BY art
+        ) GROUP BY art ORDER BY n DESC
       `).bind(fenster),
       /* 7b — dieselben Mails, aber je Tag: die Kachel "Mails, 24 h" im Kopf
          nennt eine einzelne Zahl, und eine einzelne Zahl sagt nicht, ob das
-         viel ist. Die Linie darunter schon. */
+         viel ist. Die Linie darunter schon. Dieselben zwei Toepfe wie oben -
+         zwei Zaehlweisen fuer dieselbe Frage waeren die sicherste Art, dass
+         Kachel und Balken sich widersprechen. */
       env.DB.prepare(`
-        SELECT date(gesendet_am) AS tag, count(*) AS n
-        FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
-        GROUP BY tag ORDER BY tag
+        SELECT tag, sum(n) AS n FROM (
+          SELECT date(gesendet_am) AS tag, count(*) AS n
+          FROM mail_ausgang WHERE gesendet_am > datetime('now', ?1)
+          GROUP BY tag
+          UNION ALL
+          SELECT date(erstellt) AS tag, sum(anzahl)
+          FROM versand_ausgang
+          WHERE weg = 'mail' AND erstellt > datetime('now', ?1)
+          GROUP BY tag
+        ) GROUP BY tag ORDER BY tag
+      `).bind(fenster),
+      /* 7c — und das Klopfen an der Tuer, das bis 0025 gar nicht gezaehlt
+         wurde. Eigenes Bild und kein zweiter Balken im Mail-Diagramm: die
+         Zahlen sind nicht gegeneinander lesbar. Eine Mail geht an eine
+         Adresse, ein Push an jedes Geraet - wer zwei hat, zaehlt zweimal. */
+      env.DB.prepare(`
+        SELECT art, sum(anzahl) AS n, sum(kaputt) AS kaputt
+        FROM versand_ausgang
+        WHERE weg = 'push' AND erstellt > datetime('now', ?1)
+        GROUP BY art ORDER BY n DESC
       `).bind(fenster),
       // Und eine Zahl ohne Bild.
       env.DB.prepare(`
@@ -5456,7 +5562,7 @@ const ROUTEN = {
       env.DB.prepare('SELECT count(*) AS n FROM zugriffe'),
     ]);
 
-    const [mails, mailsJeTag, postwillig,
+    const [mails, mailsJeTag, pushs, postwillig,
            aufrufeJeNutzerTag, aufrufeJeNutzer, aufrufeInsgesamt] = ergebnis.slice(STATISTIK_ABFRAGEN);
 
     /* Die Saeule je Tag, aus den flachen Zeilen gebaut: eine Gruppe je Tag,
@@ -5481,6 +5587,7 @@ const ROUTEN = {
       ...statistikRunde(ergebnis),
       mails: mails.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
       mails_je_tag: mailsJeTag.results,
+      pushs: pushs.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
       postwillig: { alle: p.alle, willig: p.willig || 0 },
       aufrufe_je_tag: aufrufeJeTag,
       aufrufe_nutzer_reihen: aufrufeNutzerReihen,
@@ -5948,11 +6055,18 @@ const ROUTEN = {
   // -------------------------------------------------------------------------
   /* Die Testmail - nur an den Admin selbst, der gerade im Kontor sitzt, und
      bewusst AUSSERHALB von `rundmailAbschicken`: keine Stundensperre (sie
-     wuerde sonst den echten Versand danach blockieren), kein `admin_log`
-     (sonst stuende sie im Protokoll als Rundmail), kein `mail_ausgang` (sonst
-     zaehlte sie in der Mail-Statistik mit). Direkt `schickeMail`, mit einem
-     Praefix im Betreff, damit sie im Postfach nicht mit einer echten
-     verwechselt wird. */
+     wuerde sonst den echten Versand danach blockieren) und kein `admin_log`
+     (sonst stuende sie im Protokoll als Rundmail). Direkt `schickeMail`, mit
+     einem Praefix im Betreff, damit sie im Postfach nicht mit einer echten
+     verwechselt wird.
+
+     SEIT 0025 WIRD SIE DOCH GEZAEHLT, unter eigener Art `test`. Hier stand
+     vorher "kein `mail_ausgang` (sonst zaehlte sie in der Mail-Statistik
+     mit)" - die Sorge war, dass eine Probe die Rundmail-Zahl aufblaeht. Mit
+     einer eigenen Art tut sie das nicht: sie steht als eigener Balken
+     daneben, und dass Proben gelaufen sind, ist eine Auskunft und keine
+     Verfaelschung. In `mail_ausgang` landet sie weiterhin nicht - dort haengt
+     die Doppel-Sperre, und die hat eine Testmail nicht verdient. */
   'POST /api/admin/rundmail/test': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
@@ -5965,8 +6079,9 @@ const ROUTEN = {
     const geprueft = rundmailPruefen(daten);
     if (geprueft.fehler) return fehler(request, geprueft.fehler);
 
-    await schickeMail(env, ich.email, `[Test] ${geprueft.betreff}`,
-      rundmailText(geprueft), mailRumpf(rundmailHtml(geprueft)));
+    await mitProtokoll(env, 'testmail', () =>
+      schickeMail(env, ich.email, `[Test] ${geprueft.betreff}`,
+        rundmailText(geprueft), mailRumpf(rundmailHtml(geprueft))));
 
     return antwort(request, { ok: true, email: ich.email }, 200, KEIN_FREMDER_CACHE);
   },
@@ -6067,26 +6182,98 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
+  /* Das Protokoll. Es fuehrt seit 0025 DREI Quellen statt einer, und damit
+     hat es seine Bedeutung geaendert: aus "wer hat was verwaltet" ist "was
+     ist passiert" geworden. Das war eine bewusste Bestellung, keine
+     schleichende Erweiterung - vorher stand hier nur `admin_log`, und die
+     Rundmail war die einzige Post, die je auftauchte (auch die nur, weil ein
+     Versand durchs Kontor eine Verwaltungshandlung IST und die Zeile
+     nebenbei die Stundensperre traegt).
+
+     `quelle` unterscheidet die drei, und zwar fuer die Seite: sie waehlt
+     danach das Zeichen und den Satzbau, und die Uebersichtskarte siebt
+     danach wieder auf das Verwaltete zurueck.
+
+     ZWEI ABFRAGEN, NICHT EINE, und der Grund steht in der zweiten: die
+     gemischte Liste kann die Verwaltungszeilen wegdruecken.
+
+     DIE MAILS WERDEN GEBUENDELT. Ein Notruf sind sechs Zeilen in
+     `mail_ausgang` (eine je Empfaenger, das Gatter gegen die Doppelmail
+     braucht sie so) - im Protokoll ist er EIN Vorgang mit einer Sechs
+     daneben.
+
+     DER BEZUG ALLEIN GENUEGT ALS SCHLUESSEL, und das ist kein Zufall,
+     sondern eine Folge des UNIQUE-Index `mail_einmal` auf
+     (user_id, art, bezug): zu einem Bezug kann jeder Mensch hoechstens EINE
+     Mail bekommen. Damit ist eine Bezugsgruppe zwangslaeufig ein einziger
+     Versandstoss und kann nicht ueber die Zeit streuen - nachgesehen, nicht
+     geschlossen: ueber alle Gruppen in der Datenbank gilt `min = max` und
+     `Zeilen = Empfaenger`. Eine Minute im Schluessel wuerde deshalb nichts
+     trennen, was zusammengehoert, aber sehr wohl einen Stoss zerreissen, der
+     zufaellig ueber eine Minutengrenze rutscht.
+
+     Ohne Bezug (die Rundmail, als einzige) faellt diese Sicherung weg - sie
+     darf beliebig oft gehen. Dort gruppiert die Minute, und dort ist der
+     seltene Doppeleintrag an der Grenze auch harmlos: die Rundmail hat im
+     `admin_log` ohnehin ihre eigene Zeile mit Absender und Betreff. */
   'GET /api/admin/protokoll': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
-    const zeilen = await env.DB.prepare(`
-      SELECT l.id, l.aktion, l.detail, l.erstellt,
-             coalesce(a.name, 'Ehemaliger') AS wer,
-             coalesce(z.name, l.detail, '—') AS wen
-      FROM admin_log l
-      LEFT JOIN users a ON a.id = l.admin_id
-      LEFT JOIN users z ON z.id = l.ziel_id
-      ORDER BY l.id DESC LIMIT 50
-    `).all();
+    const [alles, verwaltet] = await env.DB.batch([
+      env.DB.prepare(`
+        SELECT * FROM (
+          SELECT l.erstellt AS wann, 'admin' AS quelle, l.aktion AS aktion,
+                 coalesce(a.name, 'Ehemaliger') AS wer,
+                 coalesce(z.name, l.detail, '—') AS wen,
+                 l.detail AS detail, NULL AS anzahl, NULL AS kaputt
+          FROM admin_log l
+          LEFT JOIN users a ON a.id = l.admin_id
+          LEFT JOIN users z ON z.id = l.ziel_id
+
+          UNION ALL
+
+          SELECT min(gesendet_am), 'mail', art, NULL, NULL, bezug,
+                 count(*), sum(fehler IS NOT NULL)
+          FROM mail_ausgang
+          GROUP BY art,
+                   coalesce(bezug, strftime('%Y-%m-%d %H:%M', gesendet_am))
+
+          UNION ALL
+
+          SELECT erstellt, weg, art, NULL, NULL, bezug, anzahl, kaputt
+          FROM versand_ausgang
+        )
+        ORDER BY wann DESC LIMIT 60
+      `),
+      /* Dieselbe Frage wie frueher, eigens noch einmal gestellt: die
+         Uebersichtskarte heisst "Zuletzt im Protokoll" und meint die
+         Verwaltung. Sie aus der gemischten Liste zu sieben ginge schief -
+         ein einziger Notruf legt sieben Zeilen oben drauf, und nach zwei
+         lebhaften Abenden staende in der Karte "noch hat niemand etwas
+         verwaltet", obwohl gestern jemand gesperrt wurde. Drei Zeilen
+         kosten weniger als dieser Irrtum. */
+      env.DB.prepare(`
+        SELECT l.erstellt AS wann, 'admin' AS quelle, l.aktion AS aktion,
+               coalesce(a.name, 'Ehemaliger') AS wer,
+               coalesce(z.name, l.detail, '—') AS wen, l.detail AS detail
+        FROM admin_log l
+        LEFT JOIN users a ON a.id = l.admin_id
+        LEFT JOIN users z ON z.id = l.ziel_id
+        ORDER BY l.id DESC LIMIT 3
+      `),
+    ]);
+
+    const form = z => ({
+      quelle: z.quelle, aktion: z.aktion, wer: z.wer, wen: z.wen,
+      detail: z.detail, anzahl: z.anzahl, kaputt: z.kaputt,
+      wann: utc(z.wann),
+    });
 
     return antwort(request, {
-      zeilen: zeilen.results.map(z => ({
-        id: z.id, aktion: z.aktion, wer: z.wer, wen: z.wen,
-        detail: z.detail, wann: utc(z.erstellt),
-      })),
+      zeilen: alles.results.map(form),
+      verwaltet: verwaltet.results.map(form),
     }, 200, KEIN_FREMDER_CACHE);
   },
 

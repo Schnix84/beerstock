@@ -1522,6 +1522,16 @@
         // und eine Mail, die nicht rausging, ist kein halber Erfolg.
         { feld: 'kaputt', titel: 'ging nicht raus', farbe: REIHE[2] },
       ], g => g.art.replace(/_/g, ' ')),
+      /* Das Klopfen bekommt ein EIGENES Bild und keine dritte Säule im
+         Mail-Diagramm. Die beiden Zahlen sehen vergleichbar aus und sind es
+         nicht: eine Mail geht an eine Adresse, ein Push an jedes Gerät — wer
+         die Tafel auf Handy und Rechner liegen hat, zählt zweimal. Nebenan
+         gestellt lüde das zu einem Vergleich ein, den die Achse nicht
+         hergibt. */
+      Bilder.saeulen('Push je Art' + fenster, s.pushs || [], [
+        { feld: 'n',      titel: 'angestoßene Geräte', farbe: REIHE[0] },
+        { feld: 'kaputt', titel: 'nicht zugestellt',   farbe: REIHE[2] },
+      ], g => g.art.replace(/_/g, ' ')),
       Bilder.saeulen('Seitenaufrufe je Tag, nach Nutzer' + fenster,
         s.aufrufe_je_tag || [], aufrufeReihen, g => nurTag(g.tag)),
       Bilder.liegend('Seitenaufrufe je Nutzer, insgesamt',
@@ -1566,10 +1576,45 @@
     rundmail:   ['✉', ''],
   };
 
-  // Wen oder was die Handlung betraf, in einem Satzstück.
-  const logWen = z => z.aktion === 'rundmail'
-    ? '„' + (z.detail || '') + '"'
-    : z.wen + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
+  /* Das Protokoll führt seit dem Versandprotokoll drei Quellen, und `quelle`
+     entscheidet die Darstellung — nicht `aktion`. Der Grund ist eine Falle:
+     „rundmail" ist BEIDES, eine Verwaltungshandlung im `admin_log` und eine
+     Mailart im Ausgang. Ein Versand durchs Kontor erzeugt darum zwei Zeilen —
+     „Schnix → rundmail „Betreff"" und „Post → rundmail · 6 Mails" —, und das
+     ist keine Doppelung, sondern zwei Auskünfte: wer sie losgeschickt hat und
+     wie viele tatsächlich rausgingen. Über `aktion` allein wären sie nicht
+     auseinanderzuhalten.
+
+     Post und Klopfen teilen sich das ✉ nicht: eine Mail liegt im Postfach,
+     ein Push klopft und ist wieder weg. */
+  const QUELL_ZEICHEN = { mail: ['✉', ''], push: ['✦', ''] };
+
+  const logZeichen = z => z.quelle === 'admin'
+    ? (LOG_ZEICHEN[z.aktion] || ['·', ''])
+    : (QUELL_ZEICHEN[z.quelle] || ['·', '']);
+
+  // Was in der Spalte „wer → was" steht. Beim Versand gibt es kein Wer: eine
+  // Notrufmail schickt niemand, sie fällt an.
+  const logWas = z => z.quelle === 'admin'
+    ? z.wer + ' → ' + z.aktion
+    : (z.quelle === 'mail' ? 'Post → ' : 'Push → ') + z.aktion.replace(/_/g, ' ');
+
+  /* Wen oder was die Handlung betraf, in einem Satzstück. Beim Versand ist es
+     die Zahl — und zwar in Stück, nicht als nackte Ziffer: „6" allein neben
+     „notruf" liest sich wie eine Id. Die Fehlerzahl steht nur da, wenn es
+     eine gibt; „0 kaputt" an jeder Zeile wäre eine Beruhigung, die man nach
+     dem dritten Mal nicht mehr liest. */
+  function logWen(z) {
+    if (z.quelle === 'mail' || z.quelle === 'push') {
+      const stueck = z.quelle === 'mail'
+        ? (z.anzahl === 1 ? '1 Mail' : z.anzahl + ' Mails')
+        : (z.anzahl === 1 ? '1 Gerät' : z.anzahl + ' Geräte');
+      return stueck + (z.kaputt ? ' · ' + z.kaputt + ' nicht zugestellt' : '');
+    }
+    return z.aktion === 'rundmail'
+      ? '„' + (z.detail || '') + '"'
+      : z.wen + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
+  }
 
   /* EINE Zeile für zwei Orte: das Protokollblatt und die Vorschaukarte auf der
      Übersicht. `kurz` lässt dort das „wer → was" weg — in einer drittel Karte
@@ -1577,7 +1622,7 @@
      seit dem letzten Blick etwas passiert ist. */
   function logZeile(z, kurz) {
     const li = el('li');
-    const [glyph, ton] = LOG_ZEICHEN[z.aktion] || ['·', ''];
+    const [glyph, ton] = logZeichen(z);
     li.appendChild(el('span', 'zeichen ' + ton, glyph));
     const t = el('time', null, vorhin(z.wann));
     t.dateTime = z.wann;
@@ -1585,7 +1630,7 @@
     // sonst auf dieser Seite, nicht als grauer Systemtooltip.
     Bilder.tippAm(t, { titel: datum(z.wann), zeilen: [] });
     li.appendChild(t);
-    if (!kurz) li.appendChild(el('span', 'was', z.wer + ' → ' + z.aktion));
+    if (!kurz) li.appendChild(el('span', 'was', logWas(z)));
     li.appendChild(el('span', kurz ? 'wen' : null, logWen(z)));
     return li;
   }
@@ -1594,7 +1639,9 @@
     const ziel = $('log');
     ziel.textContent = '';
     if (!zeilen.length) {
-      ziel.appendChild(el('li', 'leer-hinweis', 'Noch hat niemand etwas verwaltet.'));
+      // Nicht mehr „noch hat niemand etwas verwaltet": das Blatt zeigt seit
+      // dem Versandprotokoll auch, was von selbst rausging.
+      ziel.appendChild(el('li', 'leer-hinweis', 'Noch ist nichts passiert.'));
       return;
     }
     zeilen.forEach(z => ziel.appendChild(logZeile(z)));
@@ -1623,7 +1670,7 @@
     return k;
   }
 
-  function querZeichnen(logZeilen) {
+  function querZeichnen(verwaltet) {
     const ziel = $('quer');
     ziel.textContent = '';
 
@@ -1650,12 +1697,19 @@
        Der Jahresrückblick oben darf dagegen fehlen: dorthin führt kein Blatt,
        nur ein Overlay, und ohne Jahre gibt es nichts zu zeigen. */
 
-    // 2 — Was zuletzt verwaltet wurde. Drei Zeilen, mehr passt nicht in eine
-    //     drittel Karte, und mehr beantwortet die Frage auch nicht.
+    /* 2 — Was zuletzt VERWALTET wurde. Drei Zeilen, mehr passt nicht in eine
+       drittel Karte, und mehr beantwortet die Frage auch nicht.
+
+       Die Karte bekommt seit dem Versandprotokoll eine eigene Liste
+       (`verwaltet`) statt der ersten drei aus dem Blatt. Das Blatt führt jetzt
+       auch Post und Klopfen, und ein einziger Notruf legt sieben Zeilen oben
+       drauf — die Karte hieße dann zwar weiter „Zuletzt im Protokoll", zeigte
+       aber nur noch Mailverkehr, und die Sperre von gestern wäre nirgends mehr
+       zu sehen. Der Weg ins Blatt führt weiter zu allem. */
     let inhalt;
-    if (logZeilen && logZeilen.length) {
+    if (verwaltet && verwaltet.length) {
       inhalt = el('ul', 'mini-log');
-      logZeilen.slice(0, 3).forEach(z => inhalt.appendChild(logZeile(z, true)));
+      verwaltet.slice(0, 3).forEach(z => inhalt.appendChild(logZeile(z, true)));
     } else {
       inhalt = el('p', 'leer-hinweis', 'Noch hat niemand etwas verwaltet.');
     }
@@ -2405,7 +2459,7 @@
     /* Zuletzt, nicht zuerst: die Zahlen an den Zungen kommen aus `stand` und
        `geplant`, und die stehen erst, seit die Zeilen darüber gelaufen sind.
        Die Querverweise auf der Übersicht hängen an denselben Daten. */
-    querZeichnen(log.zeilen);
+    querZeichnen(log.verwaltet);
     registerZeichnen();
   }
 
