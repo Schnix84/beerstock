@@ -10952,14 +10952,22 @@
     }
   });
 
-  /* Die Aufschrift des Meldeknopfs. Drei Wortlaute, einer davon steht da:
+  /* Die Aufschrift des Meldeknopfs. Ein Wortlaut aus dieser Reihe steht da:
      gewuerfelt beim Aufbau der Seite und noch einmal nach jeder Meldung,
      damit der Knopf nicht jeden Abend dasselbe sagt.
 
      Nur hier und nirgends sonst — der Wirt duldet den Spass am eigenen
-     Deckel, nicht an fremden Formularen. Und die drei sind gleichberechtigt:
-     wer „Vertrau mir Bruder" drueckt, schreibt genauso an wie der andere. */
-  const AUFSCHRIFTEN = ['Anschreiben', 'Stimmt so', 'Vertrau mir Bruder'];
+     Deckel, nicht an fremden Formularen. Und alle sind gleichberechtigt:
+     wer „Bratan vertrau" drueckt, schreibt genauso an wie der andere.
+
+     Die Reihe laeuft vom Sachlichen ins Beteuernde — „Anschreiben" sagt,
+     was der Knopf tut, der Rest beteuert die Zahl, die einer gerade
+     eingetippt hat. Kurz muessen sie bleiben: ab etwa zwanzig Zeichen
+     bricht der Knopf auf schmalen Geraeten in die zweite Zeile. */
+  const AUFSCHRIFTEN = [
+    'Anschreiben', 'Stimmt so', 'Vertrau mir Bruder', 'Auf Ehre',
+    'No Cap', 'Auf Nacken', 'Digga vertrau', 'Bratan vertrau',
+  ];
   function wuerfleAufschrift() {
     $('melde-knopf').textContent =
       AUFSCHRIFTEN[Math.floor(Math.random() * AUFSCHRIFTEN.length)];
