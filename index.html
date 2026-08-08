@@ -10103,6 +10103,13 @@
 
     setInterval(() => {
       if (document.visibilityState !== 'visible') return;
+      /* Der Punkt im Schild muss HIER nachgezogen werden und nicht nur an den
+         Hörern der WebSocket. Eine Leitung, die iOS im Hintergrund wegwirft,
+         feuert kein `close` — der Punkt pulste danach „live" über einem toten
+         Socket weiter, also genau die Lüge, gegen die er gebaut ist. Derselbe
+         Takt, der die Notrufzeilen von „live" auf „steht still" dreht, dreht
+         jetzt auch ihn. */
+      stromStand();
       // Das Sicherheitsnetz unter dem Uhrwerk: ein Wecker, den die Laufzeit
       // hat fallen lassen, kostet so höchstens 20 Sekunden Verzug.
       nachDerUhr();
@@ -10133,6 +10140,10 @@
          dahin — `frisch()` unten lädt zwar, zeichnet aber nichts neu, wenn der
          Worker Byte für Byte dasselbe sagt wie vor dem Einschlafen. */
       nachDerUhr();
+      /* Und noch vor dem Verbindungsversuch die Wahrheit ins Schild: aus der
+         Tasche geholt ist die Leitung so gut wie sicher tot, `strom()` braucht
+         aber einen Moment. Ohne das stünde in genau diesem Moment „live" da. */
+      stromStand();
       strom();
       /* Der eigene Live-Standort hängt am selben Schlaf: `watchPosition`
          übersteht das Einfrieren auf iOS oft nur formal — die Kennung lebt,
