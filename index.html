@@ -103,12 +103,9 @@
     --ampel:       var(--kreide-matt);
     --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
 
-    /* Nur fuer Wrapped: Serienfarben fuer liegende Balken (Eiskoenig, Rad).
-       Die validierte Kreidepalette auf --schiefer, alle Pflichtpruefungen
-       PASS - siehe ideas/plan-wrapped.md. Eigenstaendig statt aus bilder.js:
-       die Tafel laedt diese Datei nicht und darf es auch nicht (CLAUDE.md). */
-    --wr-s1: #399c69; --wr-s2: #b15041; --wr-s3: #b29126;
-    --wr-s4: #4c9bcb; --wr-s5: #994d96;
+    /* Die Melderfarben standen hier einmal als --wr-s1..5 und wurden von
+       keiner Regel gelesen: gezeichnet werden sie im Skript, nicht im Stil.
+       Sie stehen jetzt nur noch dort, als `MENSCHEN`. */
 
     /* Von der Temperatur gesetzt (die Spalten 4..8 von STUFEN) */
     --schaum:      1;      /* Kronenhoehe, 0..1                       */
@@ -3787,21 +3784,51 @@
      Ein Bogen je Melder, die Länge proportional zum Gewicht. 0° ist oben,
      dorthin zeigt der Flaschenhals im Ruhezustand; gerechnet wird im
      Uhrzeigersinn, in die Richtung, in die man eine Flasche anstößt. */
-  /* Die Bögen tragen Farbe. Vorher waren sie gelbe und graue Kreide in vier
-     Abstufungen — bei fünf Meldern lagen zwei Grautöne nebeneinander, und
-     wer welchen Bogen hat, war nur noch am Namen abzulesen.
+  /* DIE MELDERFARBEN. Sieben Kreiden, eine je Mensch.
 
-     Genommen ist die im Sechs-Prüfungen-Lauf validierte Kreidereihe, wortgleich
-     und in derselben Ordnung wie `Bilder.aufsetzen({ reihe: … })` in
-     `statistik.html` und `admin.html`. Zwei verschiedene Grüns auf zwei
-     Schiefertafeln desselben Hauses wären ein Fehler.
+     JEDE FARBE GEHÖRT EINEM MENSCHEN, nicht einem Platz. Welchen Platz der
+     Melder hat, sagt der Worker (`farbe`, siehe migrations/0028): entweder
+     der im Kontor gewählte oder der aus der Anmeldereihenfolge. Hier steht
+     nur, wie Platz 0..6 aussieht. Vorher hing die Farbe an der Stellung im
+     jeweiligen Bild — bei sieben Meldern und sechs Kreiden teilte sich immer
+     genau ein Paar eine Farbe, und welches, entschied die Bestandsliste des
+     Tages.
 
-     Was das NICHT ist: eine feste Zuordnung Mensch → Farbe. Der Index kommt
-     hier aus der Reihenfolge des Feldes, drüben aus der Reihenfolge der
-     Kurven — dieselbe Person kann auf beiden Seiten verschieden gefärbt sein.
-     Das zu binden hieße, dem Worker einen stabilen Index abzuverlangen, und
-     das ist eine eigene Änderung. */
-  const RAD_KREIDE = ['#399c69', '#b29126', '#b15041', '#4c9bcb', '#994d96', '#8a938f'];
+     WARUM SIEBEN UND NICHT ACHT, obwohl acht bequemer wären: sie gehen nicht.
+     Auf Schiefer, im Kreidebereich (OKLCH L 0,48–0,67, C ≥ 0,10), trägt der
+     Farbraum sieben Töne, die alle Pflichtprüfungen bestehen — acht kommen
+     über einen engsten Abstand von 13,5 nicht hinaus und fallen am
+     Normalsicht-Boden (15) durch. Gemessen mit
+     `ideas/pruefungen/kreide-suche.mjs`, abgenommen vom Validator des
+     dataviz-Skills, auf Schiefer UND Kartengrund: engster Abstand 15,6, bei
+     Rot-/Grünblindheit 6,4. Der CVD-Wert liegt im Warnband und ist NUR
+     zulässig, weil an jedem Bogen der Name steht und an jeder Kurve auch. Wer
+     die Beschriftung wegnimmt, muss die Reihe neu ziehen.
+
+     WAS BEIM ACHTEN MELDER PASSIERT: die Reihe fängt von vorn an, er teilt
+     sich Magenta mit dem Ersten. Das ist der alte Zustand, nur um einen
+     Melder später — und diesmal mit einem Ausweg: im Kontor lässt sich jede
+     Kreide von Hand vergeben. Eine achte Farbe zu erfinden wäre der falsche
+     Ausweg; sie wäre von einer der sieben nicht mehr zu unterscheiden.
+
+     DIESELBEN SIEBEN IN DERSELBEN ORDNUNG stehen als `menschen` in
+     `statistik.html` und `admin.html` — die Tafel ist eine geschlossene Datei
+     und lädt `bilder.js` nicht (CLAUDE.md), also gibt es die Reihe zweimal.
+     Wer eine ändert, ändert beide, sonst trägt derselbe Mensch drüben eine
+     andere Kreide. Die Zahl sieben steht außerdem im Worker (`FARBEN`), der
+     damit die Wahl im Kontor prüft. */
+  const MENSCHEN = [
+    '#d153a2',   // 0  Magenta
+    '#be4523',   // 1  Ziegelrot
+    '#c18705',   // 2  Gold
+    '#017a16',   // 3  Dunkelgrün
+    '#39ac6f',   // 4  Grün
+    '#1d9af0',   // 5  Blau
+    '#6956c2',   // 6  Indigo
+  ];
+  // Der Platz eines Melders, oder der Rückfall. Siehe `rad()`, warum es ihn gibt.
+  const menschenFarbe = (platz, ersatz = 0) =>
+    MENSCHEN[(platz == null ? ersatz : platz) % MENSCHEN.length];
   let radFelder = [];   // Segmentgrenzen des zuletzt gezeichneten Rades
   let radStand = 0;     // aktueller Drehwinkel, damit die nächste Drehung anschließt
 
@@ -4471,8 +4498,13 @@
         const luecke = Math.min(1.5, weite * .12);
         const [x0, y0] = radPunkt(von + luecke, R);
         const [x1, y1] = radPunkt(von + weite - luecke, R);
+        /* Die Farbe kommt vom MENSCHEN und nicht von der Stellung im Rad:
+           `seg.farbe` ist sein Platz in der Kreidereihe. Eingefrorene Felder
+           von vor Schema 28 haben ihn nicht — dort tritt der alte Weg ein,
+           die Stellung `i`, wie bei `biere` auch. Ein Rad, das beim
+           Nachzeichnen andere Farben bekäme als am Abend, wäre kein Beleg. */
         g.appendChild(s_el('path', {
-          class: 'rad-bogen', stroke: RAD_KREIDE[i % RAD_KREIDE.length],
+          class: 'rad-bogen', stroke: menschenFarbe(seg.farbe, i),
           d: `M${x0.toFixed(1)},${y0.toFixed(1)} A${R},${R} 0 ` +
              `${weite > 180 ? 1 : 0},1 ${x1.toFixed(1)},${y1.toFixed(1)}`,
         }));
@@ -8171,14 +8203,13 @@
      dataviz-Verfahren: fast alles Hero-Zahlen und Stat-Kacheln, nur zwei
      echte Grafiken — liegende Balken für Identität (Melderfarben, jede Zeile
      direkt mit Name und Wert beschriftet), Monatssäulen für Größe (ein
-     Farbton, nur das Extrem beschriftet). Melderfarbe hängt am Menschen
-     (Anmeldereihenfolge unter den in DIESEM Jahr sichtbaren Meldern) — eine
-     eigene, an `ideas/plan-wrapped.md` validierte Palette, nicht die aus
-     `bilder.js`: die Tafel lädt diese Datei nicht und darf es auch nicht.
+     Farbton, nur das Extrem beschriftet). Melderfarbe hängt am Menschen und
+     ist dieselbe wie am Rad-Bogen und an der Kurve in der Statistik — seit
+     Schema 28 kommt der Platz vom Worker (`farbe`) und wird nicht mehr hier
+     aus der Reihenfolge gezählt. Die Reihe dazu ist `MENSCHEN` weiter oben.
      --------------------------------------------------------------------- */
   const WR_MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
     'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-  const WR_PALETTE = ['#399c69', '#b15041', '#b29126', '#4c9bcb', '#994d96'];
   const wrZahl = n => n.toLocaleString('de-DE');
   const wrTagMonat = iso => new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
   const wrWochentag = iso => new Date(iso).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
@@ -8194,16 +8225,23 @@
     p.hidden = !text;
   }
 
-  /* Melderfarbe nach Anmeldereihenfolge (id aufsteigend), aber nur unter den
-     Meldern, die in DIESEM Jahr in einer der beiden Balken-Grafiken
-     auftauchen — sonst hätte ein Melder ohne jede Zeile trotzdem eine Farbe
-     "verbraucht", und der erste sichtbare bekäme die zweite Farbe. */
+  /* Die Melderfarbe je Id. Der Platz steht seit Schema 28 an der Zeile selbst
+     (`farbe`), gezählt wird hier nichts mehr.
+
+     Vorher lief das über die Anmeldereihenfolge unter den in DIESEM Jahr
+     sichtbaren Meldern — das war für sich stimmig, aber es hieß, dass derselbe
+     Mensch im Rückblick eine andere Kreide trug als am Rad. Genau das ist
+     jetzt weg; ein Melder ohne Zeile "verbraucht" dafür einen Platz, und das
+     ist der richtige Tausch: die Farbe gehört ihm, ob er dieses Jahr
+     auftaucht oder nicht.
+
+     `farbe` kann fehlen, wenn ein Rückblick aus einem älteren Worker kommt —
+     dann bleibt es beim Grau von `wrFarbe`. */
   function wrappedFarben(d) {
-    const ids = new Set();
-    (d.runde.eiskoenig || []).forEach(z => ids.add(z.id));
-    ((d.runde.rad && d.runde.rad.gewonnen) || []).forEach(z => ids.add(z.id));
     const karte = new Map();
-    [...ids].sort((a, b) => a - b).forEach((id, i) => karte.set(id, WR_PALETTE[i % WR_PALETTE.length]));
+    const nimm = z => { if (z.farbe != null) karte.set(z.id, menschenFarbe(z.farbe)); };
+    (d.runde.eiskoenig || []).forEach(nimm);
+    ((d.runde.rad && d.runde.rad.gewonnen) || []).forEach(nimm);
     return karte;
   }
 

@@ -1,0 +1,54 @@
+-- ===========================================================================
+-- Schema 28: Jeder Mensch hat eine Farbe.
+--
+-- Bisher hing die Farbe eines Bogens am PLATZ und nicht am Menschen: das Rad
+-- faerbte seine Boegen der Reihe nach durch, die Kurvenschar in der Statistik
+-- ebenso. Wer heute den groessten Bestand hatte, war gruen; morgen war es
+-- jemand anderes. Bei sieben Meldern und sechs Kreiden kam dazu, dass sich
+-- immer genau ein Paar dieselbe Farbe teilte - welches, entschied die
+-- Bestandsliste des Tages.
+--
+-- EINE SPALTE, NULLBAR:
+--
+--   farbe   NULL = automatisch, sonst der PLATZ in der Kreidereihe (0..6)
+--
+-- WARUM EIN PLATZ UND KEIN HEX-WERT. Die Reihe ist ein geprueftes Ganzes -
+-- sieben Toene, die auf Schiefer gegeneinander stehen (Helligkeitsband, Chroma,
+-- Abstand fuer Normalsichtige UND fuer Rot-/Gruenblinde). Ein freies
+-- Farbfeld im Kontor liesse jeden ein `#00ff00` eintragen, das neben der
+-- Reihe steht wie ein Neonschild - und die Pruefung, die den Rest zusammen-
+-- haelt, waere ausgehebelt. Ein Platz kann nur eine der sieben Kreiden meinen.
+--
+-- WARUM NULL DER NORMALFALL IST. Wer nichts einstellt, bekommt seinen Platz
+-- aus der ANMELDEREIHENFOLGE - der wievielte er in `users` ist, nach `id`
+-- aufsteigend. Das ist fuer immer stabil, weil diese Anwendung Nutzer nur
+-- weich entfernt (`entfernt_am`, siehe 0011): eine Zeile verschwindet nie,
+-- also rutscht auch niemand nach. Ein neuer Melder bekommt den naechsten
+-- Platz und niemandem sonst faellt die Farbe um.
+--
+-- Der Worker rechnet das an Ort und Stelle:
+--
+--   coalesce(u.farbe, (SELECT count(*) FROM users x WHERE x.id < u.id))
+--
+-- Bei sieben Zeilen ist die Unterabfrage kein Thema; ein Index dafuer waere
+-- Vorsorge fuer eine Runde, die es nicht gibt.
+--
+-- WAS MIT DEN ALTEN ZEILEN PASSIERT: nichts, sie bleiben NULL. Beim ersten
+-- Bild nach dem Ausrollen hat also jeder seine Farbe aus der Reihenfolge,
+-- und wer eine andere will, holt sie sich im Kontor. Ausdruecklich KEIN
+-- `UPDATE ... WHERE name = 'Schnix'` in dieser Datei: welcher Mensch welche
+-- Kreide mag, ist eine Tatsache ueber die Runde von heute und gehoert nicht
+-- in die Schemageschichte.
+--
+-- KEIN CHECK und KEIN UNIQUE. Den Bereich 0..6 prueft der Worker (`FARBEN`),
+-- und dass zwei Melder denselben Platz waehlen duerfen, ist Absicht: sonst
+-- liesse sich kein Tausch machen, ohne einen von beiden erst auf einen
+-- dritten Platz zu schieben. Das Kontor zeigt, welcher Platz schon vergeben
+-- ist; entscheiden darf der Wirt.
+--
+-- ZEIT: nichts Neues, diese Spalte traegt keine.
+-- ===========================================================================
+
+/* Reines ALTER TABLE ADD COLUMN - kein Tabellentausch, also auch kein
+   `PRAGMA foreign_keys = OFF`. */
+ALTER TABLE users ADD COLUMN farbe INTEGER;

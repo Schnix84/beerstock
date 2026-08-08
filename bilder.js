@@ -172,6 +172,7 @@ window.Bilder = (function () {
   function aufsetzen(palette) {
     Object.assign(P, palette || {});
     if (palette && palette.reihe) REIHE = palette.reihe;
+    if (palette && palette.menschen) MENSCHEN = palette.menschen;
     losFarbenSetzen();
 
     const wurzel = document.documentElement.style;
@@ -353,6 +354,28 @@ window.Bilder = (function () {
      bewusst wenige: mehr als sechs Linien in einem Bild liest ohnehin
      niemand mehr auseinander. */
   let REIHE = ['#2f5d4a', '#b8901f', '#b04a38', '#4a6f8a', '#7a5c8f', '#6f6653'];
+
+  /* ZWEI REIHEN, ZWEI AUFGABEN, und sie dürfen nicht dieselbe sein.
+
+     `REIHE` färbt ROLLEN: den Ausgang einer Ziehung, den Balken einer
+     Rangliste, die Anteile einer Säule. Was Platz 3 bedeutet, hängt am Bild.
+
+     `MENSCHEN` färbt IDENTITÄT: eine Kreide je Melder, dieselbe an seiner
+     Kurve hier, an seinem Bogen im Rad und an seiner Karte im Kontor. Welchen
+     Platz jemand hat, sagt der Worker (`farbe` an der Kurve, siehe
+     migrations/0028) — diese Datei zählt nichts durch.
+
+     Die Vorgabe hier ist die Kreidereihe; wer auf Papier zeichnet, reicht
+     ihre Tintenfassung über `aufsetzen({ menschen: [...] })` herein. Dieselben
+     sieben in derselben Ordnung stehen als `MENSCHEN` in `index.html` — warum
+     sieben und nicht acht, steht dort. */
+  let MENSCHEN = ['#d153a2', '#be4523', '#c18705', '#017a16',
+                  '#39ac6f', '#1d9af0', '#6956c2'];
+  /* Die Farbe eines Melders. `ersatz` ist die Stellung im Bild und greift nur
+     bei Daten ohne Platz — ein Worker von vor Schema 28, oder ein
+     eingefrorenes Feld von damals. */
+  const menschenFarbe = (platz, ersatz = 0) =>
+    MENSCHEN[(platz == null ? ersatz : platz) % MENSCHEN.length];
 
   function rahmen(titel) {
     const box = el('div', 'bild');
@@ -658,7 +681,11 @@ window.Bilder = (function () {
     mitWerten.forEach((k, i) => {
       const px = [];
       stand[i].forEach((s, d) => { if (s) px.push([x(d), y(k.werte[s.j])]); });
-      const farbe = REIHE[i % REIHE.length];
+      /* Die Farbe gehört dem MELDER, nicht seiner Stellung in der Schar:
+         `k.farbe` ist sein Platz in der Kreidereihe. Vorher lief das über `i`,
+         und damit wechselte eine Kurve die Farbe, sobald jemand anderes
+         dazukam oder das Fenster einen Melder herausfiltert. */
+      const farbe = menschenFarbe(k.farbe, i);
       const strich = px.length === 1
         ? s_el('circle', { cx: px[0][0], cy: px[0][1], r: 2.2, fill: farbe })
         : s_el('polyline', {
@@ -687,7 +714,7 @@ window.Bilder = (function () {
         .map((k, i) => {
           const s = stand[i][d];
           return !s ? null : {
-            farbe: REIHE[i % REIHE.length], was: k.name,
+            farbe: menschenFarbe(k.farbe, i), was: k.name,
             wert: k.werte[s.j], zeigt: text(k, s.j),
             frisch: s.frisch, seit: k.tage[s.j],
           };
@@ -740,7 +767,7 @@ window.Bilder = (function () {
       const s = el('span');
       s.dataset.heb = '1';
       const punkt = el('i');
-      punkt.style.background = REIHE[i % REIHE.length];
+      punkt.style.background = menschenFarbe(k.farbe, i);
       s.appendChild(punkt);
       s.appendChild(document.createTextNode(k.name));
       const heben = an => {
@@ -801,10 +828,18 @@ window.Bilder = (function () {
   /* 3 — Liegende Balken. Für Ranglisten mit Namen: senkrecht müsste man den
      Kopf drehen, um zu lesen, wer gemeint ist.
 
-     Die Balken werden nach unten hin blasser. Das ist keine Zierde: acht
-     gleich gefärbte Balken sind eine Liste, eine Staffel ist eine Rangfolge —
-     und die Länge allein trennt Platz 1 und Platz 2 kaum, wenn beide fast
-     gleich oft dran waren. */
+     ZWEI FASSUNGEN, und welche gilt, entscheiden die Daten.
+
+     Steht an den Zeilen eine Melderfarbe (`farbe`, seit Schema 28), trägt
+     jeder Balken SEINE — dieselbe Kreide wie die Kurve desselben Menschen im
+     Bild darüber und sein Bogen am Rad. Dann sind die Balken voll deckend:
+     die Rangfolge steht in der Reihenfolge und in der Zahl am Ende, und ein
+     verblassender Farbton wäre nur noch ein schlechter Farbton.
+
+     Ohne Melderfarbe bleibt es beim Alten: ein Ton, nach unten hin blasser.
+     Das war nie Zierde — acht gleich gefärbte Balken sind eine Liste, eine
+     Staffel ist eine Rangfolge, und die Länge allein trennt Platz 1 und
+     Platz 2 kaum, wenn beide fast gleich oft dran waren. */
   function bildLiegend(titel, daten, nameVon, wertVon, was) {
     const box = rahmen(titel);
     if (!daten.length) return leer(box, 'Noch nichts eingetragen.');
@@ -815,7 +850,12 @@ window.Bilder = (function () {
     const hoehe = Math.max(zeilen.length * (hoch + luft) + 6, 40);
     const svg = s_el('svg', { viewBox: `0 0 ${W} ${hoehe}`, role: 'img' });
     const lx = 66;   // Platz für den Namen
-    const stufe = i => Math.max(.34, .85 - i * .07);
+    /* Entweder ALLE Zeilen tragen eine Farbe oder keine. Ein gemischtes Bild
+       — drei Melder bunt, der vierte im Verlegenheitsgrün — sähe aus, als
+       bedeute das Grün etwas. */
+    const eigen = zeilen.every(z => z && z.farbe != null);
+    const ton = (z, i) => eigen ? menschenFarbe(z.farbe) : REIHE[0];
+    const stufe = i => eigen ? 1 : Math.max(.34, .85 - i * .07);
 
     const balken = [];
     zeilen.forEach((z, i) => {
@@ -823,7 +863,7 @@ window.Bilder = (function () {
       const b = (wertVon(z) / max) * (W - lx - 22);
       const r = s_el('rect', {
         x: lx, y, width: Math.max(b, 1), height: hoch, rx: 2,
-        fill: REIHE[0], opacity: stufe(i),
+        fill: ton(z, i), opacity: stufe(i),
       });
       svg.appendChild(r);
       balken.push(r);
@@ -845,7 +885,7 @@ window.Bilder = (function () {
       hervor: an => balken[i].setAttribute('opacity', an ? 1 : stufe(i)),
       inhalt: () => ({
         titel: nameVon(z),
-        zeilen: [{ farbe: REIHE[0], was: was || 'Anzahl', wert: zahl(wertVon(z)) }],
+        zeilen: [{ farbe: ton(z, i), was: was || 'Anzahl', wert: zahl(wertVon(z)) }],
         fuss: summe ? Math.round((wertVon(z) / summe) * 100) + ' % der gezeigten Zeilen' : null,
       }),
     })));

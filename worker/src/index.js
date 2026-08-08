@@ -355,6 +355,34 @@ const MAIL_ARTEN = {
 // Zwei Rollen, mehr nicht. Alles darueber waere Verwaltung von Verwaltung.
 const ROLLEN = new Set(['user', 'admin']);
 
+/* Die Melderfarbe (Schema 28). Sie haengt am MENSCHEN und nicht an seinem
+   Platz in irgendeiner Liste: dieselbe Kreide am Rad-Bogen, an der Kurve in
+   der Statistik und an der Karte im Kontor. Vorher faerbte jede Grafik der
+   Reihe nach durch, und wer heute vorn lag, war gruen.
+
+   Der Worker gibt eine ZAHL heraus, nie einen Farbwert: welcher Ton auf
+   Platz 3 sitzt, ist eine Frage der Zeichnung und steht in der Seite. Er
+   weiss nur, WIE VIELE es sind - und das muss er wissen, sonst liesse sich
+   `farbe` nicht pruefen.
+
+   SIEBEN, UND DIESE SIEBEN STEHEN AN VIER STELLEN: `MENSCHEN` in
+   `index.html` (die Tafel ist eine geschlossene Datei und laedt `bilder.js`
+   nicht), die Vorgabe in `bilder.js` und die `menschen`-Reihe, die
+   `statistik.html` und `admin.html` an `Bilder.aufsetzen` reichen. Wer die
+   Reihe aendert, aendert alle vier UND diese Zahl; erzwingen laesst sich das
+   von hier aus nicht.
+
+   Warum sieben und nicht acht - der Kreidebereich auf Schiefer gibt nicht
+   mehr her - steht ausfuehrlich an `MENSCHEN` in `index.html`. */
+const FARBEN = 7;
+
+/* Der Platz eines Melders als SQL-Ausdruck: sein eingestellter, sonst der aus
+   der Anmeldereihenfolge. Eine Funktion, weil nicht jede Abfrage ihre
+   Nutzertabelle `u` nennt. Warum die Reihenfolge fuer immer haelt, steht in
+   migrations/0028. */
+const farbeSql = (alias = 'u') =>
+  `coalesce(${alias}.farbe, (SELECT count(*) FROM users x WHERE x.id < ${alias}.id))`;
+
 /* Die Zeitraeume, die das Kontor zeigen darf. Der erste ist die Vorgabe.
    Eine LISTE, kein Bereich mit Ober- und Untergrenze: der Wert geht in ein
    `datetime('now', ?)`, und drei erlaubte Zahlen kann man ansehen und
@@ -561,7 +589,7 @@ function mailWahl(u) {
    Und darum steht die Sperre AUCH nur hier: wer gesperrt ist, faellt aus dem
    Topf - aus dem gezeichneten wie aus dem gezogenen, in einem Zug. */
 const losFeldStmt = env => env.DB.prepare(`
-  SELECT u.id, u.name, u.quelle, r.biere
+  SELECT u.id, u.name, u.quelle, r.biere, ${farbeSql()} AS farbe
   FROM users u
   JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j ON j.user_id = u.id
   JOIN reports r ON r.id = j.id
@@ -640,9 +668,14 @@ function ziehe(feld) {
 
    Das Feld wird bei der Ziehung als JSON eingefroren. In alten Zeilen fehlt
    `biere` deshalb; die Seite faellt dort auf `gewicht` zurueck. */
+/* `farbe` reitet mit und wird MITEINGEFROREN: das Feld einer alten Ziehung
+   liegt als JSON in `los.feld`, und ein Rad, das beim Nachzeichnen andere
+   Farben bekaeme als am Abend selbst, waere kein Beleg mehr. Zeilen von vor
+   Schema 28 haben sie nicht - die Seite faellt dort auf den Platz im Rad
+   zurueck, so wie bei `biere` auch. */
 const losSegmente = feld =>
   feld.map(p => ({ name: p.name, gewicht: gewicht(p.biere), biere: p.biere,
-                   gemessen: p.quelle === 'ha' }));
+                   gemessen: p.quelle === 'ha', farbe: p.farbe }));
 
 /* Wer heute noch gezogen werden kann. Bewusst hier in JS und nicht als
    Unterabfrage im SQL: der Verfall wird erst beim naechsten Schreiben
@@ -1915,7 +1948,7 @@ const statistikAbfragen = (env, fenster) => [
      Zwei Bilder aus einer Abfrage - getrennt waeren es zwei Durchlaeufe ueber
      dieselben Zeilen mit demselben `max(id)` darin. */
   env.DB.prepare(`
-    SELECT r.user_id, coalesce(u.name,'Ehemaliger') AS name,
+    SELECT r.user_id, coalesce(u.name,'Ehemaliger') AS name, ${farbeSql()} AS farbe,
            j.tag, r.biere, r.temperatur, j.tief, j.hoch, j.n
     FROM reports r
     JOIN users u ON u.id = r.user_id
@@ -1931,7 +1964,7 @@ const statistikAbfragen = (env, fenster) => [
   // `ort IS NULL`: ein Abend auswaerts hat keinen Gastgeber (migrations/0024),
   // in der Spalte steht dort nur der, der ihn ausgemacht hat.
   env.DB.prepare(`
-    SELECT coalesce(u.name,'Ehemaliger') AS name, count(*) AS n
+    SELECT coalesce(u.name,'Ehemaliger') AS name, ${farbeSql()} AS farbe, count(*) AS n
     FROM termine t JOIN users u ON u.id = t.gastgeber_id
     WHERE t.abgesagt_am IS NULL AND t.ort IS NULL
     GROUP BY t.gastgeber_id ORDER BY n DESC
@@ -1983,8 +2016,8 @@ const statistikAbfragen = (env, fenster) => [
      mehr tut. Da Entfernen den Namen loescht, waere die Zeile ohnehin nur
      ein "Ehemaliger" ohne erkennbaren Bezug - hier lieber ganz weg. */
   env.DB.prepare(`
-    SELECT name, notrufe_insgesamt AS n FROM users
-    WHERE notrufe_insgesamt > 0 AND entfernt_am IS NULL ORDER BY n DESC
+    SELECT u.name, ${farbeSql()} AS farbe, u.notrufe_insgesamt AS n FROM users u
+    WHERE u.notrufe_insgesamt > 0 AND u.entfernt_am IS NULL ORDER BY n DESC
   `),
 ];
 
@@ -2000,9 +2033,11 @@ const statistikRunde = (ergebnis) => {
   const gradKurven = new Map();
   for (const z of bestand.results) {
     if (!kurven.has(z.user_id)) {
-      kurven.set(z.user_id, { name: z.name, tage: [], werte: [] });
+      /* `farbe` steht EINMAL an der Kurve und wandert nicht mit den Tagen
+         mit: sie gehoert dem Menschen, nicht der Meldung. */
+      kurven.set(z.user_id, { name: z.name, farbe: z.farbe, tage: [], werte: [] });
       gradKurven.set(z.user_id,
-        { name: z.name, tage: [], werte: [], tief: [], hoch: [], n: [] });
+        { name: z.name, farbe: z.farbe, tage: [], werte: [], tief: [], hoch: [], n: [] });
     }
     const k = kurven.get(z.user_id);
     k.tage.push(z.tag);
@@ -5586,6 +5621,9 @@ const ROUTEN = {
         SELECT u.id, u.name, u.email, u.rolle, u.quelle, u.erstellt,
                u.gesperrt_am, u.gesperrt_grund, u.entfernt_am,
                u.mail_stumm_am, u.mail_prefs,
+               -- Der Platz in der Kreidereihe, und daneben ob er GEWAEHLT ist:
+               -- das Kontor zeigt "automatisch" anders an als "so bestellt".
+               ${farbeSql()} AS farbe, u.farbe AS farbe_gewaehlt,
                coalesce(g.name, 'Ehemaliger') AS gesperrt_von,
                (SELECT count(*) FROM tokens t      WHERE t.user_id = u.id)   AS geraete,
                (SELECT count(*) FROM reports r     WHERE r.user_id = u.id)   AS meldungen,
@@ -5634,6 +5672,10 @@ const ROUTEN = {
         email: u.email,
         rolle: u.rolle,
         gemessen: u.quelle === 'ha',
+        // Welche Kreide er traegt, und ob das seine Wahl war oder die
+        // Anmeldereihenfolge (siehe migrations/0028).
+        farbe: u.farbe,
+        farbe_gewaehlt: u.farbe_gewaehlt != null,
         seit: utc(u.erstellt),
         gesperrt: u.gesperrt_am
           ? { seit: utc(u.gesperrt_am), grund: u.gesperrt_grund, von: u.gesperrt_von }
@@ -5665,8 +5707,9 @@ const ROUTEN = {
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
     const aktion = String(daten.aktion || '');
-    if (!['sperren', 'entsperren', 'rolle', 'entfernen'].includes(aktion)) {
-      return fehler(request, "aktion: 'sperren', 'entsperren', 'rolle' oder 'entfernen'");
+    if (!['sperren', 'entsperren', 'rolle', 'entfernen', 'farbe'].includes(aktion)) {
+      return fehler(request,
+        "aktion: 'sperren', 'entsperren', 'rolle', 'entfernen' oder 'farbe'");
     }
 
     const ziel = await env.DB.prepare(`
@@ -5676,8 +5719,12 @@ const ROUTEN = {
     if (ziel.entfernt_am) return fehler(request, 'Der ist schon entfernt', 409);
 
     // --- Die drei Schutzregeln, vor jeder Handlung ---------------------------
+    /* Die eigene Farbe ist ausdruecklich erlaubt. Die Selbstregel darunter
+       schuetzt davor, sich das Kontor zuzuschliessen - eine Kreide kann das
+       nicht, und wer seine Farbe nicht selbst waehlen darf, braucht die Wahl
+       nicht. Sie war der Anlass fuer die ganze Spalte. */
     const gegenMich = ziel.id === ich.id;
-    if (gegenMich && aktion !== 'entsperren') {
+    if (gegenMich && aktion !== 'entsperren' && aktion !== 'farbe') {
       /* Auch die Degradierung: wer sich selbst zum `user` macht, sperrt sich
          aus dem Kontor aus. Zurueck kaeme er nur ueber ADMIN_MAIL - und das
          ist der Notausgang, nicht der Weg. */
@@ -5751,6 +5798,23 @@ const ROUTEN = {
       const neu = ziel.rolle === 'admin' ? 'user' : 'admin';
       detail = neu;
       await env.DB.prepare('UPDATE users SET rolle = ? WHERE id = ?').bind(neu, ziel.id).run();
+
+    } else if (aktion === 'farbe') {
+      /* Ein PLATZ in der Kreidereihe, kein Farbwert - warum, steht in
+         migrations/0028. `null` gibt ihn wieder frei und stellt damit die
+         Anmeldereihenfolge her; das ist kein Sonderfall, sondern der
+         Ausgangszustand jeder Zeile.
+
+         Doppelte Plaetze sind erlaubt: ohne sie liesse sich kein Tausch
+         machen, ohne einen der beiden erst auf einen dritten zu schieben. */
+      const roh = daten.farbe;
+      const platz = roh === null || roh === undefined ? null : Number(roh);
+      if (platz !== null && (!Number.isInteger(platz) || platz < 0 || platz >= FARBEN)) {
+        return fehler(request, `farbe: 0 bis ${FARBEN - 1} oder null`);
+      }
+      detail = platz === null ? 'automatisch' : String(platz);
+      await env.DB.prepare('UPDATE users SET farbe = ? WHERE id = ?')
+        .bind(platz, ziel.id).run();
 
     } else {
       /* Weich. Ein hartes DELETE risse ueber `kommentare.autor_id`
@@ -5902,7 +5966,8 @@ const ROUTEN = {
       // "insgesamt" ist keine Frage an den Zeitraum-Schalter, genau wie beim
       // Gastgeber und den Ziehungen oben.
       env.DB.prepare(`
-        SELECT z.user_id, coalesce(u.name,'Ehemaliger') AS name, count(*) AS n
+        SELECT z.user_id, coalesce(u.name,'Ehemaliger') AS name,
+               ${farbeSql()} AS farbe, count(*) AS n
         FROM zugriffe z JOIN users u ON u.id = z.user_id
         GROUP BY z.user_id ORDER BY n DESC
       `),
@@ -5917,7 +5982,7 @@ const ROUTEN = {
        Rangliste `aufrufeJeNutzer` (meistbeschaeftigt zuerst) - dieselbe
        Reihenfolge, mit der die Seite ihnen Farben zuteilt. */
     const aufrufeNutzerReihen = aufrufeJeNutzer.results.map(z => ({
-      feld: 'u' + z.user_id, titel: z.name,
+      feld: 'u' + z.user_id, titel: z.name, farbe: z.farbe,
     }));
     const tageJeAufruf = new Map();
     for (const z of aufrufeJeNutzerTag.results) {
@@ -5997,8 +6062,13 @@ const ROUTEN = {
     const jahrPrefix = `${jahr}-%`;
 
     const ergebnis = await env.DB.batch([
-      // 0 - alle Melder, Anmeldereihenfolge = Melderfarbe auf der Seite.
-      env.DB.prepare("SELECT id, coalesce(name,'Ehemaliger') AS name FROM users ORDER BY id"),
+      /* 0 - alle Melder mit Namen UND Melderfarbe. Der Platz kommt seit
+         Schema 28 von hier und wird nicht mehr auf der Seite aus der
+         Reihenfolge gezaehlt: sonst haette derselbe Mensch im Rueckblick eine
+         andere Kreide als am Rad und in der Statistik. */
+      env.DB.prepare(`SELECT u.id, coalesce(u.name,'Ehemaliger') AS name,
+                             ${farbeSql()} AS farbe
+                      FROM users u ORDER BY u.id`),
 
       /* 1 - Eiskoenig: Tage auf Platz 1, Tagesende-Stand mit Carry-Forward.
          `roh` schneidet die Historie auf das Jahr plus GENAU EINE Carry-in-
@@ -6243,12 +6313,15 @@ const ROUTEN = {
     ] = ergebnis;
 
     const namen = new Map(leute.results.map(u => [u.id, u.name]));
+    // Die Melderfarbe daneben: dieselbe Zeile traegt sie schon, und beide
+    // Balkenbilder des Rueckblicks brauchen sie.
+    const farben = new Map(leute.results.map(u => [u.id, u.farbe]));
     const mitName = (zeilen, feld = 'user_id') =>
       zeilen.map(z => ({ ...z, name: namen.get(z[feld]) || 'Ehemaliger' }));
 
     // -- Eiskoenig ------------------------------------------------------------
     const eiskoenig = mitName(eiskoenigZeilen.results)
-      .map(z => ({ id: z.user_id, name: z.name, tage: z.tage }));
+      .map(z => ({ id: z.user_id, name: z.name, farbe: farben.get(z.user_id) ?? null, tage: z.tage }));
 
     // -- wie oft gemeldet wurde, je Monat --------------------------------------
     const meldungMonat = Array(12).fill(0);
@@ -6269,7 +6342,8 @@ const ROUTEN = {
     const rad = ziehungen ? {
       ziehungen, zusagen: zugesagt,
       quote: quoteNenner ? Math.round(zugesagt / quoteNenner * 100) : 0,
-      gewonnen: mitName(radGewonnen.results).map(z => ({ id: z.user_id, name: z.name, n: z.n })),
+      gewonnen: mitName(radGewonnen.results).map(z => ({
+        id: z.user_id, name: z.name, farbe: farben.get(z.user_id) ?? null, n: z.n })),
     } : null;
 
     // -- Abend des Jahres: bester Schnitt ab 2 Bewertungen, aelterer bei Gleichstand --

@@ -779,8 +779,36 @@
     font-family: var(--hand); font-size: 14px; line-height: 1;
     background: #399c69; color: var(--kreide);
   }
-  .karte.gesperrt .k-mono { background: #b15041; }
-  .karte.weg .k-mono { background: #5a635f; }
+  /* Gesperrt und entfernt schlagen die Melderfarbe: an einer Karte, die
+     ausgegraut ist, wäre ein kräftiger Punkt eine Einladung. */
+  .karte.gesperrt .k-mono { background: #b15041 !important; }
+  .karte.weg .k-mono { background: #5a635f !important; }
+
+  /* --- Die Kreide eines Menschen -------------------------------------------
+     Sieben Punkte in einer Reihe, dieselbe Bauform wie die Knopfzeile darüber.
+     Sie stehen erst da, wenn „Farbe" gedrückt wurde — an jeder Karte
+     dauerhaft sieben Punkte wären ein Farbkasten, wo eine Verwaltung steht.
+     --------------------------------------------------------------------- */
+  /* Der Knopf, solange die Reihe offen steht. Ausdrücklich NICHT `.sicher`:
+     das Rot dort ist die Farbe der Rückfrage vor einer zerstörenden Handlung,
+     und Umfärben ist keine. Dieselbe helle Kante wie ein gewählter Reiter —
+     „das hier ist gerade offen" heißt im ganzen Kontor dasselbe. */
+  .k-tat button.offen {
+    border-color: var(--kreide); color: var(--kreide); background: #ffffff0a;
+  }
+  .k-farben { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+  .k-farben button {
+    width: 22px; height: 22px; padding: 0; border-radius: 50%;
+    border: 1px solid #ffffff40;
+  }
+  /* Die gewählte trägt einen Ring statt einer Umrandung: eine dickere Kante
+     verschöbe die Nachbarn um einen Punkt. */
+  .k-farben button[aria-pressed="true"] {
+    border-color: var(--kreide); box-shadow: 0 0 0 2px var(--schiefer), 0 0 0 3px var(--kreide);
+  }
+  /* „Automatisch" ist kein Ton, sondern das Zurücknehmen der Wahl — also kein
+     Punkt, sondern ein Wort. */
+  .k-farben button.auto { width: auto; height: auto; border-radius: 3px; padding: 3px 8px; }
   .marke {
     font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
     border: 1px solid currentColor; border-radius: 999px; padding: 1px 7px;
@@ -1478,6 +1506,20 @@
        Platz 3, offen = Platz 2). Wer Rot und Gelb tauscht, färbt „abgesagt"
        gelb und „offen" rot. */
     reihe:      ['#399c69', '#b29126', '#b15041', '#4c9bcb', '#994d96', '#8a938f'],
+    /* Und die Reihe für die MENSCHEN, getrennt von der für die Rollen: eine
+       Kreide je Melder, dieselbe an seiner Kurve, an seinem Bogen im Rad und
+       an seiner Karte in der Runde unten. Welchen Platz jemand hat, sagt der
+       Worker (`farbe`, siehe migrations/0028) — und hier ist es einstellbar.
+
+       SIEBEN UND NICHT SECHS: sieben Angemeldete auf sechs Farben hießen,
+       dass sich immer ein Paar eine teilt. Und nicht acht, weil der
+       Kreidebereich auf Schiefer nicht mehr hergibt (Begründung und Messwerte
+       stehen an `MENSCHEN` in `index.html`). Wer die Reihe ändert, ändert sie
+       an allen vier Stellen (hier, `statistik.html`, die Vorgabe in
+       `bilder.js`, `MENSCHEN` in `index.html`) — und die Zahl sieben steht im
+       Worker als `FARBEN`, der damit die Wahl prüft. */
+    menschen:   ['#d153a2', '#be4523', '#c18705', '#017a16',
+                 '#39ac6f', '#1d9af0', '#6956c2'],
     linie:      '#ffffff33',
     text:       '#cfd6cd',
     textWeg:    '#93a09a',
@@ -1687,8 +1729,14 @@
       const kopf = el('div', 'k-kopf');
       // Der erste Buchstabe des Namens. `Array.from`, nicht `[0]`: ein Name
       // darf mit einem Zeichen anfangen, das aus zwei Codeeinheiten besteht.
-      kopf.appendChild(el('span', 'k-mono',
-        (Array.from(u.name || '?')[0] || '?').toUpperCase()));
+      const mono = el('span', 'k-mono',
+        (Array.from(u.name || '?')[0] || '?').toUpperCase());
+      /* Das Monogramm trägt seine Kreide — dieselbe wie seine Kurve in den
+         Bildern oben und sein Bogen am Rad. Damit ist die Farbe an der Stelle
+         zu sehen, an der man sie ändert, und nicht bloß eine Zahl in einer
+         Antwort. */
+      mono.style.background = MENSCHEN[u.farbe % MENSCHEN.length];
+      kopf.appendChild(mono);
       kopf.appendChild(el('span', 'k-name', u.name || 'Ehemaliger'));
       if (u.rolle === 'admin') kopf.appendChild(el('span', 'marke admin', 'Admin'));
       if (u.gemessen) kopf.appendChild(el('span', 'marke', 'gemessen'));
@@ -1741,6 +1789,21 @@
      reißt einen aus dem Blatt, und man klickt ihn weg, ohne ihn zu lesen. */
   let sicher = null;   // 'id:aktion', solange die Rückfrage steht
   let sicherUhr = null;
+  /* Wessen Kreidereihe gerade offen steht. Kein `sicher`: das Umfärben ist
+     keine zerstörende Handlung, die einen zweiten Klick bräuchte — der Knopf
+     klappt nur auf, was danach kommt, wirkt sofort und lässt sich ebenso
+     sofort zurücknehmen. Immer nur eine Karte, sonst steht das Kontor nach
+     drei Klicks voll Farbkästen. */
+  let farbeOffen = null;
+
+  /* Die sieben Kreiden, wortgleich mit der `menschen`-Reihe an
+     `Bilder.aufsetzen` oben — beide Fassungen stehen absichtlich in derselben
+     Datei zwei Bildschirme auseinander, weil die eine die Bilder färbt und
+     die andere die Punkte im Bedienteil. Über `Bilder` ginge es auch, aber
+     dann hinge das Kontor für eine Reihe von sieben Zeichenketten an einer
+     fremden Datei. */
+  const MENSCHEN = ['#d153a2', '#be4523', '#c18705', '#017a16',
+                    '#39ac6f', '#1d9af0', '#6956c2'];
 
   function knoepfe(u) {
     const zeile = el('div', 'k-tat');
@@ -1760,6 +1823,18 @@
       tat('entfernen', 'entfernen', true);
     }
 
+    /* Die Kreide, an jeder Karte — auch an der eigenen. Sie war der Anlass für
+       die ganze Spalte, und sie ist die einzige Handlung hier, die man mit
+       sich selbst machen darf: eine Farbe kann niemanden aussperren. */
+    const auf = el('button', farbeOffen === u.id ? 'offen' : null, 'Farbe');
+    auf.setAttribute('aria-expanded', String(farbeOffen === u.id));
+    auf.type = 'button';
+    auf.addEventListener('click', () => {
+      farbeOffen = farbeOffen === u.id ? null : u.id;
+      runde(stand.nutzer);
+    });
+    zeile.appendChild(auf);
+
     // Das Feld für den Sperrgrund steht erst da, wenn die Rückfrage steht:
     // vorher wäre es ein leeres Kästchen an jeder Karte.
     if (sicher === u.id + ':sperren') {
@@ -1772,7 +1847,58 @@
       zeile.appendChild(f);
       setTimeout(() => f.focus(), 0);
     }
+
+    if (farbeOffen === u.id) zeile.appendChild(farbreihe(u));
     return zeile;
+  }
+
+  /* Die acht Kreiden plus „automatisch". Jeder Druck wirkt sofort — es gibt
+     nichts zu bestätigen, und wer sich vertut, drückt daneben.
+
+     Ein Punkt darf mehrfach vergeben sein: sonst ließe sich kein Tausch
+     machen, ohne einen der beiden erst auf einen dritten Platz zu schieben.
+     Wer schon auf dieser Kreide sitzt, steht als Name darunter — das ist die
+     Auskunft, die ein Verbot ersetzt. */
+  function farbreihe(u) {
+    const reihe = el('div', 'k-farben');
+    MENSCHEN.forEach((ton, i) => {
+      const b = el('button');
+      b.type = 'button';
+      b.style.background = ton;
+      b.setAttribute('aria-pressed', String(u.farbe === i));
+      const auch = stand.nutzer
+        .filter(a => a.id !== u.id && !a.entfernt && a.farbe === i)
+        .map(a => a.name);
+      b.title = auch.length ? 'Farbe ' + (i + 1) + ' — auch ' + auch.join(', ')
+        : 'Farbe ' + (i + 1);
+      b.setAttribute('aria-label', b.title);
+      b.addEventListener('click', () => farbeSetzen(u, i));
+      reihe.appendChild(b);
+    });
+    /* Zurück auf die Anmeldereihenfolge. Steht nur da, wenn es etwas
+       zurückzunehmen GIBT — an einer Karte ohne Wahl wäre es ein Knopf, der
+       nichts tut. */
+    if (u.farbe_gewaehlt) {
+      const a = el('button', 'auto', 'automatisch');
+      a.type = 'button';
+      a.title = 'Wieder die Farbe aus der Anmeldereihenfolge';
+      a.addEventListener('click', () => farbeSetzen(u, null));
+      reihe.appendChild(a);
+    }
+    return reihe;
+  }
+
+  async function farbeSetzen(u, platz) {
+    sagt('runde-sagt', '');
+    try {
+      await ruf('/api/admin/nutzer', { id: u.id, aktion: 'farbe', farbe: platz });
+      await laden();
+      sagt('runde-sagt', platz === null
+        ? `${u.name} bekommt seine Farbe wieder aus der Anmeldereihenfolge.`
+        : `${u.name} schreibt jetzt mit Farbe ${platz + 1}.`);
+    } catch (e) {
+      sagt('runde-sagt', e.message, true);
+    }
   }
 
   async function handeln(u, aktion, schluessel, zerstoerend) {
@@ -1929,10 +2055,14 @@
       Bilder.losJeMelder('Ausgang der Ziehungen je Melder, insgesamt',
         s.lose_je_melder || []));
 
-    // Die Farbe kommt von hier, nicht vom Worker: der kennt die Palette des
-    // Kontors nicht, nur die Reihenfolge (meistbeschaeftigt zuerst).
+    /* Die Farbe kommt weiter von HIER und nicht vom Worker: der kennt die
+       Palette des Kontors nicht. Was er seit Schema 28 mitschickt, ist der
+       PLATZ (`farbe`) — und den übersetzt diese Zeile, damit ein Nutzer in
+       der Säule dieselbe Kreide trägt wie in seiner Kurve und an seiner
+       Karte. Die Reihenfolge (meistbeschäftigt zuerst) bleibt, sie ordnet
+       jetzt nur noch die Säulen und nicht mehr die Farben. */
     const aufrufeReihen = (s.aufrufe_nutzer_reihen || [])
-      .map((r, i) => ({ ...r, farbe: REIHE[i % REIHE.length] }));
+      .map((r, i) => ({ ...r, farbe: MENSCHEN[(r.farbe ?? i) % MENSCHEN.length] }));
 
     gruppe('Betrieb & Post',
       Bilder.saeulen('Betrieb je Woche' + fenster, s.betrieb, [
@@ -1998,6 +2128,8 @@
     rolle:      ['⇅', ''],
     entfernen:  ['✕', 'rot'],
     rundmail:   ['✉', ''],
+    // Der Kreis ist die Farbe selbst, so gut es ein Schriftzeichen kann.
+    farbe:      ['◍', ''],
   };
 
   /* Das Protokoll führt seit dem Versandprotokoll drei Quellen, und `quelle`
@@ -2083,6 +2215,12 @@
     if (z.aktion === 'rundmail') {
       return '„' + (z.detail || '') + '"'
         + (z.anzahl && !kurz ? ' · ' + versandStueck(z) : '');
+    }
+    /* Beim Umfärben steht im Protokoll die nackte Platzzahl — der Worker
+       schreibt den Platz, und „Kai (5)" liest sich wie ein Zähler. Das Wort
+       davor macht daraus eine Auskunft. „automatisch" bleibt, wie es ist. */
+    if (z.aktion === 'farbe' && /^\d+$/.test(z.detail || '')) {
+      return z.wen + ' (Farbe ' + (Number(z.detail) + 1) + ')';
     }
     return z.wen + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
   }

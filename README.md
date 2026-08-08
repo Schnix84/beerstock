@@ -469,6 +469,33 @@ Kreide (Verlauf) und einmal in Tinte (Kontor). **Die Tafel lädt sie nicht** —
 `index.html` gilt weiter: eine Datei, keine externen Ressourcen. Sie zeigt nur
 einen Knopf, der hinüberführt.
 
+**Jeder Melder hat eine Farbe, und zwar überall dieselbe.** Sieben Kreiden, und
+welche jemand trägt, sagt der Worker als *Platz* (`users.farbe`, Schema 28) —
+entweder der im Kontor gewählte oder der aus der Anmeldereihenfolge. Damit ist
+derselbe Mensch am Rad-Bogen, an seiner Bestands- und Temperaturkurve, an den
+liegenden Balken, im Jahresrückblick und am Monogramm im Kontor gleich gefärbt.
+Vorher hing die Farbe an der *Stellung* im jeweiligen Bild, und wer heute vorn
+lag, war grün.
+
+Die sieben Töne stehen an vier Stellen: als Vorgabe in `bilder.js`, als
+`menschen`-Reihe in `statistik.html` und `admin.html` und als `MENSCHEN` in
+`index.html` (die Tafel lädt `bilder.js` ja nicht). Wer die Reihe ändert, ändert
+alle vier — und die Zahl sieben kennt zusätzlich der Worker als `FARBEN`, er
+prüft damit die Wahl im Kontor.
+
+Sie sind gezogen, nicht gewählt (`ideas/pruefungen/kreide-suche.mjs`, abgenommen
+vom Validator des dataviz-Skills): engster Abstand zweier Töne 15,6 gegen eine
+Schwelle von 15, bei Rot-/Grünblindheit 6,4 — beides auf Schiefer **und**
+Kartengrund. **Sieben ist keine runde Zahl, sondern die Grenze:** acht Töne im
+Kreidebereich kommen über 13,5 nicht hinaus und fallen durch. Ein achter Melder
+teilt sich darum Magenta mit dem ersten — der Unterschied zu früher ist, dass
+der Wirt das im Kontor auflösen kann.
+
+Getrennt davon bleibt die `reihe`: die färbt *Rollen* — den Ausgang einer
+Ziehung, die Anteile einer Säule, zugesagt gegen abgesagt. Zwei Reihen, zwei
+Aufgaben; wer sie zusammenlegt, färbt irgendwann einen Menschen wie einen
+Zustand.
+
 ### Architektur
 
 Nur der Worker schreibt; alles andere ist statisch oder ruft bei ihm an. Die
@@ -647,7 +674,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit. Stumme Tage stehen **nicht** in der Antwort — die schreibt erst die Zeichnung fort (siehe unten) |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
-| `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen', grund?}` — nur Admin |
+| `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen'\|'farbe', grund?, farbe?}` — nur Admin. `farbe` ist der Platz in der Kreidereihe (0–6) oder `null` für „wieder nach Anmeldereihenfolge"; als einzige Aktion auch mit sich selbst erlaubt |
 | `GET /api/admin/statistik` 🔒 | dasselbe **plus Betrieb**: Mails je Art und je Tag, Anmeldungen, wer noch Post will, Seitenaufrufe insgesamt/je Tag/je Nutzer — nur Admin |
 | `POST /api/admin/rundmail` 🔒 | `{betreff, text, bild_url?, knopf_text?, knopf_link?}` sofort an alle, die sie wollen — nur Admin |
 | `POST /api/admin/rundmail/planen` 🔒 | dieselben Felder plus `{versand_am}` — vorgemerkt statt sofort verschickt, nur Admin |

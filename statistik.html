@@ -596,6 +596,27 @@
        steht wortgleich im Kontor: seit beide Seiten Schiefer sind, wären zwei
        verschiedene Grüns für dasselbe Bild ein Fehler. */
     reihe:      ['#399c69', '#b29126', '#b15041', '#4c9bcb', '#994d96', '#8a938f'],
+    /* Und die Reihe für die MENSCHEN, getrennt von der für die Rollen: eine
+       Kreide je Melder, dieselbe an seiner Kurve hier, an seinem Bogen im Rad
+       und an seiner Karte im Kontor. Welchen Platz jemand hat, sagt der Worker
+       (`farbe`, siehe migrations/0028); hier steht nur, wie Platz 0..7
+       aussieht.
+
+       SIEBEN UND NICHT SECHS: sieben Angemeldete auf sechs Farben hießen,
+       dass sich immer ein Paar eine teilt. Und sieben und nicht acht, weil
+       der Kreidebereich auf Schiefer nicht mehr hergibt — acht Töne kommen
+       über einen engsten Abstand von 13,5 nicht hinaus und fallen durch.
+       Diese sieben bestehen: 15,6 gegen eine Schwelle von 15, bei
+       Rot-/Grünblindheit 6,4 (Warnband, erlaubt nur, weil jede Kurve im
+       Kasten und in der Legende ihren Namen trägt). Gezogen mit
+       `ideas/pruefungen/kreide-suche.mjs`.
+
+       DIESELBEN SIEBEN IN DERSELBEN ORDNUNG stehen im Kontor, als Vorgabe in
+       `bilder.js` und als `MENSCHEN` in `index.html` (die Tafel lädt
+       `bilder.js` nicht). Die Zahl sieben kennt außerdem der Worker
+       (`FARBEN`), er prüft damit die Wahl im Kontor. */
+    menschen:   ['#d153a2', '#be4523', '#c18705', '#017a16',
+                 '#39ac6f', '#1d9af0', '#6956c2'],
     linie:      '#ffffff33',
     text:       '#cfd6cd',
     textWeg:    '#93a09a',
