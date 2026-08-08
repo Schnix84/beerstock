@@ -3604,6 +3604,9 @@
      unter dem Ring liegen (y 36,5 … 263,5), sonst kreuzt die Schrift ihn. Oben
      also y + 19 ≤ 36,5, unten y − 6 ≥ 263,5. */
   const RAD_KUPPE = 17, RAD_SOHLE = 270;
+  /* Die Außenkante des Bogens: Radius 110 plus die halbe Strichbreite von 7.
+     Daran hält sich die Schrift, mit RAD_LUFT Abstand. */
+  const RAD_RING = 113.5, RAD_LUFT = 3;
   // Die seitlichen Grenzen der viewBox (-45 … 345), zwei Einheiten nach innen.
   const RAD_SAUM = [-43, 343];
 
@@ -3635,9 +3638,19 @@
       // beiden können später über oder unter dem Ring stehen.
       seite[0].oberste = true;
       seite[seite.length - 1].unterste = true;
+
+      /* Und die oberste wird gleich hier gehoben, VOR dem Schieben. Umgekehrt
+         war es falsch: die zweite Marke wich beim Schieben einer aus, die
+         gleich darauf 9 px nach oben weggerückt ist, und stand danach 11 px
+         zu tief — auf der Tafel war das genau die eine, die den Ring kreuzte.
+         Der Startwert des Schiebens muss die Hebung deshalb kennen. */
+      if (seite[0].y < 150 && Math.abs(seite[0].x - 150) < RAD_ACHSE) {
+        seite[0].y = Math.min(seite[0].y, RAD_KUPPE);
+      }
+
       if (seite.length < 2) continue;
       const zeile = Math.min(RAD_ZEILE, (RAD_UNTEN - RAD_OBEN) / (seite.length - 1));
-      let y = RAD_OBEN - zeile;
+      let y = Math.min(RAD_OBEN, seite[0].y) - zeile;
       for (const m of seite) { m.y = Math.max(m.y, y + zeile); y = m.y; }
       y = RAD_UNTEN + zeile;
       for (let i = seite.length - 1; i >= 0; i--) {
@@ -3687,9 +3700,26 @@
        oder unter dem Ring ist eben nur für eine Platz. */
     for (const m of marken) {
       if (m.gedraengt || Math.abs(m.x - 150) >= RAD_ACHSE) continue;
-      if (m.oberste && m.y < 150) m.y = Math.min(m.y, RAD_KUPPE);
       if (m.oberste && m.y <= RAD_KUPPE) m.mittig = true;
       if (m.unterste && m.y >= RAD_SOHLE) m.mittig = true;
+    }
+
+    /* Zuletzt: keine Marke liegt auf dem Ring. Sie steht am Rand ihrer eigenen
+       Höhe richtig, aber sie ist zwei Zeilen hoch, und in der oberen Hälfte des
+       Rades wölbt sich der Bogen unter der zweiten Zeile nach außen — dann
+       streicht die Zahl über die Kreide. Auf der Tafel traf das „Schnix".
+
+       Maßgeblich ist die Kante des Blocks, die der Radmitte am nächsten liegt:
+       dort reicht der Ring am weitesten nach außen. Liegt der ganze Block über
+       oder unter dem Ring, gibt es nichts zu rücken — das ist der Fall für die
+       mittig gesetzten, die deshalb übersprungen werden. */
+    for (const m of marken) {
+      if (m.mittig) continue;
+      const kopf = m.y - 6, fuss = m.y + 19;
+      const dy = kopf > 150 ? kopf - 150 : fuss < 150 ? 150 - fuss : 0;
+      if (dy >= RAD_RING) continue;
+      const kante = Math.sqrt(RAD_RING * RAD_RING - dy * dy) + RAD_LUFT;
+      m.x = m.rechts ? Math.max(m.x, 150 + kante) : Math.min(m.x, 150 - kante);
     }
 
     for (const m of marken) {
@@ -3706,28 +3736,31 @@
       zahl.textContent = m.zahl;
       g.append(name, zahl);
 
-      /* Und jetzt die Breite. Die viewBox hat seitlich 45 Einheiten Luft; ein
-         langer Name bei 3 oder 9 Uhr braucht mehr, und ein SVG schneidet ihn
-         dort einfach ab. Vorher fiel das kaum auf, weil dort die BREITEN Bögen
-         lagen und die tragen wenige Namen; jetzt schiebt der Reißverschluss
-         gerade die schmalen dorthin. Mit „Christopher" ist es reproduzierbar.
+      /* Und jetzt die Breite. Seitlich steht der Schrift nur, was zwischen dem
+         Saum der viewBox und dem Ring liegt — bei 3 und 9 Uhr sind das keine
+         80 Einheiten, und ein zwölfstelliger Name braucht mehr. Vorher fiel das
+         kaum auf, weil dort die BREITEN Bögen lagen und die tragen wenige
+         Namen; jetzt schiebt der Reißverschluss gerade die schmalen dorthin.
+         Mit „Christopher" ist es reproduzierbar.
+
+         Gestaucht statt gerückt. Rücken hieße, sich zwischen zwei Fehlern zu
+         entscheiden: nach außen schneidet der Rahmen den Namen ab, nach innen
+         legt er sich auf den Bogen — beides wurde in der Probe sichtbar.
+         `textLength` mit `spacingAndGlyphs` presst ihn stattdessen in den Platz,
+         den es gibt; bei den heutigen Namen (drei bis sechs Zeichen) greift das
+         nie, und wo es greift, sind es ein paar Prozent.
 
          Gemessen wird am eingehängten Element, nicht geschätzt — die Kreideschrift
          hat keine Zeichenbreite, mit der man rechnen könnte. Kann der Browser
-         nicht messen (unsichtbares SVG antwortet 0), bleibt der geometrische
-         Platz stehen; schlechter als vorher wird es dadurch nie. */
-      const breit = Math.max(name.getComputedTextLength(), zahl.getComputedTextLength());
-      // Eine mittige Marke wächst nach BEIDEN Seiten, ihr steht also nur die
-      // Hälfte des Weges bis zum Saum zur Verfügung — und sie weicht in die
-      // Richtung aus, in der noch Platz ist.
-      const halb = m.mittig ? breit / 2 : breit;
-      const platz = m.mittig ? Math.min(m.x - RAD_SAUM[0], RAD_SAUM[1] - m.x)
+         nicht messen (unsichtbares SVG antwortet 0), bleibt alles, wie es ist;
+         schlechter als vorher wird es dadurch nie. */
+      const platz = m.mittig ? 2 * Math.min(m.x - RAD_SAUM[0], RAD_SAUM[1] - m.x)
                   : m.rechts ? RAD_SAUM[1] - m.x : m.x - RAD_SAUM[0];
-      if (halb > platz) {
-        const x = (m.mittig ? Math.min(Math.max(m.x, RAD_SAUM[0] + halb), RAD_SAUM[1] - halb)
-                 : m.rechts ? RAD_SAUM[1] - breit : RAD_SAUM[0] + breit).toFixed(1);
-        name.setAttribute('x', x);
-        zahl.setAttribute('x', x);
+      if (platz > 0) for (const t of [name, zahl]) {
+        if (t.getComputedTextLength() > platz) {
+          t.setAttribute('textLength', platz.toFixed(1));
+          t.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+        }
       }
     }
   }
