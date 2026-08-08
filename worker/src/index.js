@@ -856,10 +856,11 @@ const kreisWaehlbarStmt = (env, ichId) => env.DB.prepare(`
 /* Den gewuenschten Kreis aus dem Rumpf lesen. Gibt `{ fehler }` oder
    `{ ids }`, wobei `ids === null` "an alle" heisst.
 
-   DREI EINGABEN, DREI BEDEUTUNGEN, und die Asymmetrie ist Absicht:
+   VIER EINGABEN, VIER BEDEUTUNGEN, und die Asymmetrie ist Absicht:
 
      kein `kreis` / null   an alle - so wie jeder Notruf vor dieser Migration
      [1, 7, 12]            nur an diese
+     [eigene Id]           die PROBE - siehe unten
      []                    Fehler, kein "an niemanden"
 
    Die leere Liste ist der gefaehrliche Fall: ein Fehler in der Seite, der ein
@@ -867,15 +868,37 @@ const kreisWaehlbarStmt = (env, ichId) => env.DB.prepare(`
    ein Hilferuf ins Leere, der auf der eigenen Tafel trotzdem so aussieht, als
    waere er raus. Also 400 statt Stille.
 
+   DIE PROBE ist derselbe Fall, nur ausdruecklich gewollt: ein Kreis aus genau
+   einem Namen, dem eigenen. Sie ist der einzige Weg, den Notruf in der
+   LAUFENDEN Anlage auszuprobieren - Karte, Marke, Frist, Zuruecknehmen -, ohne
+   die Runde zu wecken. Der Aufrufer sagt mit `darfProbe`, ob sie erlaubt ist;
+   heute darf sie der Wirt (`istAdmin`). Fuer alle anderen bleibt es bei der
+   alten Antwort: wer nur sich selbst waehlt, hat sich vertippt.
+
+   `probe` zieht sich durch beide Routen und schaltet dort ZWEIERLEI ab - die
+   Post und den Zaehler. Eine Spalte am Notruf braucht es dafuer nicht: dass
+   der Kreis aus einem Namen besteht und das der eigene ist, steht schon in
+   `notruf_kreis`, und eine zweite Fassung derselben Tatsache liefe irgendwann
+   auseinander.
+
+   Nur die ALLEINIGE eigene Id ist eine Probe. `[ich, Anna]` bleibt, was es
+   war: ein echter Notruf an Anna, die eigene Id faellt still heraus - man
+   steht ja ohnehin auf der eigenen Tafel.
+
    Geprueft wird gegen `kreisWaehlbarStmt`, nicht nur auf "ist eine Zahl":
    sonst legte ein erfundener Wert Zeilen an, die auf niemanden zeigen, und
    der Absender saehe einen Kreis von vier, von denen drei nie existiert
    haben. */
-async function notrufKreis(daten, env, ichId) {
+async function notrufKreis(daten, env, ichId, darfProbe = false) {
   const roh = daten.kreis;
   if (roh === undefined || roh === null) return { ids: null };
   if (!Array.isArray(roh)) return { fehler: 'kreis: eine Liste von Ids oder null' };
   if (!roh.length) return { fehler: 'kreis: mindestens einer - sonst sieht ihn niemand' };
+
+  if (roh.length === 1 && Number(roh[0]) === ichId) {
+    if (!darfProbe) return { fehler: 'kreis: dich selbst zu rufen hilft dir nicht' };
+    return { ids: [ichId], probe: true };
+  }
 
   const gewuenscht = new Set();
   for (const w of roh) {
@@ -3972,8 +3995,12 @@ const ROUTEN = {
 
     /* Wer ihn sehen soll. `null` heisst an alle - siehe `notrufKreis` und
        migrations/0021. Geprueft VOR dem Anlegen: ein Notruf, dessen Kreis
-       nicht steht, ist keiner, den man kurz mal stehen lassen kann. */
-    const kreis = await notrufKreis(daten, env, ich.id);
+       nicht steht, ist keiner, den man kurz mal stehen lassen kann.
+
+       Nur der eigene Name darin ist die Probe (siehe `notrufKreis`): sie legt
+       dieselbe Zeile an wie jeder andere Notruf und laeuft dieselben neunzig
+       Minuten - sie schweigt nur nach aussen und zaehlt nicht mit. */
+    const kreis = await notrufKreis(daten, env, ich.id, istAdmin(ich));
     if (kreis.fehler) return fehler(request, kreis.fehler);
 
     /* Ob der Standort mitwandern soll. Fehlt das Feld, ist es ein einmaliger
@@ -4001,11 +4028,16 @@ const ROUTEN = {
       // Der Zaehler fuer die Statistik - siehe Migration 0017, warum nicht
       // aus `notrufe` selbst gezaehlt wird. Nur beim ABSETZEN, nicht beim
       // Standort-Nachtrag: der ersetzt keinen Notruf, er ergaenzt einen.
+      //
+      // Die Probe zaehlt 0 statt gar nicht: `zuletzt` gehoert zum Betrieb der
+      // Seite und nicht zur Statistik - wer probiert, war da. Nur der Balken
+      // im Verlauf soll nichts davon wissen, sonst stuende dort am Ende die
+      // Werkstatt und nicht die Runde.
       env.DB.prepare(`
         UPDATE users SET zuletzt = datetime('now'),
-                         notrufe_insgesamt = notrufe_insgesamt + 1
+                         notrufe_insgesamt = notrufe_insgesamt + ?
         WHERE id = ?
-      `).bind(ich.id),
+      `).bind(kreis.probe ? 0 : 1, ich.id),
     ]);
     const zeile = neu.results[0];
 
@@ -4022,11 +4054,18 @@ const ROUTEN = {
        nicht erst die Seite aufmachen muessen, um zu wissen, wohin.
 
        Ohne Kreis geht sie an alle mit Namen - dieselbe Runde wie vor
-       Migration 0021. */
-    const anWen = kreis.ids ?? (await env.DB.prepare(
-      'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
-      .bind(ich.id).all()).results.map(r => r.id);
-    notrufPost(env, ctx, ich, zeile.id, art, lat, lon, anWen, zeile.bis, !!zeile.live);
+       Migration 0021.
+
+       Bei der Probe gar keine: `empfaenger` waere hier die eigene Id, und
+       weder `benachrichtige` noch `stosse` werfen den Absender von sich aus
+       heraus (das taete `ausser`, und das setzt der Notruf nicht). Ein Klopfen
+       am eigenen Geraet ist kein Test des Notrufs, sondern nur laut. */
+    if (!kreis.probe) {
+      const anWen = kreis.ids ?? (await env.DB.prepare(
+        'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
+        .bind(ich.id).all()).results.map(r => r.id);
+      notrufPost(env, ctx, ich, zeile.id, art, lat, lon, anWen, zeile.bis, !!zeile.live);
+    }
 
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
@@ -4137,7 +4176,7 @@ const ROUTEN = {
 
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
-    const kreis = await notrufKreis(daten, env, ich.id);
+    const kreis = await notrufKreis(daten, env, ich.id, istAdmin(ich));
     if (kreis.fehler) return fehler(request, kreis.fehler);
 
     const zeile = await env.DB.prepare(`
@@ -4151,11 +4190,18 @@ const ROUTEN = {
 
     /* Angeschrieben wird der ganze neue Kreis, nicht die Differenz - warum,
        steht an `notrufPost`. Ohne Kreis ist das die ganze Runde: wer von
-       "nur an drei" auf "an alle" umlegt, erreicht damit auch die uebrigen. */
-    const anWen = kreis.ids ?? (await env.DB.prepare(
-      'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
-      .bind(ich.id).all()).results.map(r => r.id);
-    notrufPost(env, ctx, ich, zeile.id, zeile.art, zeile.lat, zeile.lon, anWen, zeile.bis, !!zeile.live);
+       "nur an drei" auf "an alle" umlegt, erreicht damit auch die uebrigen.
+
+       Die Probe schreibt niemanden an - auch nicht sich selbst, siehe
+       `POST /api/notruf`. Wer einen laufenden Notruf nachtraeglich auf die
+       Probe zurueckzieht, hat die Runde dabei schon erreicht; die Post von
+       vorhin bleibt draussen, die Karte nimmt der Kreiswechsel weg. */
+    if (!kreis.probe) {
+      const anWen = kreis.ids ?? (await env.DB.prepare(
+        'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
+        .bind(ich.id).all()).results.map(r => r.id);
+      notrufPost(env, ctx, ich, zeile.id, zeile.art, zeile.lat, zeile.lon, anWen, zeile.bis, !!zeile.live);
+    }
 
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
@@ -4178,7 +4224,15 @@ const ROUTEN = {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     const leute = await kreisWaehlbarStmt(env, ich.id).all();
-    return antwort(request, { leute: leute.results }, 200, KEIN_FREMDER_CACHE);
+    /* `probe` ist die eigene Id, und nur der Wirt bekommt sie - er darf sich
+       selbst waehlen und damit den Notruf in der laufenden Anlage ausprobieren
+       (siehe `notrufKreis`). Sie steht NEBEN der Liste und nicht darin: `leute`
+       ist ein Adressbuch, und man selbst gehoert nicht in sein eigenes. Wie der
+       Knopf dazu heisst, entscheidet die Seite. */
+    return antwort(request, {
+      leute: leute.results,
+      probe: istAdmin(ich) ? ich.id : null,
+    }, 200, KEIN_FREMDER_CACHE);
   },
 
   /* Zurueckgenommen. Kein Loeschen: die Zeile bleibt bis zum Aufraeumen stehen,

@@ -635,11 +635,11 @@ Drei Dinge, die dazugehören:
 | `POST /api/kommentar` | `{ziel_art, ziel_id, text?, bild?, antwort_auf?, ohne_vorschau?}` — Text oder Bild muss da sein; `antwort_auf` darf auf eine Antwort zeigen, sie hängt dann an deren Wurzel, und der Adressat bleibt als `an_id` stehen; `ohne_vorschau` ist das „×" an der Karte über dem Schreibfeld |
 | `POST /api/kommentar/aendern` | `{id, text, ohne_vorschau?}` oder `{id, loeschen:true}` |
 | `POST /api/reaktion` | `{kommentar_id, art}` — `art` ist das Emoji selbst und muss in `REAKTIONEN` stehen (die Liste im Worker, nicht im Schema); Schalter, derselbe Druck nimmt zurück; zurück kommen `anzahl` und die `namen` |
-| `POST /api/notruf` 🔒 | `{art:'bier'\|'kamerad', lat, lon, genau?, live?, kreis?}` — gilt 90 Minuten, ein erneuter Ruf ersetzt den eigenen. `kreis` fehlend oder `null` heißt an alle, eine Liste von Nutzer-Ids heißt nur an diese; `[]` ist ein Fehler und kein „an niemanden" |
+| `POST /api/notruf` 🔒 | `{art:'bier'\|'kamerad', lat, lon, genau?, live?, kreis?}` — gilt 90 Minuten, ein erneuter Ruf ersetzt den eigenen. `kreis` fehlend oder `null` heißt an alle, eine Liste von Nutzer-Ids heißt nur an diese; `[]` ist ein Fehler und kein „an niemanden". Genau die **eigene** Id allein ist die *Probe*: der Notruf steht vollständig auf der eigenen Tafel, schreibt aber niemanden an und zählt in keiner Statistik mit — erlaubt nur für den Wirt |
 | `POST /api/notruf/standort` 🔒 | `{lat, lon, genau?}` — trägt nur den Standort am laufenden Notruf nach, ohne neue Mail |
 | `POST /api/notruf/live` 🔒 | `{live}` — legt den Schieberegler am laufenden Notruf um, ohne Koordinaten und ohne Mail |
 | `POST /api/notruf/kreis` 🔒 | `{kreis}` — ersetzt den Empfängerkreis am laufenden Notruf, in beide Richtungen. Dazugekommene werden angeschrieben (Doppelmails bremst `mail_einmal`), Weggenommenen verschwindet die Karte |
-| `GET /api/kreis` 🔒 | `{leute:[{id, name}]}` — wer sich anwählen lässt: alle Angemeldeten mit Namen außer einem selbst, ohne Gesperrte und Entfernte. Nicht aus `feld`, das kennt nur, wer schon einmal gemeldet hat |
+| `GET /api/kreis` 🔒 | `{leute:[{id, name}], probe}` — wer sich anwählen lässt: alle Angemeldeten mit Namen außer einem selbst, ohne Gesperrte und Entfernte. `probe` ist die eigene Id für den Wirt und sonst `null` — daraus baut die Seite den Knopf „Ich selbst (Probe)". Nicht aus `feld`, das kennt nur, wer schon einmal gemeldet hat |
 | `POST /api/notruf/weg` 🔒 | nimmt den eigenen zurück; zweimal gerufen ist kein Fehler |
 | `GET /api/kachel` | `?z=&x=&y=` — Kartenkachel über den Worker statt direkt von OSM; sieben Tage im Cache, fremder Referer → 403 |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |

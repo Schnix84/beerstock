@@ -4852,7 +4852,15 @@
          das ist keine Kosmetik: `notrufStand` greift die Zeitmarke über
          `querySelector('.nr-marke')` ab, und das ist die erste im Dokument.
          Sie wandert nicht mit der Uhr, also steht sie hier und nicht dort. */
-      if (n.kreis) wer.appendChild(el('span', 'nr-marke nr-marke-kreis', 'nur an ' + n.kreis));
+      /* „Probe" statt „nur an 1": ein Kreis, in dem nur der Rufende selbst
+         steht, ist der Testnotruf (siehe `notrufKreis` im Worker). `kreis_wer`
+         gibt es nur am eigenen Notruf — was hier steht, sieht ohnehin niemand
+         sonst, und der Vergleich geht deshalb ohne die eigene Id aus. */
+      if (n.kreis) {
+        const probe = n.kreis === 1 && n.kreis_wer && n.kreis_wer[0] === n.wer;
+        wer.appendChild(el('span', 'nr-marke nr-marke-kreis',
+          probe ? 'Probe' : 'nur an ' + n.kreis));
+      }
       z.appendChild(wer);
 
       /* Zum eigenen Notruf führt kein „hin" — man ist schon da. Stattdessen
@@ -6014,6 +6022,12 @@
   const kreisGewaehlt = new Set();  // Ids, nur im Modus 'auswahl' von Belang
   let kreisLeute = null;            // die wählbaren Namen, erst bei Bedarf geholt
   let kreisUhr = null;              // Sammelfrist für Änderungen am laufenden Notruf
+  /* Die eigene Id — aber nur, wenn der Worker sie hergibt. Er tut das allein
+     beim Wirt, und daran hängt der Probelauf: ein Notruf an sich selbst, der
+     auf der eigenen Tafel vollständig dasteht, aber niemanden anschreibt und
+     in keiner Statistik landet. Für alle anderen bleibt `kreisIch` null, und
+     damit gibt es den Knopf gar nicht erst. */
+  let kreisIch = null;
 
   const kreisGemerkt = () => {
     try { return JSON.parse(localStorage.getItem(KREIS_SPEICHER) || '[]'); }
@@ -6021,11 +6035,21 @@
   };
   /* Nur eine echte Auswahl wird gemerkt. Ein Notruf an alle sagt nichts
      darüber, wen man beim nächsten Mal meint — er würde die Vorauswahl
-     löschen, ohne dass jemand das wollte. */
+     löschen, ohne dass jemand das wollte.
+
+     Der Probelauf wird ausdrücklich NICHT gemerkt: sonst stünde beim nächsten
+     Öffnen „Nur an ausgewählte" mit sich selbst da, und ein Druck auf „Bier"
+     ginge still an niemanden — genau der Hilferuf ins Leere, gegen den der
+     leere Kreis drüben im Worker abgewiesen wird. Eine Probe ist ein einzelner
+     Versuch und keine Gewohnheit. */
   const kreisMerken = () => {
-    if (kreisModus !== 'auswahl') return;
+    if (kreisModus !== 'auswahl' || kreisProbe()) return;
     try { localStorage.setItem(KREIS_SPEICHER, JSON.stringify([...kreisGewaehlt])); } catch {}
   };
+
+  // Steht die Auswahl gerade auf „nur ich selbst"? Genau dann ist es eine Probe.
+  const kreisProbe = () =>
+    kreisIch != null && kreisGewaehlt.size === 1 && kreisGewaehlt.has(kreisIch);
 
   /* Die Namen. Eigener Ruf, erst beim ersten Umlegen auf „Nur an ausgewählte" —
      wer immer an alle ruft, holt sie nie. Sie kommen NICHT aus `feld`: das
@@ -6037,10 +6061,13 @@
       if (!r.ok) throw new Error('Fehler ' + r.status);
       const d = await r.json();
       kreisLeute = d.leute || [];
+      // Die eigene Id kommt nur beim Wirt mit — sonst bleibt sie null.
+      kreisIch = Number.isInteger(d.probe) ? d.probe : null;
       /* Wer nicht mehr wählbar ist (entfernt, gesperrt, umbenannt), fliegt aus
          der gemerkten Auswahl — sonst schickte die Seite Ids, die der Worker
          ohnehin wegwirft, und der Zähler der Knöpfe stimmte nicht. */
       const gibt = new Set(kreisLeute.map(p => p.id));
+      if (kreisIch != null) gibt.add(kreisIch);
       for (const id of [...kreisGewaehlt]) if (!gibt.has(id)) kreisGewaehlt.delete(id);
     } catch {
       kreisLeute = [];
@@ -6053,12 +6080,18 @@
     feld.hidden = kreisModus === 'alle';
     feld.textContent = '';
     if (!feld.hidden) {
+      /* Der eigene Name steht vorn und sieht aus wie jeder andere — derselbe
+         Knopf, dieselbe Reihe. Er ist keine Sonderfunktion mit eigenem Platz,
+         sondern ein Empfänger wie die anderen; nur eben man selbst. Was er
+         auslöst, sagt sein Text. */
+      const namen = (kreisIch != null ? [{ id: kreisIch, name: 'Ich selbst (Probe)' }] : [])
+        .concat(kreisLeute || []);
       if (!kreisLeute) {
         feld.appendChild(el('div', 'nr-leute-warten', 'Namen werden geholt …'));
-      } else if (!kreisLeute.length) {
+      } else if (!namen.length) {
         feld.appendChild(el('div', 'nr-leute-warten', 'Außer dir schreibt hier noch niemand mit.'));
       } else {
-        for (const p of kreisLeute) {
+        for (const p of namen) {
           const b = el('button', 'nr-chip', p.name);
           b.type = 'button';
           b.setAttribute('aria-pressed', String(kreisGewaehlt.has(p.id)));
@@ -6072,8 +6105,17 @@
     for (const id of ['nr-bier', 'nr-kamerad', 'nr-alles']) $(id).disabled = zu;
   }
 
+  /* Die Probe schließt die anderen aus und die anderen die Probe: „ich selbst
+     und Anna" gäbe es drüben gar nicht — der Worker wirft die eigene Id aus
+     jedem gemischten Kreis heraus, und dann stünde hier ein Knopf gedrückt,
+     der nichts bedeutet. Also ist sie ein Entweder-oder, sichtbar an den
+     Knöpfen und nicht erst an der Antwort. */
   function kreisTippen(id) {
-    if (kreisGewaehlt.has(id)) kreisGewaehlt.delete(id); else kreisGewaehlt.add(id);
+    if (kreisGewaehlt.has(id)) kreisGewaehlt.delete(id);
+    else {
+      if (kreisIch != null && (id === kreisIch || kreisGewaehlt.has(kreisIch))) kreisGewaehlt.clear();
+      kreisGewaehlt.add(id);
+    }
     kreisZeichnen();
     kreisAendern();
   }
@@ -6169,7 +6211,9 @@
       return;
     }
 
-    notrufSagt('Wird angeschrieben …');
+    // Bei der Probe wird niemand angeschrieben — dann soll hier auch nichts
+    // anderes stehen.
+    notrufSagt(kreisProbe() ? 'Probe wird gestellt …' : 'Wird angeschrieben …');
     try {
       const d = await ruf('/api/notruf', {
         art,
