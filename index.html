@@ -1155,6 +1155,19 @@
     align-items: baseline; gap: 8px; margin-top: 18px;
     font-size: 11px; color: var(--kreide-weg);
   }
+  /* Die zweite Fußzeile, für die Anbindung von Home Assistant. WORTGLEICH dieselbe Form wie
+     die Gerätezeile darüber, nur mit kleinerem Abstand: es sind zwei Zeilen
+     über dasselbe Thema — welche Schlüssel gelten in meinem Namen. Ein eigener
+     Kasten mit eigener Überschrift hätte daraus zwei Themen gemacht, und das
+     zweite hätte niemand gefunden.
+
+     Zwei Tat-Wörter statt einem: „ansehen" führt auf die Seite mit der
+     Anleitung, „widerrufen" tut es hier auf der Stelle. Der kurze Weg ist da,
+     weil das der Griff ist, den man im Zweifel eilig braucht — wer die
+     Anbindung abschalten will, will nicht erst eine Anleitung lesen. */
+  .dk-haus { margin-top: 9px; }
+  .dk-haus-tat { display: flex; gap: 11px; }
+
   /* Der Weg ins Kontor steht UNTER der Gerätezeile und mit Abstand: „alle
      abmelden" und „Mitgliederverwaltung" sind zwei sehr verschiedene Knöpfe,
      und nebeneinander vertippt man sich. Der Abstand ist größer als der der
@@ -3168,6 +3181,24 @@
       <div class="dk-fuss">
         <span id="dk-geraete"></span>
         <button class="ko-tat" id="dk-alle" type="button">alle abmelden</button>
+      </div>
+
+      <!-- Home Assistant: der Schlüssel, unter dem eine Hausautomation von
+           außen meldet, ohne dass ein Browser beteiligt ist. Er zählt bewusst
+           NICHT als Gerät in der Zeile darüber (der Worker zählt ihn seit
+           Schema 27 getrennt) — sonst meldet das Blatt ein Gerät, das keines
+           ist, und zwar genau dem, der gerade nachsieht, wie viele es sind.
+
+           Die Zeile steht IMMER da, auch wenn keiner eingerichtet ist. Das ist
+           der einzige Ort, an dem man von der Anbindung überhaupt erfährt: sie
+           nur denen zu zeigen, die schon eine haben, hieße, sie nur denen zu
+           zeigen, die sie nicht mehr suchen. -->
+      <div class="dk-fuss dk-haus">
+        <span id="dk-haus-was"></span>
+        <span class="dk-haus-tat">
+          <button class="ko-tat" id="dk-haus-auf" type="button">einrichten</button>
+          <button class="ko-tat" id="dk-haus-weg" type="button" hidden>widerrufen</button>
+        </span>
       </div>
 
       <!-- Der einzige Wegweiser ins Kontor. Bisher kannte man die Adresse oder
@@ -8805,6 +8836,10 @@
 
   let deckelOffen = false;
   let deckelStand = null;   // die letzte Antwort von /api/me
+  /* Die Rückfrage am „widerrufen" der Home-Assistant-Anbindung. Steht hier oben und
+     nicht beim Knopf, weil `deckelZeichnen()` sie beim Aufschlagen zurücksetzt
+     und weiter unten stünde sie in der zeitlichen Totzone. */
+  let dkHausSicher = false;
 
   function dkSagt(text, schlecht) {
     const p = $('dk-sagt');
@@ -8891,6 +8926,28 @@
     $('dk-geraete').textContent = n === 1
       ? 'Angemeldet auf einem Gerät'
       : 'Angemeldet auf ' + n + ' Geräten';
+
+    /* Home Assistant. Die Zeile beantwortet zwei Fragen auf einmal, und die
+       zweite ist die wichtigere: „steht einer" UND „meldet er auch noch". Ein
+       eingerichteter Anschluss, von dem seit Wochen nichts kommt, heißt, dass
+       drüben die Automation steht — und das sieht man von hier aus sonst
+       nirgends.
+
+       `kurzZeit` und keine eigene Formatierung: dieselbe Auskunft trägt im
+       Thread dieselben Worte. Grob ist sie ohnehin, `tokens.zuletzt` wird im
+       Worker nur einmal je Stunde fortgeschrieben. */
+    const haus = d.ha_zugang || null;
+    $('dk-haus-was').textContent = !haus
+      ? 'Home Assistant nicht verbunden'
+      : haus.zuletzt
+        ? 'Home Assistant, gemeldet ' + kurzZeit(haus.zuletzt)
+        : 'Home Assistant, noch nichts gemeldet';
+    $('dk-haus-auf').textContent = haus ? 'ansehen' : 'einrichten';
+    $('dk-haus-weg').hidden = !haus;
+    // Ein neu aufgeschlagenes Blatt fragt nicht mehr „wirklich?" — die
+    // Rückfrage gehört zu dem Klick, der sie ausgelöst hat, nicht zum Blatt.
+    dkHausSicher = false;
+    $('dk-haus-weg').textContent = 'widerrufen';
 
     // `/api/me` trug die Rolle schon immer mit, nur hat sie hier nie jemand
     // gelesen. Verlässt sich nichts drauf: das Kontor prüft selbst.
@@ -9434,6 +9491,50 @@
     deckelZu();
     sagt('Alle Geräte abgemeldet. Dein Eintrag bleibt in der Liste stehen.');
     formular();
+  });
+
+  /* Home Assistant. „ansehen"/„einrichten" führt beides auf dieselbe Seite —
+     ein Ziel, zwei Worte, weil „einrichten" für den, der schon einen hat, eine
+     falsche Auskunft wäre. Erzeugt wird dort, nicht hier: das Token ist genau
+     einmal sichtbar, und der Deckel ist ein Blatt, das man mit einem Wisch
+     zumacht. Ein Geheimnis, das man einmal zu sehen bekommt, gehört nicht auf
+     eine Fläche, die schon beim Danebentippen verschwindet. */
+  $('dk-haus-auf').addEventListener('click', () => { location.href = 'homeassistant.html'; });
+
+  /* Widerrufen geht dagegen hier — es ist der eilige Griff. Mit derselben
+     Rückfrage wie „alle abmelden" (zweiter Klick in derselben Zeile, kein
+     confirm()), weil danach drüben etwas stillsteht und das Wiederherstellen
+     einen Gang in die YAML kostet. */
+  $('dk-haus-weg').addEventListener('click', async () => {
+    const knopf = $('dk-haus-weg');
+    if (!dkHausSicher) {
+      dkHausSicher = true;
+      knopf.textContent = 'wirklich?';
+      dkSagt('Danach meldet die Wohnung ins Leere, bis du einen neuen Schlüssel '
+           + 'erzeugt und drüben eingetragen hast.');
+      setTimeout(() => {
+        if (!dkHausSicher) return;
+        dkHausSicher = false;
+        knopf.textContent = 'widerrufen';
+      }, 6000);
+      return;
+    }
+    dkHausSicher = false;
+    knopf.textContent = 'widerrufen';
+    knopf.disabled = true;
+    try {
+      await ruf('/api/ha/zugang/weg', {});
+    } catch (e) {
+      dkSagt(e.message, true);
+      knopf.disabled = false;
+      return;
+    }
+    knopf.disabled = false;
+    // Die eine Stelle im Stand, die sich geändert hat — ein zweiter Ruf nach
+    // /api/me für ein Feld wäre eine Runde für nichts.
+    if (deckelStand) deckelStand.ha_zugang = null;
+    deckelZeichnen();
+    dkSagt('Der Schlüssel für Home Assistant ist widerrufen.');
   });
 
   /* --- Die Hand am Thread: langer Druck und Wisch ---------------------------

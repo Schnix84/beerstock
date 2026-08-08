@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Home Assistant — beerstock</title>
+<style>
+  /* ==========================================================================
+     HOME ASSISTANT
+
+     Die Anleitung, wie eine Hausautomation selbst meldet — und der Ort, an dem der
+     Schlüssel dafür ausgegeben wird. Beides auf EINER Seite, und das ist der
+     ganze Witz daran: die Anleitung stand bisher im README, der Schlüssel lag
+     im `localStorage` und musste per Entwicklerwerkzeug herausgeholt werden.
+     Wer beides an zwei Orten hat, kopiert zwischen zwei Orten.
+
+     Sie sieht aus wie die Statistiken und nicht wie das Kontor: der Nutzer
+     kommt aus der Gaststube und geht nicht ins Hinterzimmer. Kreide auf
+     Schiefer, Holzrahmen, dieselbe Hand. Der Rahmen ist wortgleich von dort
+     übernommen — zwei Nebenseiten mit zwei Rahmen wären zwei Häuser.
+
+     Schmaler als die Statistiken (620 statt 760): dort hängen zwei Bilder
+     nebeneinander, hier steht Fließtext, und eine Textspalte über die volle
+     Brettbreite liest sich auf dem Rechner wie ein Beipackzettel.
+
+     KEIN `bilder.js`. Die Datei ist für Grafiken da; hier ist nichts zu
+     zeichnen, und ein 49-kB-Anhang für nichts wäre ein Ladefehler mit Ansage.
+     ========================================================================== */
+  :root {
+    --schiefer:    #262c2e;
+    --schiefer-t:  #191d1f;
+    --kreide:      #eef1ea;
+    --kreide-matt: #cfd6cd;
+    --kreide-weg:  #93a09a;
+    --gelb:        #e8c766;
+    --gruen:       #8fc9a6;
+    --rot:         #d9705f;
+    --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; min-height: 100%;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--kreide);
+    background:
+      radial-gradient(130% 55% at 50% -12%, #e8c76614, transparent 60%),
+      radial-gradient(120% 90% at 50% 0%, #1f2629, #14181a 52%, #0c0f11 100%);
+    background-color: #0c0f11;
+    /* Beides gegen dieselbe Kante — die lange Begründung steht in
+       `statistik.html`, und zwei Fassungen davon wären eine zu viel. */
+    background-repeat: no-repeat;
+    min-height: 100svh;
+    padding: clamp(10px, 3vw, 28px);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- Der Holzrahmen -----------------------------------------------------
+     VIER LEISTEN, nicht eine Flaeche. Der alte Rahmen war ein einziger Kasten
+     mit einem Hintergrund darauf; das ging an drei Stellen schief. Die
+     Jahresringe hatten eine feste Periode von 23 px - gleicher Abstand,
+     gleiche Staerke, endlos, und genau das hat kein Holz. Die Maserung lief
+     ueber alle vier Seiten in DERSELBEN Richtung, auf der Oberleiste also quer
+     statt laengs; die Gehrungsnaht war zwar aufgemalt, aber die Faser drehte
+     sich an ihr nicht - und daran erkennt das Auge eine Fuge. Und ein einziger
+     160-Grad-Verlauf machte daraus eine Kachel statt vier Hoelzer unter einem
+     Licht von oben.
+
+     Jetzt malt `.rh` das Holz - ein Kind hinter der Tafel, darin vier
+     `<i>`, jedes per `clip-path` auf sein Trapez beschnitten. Dadurch ist die
+     Gehrung eine echte Kante zwischen zwei Flaechen, jede Leiste hat ihre
+     eigene Faserrichtung (laengs, wie ein aus der Leiste gefraestes Profil sie
+     hat) und ihre eigene Beleuchtung. Dazu die Fase aussen und der Falz innen.
+
+     WORTGLEICH von `index.html` - dort steht das Original, hier die Kopie
+     (wie schon bei `.tafel`). Abgesegnet am Mock ideas/mocks/mock-n-rahmen.html,
+     Variante A.
+
+     WARUM VIER ELEMENTE UND NICHT VIER HINTERGRUNDSCHICHTEN: eine Schicht mit
+     `background-size: 100% 15px` deckt die Oberleiste MITSAMT der beiden
+     Eckquadrate ab, die Seitenleiste ebenso - in den Ecken gewinnt dann
+     schlicht die obere Schicht, und man bekommt einen stumpfen Stoss statt
+     einer Gehrung. Erst der Zuschnitt auf ein Trapez legt die 45-Grad-Kante
+     wirklich zwischen zwei Flaechen. */
+  .brett {
+    /* Eine Zahl, vier Verwendungen: Polsterung, die vier Trapeze, die Naht,
+       der Falz. */
+    --r: clamp(9px, 2.4vw, 15px);
+    /* Der Ton des Holzes. `--holz`/`--holz-t` gibt es nicht mehr: alle vier
+       Seiten und die Wrapped-Karte tragen jetzt denselben Rahmen, damit war
+       das alte Paar tot. Diese vier Werte stehen wortgleich an jeder Stelle,
+       an der ein Rahmen haengt. */
+    --h-hell:   #f8ecd2;
+    --h-mitte:  #eed5a6;
+    --h-dunkel: #d0b284;
+    --h-tief:   #a98a5e;
+    --fase-hell: .38;
+    --fase-dunkel: .55;
+    position: relative;
+    max-width: 620px; margin: 0 auto;
+    /* Knapper gerundet als bisher (7 px -> 4). Eine gegehrte Leiste laeuft in
+       der Ecke spitz zu; je runder die Silhouette, desto mehr sieht der Rahmen
+       nach Gehaeuse aus und desto weniger nach Holz. */
+    border-radius: 4px;
+    padding: var(--r);
+    /* Der aeussere Haarstrich war `#1a1007` und legte einen orangen Faden um
+       alles; jetzt entsaettigt. */
+    box-shadow:
+      0 42px 70px -30px #000e,
+      0 14px 30px -18px #000c,
+      0 0 0 1px #14110d;
+  }
+  /* `overflow` sitzt hier und nicht auf `.brett`: auf `.brett` schnitte es
+     alles ab, was aus der Tafel herausragen darf. */
+  .rh {
+    position: absolute; inset: 0; border-radius: inherit;
+    overflow: hidden; pointer-events: none;
+  }
+  .rh-l { position: absolute; inset: 0; }
+  .rh-o { clip-path: polygon(0 0, 100% 0, calc(100% - var(--r)) var(--r), var(--r) var(--r)); }
+  .rh-u { clip-path: polygon(0 100%, var(--r) calc(100% - var(--r)), calc(100% - var(--r)) calc(100% - var(--r)), 100% 100%); }
+  .rh-li { clip-path: polygon(0 0, var(--r) var(--r), var(--r) calc(100% - var(--r)), 0 100%); }
+  .rh-re { clip-path: polygon(100% 0, 100% 100%, calc(100% - var(--r)) calc(100% - var(--r)), calc(100% - var(--r)) var(--r)); }
+
+  /* --- Die Maserung -------------------------------------------------------
+     DER KERN, und er ist nicht offensichtlich: gefiltertes Rauschen wird NIE
+     eine Ader. `feTurbulence` mittelt sich weg - egal wie weit man den
+     Kontrast spreizt, es bleibt Dunst. Am Mock sind zwei Anlaeufe genau daran
+     gescheitert (gemessen: die Streuung laengs der Leiste FIEL auf 10, statt
+     zu steigen).
+
+     Was traegt: eine GESTREIFTE Vorlage (`<pattern>`, ungleich breite Baender
+     in sechs Toenen), verschoben von einer `feDisplacementMap`. Die Streifen
+     bleiben durchgehende Linien und werden wellig - genau das, was eine Faser
+     tut. `scale='30'` ist der Ausschlag: darunter wird es Kord, darueber
+     Marmor. Im selben Bild darueber zwei Wolken (breite dunkle Zonen,
+     gebleichte Zonen), als eigene Schicht der Flaum des Saegeschnitts.
+
+     Zwei Bilder, nicht vier: liegend fuer Ober- und Unterleiste, stehend fuer
+     die Seiten - dort stehen die Streifen und die Frequenzen sind getauscht.
+     Die Bilder sind DECKEND und tragen die Farbe; die Verlaeufe darueber
+     machen nur noch Licht.
+
+     UND SIE SIND WARM, alle drei Stellen zugleich: Palette, Lichtkanten
+     (`#ffe4bb` statt reinem Weiss) und Schatten (`#2b1805` statt Schwarz).
+     Neutrale Kanten waschen jede Holzfarbe zurueck ins Beige - nur die
+     Palette zu waermen bringt sichtbar nichts. */
+  .rh-l {
+    --rh-bild-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='60'%3E%3Cdefs%3E%3Cpattern id='s' width='600' height='15' patternUnits='userSpaceOnUse'%3E%3Crect width='600' height='15' fill='%23eed5a6'/%3E%3Crect y='0' width='600' height='1.5' fill='%23a8825a'/%3E%3Crect y='3.5' width='600' height='0.8' fill='%2386633c'/%3E%3Crect y='6' width='600' height='3' fill='%23e4c48c'/%3E%3Crect y='10' width='600' height='1.2' fill='%23bd9a6c'/%3E%3Crect y='12.5' width='600' height='2' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.025' numOctaves='3' seed='5' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='13' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='26' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='720' height='180' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='600' height='60' filter='url(%23z)'/%3E%3Crect width='600' height='60' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-bild-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='600'%3E%3Cdefs%3E%3Cpattern id='s' width='15' height='600' patternUnits='userSpaceOnUse'%3E%3Crect width='15' height='600' fill='%23eed5a6'/%3E%3Crect x='0' width='1.5' height='600' fill='%23a8825a'/%3E%3Crect x='3.5' width='0.8' height='600' fill='%2386633c'/%3E%3Crect x='6' width='3' height='600' fill='%23e4c48c'/%3E%3Crect x='10' width='1.2' height='600' fill='%23bd9a6c'/%3E%3Crect x='12.5' width='2' height='600' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.025 0.006' numOctaves='3' seed='17' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='25' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='38' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='180' height='720' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='60' height='600' filter='url(%23z)'/%3E%3Crect width='60' height='600' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-flaum:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cfilter id='f1'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='3' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.22 0 0 0 0 0.14 0 0 0 0 0.06 0 0 0 0.3 0'/%3E%3C/filter%3E%3Cfilter id='f2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='41' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.95 0 0 0 0 0.84 0 0 0 0.26 0'/%3E%3C/filter%3E%3Crect width='60' height='60' filter='url(%23f1)'/%3E%3Crect width='60' height='60' filter='url(%23f2)'/%3E%3C/svg%3E");
+    --licht-v: linear-gradient(180deg, #ffe4bb28, #ffe4bb00 26%, #2b18051a);
+  }
+  /* WICHTIG: jede Leiste liegt zwar ueber der ganzen Flaeche (`inset: 0`) und
+     zeigt davon nur ihr Trapez - ihre Verlaeufe muessen aber ueber die LEISTE
+     laufen, nicht ueber das Brett. Ohne die `/ 100% var(--r)`-Angaben spannt
+     ein 180-Grad-Verlauf ueber die volle Bretthoehe, und von der Oberleiste
+     bleiben die obersten zwei Prozent davon uebrig: eine glatte Flaeche. */
+  .rh-o {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      linear-gradient(180deg, #ffe4bb3d, #ffe4bb00 42%, #2b180536) 0 0 / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 0 no-repeat,
+      var(--h-mitte);
+  }
+  /* Die Unterleiste liegt im Eigenschatten: oben nimmt ihr die Tafel das
+     Licht, nach unten hin hellt nur auf, was vom Boden zurueckkommt - und das
+     ist WENIG. Der helle Stopp steht erst bei 82 %: sonst ist die Unterleiste
+     am Ende heller als die obere, und das Licht kaeme von unten. */
+  .rh-u {
+    background:
+      var(--rh-flaum) 0 100% repeat,
+      linear-gradient(180deg, #2b18054f, #2b18051a 60%, #2b180500 82%, #ffe4bb22) 0 100% / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 100% no-repeat,
+      var(--h-dunkel);
+  }
+  /* Die Seitenleisten zeigen sonst den blassesten Streifen des stehenden
+     Bildes; darum der Versatz. */
+  .rh-li {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      var(--licht-v) 0 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #ffe4bb30, #2b180536) 0 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) -21px 0 no-repeat,
+      var(--h-mitte);
+  }
+  /* Rechts ist eine Spur dunkler als links: das Licht steht leicht links ueber
+     der Tafel, sonst stuende sie in einem Fotostudio. */
+  .rh-re {
+    background:
+      var(--rh-flaum) 100% 0 repeat,
+      var(--licht-v) 100% 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #2b18053e, #2b180520) 100% 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) calc(100% + 19px) 0 no-repeat,
+      var(--h-dunkel);
+  }
+
+  /* Die Gehrungsfuge entsteht schon dadurch, dass an ihr die Faserrichtung
+     springt. Der Haarstrich macht sie nur lesbar - dunkel auf der einen, ein
+     Hauch Licht auf der anderen Seite, wie an einer Fuge, in der sich Staub
+     haelt. */
+  .rh-naht {
+    position: absolute; inset: 0; opacity: .5;
+    background-image:
+      linear-gradient(45deg,  transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-45deg, transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-135deg,transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%),
+      linear-gradient(135deg, transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%);
+    background-size: var(--r) var(--r);
+    background-position: left top, right top, right bottom, left bottom;
+    background-repeat: no-repeat;
+  }
+  /* Die Aussenfase: zwei Haarstriche, keine Verlaeufe. Die vier Kanten duerfen
+     NICHT dasselbe tun - ein umlaufender heller Ring (`0 0 0 1px`) legt auch
+     unten und rechts eine Lichtkante an, wo das Licht von oben links gerade
+     nicht hinkommt. Also einzeln: oben und links hell, unten und rechts
+     dunkel. */
+  .rh-fase {
+    position: absolute; inset: 0; border-radius: inherit;
+    box-shadow:
+      0 1px 0 rgb(255 232 197 / var(--fase-hell)) inset,
+      1px 0 0 rgb(255 232 197 / calc(var(--fase-hell) * .6)) inset,
+      0 -1px 0 rgb(43 24 5 / var(--fase-dunkel)) inset,
+      -1px 0 0 rgb(43 24 5 / calc(var(--fase-dunkel) * .8)) inset;
+  }
+  /* Der Falz: die Tafel liegt HINTER dem Holz, nicht darauf. Sichtbar wird das
+     an drei Pixeln - der Lippe, die zwei Pixel weiter aussen als die Tafel
+     steht, ihrer Lichtkante, und dem Schatten, den das Holz auf den Stein
+     wirft (der sitzt als `inset` an `.tafel` selbst).
+
+     Der weiche Schatten MUSS mit der Rahmenbreite rechnen. Eine feste
+     `0 0 14px 4px`-Wolke verschluckt eine neun Pixel schmale Leiste komplett -
+     dann ist der ganze Rahmen nur noch eine dunkle Rinne. */
+  .rh-falz {
+    position: absolute; inset: calc(var(--r) - 2px); border-radius: 3px;
+    box-shadow:
+      0 1px calc(var(--r) * .45) #2b180552,
+      0 0 0 1px #17100a,
+      0 1px 0 rgb(255 232 197 / var(--fase-hell));
+  }
+  .tafel {
+    position: relative; border-radius: 3px; overflow: hidden;
+    padding: clamp(18px, 5vw, 30px) clamp(15px, 4.5vw, 26px) clamp(20px, 4vw, 28px);
+    background:
+      radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
+    /* Die erste Zeile ist der Schatten, den die Falzlippe des Rahmens auf den
+       Stein wirft. Ohne sie stimmt der Falz von aussen und ist von innen nicht
+       zu sehen. */
+    box-shadow:
+      0 7px 12px -6px #000a inset,
+      0 0 0 1px #000a inset,
+      0 16px 34px -14px #000b inset,
+      0 -10px 26px -18px #0009 inset;
+  }
+  .tafel::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 0.97 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23k)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='340' height='340' filter='url(%23w)'/%3E%3C/svg%3E");
+  }
+  .tafel::after {
+    content: ""; position: absolute; inset: -8%; pointer-events: none; opacity: .3;
+    background:
+      linear-gradient(112deg, transparent 12%, #ffffff12 22%, #ffffff26 30%, #ffffff0a 38%, transparent 46%),
+      linear-gradient(112deg, transparent 48%, #ffffff0e 58%, #ffffff1c 64%, transparent 74%),
+      linear-gradient(112deg, transparent 72%, #ffffff10 84%, transparent 94%),
+      radial-gradient(65% 30% at 24% 30%, #ffffff1f, transparent 70%),
+      radial-gradient(50% 22% at 74% 64%, #ffffff17, transparent 70%);
+    mix-blend-mode: screen;
+  }
+  .tafel > * { position: relative; z-index: 1; }
+  .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
+
+  /* --- Kopf: dieselbe Zeile, dieselbe Pille wie in den Statistiken --------- */
+  .kopfzeile {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
+    margin-bottom: 14px;
+  }
+  .kopfzeile .zur-tafel {
+    margin-left: auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 40px; padding: 4px 10px;
+    font: inherit; font-size: 12px; text-decoration: none;
+    border: 1px solid #ffffff40; border-radius: 999px;
+    background: #ffffff0a; color: var(--kreide-weg);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .kopfzeile .zur-tafel:hover {
+    background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
+  }
+  .zurueck {
+    display: inline-block; color: var(--kreide-weg); font-size: 13px;
+    text-decoration: none; border-bottom: 1px dashed #ffffff2e; padding-bottom: 1px;
+  }
+  .zurueck:hover { color: var(--kreide); }
+  h1 {
+    font-family: var(--hand); font-weight: 400;
+    font-size: clamp(26px, 7vw, 36px); line-height: 1.15;
+    margin: 0; transform: rotate(-.8deg); transform-origin: left;
+  }
+  h2 {
+    font-family: var(--hand); font-weight: 400; font-size: 21px;
+    margin: 30px 0 10px; color: var(--kreide);
+  }
+  p { margin: 0 0 11px; font-size: 14px; line-height: 1.6; color: var(--kreide-matt); }
+  p.leise { color: var(--kreide-weg); font-size: 13px; }
+  .vorspann { margin-bottom: 4px; }
+
+  /* --- Der Kasten mit dem Zugang -------------------------------------------
+     Das einzige Feld der Seite mit einem eigenen Grund. Es ist der Grund, aus
+     dem jemand hierherkommt — alles darunter ist Anleitung, die man auch im
+     README lesen könnte. Ein umrissener Kasten und keine Kreidefläche: eine
+     gefüllte Fläche ist auf Schiefer das Lauteste, was es gibt, und das
+     Lauteste auf dieser Seite soll das Token sein, nicht der Kasten darum.
+     --------------------------------------------------------------------- */
+  .anschluss {
+    border: 1px solid #ffffff2b; border-radius: 4px;
+    background: #ffffff08; padding: 14px 15px; margin: 16px 0 4px;
+  }
+  .anschluss .stand {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 9px;
+    margin-bottom: 10px;
+  }
+  .anschluss .lampe {
+    font-size: 15px; font-family: var(--hand);
+  }
+  .anschluss .lampe.an  { color: var(--gruen); }
+  .anschluss .lampe.aus { color: var(--kreide-weg); }
+  .anschluss .wann { font-size: 12px; color: var(--kreide-weg); }
+  .knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* Der Knopf. Dieselbe Pille wie überall auf den Nebenseiten; der eine, der
+     etwas anlegt, ist heller umrissen — nicht gefüllt, siehe oben. */
+  button.k {
+    font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid #ffffff40; border-radius: 999px; padding: 6px 14px;
+    background: #ffffff0a; color: var(--kreide-matt);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  button.k:hover:not(:disabled) {
+    background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
+  }
+  button.k:disabled { opacity: .5; cursor: default; }
+  button.k.stark { border-color: var(--kreide); border-width: 2px; color: var(--kreide); padding: 5px 13px; }
+  button.k.weg:hover:not(:disabled) { border-color: var(--rot); color: #f0c7bf; }
+
+  /* --- Das frische Token ---------------------------------------------------
+     Der Kasten erscheint EINMAL, direkt nach dem Erzeugen, und verschwindet
+     mit dem nächsten Laden der Seite. Er ist gelb umrandet, weil Gelb auf
+     beiden Seiten der Ton für „hier ist etwas zu tun" ist — und hier ist
+     wirklich etwas zu tun, und zwar jetzt: gespeichert ist nur der Hash, ein
+     zweites Mal gibt es das nicht.
+     --------------------------------------------------------------------- */
+  .frisch {
+    border: 1px solid var(--gelb); border-radius: 4px;
+    background: #e8c7660f; padding: 13px 14px; margin: 14px 0 0;
+  }
+  .frisch .titel {
+    font-family: var(--hand); font-size: 16px; color: var(--gelb);
+    margin-bottom: 7px;
+  }
+  .frisch p { color: var(--kreide-matt); }
+  .frisch p:last-child { margin-bottom: 0; }
+
+  /* --- Code: Token und YAML ------------------------------------------------
+     `overflow-x: auto` ist nicht Kosmetik: ein Token ist 64 Zeichen und eine
+     `url:`-Zeile ist länger als jedes Handy breit. Ohne den eigenen Schieber
+     wandert die ganze Seite nach rechts, und dann steht der Holzrahmen im Weg.
+     --------------------------------------------------------------------- */
+  .code {
+    border: 1px solid #ffffff1f; border-radius: 3px;
+    background: #0000004d; margin: 14px 0 8px;
+  }
+  /* Die Kopfzeile trägt den Dateinamen links und den Kopierknopf rechts.
+
+     Der Knopf hing hier zuerst als `position: absolute` über der rechten
+     oberen Ecke des Blocks — auf dem Rechner unauffällig, auf dem Handy lag
+     er auf der ersten Zeile: „beerstock_token: "Bearer DEIN-S[kopieren]".
+     Ein `padding-right` am `pre` hilft dagegen nicht, weil der Block waagerecht
+     scrollt und kurze Zeilen trotzdem unter den Knopf rutschen. Eine eigene
+     Zeile kann gar nicht überlappen — und sie hat den Dateinamen gleich mit
+     aufgenommen, der vorher als loses Element darüber stand. */
+  .code-kopf {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 7px 6px 12px; border-bottom: 1px solid #ffffff14;
+  }
+  .code-kopf .datei {
+    flex: 1; min-width: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px; color: var(--kreide-weg); letter-spacing: .02em;
+    line-height: 1.4;
+  }
+  .code pre {
+    margin: 0; padding: 11px 12px; overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px; line-height: 1.55; color: #dfe6e0;
+    /* Umbrechen wäre hier falsch: eine umgebrochene YAML-Zeile sieht aus wie
+       zwei, und wer sie so abtippt, hat einen Einrückungsfehler. Kopiert wird
+       ohnehin über den Knopf. */
+    white-space: pre;
+    -webkit-text-size-adjust: 100%;
+  }
+  /* Der Dateiname steht in der Kopfzeile und NICHT als `# secrets.yaml` in der
+     ersten Zeile des Blocks: von dort ginge er beim Kopieren mit und stünde
+     hinterher doppelt in der Datei. */
+  .code .kopieren {
+    flex: none;
+    font: inherit; font-size: 11px; cursor: pointer;
+    border: 1px solid #ffffff33; border-radius: 999px; padding: 3px 10px;
+    background: #ffffff0a; color: var(--kreide-weg);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .code .kopieren:hover { background: #ffffff1c; border-color: #ffffff77; color: var(--kreide); }
+  .code .kopieren.getan { color: var(--gruen); border-color: var(--gruen); }
+
+  ul { margin: 0 0 11px; padding-left: 19px; }
+  li { font-size: 14px; line-height: 1.6; color: var(--kreide-matt); margin-bottom: 7px; }
+  li b { color: var(--kreide); font-weight: 600; }
+  code.wort {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .92em; background: #ffffff12; border-radius: 2px; padding: 1px 4px;
+  }
+
+  .sagt {
+    margin: 16px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 13px;
+    line-height: 1.5; background: #ffffff0d; border-left: 2px solid var(--kreide-weg);
+  }
+  .sagt.schlecht { border-left-color: var(--rot); color: #f0c7bf; }
+
+  .tuer { text-align: center; padding: 40px 10px 30px; }
+  .tuer h2 { font-family: var(--hand); font-weight: 400; font-size: 24px; margin: 0 0 8px; }
+  .tuer p { color: var(--kreide-weg); font-size: 14px; margin: 0 0 16px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="brett">
+
+  <!-- Das Holz. Vier Leisten, jede auf ihr Trapez beschnitten - erst dadurch
+       dreht die Faser an der Gehrung. Reine Zeichnung; darum `aria-hidden`. -->
+  <div class="rh" aria-hidden="true">
+    <i class="rh-l rh-o"></i><i class="rh-l rh-u"></i><i class="rh-l rh-li"></i><i class="rh-l rh-re"></i>
+    <i class="rh-naht"></i><i class="rh-fase"></i><i class="rh-falz"></i>
+  </div>
+
+  <div class="tafel">
+    <div class="kopfzeile">
+      <h1 class="kr">Home Assistant</h1>
+      <a class="zur-tafel" href="./" aria-label="zurück zur Tafel">←</a>
+    </div>
+
+    <!-- Alles außer der Tür. Bis `/api/me` da ist, steht hier nichts: eine
+         Anleitung, die schon dasteht, während noch offen ist, ob der Leser
+         überhaupt angemeldet ist, müsste gleich wieder weggeräumt werden. -->
+    <div id="inhalt" hidden>
+      <p class="vorspann">
+        Wer eine Hausautomation hat, kann den Bierbestand von dort melden lassen,
+        statt ihn einzutippen — dieselbe Route wie jeder andere Melder, nur ohne
+        Browser. Hier steht, wie das geht, und hier gibt es den Schlüssel dazu.
+      </p>
+
+      <div class="anschluss">
+        <div class="stand">
+          <span class="lampe" id="lampe"></span>
+          <span class="wann" id="wann"></span>
+        </div>
+        <div class="knoepfe">
+          <button class="k stark" id="erzeugen" type="button"></button>
+          <button class="k weg" id="widerrufen" type="button" hidden>widerrufen</button>
+        </div>
+      </div>
+
+      <!-- Der einmalige Kasten. Wird von `zeigeFrisch()` gefüllt. -->
+      <div class="frisch" id="frisch" hidden>
+        <div class="titel">Einmal sichtbar — jetzt kopieren</div>
+        <p id="frisch-satz"></p>
+        <div class="code">
+          <div class="code-kopf">
+            <span class="datei">dein Schlüssel</span>
+            <button class="kopieren" type="button" data-fuer="token-feld">kopieren</button>
+          </div>
+          <pre id="token-feld"></pre>
+        </div>
+        <p class="leise">
+          Gespeichert ist nur eine Prüfsumme davon. Die Seite kann es dir kein
+          zweites Mal zeigen — verloren heißt: neu erzeugen.
+        </p>
+      </div>
+
+      <!-- Nicht „In Home Assistant": so heißt seit der Umbenennung schon die
+           Überschrift der Seite, und zwei gleichlautende Zeilen übereinander
+           lesen sich wie ein Fehler im Aufbau. -->
+      <h2 class="kr">So wird er eingetragen</h2>
+      <p>
+        Drei Stücke: der Schlüssel in die <code class="wort">secrets.yaml</code>,
+        der Aufruf in die <code class="wort">configuration.yaml</code>, und die
+        Aktion, die ihn benutzt. Die Blöcke haben deinen Schlüssel schon drin,
+        sobald du oben einen erzeugt hast.
+      </p>
+
+      <div class="code">
+        <div class="code-kopf">
+          <span class="datei">secrets.yaml</span>
+          <button class="kopieren" type="button" data-fuer="y1">kopieren</button>
+        </div>
+        <pre id="y1"></pre>
+      </div>
+      <p class="leise">
+        Das Wort <code class="wort">Bearer</code> gehört mit in den Wert — der
+        Kopf muss vollständig <code class="wort">Bearer &lt;Schlüssel&gt;</code>
+        lauten. Ohne das kommt bei jeder Meldung ein 401 zurück.
+      </p>
+
+      <div class="code">
+        <div class="code-kopf">
+          <span class="datei">configuration.yaml</span>
+          <button class="kopieren" type="button" data-fuer="y2">kopieren</button>
+        </div>
+        <pre id="y2"></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-kopf">
+          <span class="datei">so wird er gerufen — Automation oder Skript</span>
+          <button class="kopieren" type="button" data-fuer="y3">kopieren</button>
+        </div>
+        <pre id="y3"></pre>
+      </div>
+      <p class="leise">
+        <code class="wort">biere</code> ist eine ganze Zahl von 0 bis 999,
+        <code class="wort">temperatur</code> eine Zahl von −30 bis 30, Komma
+        erlaubt. Mehr als eine Meldung je Minute gibt einen 429er — das ist
+        keine Abwehr, sondern der Schutz vor der Automation, die im Sekundentakt
+        dasselbe meldet.
+      </p>
+
+      <h2 class="kr">Zwei Dinge, die man wissen sollte</h2>
+      <ul>
+        <li>
+          <b>Der Schlüssel ist der Zugang, nicht bloß ein Melderecht.</b> Wer
+          ihn hat, kann in deinem Namen schreiben und alles sehen — er gehört in
+          die <code class="wort">secrets.yaml</code> und nicht in ein Repo, das
+          jemand anders liest.
+        </li>
+        <li>
+          <b>„Alle Geräte abmelden“ im Deckel wirft ihn mit weg.</b> Danach muss
+          hier ein neuer Schlüssel erzeugt und in Home Assistant eingetragen
+          werden.
+        </li>
+      </ul>
+    </div>
+
+    <div class="tuer" id="tuer" hidden>
+      <h2 class="kr">Erst anmelden</h2>
+      <p id="tuer-text">
+        Der Schlüssel gehört zu einem Konto, also muss eines da sein. Melde dich
+        auf der Tafel an — mit derselben Adresse wie immer — und komm wieder her.
+      </p>
+      <a class="zurueck" href="./">zur Tafel und anmelden</a>
+    </div>
+
+    <p class="sagt" id="sagt" hidden></p>
+  </div>
+</div>
+
+<script>
+  // ==========================================================================
+  // Dieselbe Herkunft, dasselbe Token wie die Tafel — wer dort angemeldet ist,
+  // ist es hier auch. Kein zweiter Anmeldeweg, kein zweiter Angriffsweg.
+  // ==========================================================================
+  const API = location.hostname === 'localhost'
+    ? 'http://localhost:8787'
+    : 'https://beerstock-api.mc-schneider84.workers.dev';
+  /* Die Adresse IM YAML ist absichtlich fest und nicht `API`: der Block wird
+     in eine Wohnung kopiert, und eine Hausautomation erreicht `localhost:8787`
+     dieses Rechners nie. Wer lokal prüft, sieht hier die öffentliche Adresse —
+     das ist richtig so, denn genau die wird ja hinterher eingetragen. */
+  const API_OEFFENTLICH = 'https://beerstock-api.mc-schneider84.workers.dev';
+  const SPEICHER = 'beerstock-token';
+
+  const $ = id => document.getElementById(id);
+  const merke = () => { try { return localStorage.getItem(SPEICHER); } catch { return null; } };
+
+  async function ruf(pfad, rumpf) {
+    const t = merke();
+    const r = await fetch(API + pfad, {
+      method: rumpf === undefined ? 'GET' : 'POST',
+      headers: Object.assign(
+        t ? { Authorization: 'Bearer ' + t } : {},
+        rumpf === undefined ? {} : { 'Content-Type': 'application/json' }),
+      body: rumpf === undefined ? undefined : JSON.stringify(rumpf),
+      cache: 'no-store',
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(d.fehler || 'Das ging nicht'), { status: r.status });
+    return d;
+  }
+
+  function sagt(text, schlecht) {
+    const p = $('sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  /* Grob gerundet, und das ist keine Nachlässigkeit: `tokens.zuletzt` wird im
+     Worker nur einmal je Stunde fortgeschrieben (sonst wären es Tausende
+     Schreibvorgänge am Tag für eine Anzeige). Eine minutengenaue Angabe wäre
+     hier also eine Genauigkeit, die es gar nicht gibt. */
+  function ungefaehr(iso) {
+    const min = Math.max(0, (Date.now() - new Date(iso).getTime()) / 60000);
+    if (min < 90) return 'in der letzten Stunde';
+    const std = min / 60;
+    if (std < 24) return 'vor ' + Math.round(std) + ' Stunden';
+    const tage = Math.round(std / 24);
+    return tage === 1 ? 'gestern' : 'vor ' + tage + ' Tagen';
+  }
+  const alsTag = iso => iso
+    ? new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '';
+
+  // ==========================================================================
+  // Die YAML-Blöcke. Sie werden bei jedem Zustandswechsel neu geschrieben,
+  // weil genau ein Wort darin sich ändert: der Schlüssel. Ihn nur an einer
+  // Stelle einzusetzen und den Rest stehen zu lassen wäre sparsamer und
+  // gleichzeitig die Art von Sparsamkeit, bei der irgendwann ein Block den
+  // alten Schlüssel zeigt und der daneben den neuen.
+  // ==========================================================================
+  const PLATZHALTER = 'DEIN-SCHLUESSEL';
+
+  function bloeckeSchreiben(token) {
+    const s = token || PLATZHALTER;
+    $('y1').textContent = 'beerstock_token: "Bearer ' + s + '"';
+    $('y2').textContent =
+      'rest_command:\n' +
+      '  beerstock:\n' +
+      '    url: ' + API_OEFFENTLICH + '/api/report\n' +
+      '    method: POST\n' +
+      '    headers:\n' +
+      '      Authorization: !secret beerstock_token\n' +
+      '    content_type: application/json\n' +
+      '    payload: \'{"biere": {{ biere }}, "temperatur": {{ grad }} }\'';
+    $('y3').textContent =
+      'action: rest_command.beerstock\n' +
+      'data:\n' +
+      '  biere: "{{ states(\'sensor.kuehlschrank_flaschen\') | int }}"\n' +
+      '  grad: "{{ states(\'sensor.kuehlschrank_temperatur\') | float }}"';
+  }
+
+  // ==========================================================================
+  // Kopieren. `navigator.clipboard` braucht einen sicheren Kontext — den gibt
+  // es hier immer (https, oder localhost beim Prüfen). Schlägt es trotzdem
+  // fehl, wird der Text markiert statt einen Fehler zu melden: markiert kommt
+  // der Nutzer mit Strg+C weiter, mit einer roten Zeile kommt er nirgendwo hin.
+  // ==========================================================================
+  async function kopieren(knopf) {
+    const feld = $(knopf.dataset.fuer);
+    const text = feld.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      const vorher = knopf.textContent;
+      knopf.textContent = 'kopiert';
+      knopf.classList.add('getan');
+      setTimeout(() => { knopf.textContent = vorher; knopf.classList.remove('getan'); }, 1600);
+    } catch {
+      const bereich = document.createRange();
+      bereich.selectNodeContents(feld);
+      const wahl = getSelection();
+      wahl.removeAllRanges();
+      wahl.addRange(bereich);
+      knopf.textContent = 'markiert';
+      setTimeout(() => { knopf.textContent = 'kopieren'; }, 1600);
+    }
+  }
+  document.addEventListener('click', ev => {
+    const k = ev.target.closest('.kopieren');
+    if (k) kopieren(k);
+  });
+
+  // ==========================================================================
+  // Zustand
+  // ==========================================================================
+  let stand = null;          // was `/api/me` über die Verbindung sagt
+  let frisch = null;         // das eben erzeugte Token, nur in diesem Tab
+
+  function zeichnen() {
+    const da = !!stand;
+    $('lampe').textContent = da ? 'Verbunden' : 'Noch nicht verbunden';
+    $('lampe').className = 'lampe ' + (da ? 'an' : 'aus');
+    /* „noch keine Meldung" statt „zuletzt gemeldet noch nie": den ganzen Satz
+       wählen und nicht nur sein Ende einsetzen. Ein Baukasten aus Vorsilbe und
+       Zeitangabe liest sich genau in dem Fall schief, in dem er am meisten
+       gelesen wird — direkt nach dem Erzeugen, wenn drüben noch nichts steht. */
+    $('wann').textContent = !da ? ''
+      : 'seit ' + alsTag(stand.seit) + ' · '
+        + (stand.zuletzt ? 'zuletzt gemeldet ' + ungefaehr(stand.zuletzt) : 'noch keine Meldung');
+    /* Der Knopf sagt beim zweiten Mal, was er anrichtet. „Neu erzeugen“ allein
+       verschweigt, dass der alte damit stirbt — und das ist genau die Auskunft,
+       die man vor dem Klick braucht, nicht danach. */
+    $('erzeugen').textContent = da ? 'neuen Schlüssel erzeugen' : 'Schlüssel erzeugen';
+    $('erzeugen').title = da
+      ? 'Der bisherige Schlüssel gilt danach nicht mehr.'
+      : '';
+    $('widerrufen').hidden = !da;
+    bloeckeSchreiben(frisch);
+  }
+
+  function zeigeFrisch(ersetzt) {
+    $('frisch').hidden = false;
+    $('frisch-satz').textContent = ersetzt
+      ? 'Der Schlüssel steht. Der bisherige gilt ab sofort nicht mehr — trag '
+        + 'diesen hier in Home Assistant ein, sonst meldet es ins Leere.'
+      : 'Der Schlüssel steht. Er liegt schon in den Blöcken darunter — du '
+        + 'kannst sie also gleich als Ganzes kopieren.';
+    $('token-feld').textContent = frisch;
+    $('frisch').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  $('erzeugen').addEventListener('click', async () => {
+    const k = $('erzeugen');
+    k.disabled = true;
+    try {
+      const d = await ruf('/api/ha/zugang', {});
+      frisch = d.token;
+      // Der Server ist die Quelle, aber das Datum kennt er nicht besser als
+      // dieser Augenblick — neu laden nur, um `seit` sauber zu bekommen, wäre
+      // eine Runde für eine Zeile.
+      stand = { seit: new Date().toISOString(), zuletzt: null };
+      sagt('');
+      zeichnen();
+      zeigeFrisch(d.ersetzt);
+    } catch (e) {
+      sagt(e.status === 401
+        ? 'Die Anmeldung gilt hier nicht mehr. Melde dich auf der Tafel neu an.'
+        : 'Der Schlüssel ließ sich nicht erzeugen: ' + e.message, true);
+    } finally {
+      k.disabled = false;
+    }
+  });
+
+  $('widerrufen').addEventListener('click', async () => {
+    const k = $('widerrufen');
+    k.disabled = true;
+    try {
+      await ruf('/api/ha/zugang/weg', {});
+      stand = null;
+      frisch = null;
+      $('frisch').hidden = true;
+      zeichnen();
+      sagt('Widerrufen. Home Assistant meldet ab jetzt ins Leere — was dort in '
+         + 'der secrets.yaml steht, ist nur noch eine Zeichenkette.');
+    } catch (e) {
+      sagt('Das Widerrufen ging nicht: ' + e.message, true);
+    } finally {
+      k.disabled = false;
+    }
+  });
+
+  async function laden() {
+    if (!merke()) { $('tuer').hidden = false; return; }
+    let ich;
+    try {
+      ich = await ruf('/api/me');
+    } catch (e) {
+      if (e.status === 401) {
+        $('tuer').hidden = false;
+        $('tuer-text').textContent = 'Die Anmeldung gilt hier nicht mehr. Melde '
+          + 'dich auf der Tafel neu an, dann steht der Schlüssel wieder bereit.';
+      } else {
+        sagt('Der Stand ließ sich nicht holen: ' + e.message, true);
+      }
+      return;
+    }
+    stand = ich.ha_zugang || null;
+    $('inhalt').hidden = false;
+    zeichnen();
+    /* Ein Gesperrter sieht die Seite, aber der Worker lässt ihn nicht erzeugen
+       (jede Nicht-GET-Route ist für ihn zu). Das hier sagt ihm den Grund
+       vorher, statt ihn in einen 403 laufen zu lassen. */
+    if (ich.gesperrt) {
+      $('erzeugen').disabled = true;
+      $('widerrufen').disabled = true;
+      sagt('Dein Zugang ist gesperrt — solange das so ist, gibt es hier keinen '
+         + 'neuen Schlüssel.', true);
+    }
+  }
+
+  laden();
+</script>
+</body>
+</html>

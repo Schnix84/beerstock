@@ -248,19 +248,12 @@ nimmt jede Meldung entgegen, egal ob sie aus dem Browser kommt oder von einem
 Server. Die Herkunftsprüfung greift nur, wenn ein `Origin`-Kopf mitkommt — ein
 Aufruf aus Home Assistant hat keinen, und CORS gilt ohnehin nur im Browser.
 
-**Erst den eigenen Token holen.** Am Rechner die Tafel öffnen, angemeldet
-sein, die Entwicklerwerkzeuge aufmachen und in der Konsole:
-
-```js
-localStorage.getItem('beerstock-token')
-```
-
-Heraus kommt eine 64 Zeichen lange Zeile — ohne die Anführungszeichen
-kopieren. (Ohne Konsole: *Application* bzw. *Speicher* → *Local Storage* →
-`https://schnix84.github.io` → `beerstock-token`.)
-
-**Dann in Home Assistant.** Der Token gehört in `secrets.yaml`, **mit dem Wort
-`Bearer` davor** — der Kopf muss vollständig `Bearer <token>` lauten:
+**Die Anleitung steht in der App**, unter *Mein Deckel* → *Home Assistant*
+(`homeassistant.html`). Dort gibt es den Schlüssel auf Knopfdruck und die drei
+YAML-Blöcke mit dem eigenen Schlüssel schon darin, jeder mit einem
+Kopierknopf — die Anleitung an dem Ort, an dem man sie braucht, statt einer
+Konsolensitzung mit einer Beschreibung daneben. Der Umriss, damit man weiß,
+was einen erwartet:
 
 ```yaml
 # secrets.yaml
@@ -279,8 +272,6 @@ rest_command:
     payload: '{"biere": {{ biere }}, "temperatur": {{ grad }} }'
 ```
 
-Aufgerufen wird er wie jeder andere Dienst:
-
 ```yaml
 action: rest_command.beerstock
 data:
@@ -289,20 +280,28 @@ data:
 ```
 
 `biere` ist eine ganze Zahl von 0 bis 999, `temperatur` eine Zahl von −30 bis
-30, Komma erlaubt. Mehr als **eine Meldung je Minute** und derselbe Nutzer
-bekommt einen 429er — das ist keine Abwehr, sondern der Schutz vor dem
-Freund, der den Knopf zehnmal drückt, weil er nichts passieren sieht.
+30, Komma erlaubt. Das Wort `Bearer` gehört mit in den Wert. Mehr als **eine
+Meldung je Minute** und derselbe Nutzer bekommt einen 429er — das ist keine
+Abwehr, sondern der Schutz vor dem Freund, der den Knopf zehnmal drückt, weil
+er nichts passieren sieht.
+
+**Der Schlüssel gehört zu keinem Gerät.** Bis August 2026 stand hier etwas
+anderes: man holte sich das Token des eigenen Browsers per Entwicklerwerkzeug
+aus dem `localStorage`. Das ging, war aber an drei Enden falsch — der Weg
+führte durch die Konsole, dasselbe Geheimnis lag danach an zwei Orten, und
+widerrufen konnte man es nur, indem man sich selbst abmeldete. Seit Schema 27
+trägt jedes Token einen `zweck`; der für Home Assistant ist ein eigenes und hat
+im Deckel seinen eigenen Weg hinaus.
 
 **Drei Dinge, die man wissen sollte:**
 
-- **Der Token ist der Zugang, nicht bloß ein Melderecht.** Wer ihn hat, kann
-  im eigenen Namen schreiben, kommentieren und alles sehen. Er gehört nicht in
-  ein Repo, das jemand anders lesen kann.
-- **Jedes Einlösen eines Anmeldelinks legt einen neuen Token an**, alte bleiben
-  gültig. Man kann sich also gefahrlos einmal extra am Rechner anmelden, nur um
-  einen für Home Assistant zu holen — das Handy bleibt angemeldet.
-- **„Alle Geräte abmelden" im Deckel wirft auch diesen Token weg.** Danach
-  meldet Home Assistant ins Leere, bis ein neuer eingetragen ist.
+- **Der Schlüssel ist der Zugang, nicht bloß ein Melderecht.** Wer ihn hat, kann
+  im eigenen Namen schreiben und alles sehen — er gehört in die `secrets.yaml`
+  und nicht in ein Repo, das jemand anders liest.
+- **Es gibt genau einen.** Ein neuer widerruft den alten. Zeigen kann die Seite
+  ihn kein zweites Mal, gespeichert ist nur seine Prüfsumme.
+- **„Alle Geräte abmelden" im Deckel wirft ihn mit weg.** Danach muss ein neuer
+  Schlüssel erzeugt und in Home Assistant eingetragen werden.
 
 **Die Marke *gemessen* kommt dabei nicht mit.** Die hängt an
 `users.quelle = 'ha'`, einer Spalte in der Datenbank, für die es keinen
@@ -446,6 +445,7 @@ Anbindung der Wohnung ab.
 ```
 index.html           eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
 statistik.html       die Statistiken: die Bilder zur Runde — für jeden Angemeldeten
+homeassistant.html   Schlüssel und Anleitung für den, der aus seiner Wohnung melden will
 admin.html           das Kontor: Nutzerverwaltung, Statistik, Rundmail — nur fuer Admins
 bilder.js            die Grafiken samt Tooltip; statistik.html und admin.html teilen sie
 sw.js                nimmt Push-Meldungen entgegen — sonst nichts, kein Cache
@@ -481,6 +481,7 @@ flowchart LR
         Tafel["index.html<br/>Tafel, öffentlich"]
         Kontor["admin.html<br/>Kontor, nur Admin"]
         Statistik["statistik.html<br/>Statistik"]
+        Haus["homeassistant.html<br/>Schlüssel für Home Assistant"]
         Bilder["bilder.js<br/>Grafiken + Tooltip"]
         SW["sw.js<br/>nimmt Push entgegen"]
         Kontor -. "import" .-> Bilder
@@ -505,6 +506,7 @@ flowchart LR
     Tafel -- "REST + WebSocket /api/strom" --> Worker
     Kontor -- "REST" --> Worker
     Statistik -- "REST" --> Worker
+    Haus -- "REST" --> Worker
     Tafel -. "GET Foto, öffentliche URL" .-> R2
     Kontor -. "GET Foto, öffentliche URL" .-> R2
     Statistik -. "GET Foto, öffentliche URL" .-> R2
@@ -607,10 +609,12 @@ Drei Dinge, die dazugehören:
 | `POST /api/anmelden` | `{email}` → schickt einen Magic Link |
 | `POST /api/magic` | `{token}` aus dem Link → Geräte-Token |
 | `POST /api/name` | Name für die Liste setzen |
-| `GET /api/me` 🔒 | wem das Token gehört: Name, Adresse, Rolle, Sperre, Mailschalter, Gerätezahl, dazu `vapid` — der öffentliche Push-Schlüssel oder `null`, wenn der Worker kein Push kann |
+| `GET /api/me` 🔒 | wem das Token gehört: Name, Adresse, Rolle, Sperre, Mailschalter, Gerätezahl, dazu `vapid` — der öffentliche Push-Schlüssel oder `null`, wenn der Worker kein Push kann. `ha_zugang` ist `{seit, zuletzt}`, wenn ein Schlüssel für Home Assistant eingerichtet ist, sonst `null`; die Gerätezahl zählt ihn **nicht** mit |
 | `POST /api/report` | `{biere, temperatur}` mit `Bearer`-Token |
 | `POST /api/abmelden` | wirft nur dieses eine Gerät raus |
-| `POST /api/geraete/alle-abmelden` 🔒 | wirft **alle** raus, auch dieses — das verlorene Handy |
+| `POST /api/geraete/alle-abmelden` 🔒 | wirft **alle** raus, auch dieses **und den für Home Assistant** — das verlorene Handy |
+| `POST /api/ha/zugang` 🔒 | legt den Schlüssel für Home Assistant an → `{token, ersetzt}`. Es gibt genau einen: ein vorhandener wird dabei widerrufen (`ersetzt: true`). Das Klartext-Token steht **nur in dieser einen Antwort**, gespeichert ist der Hash |
+| `POST /api/ha/zugang/weg` 🔒 | widerruft nur den Schlüssel für Home Assistant, kein Gerät → `{weg}`; zweimal gerufen ist kein Fehler |
 | `POST /api/einstellungen` 🔒 | `{mail:{art:bool}}` und/oder `{stumm:bool}`; unbekannte Arten → 400. Gilt für Mail **und** Push |
 | `POST /api/push/abo` 🔒 | `{endpoint, schluessel:{p256dh, auth}}` — dieses Gerät zum Klopfen anmelden. UPSERT auf `endpoint`: die Seite ruft bei jedem Start, denn Push-Dienste tauschen Adressen im Stillen aus, und ein Gerät, an dem sich jemand anderes anmeldet, wandert mit |
 | `POST /api/push/weg` 🔒 | `{endpoint}` — nur die eigene Zeile; zweimal gerufen ist kein Fehler |

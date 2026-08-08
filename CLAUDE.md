@@ -12,6 +12,7 @@ das Datenmodell. Diese Datei hier sagt nur, was ein Agent beim *Arbeiten* am Rep
 |---|---|
 | Die Seite | `index.html` — **eine** geschlossene Datei, kein Build, keine externen Ressourcen |
 | Die Bilder | `statistik.html` („Statistiken", für jeden Angemeldeten) |
+| Der Schlüssel für die Wohnung | `homeassistant.html` (Anleitung + Token, für jeden Angemeldeten) |
 | Nutzerverwaltung | `admin.html` (das „Kontor") |
 | Grafiken + Tooltip | `bilder.js` — **geteilt** von `statistik.html` und `admin.html`, nie von der Tafel |
 | Worker | `worker/src/index.js` |
@@ -86,6 +87,13 @@ wie jeder andere Melder (`POST /api/report`); `users.quelle = 'ha'` erzeugt dara
 *gemessen*. Die Antwort auf das Glücksrad kommt über `POST /api/los/antwort`. **Die andere
 Seite dieser Verdrahtung liegt in einem privaten Repo und ist hier nicht einsehbar** — der
 Worker sieht davon nichts als einen Bearer-Token.
+
+Der Token dafür ist seit Schema 27 ein **eigener**: `tokens.zweck = 'ha'`, angelegt über
+`POST /api/ha/zugang` und einmalig auf `homeassistant.html` sichtbar. `users.quelle` und
+`tokens.zweck` sind zwei verschiedene Dinge und dürfen nicht verwechselt werden — die Quelle
+sagt „dieses **Konto** misst" (und vergibt die Marke), der Zweck sagt „dieses **Token** sitzt
+in einer Automation" (und ist getrennt widerrufbar). Wer eine Regel an eines von beiden hängt,
+muss sagen können, welches gemeint ist.
 
 ## `ideas/PROJECT-MEMORY.md`
 

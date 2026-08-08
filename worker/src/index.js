@@ -3502,9 +3502,31 @@ const ROUTEN = {
        Liste mit Zeitstempeln, damit man einzelne wegraeumen kann - sieben
        Zeilen fuer zwei benutzte Browser, und damit das groesste Feld des
        Blattes fuer die unwichtigste Auskunft darauf. Wer aufraeumen will,
-       meldet alle ab und kommt einmal neu. */
-    const geraete = await env.DB
-      .prepare('SELECT count(*) AS n FROM tokens WHERE user_id = ?').bind(ich.id).first();
+       meldet alle ab und kommt einmal neu.
+
+       SEIT SCHEMA 27 zaehlt sie nur noch die GERAETE (`zweck IS NULL`). Der
+       Hausanschluss steht daneben und hat seinen eigenen Weg hinaus - ihn in
+       dieselbe Zahl zu werfen hiesse, dem Nutzer ein Geraet zu melden, das
+       keines ist, und zwar genau dann, wenn er nachsieht, wie viele es sind.
+
+       `sum(CASE WHEN ...)` und nicht `sum(zweck = 'ha')`: `NULL = 'ha'` ist in
+       SQLite NULL, und eine Summe aus lauter NULL ist NULL, nicht 0. Die
+       Fallunterscheidung gibt hier immer eine Zahl. `count(*)`-Zeilen gibt es
+       mindestens eine - der Aufrufer haelt ja gerade ein Token in der Hand -,
+       die Spalten koennen also nicht ganz ausbleiben.
+
+       Und die zwei Zeitstempel dazu, weil die Seite sie beide braucht: `seit`
+       beantwortet "steht da einer", `zuletzt` beantwortet "meldet er sich
+       auch". Ein eingerichteter Hausanschluss, von dem seit Wochen nichts
+       kommt, ist die eine Auskunft, die man wirklich sehen will - dass die
+       Automation drueben stillsteht, sieht man von hier aus sonst nirgends. */
+    const zaehlung = await env.DB.prepare(`
+      SELECT sum(CASE WHEN zweck IS NULL THEN 1 ELSE 0 END) AS geraete,
+             sum(CASE WHEN zweck = 'ha'  THEN 1 ELSE 0 END) AS ha,
+             max(CASE WHEN zweck = 'ha'  THEN erstellt END) AS ha_seit,
+             max(CASE WHEN zweck = 'ha'  THEN zuletzt  END) AS ha_zuletzt
+      FROM tokens WHERE user_id = ?
+    `).bind(ich.id).first();
     return antwort(request, {
       name: ich.name,
       braucht_namen: !ich.name,
@@ -3516,7 +3538,16 @@ const ROUTEN = {
       gesperrt: ich.gesperrt_am ? { seit: utc(ich.gesperrt_am), grund: ich.gesperrt_grund } : null,
       mail: mailWahl(ich),
       mail_stumm: !!ich.mail_stumm_am,
-      geraete: geraete ? geraete.n : 1,
+      geraete: zaehlung ? (zaehlung.geraete || 0) : 1,
+      /* Der Hausanschluss (Schema 27), oder `null`, wenn keiner eingerichtet
+         ist. Ein Objekt und kein blosses `true`: die Seite zeigt beide Daten
+         an, und ein zweiter Aufruf nur fuer zwei Zeitstempel waere eine Runde
+         zur Datenbank fuer eine Zeile Text. Das Token selbst steht hier
+         ausdruecklich NICHT - gespeichert ist nur sein Hash, es ist nach dem
+         Erzeugen unwiederbringlich weg, und genau das ist die Zusage. */
+      ha_zugang: zaehlung && zaehlung.ha
+        ? { seit: utc(zaehlung.ha_seit), zuletzt: utc(zaehlung.ha_zuletzt) }
+        : null,
       /* Der oeffentliche VAPID-Schluessel. Er ist kein Geheimnis - der Browser
          braucht ihn als `applicationServerKey`, um ueberhaupt ein Abo anlegen
          zu koennen. `null` heisst schlicht "dieser Worker kann kein Push", und
@@ -3576,7 +3607,17 @@ const ROUTEN = {
      lassen hiesse, dass das verlorene Handy weiter mitliest, wer heute
      gezogen wurde und wo jemand einen Notruf abgesetzt hat. Der Browser dort
      hat dann noch ein Abo, das ins Leere zeigt - beim naechsten Aufruf raeumt
-     es die Seite selbst weg, und bis dahin kommt darueber nichts mehr. */
+     es die Seite selbst weg, und bis dahin kommt darueber nichts mehr.
+
+     DER HAUSANSCHLUSS GEHT MIT (Schema 27), und auch das ist kein Versehen:
+     `DELETE FROM tokens WHERE user_id = ?` kennt keinen `zweck`, und es soll
+     ihn hier auch nicht kennen. Wer diesen Knopf drueckt, hat sein Handy
+     verloren - dass die Wohnung danach weiter im selben Namen schreiben darf,
+     waere genau die Luecke, die der Knopf schliessen soll. Seit es einen
+     eigenen, feineren Weg gibt (`/api/ha/zugang/weg`), muss die Seite das
+     allerdings SAGEN: ein grober Knopf, der still mehr wegnimmt als der feine
+     danebenliegende, ist sonst die Falle, die man erst bemerkt, wenn die
+     Wohnung schweigt. Der Deckel schreibt es dazu, das README auch. */
   'POST /api/geraete/alle-abmelden': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
@@ -3585,6 +3626,70 @@ const ROUTEN = {
       env.DB.prepare('DELETE FROM push_abos WHERE user_id = ?').bind(ich.id),
     ]);
     return antwort(request, { ok: true, abgemeldet: weg.meta.changes });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Der Hausanschluss: ein Token, das nicht zu einem Browser gehoert, sondern
+     zu der Automation, die von aussen meldet (Home Assistant und alles, was
+     sich so verhaelt). Schema 27, `tokens.zweck = 'ha'`.
+
+     WARUM ES DIESE ROUTE GIBT, obwohl jedes Token seit jeher gemeldet hat:
+     bisher trug der Nutzer das Token SEINES BROWSERS in die `secrets.yaml`,
+     herausgeholt per Entwicklerwerkzeug. Das ist an drei Enden falsch - der
+     Weg fuehrt durch die Konsole, das Geheimnis liegt danach an zwei Orten,
+     und widerrufen kann man es nur, indem man sich selbst abmeldet. Ein
+     eigenes Token loest alle drei auf einmal.
+
+     ES GIBT GENAU EINEN. Erzeugen widerruft den vorherigen im selben `batch`,
+     statt einen zweiten danebenzustellen. Zwei Gruende: eine Liste von
+     Anschluessen waere dasselbe Feld, das im Deckel schon einmal als
+     Token-Liste gescheitert ist (siehe `GET /api/me`) - und wichtiger, der
+     haeufigste Grund fuer ein neues Token ist "das alte ist mir abhanden
+     gekommen". Genau dann darf das alte nicht weitergelten. Wer wirklich zwei
+     Wohnungen meldet, meldet sie mit zwei Konten; das ist ohnehin die
+     ehrlichere Abbildung.
+
+     DAS KLARTEXT-TOKEN GIBT ES HIER EIN EINZIGES MAL. Gespeichert wird nur
+     `hash(token)` - der Worker kann es spaeter nicht noch einmal zeigen, und
+     das ist die Eigenschaft, die den ganzen Rest traegt. Die Seite muss es
+     also im selben Atemzug zum Kopieren anbieten und dazuschreiben, dass es
+     nicht wiederkommt.
+
+     Ein Gesperrter kommt hier nicht durch: `nutzer()` wirft bei jeder
+     Nicht-GET-Route, die nicht in `SPERRE_FREI` steht. Diese steht dort mit
+     Absicht nicht - wer gesperrt ist, soll sich abmelden duerfen, aber sich
+     keinen frischen Schluessel ziehen. */
+  'POST /api/ha/zugang': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const token = wuerfel();
+    const [weg] = await env.DB.batch([
+      env.DB.prepare("DELETE FROM tokens WHERE user_id = ? AND zweck = 'ha'").bind(ich.id),
+      env.DB.prepare("INSERT INTO tokens (token_hash, user_id, zweck) VALUES (?, ?, 'ha')")
+        .bind(await hash(token), ich.id),
+    ]);
+    /* `ersetzt` sagt der Seite, ob sie "eingerichtet" oder "ersetzt - die alte
+       Verdrahtung meldet ab sofort ins Leere" schreiben soll. Der Unterschied
+       ist fuer den Nutzer betraechtlich und aus dem Token nicht zu sehen. */
+    return antwort(request, { token, ersetzt: weg.meta.changes > 0 });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Und wieder weg. Nur der Hausanschluss, kein Geraet: das ist der ganze
+     Zweck der Unterscheidung aus Schema 27.
+
+     KEIN 404, wenn keiner da war. Die Route sagt "danach gibt es keinen
+     Hausanschluss mehr", und das stimmt in beiden Faellen; ein Fehler waere
+     hier nur die Auskunft, dass der Nutzer zweimal geklickt hat. `weg` steht
+     trotzdem in der Antwort, damit die Seite den Satz danach richtig waehlen
+     kann. */
+  'POST /api/ha/zugang/weg': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const r = await env.DB
+      .prepare("DELETE FROM tokens WHERE user_id = ? AND zweck = 'ha'").bind(ich.id).run();
+    return antwort(request, { ok: true, weg: r.meta.changes });
   },
 
   // -------------------------------------------------------------------------
