@@ -710,15 +710,12 @@
   }
   .nr-knopf:hover { background: #e0745c14; }
 
-  /* Läuft der eigene Notruf, tauschen die beiden Handlungen den Knopf in der
-     Kopfzeile aus, und der Titel rutscht darunter: `flex-basis: 100%` reißt
-     ihn aus der ersten Zeile, `order` hält ihn trotz DOM-Reihenfolge dort
-     unten. Ohne aktiven Notruf bleibt die Zeile wie sie war — Titel links,
-     Knopf rechts, eine Zeile. */
-  #notruf-kopf.notruf-kopf-aktiv { flex-wrap: wrap; }
-  #notruf-kopf.notruf-kopf-aktiv .titel { order: 2; flex: 1 1 100%; }
-  #notruf-kopf.notruf-kopf-aktiv .nr-tafel-aktionen { order: 1; }
-  .nr-tafel-aktionen { display: flex; gap: 18px; }
+  /* Die Frage des Abends steht am FUSS des Notrufblocks, direkt über dem Rad,
+     das sie beantwortet — nicht über den Notrufen, die sie nichts angeht. Der
+     Abstand nach oben kommt NUR, wenn wirklich ein Notruf darüber steht: in
+     Ruhe ist die Liste leer, und dann muss die Zeile genau dort sitzen, wo sie
+     immer saß (siehe `:not(:empty)`). */
+  #notruf-liste:not(:empty) + #abend-kopf { margin-top: clamp(12px, 3vw, 18px); }
 
   .nr-zeile {
     display: grid; grid-template-columns: 1fr auto; gap: 4px 11px;
@@ -731,9 +728,18 @@
     grid-column: 1 / -1;
     font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
   }
-  /* Der eigene Notruf sagt es in der ersten Person — man soll nicht erst den
-     Namen lesen müssen, um zu merken, dass man sich selbst ansieht. */
-  .nr-zeile.meiner .nr-wer { color: var(--kreide); }
+  /* Eine Not steht in Gelb, egal wessen sie ist. Dass es die eigene ist, sagt
+     der SATZ („Du brauchst …") — bis 2026-08-08 sagte es zusätzlich die Farbe
+     (Kreideweiß statt Gelb), und diese leisere Fassung las sich wie „weniger
+     dringend". Dieselbe Aussage zweimal, die zweite falsch betont. */
+  /* „aktualisieren" am Ende der Standortzeile. Erbt Größe und Farbe von ihr —
+     es ist ein Wort in einem Satz und kein Knopf daneben; nur unterstrichen,
+     damit es als anfassbar zu erkennen ist. */
+  .nr-nach {
+    border: none; background: none; padding: 0; font: inherit;
+    color: inherit; text-decoration: underline; cursor: pointer;
+  }
+  .nr-nach:hover { color: var(--kreide); }
   .nr-hin {
     border: 1px solid #e8c76677; border-radius: 3px; background: none;
     padding: 4px 10px; font: inherit; font-size: 11px; letter-spacing: .06em;
@@ -2567,18 +2573,22 @@
            Angemeldete: draußen kommt vom Worker gar keine Zeile davon an.
            ============================================================= -->
       <section class="notruf-block" id="notruf-block" hidden>
-        <div class="block-kopf kr" id="notruf-kopf">
+        <!-- Kein Kopf mit Handlungen mehr: was am eigenen Notruf zu tun ist,
+             steht AN der eigenen Zeile (`nr-hin` und das „aktualisieren" am
+             Ende der Standortzeile, siehe `notrufStand`). Über der Liste stand
+             es falsch — kommt ein fremder Notruf nach dem eigenen, steht er
+             darüber (`erstellt DESC`), und der Knopf sass über einer Zeile,
+             für die er nicht gilt. -->
+        <div id="notruf-liste"></div>
+        <!-- Die Frage des Abends gehört dem Rad darunter, nicht den Notrufen
+             darüber — deshalb steht sie hier, am Fuß des Blocks. Sie bleibt
+             trotzdem IM Notrufblock, weil nur der die richtige Sichtbarkeit
+             hat: `#rad-block` ist ohne Los versteckt, und mit ihm wäre auch
+             „Notruf absetzen" weg. -->
+        <div class="block-kopf kr" id="abend-kopf">
           <span class="titel">Wo wird heute getrunken?</span>
           <button class="nr-knopf" id="notruf-auf" type="button">Notruf absetzen</button>
-          <!-- Nur solange der eigene Notruf läuft: dann ersetzen die beiden
-               Handlungen den Knopf in der Kopfzeile, und der Titel wandert
-               darunter — siehe `.notruf-kopf-aktiv` in der CSS. -->
-          <span class="nr-tafel-aktionen" id="notruf-tafel-aktionen" hidden>
-            <button class="nr-nochmal" id="notruf-tafel-standort" type="button">Standort aktualisieren</button>
-            <button class="nr-nochmal" id="notruf-tafel-weg" type="button">Notruf zurücknehmen</button>
-          </span>
         </div>
-        <div id="notruf-liste"></div>
       </section>
 
       <!-- ============ Das Glücksrad =====================================
@@ -4425,6 +4435,27 @@
             : 'seit ' + alt + (alt === 1 ? ' Minute' : ' Minuten')))
         + (Number.isFinite(n.genau) ? ' · auf ' + weite(n.genau) + ' genau' : '')
         + ' · erlischt um ' + uhr(n.bis);
+
+      /* Das Nachtragen hängt am ENDE genau dieser Zeile — sie ist die, die den
+         Standort behauptet, und dort steht man mit dem Lesen davor. Nur an der
+         eigenen, und nur bei einem einmaligen: bei „live" trägt der Browser
+         alle zwanzig Sekunden selbst nach, und auch `steht` bekommt ihn NICHT
+         (siehe die Notiz zum Live-Abriss vom 2026-08-08) — dort heilt entweder
+         der Watcher von selbst, oder die Freigabe fehlt, und dann scheiterte
+         ein Handnachtrag an derselben Ortung. Auf einem zweiten Gerät funkte
+         er sogar dessen WLAN-Standort dazwischen, was `sessionStorage` beim
+         Live-Modus gerade verhindern soll.
+
+         Steht hier und nicht in `notruf()`, weil `modus` erst hier feststeht —
+         und weil die Zeile bei jedem Takt neu geschrieben wird, wandert der
+         Knopf damit von selbst mit, sobald ein Notruf die Sorte wechselt. */
+      if (z.classList.contains('meiner') && modus === 'einmalig') {
+        unter.append(' · ');
+        const nach = el('button', 'nr-nach', 'aktualisieren');
+        nach.type = 'button';
+        nach.id = 'nr-standort-zeile';
+        unter.appendChild(nach);
+      }
     },
   };
 
@@ -5240,9 +5271,7 @@
     // Erst jetzt, wo die Zeilen hängen und eine Breite haben.
     for (const k of liste.querySelectorAll('.karte')) karteFuellen(k);
 
-    $('notruf-kopf').classList.toggle('notruf-kopf-aktiv', !!meineNot);
     $('notruf-auf').hidden = !!meineNot;
-    $('notruf-tafel-aktionen').hidden = !meineNot;
 
     /* Der Kreis im offenen Blatt geht mit. `meineNot` ist eben ersetzt worden,
        und ohne das zeigte das Blatt den Kreis von vorhin — geändert am Handy,
@@ -5347,6 +5376,8 @@
   function notrufLage(n) {
     $('nr-wahl').hidden = !!n;
     $('nr-lage').hidden = !n;
+    // Wie auf der Tafel: nachtragen kann nur, wer einmalig gemeldet hat.
+    $('nr-standort').hidden = !n || !!n.live;
     $('nr-unter').textContent = n
       ? (n.art === 'bier' ? 'du brauchst Bier'
          : n.art === 'kamerad' ? 'du suchst Gesellschaft'
@@ -8874,13 +8905,14 @@
   $('nr-alles').addEventListener('click', () => notrufSenden('alles'));
   $('nr-weg').addEventListener('click', notrufWeg);
   $('nr-standort').addEventListener('click', notrufStandortAktualisieren);
-  $('notruf-tafel-weg').addEventListener('click', notrufWeg);
-  $('notruf-tafel-standort').addEventListener('click', notrufStandortAktualisieren);
   /* Der Rückzug steht auch an der eigenen Zeile auf der Tafel. Über den Block
      gehört und nicht an die Zeile geheftet: die Zeilen werden bei jedem
-     Zeichnen neu gebaut, ein Hörer daran wäre nach dem ersten Anstoss weg. */
+     Zeichnen neu gebaut, ein Hörer daran wäre nach dem ersten Anstoss weg —
+     und die Standortzeile schreibt sich sogar alle zwanzig Sekunden neu. */
   $('notruf-liste').addEventListener('click', ev => {
     if (ev.target.id === 'nr-weg-zeile') return notrufWeg();
+    // Muss VOR dem Griff auf die Zeile stehen, sonst geht das Blatt mit auf.
+    if (ev.target.id === 'nr-standort-zeile') return notrufStandortAktualisieren();
     /* Und der Weg zurück ins Blatt: die eigene Zeile UND die eigene Karte
        öffnen es. Solange der eigene Notruf läuft, ist „Notruf absetzen"
        versteckt — ohne das käme man an Kreis und Schieberegler nicht mehr
