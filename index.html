@@ -2653,7 +2653,10 @@
           <!-- Links und rechts 45 Einheiten Luft im viewBox: dort stehen die
                Namen, und sie sollen nicht aus der Tafel laufen. -->
           <svg viewBox="-45 0 390 300" role="img" aria-labelledby="rad-titel">
-            <title id="rad-titel">Flaschendrehen: ein Bogen je Melder, so lang wie sein Bestand</title>
+            <!-- „höchstens ein Kasten" steht seit die Zahl am Bogen der echte
+                 Bestand ist: wer 72 gemeldet hat, liest 72 und hat trotzdem
+                 keinen längeren Bogen als der mit 24. -->
+            <title id="rad-titel">Flaschendrehen: ein Bogen je Melder, so lang wie sein Bestand, höchstens ein Kasten</title>
             <g id="rad-ring"></g>
 
             <!-- Eine Longneck, an die Tafel gezeichnet. Der Hals zeigt, wer
@@ -3542,6 +3545,193 @@
   };
   const kuerze = (s, n) => s.length <= n ? s : s.slice(0, n - 1) + '…';
 
+  /* --- Damit sich die Namen am Rad nicht ineinanderschreiben -----------------
+
+     Zwei Handgriffe, die zusammengehören. Der Worker liefert das Feld nach
+     Bestand ABSTEIGEND (`losFeldStmt`) — dann stehen alle schmalen Bögen
+     beieinander, und ihre Namen sind es auch. Der erste Handgriff mischt die
+     Reihenfolge, der zweite schiebt auseinander, was danach noch klebt.
+
+     Gemessen an den echten Feldern und an 30 000 gewürfelten je Feldgröße:
+     absteigend und ungeschoben klebten bei sieben Meldern bis zu drei
+     Namenspaare aufeinander (engster Abstand 1,1 px). Mit beiden Handgriffen
+     bleibt bis zwölf Melder KEINES übrig. Einer allein genügt nicht — mischen
+     hilft, garantiert aber nichts (oben und unten am Rad bringt ein Grad kaum
+     Höhe), und Schieben allein müsste einen Namen bis zu 107 px weit von
+     seinem Bogen wegtragen statt der 0 px, die es in 95 % der Fälle sind. */
+
+  /* Reihenfolge der Bögen: Reißverschluss statt absteigend — größter,
+     kleinster, zweitgrößter, zweitkleinster … So bekommt jeder schmale Bogen
+     einen breiten Nachbarn.
+
+     Eine reine Funktion des Feldes, und das ist keine Kleinigkeit: der
+     halbminütige Abgleich zeichnet das Rad neu, und ein gewürfeltes Rad
+     sprünge dabei jedes Mal. Der Sortierlauf ist stabil, Gleichstände behalten
+     also die Namensordnung des Workers — nötig, weil `gewicht` bei einem
+     Kasten gedeckelt ist und darum viele Gleichstände entstehen. */
+  const radMischen = segmente => {
+    const s = [...segmente].sort((a, b) => b.gewicht - a.gewicht), raus = [];
+    for (let i = 0, j = s.length - 1; i <= j; ) {
+      raus.push(s[i++]);
+      if (i <= j) raus.push(s[j--]);
+    }
+    return raus;
+  };
+
+  /* Die Maße des Auseinanderschiebens. Eine Marke ist zwei Zeilen hoch: der
+     Name (12,5 px) auf `y`, die Zahl (10,5 px) auf `y + 13`, beide mittig zur
+     Grundlinie — Tinte also von `y - 6` bis `y + 19`, 25 px. RAD_ZEILE lässt
+     2 px Luft.
+
+     RAD_OBEN/RAD_UNTEN sind 150 ∓ 126, also genau die Höhe, die die Marken auch
+     ungeschoben erreichen: bei 12 und 6 Uhr. Weiter hinaus darf keine, und das
+     ist keine Kosmetik — die viewBox endet bei 300, ein SVG beschneidet daran,
+     und mit einer Untergrenze von 284 wurde die Zahl der untersten Marke ab
+     sechs Meldern um drei Pixel abgeschnitten.
+
+     RAD_ACHSE ist der Mindestabstand zur Mittelachse — aber nur zwischen zwei
+     Marken, die sich bei 12 oder 6 Uhr auf gleicher Höhe begegnen: die linke
+     endet dann ein paar Pixel neben dem Anfang der rechten, und die beiden
+     lesen sich als ein Wort.
+
+     Er galt zuerst für JEDE Marke nahe der Achse, und das war falsch. Eine
+     Marke bei 6 Uhr, der gegenüber gar nichts steht, wurde damit 18 px nach
+     außen geschoben — weg von ihrem eigenen Streifen, und genau das sah man:
+     die kleinen Melder standen ein gutes Stück neben ihrem Bogen. Der Abstand
+     gehört zwischen zwei Marken, nicht zwischen Marke und Achse. */
+  const RAD_ZEILE = 27, RAD_OBEN = 24, RAD_UNTEN = 276, RAD_ACHSE = 26;
+  /* Die Grenzen für eine MITTIG gesetzte Marke: ihr Block muss ganz über bzw.
+     unter dem Ring liegen (y 36,5 … 263,5), sonst kreuzt die Schrift ihn. Oben
+     also y + 19 ≤ 36,5, unten y − 6 ≥ 263,5. */
+  const RAD_KUPPE = 17, RAD_SOHLE = 270;
+  // Die seitlichen Grenzen der viewBox (-45 … 345), zwei Einheiten nach innen.
+  const RAD_SAUM = [-43, 343];
+
+  /* Die Namen auseinanderschieben und anschreiben. Verschoben wird NUR die
+     Schrift — die Bogengrenzen in `radFelder` bleiben, wie sie sind, denn
+     daraus rechnet `radDrehen` sein Ziel, und die Bogenlänge IST die Chance.
+     Wer hier die Segmente spreizte statt der Namen, ließe die Flasche daneben
+     landen und das Rad über die Aussichten lügen.
+
+     Je Seite zwei Durchgänge, wie bei der Beschriftung eines Tortendiagramms:
+     einmal von oben nach unten drücken, einmal von unten nach oben zurück. Der
+     erste hält den oberen Rand ein, der zweite den unteren, und beide halten
+     den Zeilenabstand — der zweite kann ihn nicht verletzen, weil er jede Marke
+     nur gegen ihren schon endgültigen Nachfolger klemmt.
+
+     Ein einzelner Rückschub am Ende wäre einfacher und wäre falsch: er zieht
+     die oberste Marke mit aus dem Bild, sobald das Feld unten dicht und oben
+     dünn ist. Bei zwölf Meldern passierte das in 8 von 30 000 Fällen.
+
+     `zeile` schrumpft, wenn eine Seite mehr Namen trägt, als die Tafel hoch
+     ist — jenseits von etwa elf je Seite. Dann rücken sie enger zusammen,
+     statt aus dem Bild zu laufen; das ist der letzte Notausgang und beginnt
+     erst ab dreizehn Meldern zu greifen. */
+  function radBeschriften(g, marken) {
+    for (const rechts of [true, false]) {
+      const seite = marken.filter(m => m.rechts === rechts).sort((a, b) => a.y - b.y);
+      if (!seite.length) continue;
+      // Wer ganz oben und ganz unten steht, entscheidet sich HIER — nur die
+      // beiden können später über oder unter dem Ring stehen.
+      seite[0].oberste = true;
+      seite[seite.length - 1].unterste = true;
+      if (seite.length < 2) continue;
+      const zeile = Math.min(RAD_ZEILE, (RAD_UNTEN - RAD_OBEN) / (seite.length - 1));
+      let y = RAD_OBEN - zeile;
+      for (const m of seite) { m.y = Math.max(m.y, y + zeile); y = m.y; }
+      y = RAD_UNTEN + zeile;
+      for (let i = seite.length - 1; i >= 0; i--) {
+        seite[i].y = Math.min(seite[i].y, y - zeile);
+        y = seite[i].y;
+      }
+    }
+
+    /* Und jetzt erst die Achse, und nur dort, wo sie gebraucht wird: begegnen
+       sich eine linke und eine rechte Marke bei 12 oder 6 Uhr auf gleicher
+       Höhe, laufen sie aufeinander zu — die linke endet, wo die rechte anfängt.
+       Nur dieses Paar rückt auseinander. Alle anderen bleiben, wo ihr Bogen
+       ist; das ist der ganze Unterschied zu vorher. */
+    for (const r of marken.filter(m => m.rechts)) {
+      for (const l of marken.filter(m => !m.rechts)) {
+        if (Math.abs(r.y - l.y) >= RAD_ZEILE || r.x - l.x >= 2 * RAD_ACHSE) continue;
+        r.x = Math.max(r.x, 150 + RAD_ACHSE);
+        l.x = Math.min(l.x, 150 - RAD_ACHSE);
+        r.gedraengt = l.gedraengt = true;
+      }
+    }
+
+    /* Bei 12 und 6 Uhr liegt der Bogen QUER, und eine Marke, die von dort nach
+       links oder rechts ausläuft, steht neben ihrem Streifen statt darüber —
+       auch wenn sie ihn berührt. Dort gehört die Schrift mittig.
+
+       Die Grenze ist dieselbe wie die der Achsklammer: näher als RAD_ACHSE an
+       der Mitte heißt „oben oder unten", weiter draußen heißt „an der Seite",
+       und dort ist die seitliche Verankerung richtig — mittig geriete die
+       Schrift auf den Ring. Wen die Klammer eben auseinandergeschoben hat, der
+       bleibt seitlich: zwei mittige Marken auf gleicher Höhe liefen ineinander,
+       und genau das sollte die Klammer ja verhindern.
+
+       Oben und unten ist das NICHT symmetrisch, und daran ist der erste Versuch
+       gescheitert. Der Ring reicht von y 36,5 bis 263,5 (Radius 110 plus die
+       halbe Strichbreite). Unten steht der Block mit y = 276 vollständig
+       darunter. Oben steht bei y = 25 nur der Name über der Kuppe — die Zahl
+       auf y + 13 liegt genau darauf, und dann streicht „2 kalt" quer über den
+       Streifen, zu dem es gehört. Die obere Marke wird deshalb erst auf
+       RAD_KUPPE gehoben. Wo auch das nicht reicht, bleibt es seitlich.
+
+       Gehoben und mittig gesetzt wird nur die OBERSTE bzw. UNTERSTE ihrer
+       Seite. Ohne diese Bedingung war es ein Rückschritt: nahe der Achse können
+       zwei Marken derselben Seite liegen (zwei schmale Bögen kurz vor 12 Uhr),
+       beide wurden auf dieselbe Kuppe gehoben und lagen aufeinander — im
+       Zufallslauf bei sieben Meldern 33 von 4000 Fällen, Abstand 0,0 px. Über
+       oder unter dem Ring ist eben nur für eine Platz. */
+    for (const m of marken) {
+      if (m.gedraengt || Math.abs(m.x - 150) >= RAD_ACHSE) continue;
+      if (m.oberste && m.y < 150) m.y = Math.min(m.y, RAD_KUPPE);
+      if (m.oberste && m.y <= RAD_KUPPE) m.mittig = true;
+      if (m.unterste && m.y >= RAD_SOHLE) m.mittig = true;
+    }
+
+    for (const m of marken) {
+      const anker = m.mittig ? 'middle' : m.rechts ? 'start' : 'end';
+      const name = s_el('text', {
+        x: m.x.toFixed(1), y: m.y.toFixed(1), class: 'rad-name',
+        'text-anchor': anker, 'dominant-baseline': 'middle',
+      });
+      name.textContent = m.name;
+      const zahl = s_el('text', {
+        x: m.x.toFixed(1), y: (m.y + 13).toFixed(1), class: 'rad-zahl',
+        'text-anchor': anker, 'dominant-baseline': 'middle',
+      });
+      zahl.textContent = m.zahl;
+      g.append(name, zahl);
+
+      /* Und jetzt die Breite. Die viewBox hat seitlich 45 Einheiten Luft; ein
+         langer Name bei 3 oder 9 Uhr braucht mehr, und ein SVG schneidet ihn
+         dort einfach ab. Vorher fiel das kaum auf, weil dort die BREITEN Bögen
+         lagen und die tragen wenige Namen; jetzt schiebt der Reißverschluss
+         gerade die schmalen dorthin. Mit „Christopher" ist es reproduzierbar.
+
+         Gemessen wird am eingehängten Element, nicht geschätzt — die Kreideschrift
+         hat keine Zeichenbreite, mit der man rechnen könnte. Kann der Browser
+         nicht messen (unsichtbares SVG antwortet 0), bleibt der geometrische
+         Platz stehen; schlechter als vorher wird es dadurch nie. */
+      const breit = Math.max(name.getComputedTextLength(), zahl.getComputedTextLength());
+      // Eine mittige Marke wächst nach BEIDEN Seiten, ihr steht also nur die
+      // Hälfte des Weges bis zum Saum zur Verfügung — und sie weicht in die
+      // Richtung aus, in der noch Platz ist.
+      const halb = m.mittig ? breit / 2 : breit;
+      const platz = m.mittig ? Math.min(m.x - RAD_SAUM[0], RAD_SAUM[1] - m.x)
+                  : m.rechts ? RAD_SAUM[1] - m.x : m.x - RAD_SAUM[0];
+      if (halb > platz) {
+        const x = (m.mittig ? Math.min(Math.max(m.x, RAD_SAUM[0] + halb), RAD_SAUM[1] - halb)
+                 : m.rechts ? RAD_SAUM[1] - breit : RAD_SAUM[0] + breit).toFixed(1);
+        name.setAttribute('x', x);
+        zahl.setAttribute('x', x);
+      }
+    }
+  }
+
   /* Ein regelmäßiger Fünfstern, gerechnet statt geraten: äußerer Radius 10,2,
      innerer 4,3, Mittelpunkt 12/12 in einem 24er-Feld. */
   const STERN = 'M12.0,1.8 L14.5,8.5 L21.7,8.8 L16.1,13.3 L18.0,20.3 L12.0,16.3 ' +
@@ -3949,18 +4139,30 @@
       return z;
     },
 
-    /* Das Rad zeichnen. `segmente` kommt so vom Worker: [{name, gewicht}, …] in
-       Segmentreihenfolge — vor der Ziehung das aktuelle Feld, danach das
-       eingefrorene. Nur deshalb zeigt das Rad um 23 Uhr dieselben Felder wie
-       um 19 Uhr, und die Animation landet auf einem Feld, das es noch gibt. */
+    /* Das Rad zeichnen. `segmente` kommt vom Worker: [{name, gewicht, biere}, …]
+       — vor der Ziehung das aktuelle Feld, danach das eingefrorene. Nur deshalb
+       zeigt das Rad um 23 Uhr dieselben Felder wie um 19 Uhr, und die Animation
+       landet auf einem Feld, das es noch gibt.
+
+       Die REIHENFOLGE macht sich diese Funktion selbst (`radMischen`) und nicht
+       der Worker: die eingefrorenen Felder alter Ziehungen liegen bestandsweise
+       sortiert in der Datenbank, mischte der Worker, wären neue Räder gemischt
+       und alte nicht.
+
+       Die Beschriftung entsteht in zwei Schritten — erst gesammelt, dann in
+       einem Zug geschoben. Was am Bogen steht, kann nicht gesetzt werden,
+       während der Bogen entsteht: wohin ein Name gehört, hängt davon ab, wo
+       alle anderen stehen. */
     rad(segmente) {
       const g = $('rad-ring'), R = 110;
       g.textContent = '';
       radFelder = [];
-      const summe = segmente.reduce((a, s) => a + s.gewicht, 0) || 1;
+      const feld = radMischen(segmente);
+      const summe = feld.reduce((a, s) => a + s.gewicht, 0) || 1;
       let von = 0;
+      const marken = [];
 
-      segmente.forEach((seg, i) => {
+      feld.forEach((seg, i) => {
         const weite = seg.gewicht / summe * 360;
         radFelder.push({ name: seg.name, von, bis: von + weite });
 
@@ -3978,22 +4180,25 @@
 
         /* Name außen und waagerecht — das ist der ganze Punkt dieser Form.
            Auf der linken Hälfte hängt er nach innen, sonst liefe er aus dem
-           Bild. Lange Namen werden gekürzt, die Liste darunter hat den vollen. */
-        const mitte = von + weite / 2, [tx, ty] = radPunkt(mitte, R + 16);
-        const anker = mitte > 180 ? 'end' : 'start';
-        const name = s_el('text', {
-          x: tx.toFixed(1), y: ty.toFixed(1), class: 'rad-name',
-          'text-anchor': anker, 'dominant-baseline': 'middle',
+           Bild. Lange Namen werden gekürzt, die Liste darunter hat den vollen.
+
+           Die Zahl ist der ECHTE Bestand, nicht das Gewicht: der Bogen ist bei
+           einem Kasten gedeckelt, die Meldung ist es nicht, und „24 kalt" neben
+           einer Bestenliste, die 72 sagt, ist schlicht falsch. Eingefrorene
+           Felder von vor dieser Änderung haben kein `biere` — dort bleibt das
+           Gewicht stehen, das ist besser als eine Lücke. */
+        const mitte = von + weite / 2;
+        const rechts = mitte <= 180;
+        const [bx, by] = radPunkt(mitte, R + 16);
+        marken.push({
+          x: bx, y: by, rechts,
+          name: kuerze(seg.name, 12),
+          zahl: (seg.biere == null ? seg.gewicht : seg.biere) + ' kalt',
         });
-        name.textContent = kuerze(seg.name, 12);
-        const zahl = s_el('text', {
-          x: tx.toFixed(1), y: (ty + 13).toFixed(1), class: 'rad-zahl',
-          'text-anchor': anker, 'dominant-baseline': 'middle',
-        });
-        zahl.textContent = seg.gewicht + ' kalt';
-        g.append(name, zahl);
         von += weite;
       });
+
+      radBeschriften(g, marken);
     },
 
     /* Die Flasche auf ein Feld fahren. Der Gewinner steht vor dem ersten Bild

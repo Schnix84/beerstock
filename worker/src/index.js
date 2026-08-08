@@ -631,9 +631,18 @@ function ziehe(feld) {
   return feld[feld.length - 1];
 }
 
-// Was die Seite braucht, um das Rad zu zeichnen - egal ob schon gedreht wurde.
+/* Was die Seite braucht, um das Rad zu zeichnen - egal ob schon gedreht wurde.
+   ZWEI Zahlen je Melder, und der Unterschied ist Absicht: `gewicht` ist die
+   Chance und damit die Bogenlaenge, gedeckelt bei einem Kasten; `biere` ist,
+   was er wirklich gemeldet hat, und das steht als Zahl am Bogen. Vorher stand
+   dort das Gewicht - bei 72 Flaschen also "24 kalt", waehrend die Bestenliste
+   zwei Zeilen weiter 72 sagte.
+
+   Das Feld wird bei der Ziehung als JSON eingefroren. In alten Zeilen fehlt
+   `biere` deshalb; die Seite faellt dort auf `gewicht` zurueck. */
 const losSegmente = feld =>
-  feld.map(p => ({ name: p.name, gewicht: gewicht(p.biere), gemessen: p.quelle === 'ha' }));
+  feld.map(p => ({ name: p.name, gewicht: gewicht(p.biere), biere: p.biere,
+                   gemessen: p.quelle === 'ha' }));
 
 /* Wer heute noch gezogen werden kann. Bewusst hier in JS und nicht als
    Unterabfrage im SQL: der Verfall wird erst beim naechsten Schreiben
