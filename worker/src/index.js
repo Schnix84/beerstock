@@ -59,6 +59,17 @@ const KEIN_FREMDER_CACHE = {
   'Vary': 'Origin, Authorization',
 };
 
+/* Dasselbe fuer `GET /api/notrufe`, nur ohne die halbe Minute: die Route wird
+   im Fuenf-Sekunden-Takt gefragt, und ein Speicher, der laenger haelt als der
+   Takt, gaebe dieselbe Nadel sechsmal zurueck - die Zeile stuende still,
+   waehrend jemand geht. Die Seite fragt ohnehin mit `cache: 'no-store'`; das
+   hier ist die Seite der Antwort, damit es nicht an EINER Zeile in EINER
+   Datei haengt. */
+const KEIN_NOTRUF_CACHE = {
+  'Cache-Control': 'private, no-store',
+  'Vary': 'Origin, Authorization',
+};
+
 /* Das Gluecksrad. Gewichtet nach Bestand, weil das die Zahl ist, um die sich
    die ganze Seite dreht: wer mehr kalt hat, wird oefter gezogen. Der Deckel
    verhindert, dass einer mit 200 gemeldeten Bieren das Rad besitzt. */
@@ -4176,12 +4187,42 @@ const ROUTEN = {
     if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
 
     const kreis = await kreisLesen(env, zeile.id);
-    anstoss(request, env, ctx, 'tafel');
+    /* 'notruf' statt 'tafel', und das ist der ganze Sinn dieser einen Zeile:
+       ein Live-Standort traegt alle fuenf Sekunden nach, und die Marke
+       'tafel' stiess dabei JEDE offene Seite in die volle Bestenliste - ein
+       Zehner-Batch samt Verlauf, Terminen und Bewertungen, fuer eine
+       verschobene Nadel. Die schlanke Marke holt `GET /api/notrufe`.
+
+       NUR HIER. Alles andere am Notruf (absetzen, zuruecknehmen, Regler,
+       Kreis) meldet weiter 'tafel': das passiert einmal je Notruf, und dort
+       aendert sich mehr als eine Nadel. */
+    anstoss(request, env, ctx, 'notruf');
     return antwort(request, {
       ok: true,
       notruf: notrufAntwort(
         { ...zeile, ...kreis, lat, lon, genau, name: ich.name, user_id: ich.id }, ich.id),
     });
+  },
+
+  /* Der schlanke Bruder von `/api/leaderboard`, fuer genau eine Sache: die
+     Notrufzeilen nachziehen, wenn ein Live-Standort gewandert ist. Was das
+     spart, steht eine Route weiter oben an der Marke 'notruf'.
+
+     DIESELBE Abfrage wie dort (`notrufeStmt`), und das ist der Punkt: der
+     Empfaengerkreis haengt im SQL am Betrachter (`?1`), und eine zweite
+     Fassung davon waere genau die Sorte Kopie, die eines Tages
+     auseinanderlaeuft - ein Ort, den einer sehen darf und der andere nicht.
+
+     Der 401 fuer Abgemeldete braucht keine Sonderbehandlung: der Notrufblock
+     ist fuer sie ohnehin verborgen, und die Seite laesst einen Fehler hier
+     still fallen - der naechste Nachtrag kommt in fuenf Sekunden. */
+  'GET /api/notrufe': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const notrufe = await notrufeStmt(env, ich.id).all();
+    return antwort(request, {
+      notrufe: notrufe.results.map(n => notrufAntwort(n, ich.id)),
+    }, 200, KEIN_NOTRUF_CACHE);
   },
 
   /* Der Schieberegler, nachgereicht. Braucht eine eigene Route, weil das

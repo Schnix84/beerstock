@@ -4850,7 +4850,7 @@
 
     /* Die Karte einem gewanderten Standort nachziehen, ohne sie neu zu bauen.
        -------------------------------------------------------------------------
-       Ein Live-Notruf trägt alle zwanzig Sekunden nach, und jeder Nachtrag
+       Ein Live-Notruf trägt alle fünf Sekunden nach, und jeder Nachtrag
        stößt jede offene Seite an. Wurde die Karte dabei jedes Mal neu gebaut,
        hing sie zwanzig Kacheln neu ein — für eine Nadel, die drei Meter weiter
        steht. Also: Nadel und Streukreis verschieben, Kacheln stehen lassen.
@@ -5000,7 +5000,7 @@
 
       /* Bis zum ersten Nachtrag gilt das Absetzen selbst als Bestätigung:
          `watchPosition` meldet sich erst nach einer Drossellänge, und die
-         Zeile soll in diesen zwanzig Sekunden nicht schon „steht still"
+         Zeile soll in diesen fünf Sekunden nicht schon „steht still"
          sagen, obwohl noch niemand etwas versäumt hat. */
       const bestaetigt = new Date(n.standort_am || n.erstellt).getTime();
       const her = Math.max(0, Date.now() - bestaetigt);
@@ -5021,7 +5021,12 @@
       const min = Math.round(her / 60000);
       /* Sekunden nur, solange sie etwas heißen. Danach Minuten: „vor 214
          Sekunden" ist eine Genauigkeit, die niemand braucht und die diese
-         Zeile bei jedem Takt unruhig macht. */
+         Zeile bei jedem Takt unruhig macht.
+
+         Dass die 45 s hier seit dem Takt-Umbau zufällig auf
+         `NOTRUF_LIVE_FRIST` fallen, ist keine Kopplung: das eine ist eine
+         Wortwahl, das andere der Umschlag der Marke. Wer die Frist ändert,
+         muss diese Zahl NICHT mitziehen. */
       const frisch = her < 45000 ? 'gerade eben'
         : min < 60 ? 'vor ' + min + (min === 1 ? ' Minute' : ' Minuten')
         : 'um ' + uhr(bestaetigt);
@@ -5038,7 +5043,7 @@
       /* Das Nachtragen hängt am ENDE genau dieser Zeile — sie ist die, die den
          Standort behauptet, und dort steht man mit dem Lesen davor. Nur an der
          eigenen, und nur bei einem einmaligen: bei „live" trägt der Browser
-         alle zwanzig Sekunden selbst nach, und auch `steht` bekommt ihn NICHT
+         alle fünf Sekunden selbst nach, und auch `steht` bekommt ihn NICHT
          (siehe die Notiz zum Live-Abriss vom 2026-08-08) — dort heilt entweder
          der Watcher von selbst, oder die Freigabe fehlt, und dann scheiterte
          ein Handnachtrag an derselben Ortung. Auf einem zweiten Gerät funkte
@@ -5919,7 +5924,7 @@
     meineNot = null;
     const block = $('notruf-block'), liste = $('notruf-liste');
     /* Die Karten der letzten Zeichnung retten, bevor die Zeilen fallen. Sie
-       tragen geladene Kacheln, und ein Live-Notruf käme sonst alle zwanzig
+       tragen geladene Kacheln, und ein Live-Notruf käme sonst alle fünf
        Sekunden mit einem frischen Kachelnetz wieder — siehe `karteRuecken`. */
     const alteKarten = new Map();
     for (const k of liste.querySelectorAll('.karte')) {
@@ -6261,12 +6266,14 @@
 
   /* Den Standort holen. `enableHighAccuracy` kostet Sekunden und Akku und ist
      hier trotzdem richtig: eine Ortung über Funkzelle schickt jemanden in den
-     falschen Stadtteil. `maximumAge` erlaubt eine Minute alte Position — wer
-     eben schon einmal geortet wurde, wartet nicht noch einmal. */
+     falschen Stadtteil. `maximumAge` erlaubt zehn Sekunden alte Position — wer
+     gerade eben schon geortet wurde, wartet nicht noch einmal. Hier stand
+     einmal eine Minute, und das war für den ERSTEN Punkt eines Notrufs zu
+     lang: er ist der, auf den alle losgehen. */
   const standort = () => new Promise((gut, schlecht) => {
     if (!navigator.geolocation) return schlecht(new Error('kein_dienst'));
     navigator.geolocation.getCurrentPosition(gut, schlecht,
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
   });
 
   /* Der Browser sagt bei einer gescheiterten Ortung drei verschiedene Dinge,
@@ -6303,7 +6310,7 @@
         genau: Number.isFinite(p.coords.accuracy) ? p.coords.accuracy : null,
         /* Der Stand des Schiebereglers geht gleich mit — sonst stünde der
            Notruf für die anderen bis zum ersten Nachtrag als einmaliger da,
-           und die Marke poppte zwanzig Sekunden später auf. */
+           und die Marke poppte fünf Sekunden später auf. */
         live: notrufLiveModus,
         // null heißt an alle; eine Liste heißt genau diese und sonst niemand.
         kreis: kreisModus === 'alle' ? null : [...kreisGewaehlt],
@@ -6370,14 +6377,18 @@
      soll nicht öfter neu zeichnen, als jemand sie lesen kann. Beendet sich
      von selbst: schließt der Tab, ist auch `watchPosition` weg, ohne dass
      hier eine Spur davon bleibt. */
-  const NOTRUF_LIVE_ABSTAND = 20000;
-  /* Ab wann ein Live-Standort als stehengeblieben gilt. Drei versäumte
-     Nachträge plus Luft: unter dem Doppelten dieser Drossel flackerte die
-     Marke bei jedem Funkloch, deutlich darüber verschwiege sie einen
-     abgerissenen Standort minutenlang. Die Grenze steht HIER und nicht im
-     Worker, weil sie an genau diesem Takt hängt — wer `NOTRUF_LIVE_ABSTAND`
-     ändert, muss sie mitziehen (siehe worker/migrations/0018). */
-  const NOTRUF_LIVE_FRIST = 75000;
+  const NOTRUF_LIVE_ABSTAND = 5000;
+  /* Ab wann ein Live-Standort als stehengeblieben gilt. Die Grenze hängt
+     NICHT mehr am Nachtragstakt darüber — hier stand einmal „drei versäumte
+     Nachträge plus Luft", und bei fünf Sekunden Takt wären das dreißig, viel
+     zu knapp für jedes Funkloch. Sie hängt jetzt an der Auflösung, mit der
+     der Umschlag überhaupt geprüft wird: `notrufeNachziehen` läuft am
+     20-Sekunden-Takt von `nachfassen`, und alles unterhalb von etwa 45 s
+     wird daran unscharf. Der Umschlag landet damit 45–65 s nach dem letzten
+     Punkt. Wer ihn wirklich schnell will, braucht einen eigenen, schnelleren
+     Takt für `notrufeNachziehen` — und nicht eine kleinere Zahl hier.
+     (Siehe worker/migrations/0018, das die Grenze dem Namen nach kennt.) */
+  const NOTRUF_LIVE_FRIST = 45000;
 
   /* Die Marke „dieser Tab sendet live" — im sessionStorage, damit sie ein
      Neuladen desselben Tabs übersteht (iOS wirft eingeschlafene Tabs gern weg
@@ -6445,7 +6456,13 @@
         notrufLiveModus = false;
         $('nr-modus-einmalig').checked = true;
       },
-      { enableHighAccuracy: true, maximumAge: 30000 },
+      /* `maximumAge: 0` — kein Griff in den Zwischenspeicher. An einem
+         aktiven Watcher mit `enableHighAccuracy` läuft das GPS ohnehin
+         durch; `maximumAge` spart also nichts, es erlaubt nur, einen
+         schon veralteten Punkt noch einmal auszugeben. Bei einem Notruf
+         ist das die falsche Sparsamkeit: der Punkt, der ankommt, soll
+         der sein, wo derjenige JETZT steht. */
+      { enableHighAccuracy: true, maximumAge: 0 },
     );
     liveTabSetzen();
     notrufWachHalten();
@@ -6497,7 +6514,9 @@
       // Nur zeichnen, wenn das Blatt gerade offen ist - sonst schöbe das hier
       // still eine Karte in ein verstecktes Blatt.
       if (!$('notruf').hidden) notrufLage(d.notruf);
-      hole(true);
+      // Nur die Notrufzeilen: der Absender zöge sonst alle fünf Sekunden die
+      // ganze Tafel nach, und geändert hat sich genau eine Nadel — seine.
+      notrufeLaden();
     } catch {
       // Ein einzelner verpasster Nachtrag ist kein Grund, den Notruf oder das
       // Blatt zu stören - der nächste watchPosition-Tick versucht es wieder.
@@ -9593,9 +9612,45 @@
     }
   }
 
+  /* Nur die Notrufzeilen nachziehen, ohne die ganze Tafel. Hängt an der Marke
+     'notruf', die einzig `POST /api/notruf/standort` meldet — der Takt, der
+     oft kommt und wenig ändert. Alles andere am Notruf (absetzen,
+     zurücknehmen, Regler, Kreis) meldet weiter 'tafel'.
+
+     Dieselbe Sperre wie in `hole`: in eine laufende Radanimation oder an
+     einem eigenen POST vorbei wird nicht gezeichnet. Nachgeholt wird als
+     volles `hole` — der Fall ist selten, und zwei Wege dafür wären einer zu
+     viel.
+
+     Der eigene Riegel dazu ist bei fünf Sekunden Takt kein Luxus: zwei
+     Antworten können auf schlechtem Funk in verkehrter Reihenfolge landen,
+     und dann zeichnete die spätere die ältere Lage — eine Nadel, die
+     rückwärts springt. In `hole` fängt das der Textvergleich ab, den es hier
+     bewusst nicht gibt. Einen Takt fallen zu lassen ist richtig: der nächste
+     ist fünf Sekunden entfernt.
+
+     Und es ist `zeichneNotrufe`, nichts Kleineres: die Funktion zeichnet
+     nicht nur, sie setzt `meineNot`, zieht Kreis und Karte im offenen Blatt
+     nach, stoppt den Watcher bei erloschenem Notruf und wirft ihn nach einem
+     Tab-Neuladen wieder an. Wer das umgeht, baut den Live-Abriss vom
+     2026-08-08 wieder ein. */
+  let notrufeLaeuft = false;
+  async function notrufeLaden() {
+    if (dreht || laeuft || notrufeLaeuft) { merkeAnstoss(true, null); return; }
+    notrufeLaeuft = true;
+    try {
+      const r = await fetch(API + '/api/notrufe',
+        { headers: mitToken(), cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      zeichneNotrufe(d.notrufe || []);
+    } catch { /* der nächste Nachtrag kommt in fünf Sekunden */
+    } finally { notrufeLaeuft = false; }
+  }
+
   /* --- Anstoss und Nachholen ----------------------------------------------
-     Ein Anstoss ist eine Marke von der Tafel: 'tafel' oder ein Ziel wie
-     'user:5'. Er trägt keine Daten — die Seite lädt selbst nach, über
+     Ein Anstoss ist eine Marke von der Tafel: 'tafel', 'notruf' oder ein Ziel
+     wie 'user:5'. Er trägt keine Daten — die Seite lädt selbst nach, über
      dieselben Routen wie beim ersten Aufbau. Kommt er zur Unzeit (eigener
      Schreibvorgang unterwegs, Rad dreht), wird er gemerkt statt verworfen.
      --------------------------------------------------------------------- */
@@ -9607,6 +9662,7 @@
 
   function angestossen(marken) {
     if (marken.includes('tafel')) hole(true);
+    if (marken.includes('notruf')) notrufeLaden();
     if (flyZiel && marken.includes(flyZiel)) flyLaden(true);
     /* Die Chronik hört auf 'tafel' mit: ein Kommentar an einem archivierten
        Abend meldet beide Marken, und der Zähler an seiner Zeile steht hier.
@@ -9740,7 +9796,7 @@
   /* Der Rückzug steht auch an der eigenen Zeile auf der Tafel. Über den Block
      gehört und nicht an die Zeile geheftet: die Zeilen werden bei jedem
      Zeichnen neu gebaut, ein Hörer daran wäre nach dem ersten Anstoss weg —
-     und die Standortzeile schreibt sich sogar alle zwanzig Sekunden neu. */
+     und die Standortzeile schreibt sich sogar alle fünf Sekunden neu. */
   $('notruf-liste').addEventListener('click', ev => {
     if (ev.target.id === 'nr-weg-zeile') return notrufWeg();
     // Muss VOR dem Griff auf die Zeile stehen, sonst geht das Blatt mit auf.
