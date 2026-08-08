@@ -577,6 +577,14 @@ zählen **nicht** als Meldung (das Bild „Meldungen je Tag" bleibt unberührt),
 im Tooltip stehen sie blass, mit dem Datum ihrer Meldung dahinter. Vor der ersten
 Meldung wird nichts fortgeschrieben — die Linie beginnt, wo der Mensch beginnt.
 
+„Vorrat der Runde" macht dasselbe für alle zusammen, aber **im Worker** statt in der
+Zeichnung: eine Zahl je Tag, die Summe der zuletzt gemeldeten Stände. Fortgetragen
+wird als Treppe — wer Montag zwölf meldet und Freitag vier, hatte Mittwoch zwölf und
+nicht acht. Ein Stand, der älter als sieben Tage ist, fällt heraus (dieselbe Grenze
+wie im Rückblick); sinkt die Kurve dadurch auf null, heißt das nicht „nichts mehr da",
+sondern „seit einer Woche sagt es keiner". Vor der ersten Meldung überhaupt fängt sie
+gar nicht erst an.
+
 Die Seite ist statisch und fragt nur. Geschrieben wird ausschließlich über den
 Worker; die Wohnung selbst ist von außen nicht erreichbar und ruft dort an, statt
 angerufen zu werden.
@@ -671,7 +679,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/kachel` | `?z=&x=&y=` — Kartenkachel über den Worker statt direkt von OSM; sieben Tage im Cache, fremder Referer → 403 |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages, laufende Notrufe — ohne Token nur der Siegerplatz |
-| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit. Stumme Tage stehen **nicht** in der Antwort — die schreibt erst die Zeichnung fort (siehe unten) |
+| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit. Stumme Tage stehen dort **nicht** in der Antwort — die schreibt erst die Zeichnung fort (siehe unten). Zwei Reihen folgen dem Fenster bewusst nicht: `wachstum` und `abende` sind Fragen an die ganze Geschichte der Runde. `vorrat` dagegen ist die einzige Reihe, die der Worker selbst über stumme Tage fortschreibt, weil eine Summe über alle Melder sich nachträglich nicht zeichnen lässt |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
 | `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen'\|'farbe', grund?, farbe?}` — nur Admin. `farbe` ist der Platz in der Kreidereihe (0–6) oder `null` für „wieder nach Anmeldereihenfolge"; als einzige Aktion auch mit sich selbst erlaubt |

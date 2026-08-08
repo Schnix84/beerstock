@@ -400,6 +400,17 @@ const farbeSql = (alias = 'u') =>
    verstehen - eine Spanne muss man nachrechnen. */
 const STATISTIK_TAGE = [30, 60, 90];
 
+/* Wie lange ein gemeldeter Bestand fuer den "Vorrat der Runde" weitergilt.
+   Die Kurve summiert die letzten Staende ALLER Melder je Tag und traegt sie
+   ueber Tage ohne Meldung fort - ohne Grenze zaehlte jemand, der einmal 24
+   gemeldet hat und danach nie wieder, bis in alle Ewigkeit mit.
+
+   Dieselbe Zahl wie WRAPPED_VERFALL_TAGE, und das mit Absicht: "veraltet"
+   soll im Rueckblick nicht etwas anderes heissen als in der Statistik. Ein
+   eigener Name trotzdem, damit man die beiden verstellen kann, ohne die
+   jeweils andere Kurve ungewollt mitzudrehen. */
+const BESTAND_VERFALL_TAGE = WRAPPED_VERFALL_TAGE;
+
 /* Was ein Gesperrter trotzdem noch darf. Abmelden gehoert dazu: es loescht
    nur sein eigenes Geraete-Token, und wer draussen bleiben soll, soll auch
    herauskommen duerfen. Lesen ist ohnehin frei - die Sperre trifft nur
@@ -1915,7 +1926,7 @@ const kommentarZaehlerStmt = env => env.DB.prepare(`
 // ---------------------------------------------------------------------------
 // Die Statistik der Runde
 //
-// Sieben Abfragen, die zwei Routen gemeinsam haben: `/api/statistik` fuer jeden
+// Die Abfragen, die zwei Routen gemeinsam haben: `/api/statistik` fuer jeden
 // Angemeldeten und `/api/admin/statistik`, das nur noch den Betrieb anhaengt.
 // Sie stehen hier und nicht in den Routen, damit es sie EINMAL gibt - zweimal
 // dasselbe SQL laeuft auseinander, sobald eine der beiden Seiten etwas
@@ -1933,14 +1944,24 @@ const kommentarZaehlerStmt = env => env.DB.prepare(`
 const statistikFenster = (request) => {
   const gewuenscht = Number(new URL(request.url).searchParams.get('tage'));
   const tage = STATISTIK_TAGE.includes(gewuenscht) ? gewuenscht : STATISTIK_TAGE[0];
-  return { tage, fenster: `-${tage} days` };
+  /* Der VORLAUF gehoert nur dem Vorrat der Runde. Seine Kurve traegt den
+     zuletzt gemeldeten Stand ueber meldungslose Tage fort; faenge sie am
+     Fensterrand bei null an, stiege sie in der ersten Woche scheinbar an -
+     eine Steigung, die es nie gab, weil dort nur der Blick fehlt. Genau
+     BESTAND_VERFALL_TAGE weit zurueck und keinen Tag weiter: was aelter ist,
+     gilt auch innerhalb des Fensters nicht mehr. */
+  return {
+    tage,
+    fenster: `-${tage} days`,
+    vorlauf: `-${tage + BESTAND_VERFALL_TAGE} days`,
+  };
 };
 
 // Wie viele es sind. Die Admin-Route schneidet ihren eigenen Teil hinter
 // dieser Marke ab - eine Zahl von Hand waere beim naechsten Bild falsch.
-const STATISTIK_ABFRAGEN = 8;
+const STATISTIK_ABFRAGEN = 11;
 
-const statistikAbfragen = (env, fenster) => [
+const statistikAbfragen = (env, fenster, vorlauf) => [
   // 1 — Meldungen je Tag. Flaechenkurve.
   env.DB.prepare(`
     SELECT date(gemeldet_am) AS tag, count(*) AS n FROM reports
@@ -2030,12 +2051,151 @@ const statistikAbfragen = (env, fenster) => [
     SELECT u.name, ${farbeSql()} AS farbe, u.notrufe_insgesamt AS n FROM users u
     WHERE u.notrufe_insgesamt > 0 AND u.entfernt_am IS NULL ORDER BY n DESC
   `),
+  /* 8 — derselbe Betrieb, aber je MELDER statt je Woche. Das Wochenbild sagt,
+     wie laut es war; dieses sagt, wer geredet hat. Bewusst dieselben drei
+     Toepfe, dieselbe Zaehlweise und dieselbe UNION-Form wie in Abfrage 5 -
+     zwei Bilder desselben Namens, die sich in der Summe widersprechen, waeren
+     schlimmer als gar kein zweites.
+
+     Das heisst ausdruecklich AUCH: weich geloeschte Kommentare zaehlen hier
+     mit, genau wie drueben. Wer geschrieben hat, hat geschrieben.
+
+     `coalesce(name,'Ehemaliger')` wie beim Gastgeber und ANDERS als beim
+     Notruf: hier steht ein Fenster von 30 bis 90 Tagen davor, und wer in
+     dieser Zeit die Haelfte geschrieben hat, darf nicht spurlos aus dem Bild
+     fallen, bloss weil er inzwischen weg ist. */
+  env.DB.prepare(`
+    SELECT coalesce(u.name,'Ehemaliger') AS name,
+           sum(k) AS kommentare, sum(r) AS reaktionen, sum(b) AS sterne
+    FROM (
+      SELECT autor_id, 1 AS k, 0 AS r, 0 AS b
+      FROM kommentare WHERE erstellt > datetime('now', ?1)
+      UNION ALL
+      SELECT autor_id, 0, 1, 0
+      FROM reaktionen WHERE erstellt > datetime('now', ?1)
+      UNION ALL
+      SELECT autor_id, 0, 0, 1
+      FROM bewertungen WHERE erstellt > datetime('now', ?1)
+    ) x JOIN users u ON u.id = x.autor_id
+    GROUP BY x.autor_id
+    ORDER BY sum(k) + sum(r) + sum(b) DESC
+  `).bind(fenster),
+  /* 9 — die Abende selbst, je Monat. Die Gastgeber-Rangliste beantwortet nur,
+     BEI WEM man war, nie, wie oft die Runde ueberhaupt zusammenkommt.
+
+     Je Monat und nicht je Woche wie der Betrieb: bei einem Abend die Woche
+     waeren es lauter Saeulen der Hoehe eins - eine Zeile Text mit Achsen
+     drumherum. Der Monat buendelt genug, dass ein Sommerloch sichtbar wird.
+
+     OHNE FENSTER, und das ist hier kein Versehen: bei einem Abend die Woche
+     sind 30 Tage genau ein oder zwei Saeulen, und zwei Saeulen sind kein
+     Verlauf. "Wie oft kommen wir zusammen" ist ausserdem dieselbe Sorte Frage
+     wie "wie viele sind wir inzwischen" - und jene Kurve (Abfrage 6) folgt
+     dem Schalter aus demselben Grund schon lange nicht.
+
+     Drei Reihen aus zwei Spalten: `abgesagt_am` sticht, danach trennt `ort`
+     zwischen einem Abend beim Gastgeber (NULL) und einem auswaerts. Dieselbe
+     Unterscheidung wie in Abfrage 3, dort nur als Filter.
+
+     Auch nach OBEN offen: ein Termin, der naechste Woche ansteht, steht mit
+     im laufenden Monat. Das Bild heisst "Bierabende", nicht "gewesene
+     Bierabende" - und ein leerer kommender Monat waere die unehrlichere
+     Auskunft. Dass daraus kein Vertipper "2036" wird, der das Bild auf 120
+     Saeulen aufblaeht, haelt `pruefeBeginn` schon beim Eintragen ab
+     (TERMIN_VORAUS = 90 Tage). Eine zweite Grenze hier waere dieselbe Regel
+     ein zweites Mal, an einer Stelle, die sie nicht durchsetzen kann. */
+  env.DB.prepare(`
+    SELECT strftime('%Y-%m', beginnt_am) AS monat,
+           sum(abgesagt_am IS     NULL AND ort IS     NULL) AS zuhause,
+           sum(abgesagt_am IS     NULL AND ort IS NOT NULL) AS auswaerts,
+           sum(abgesagt_am IS NOT NULL)                     AS abgesagt
+    FROM termine GROUP BY monat ORDER BY monat
+  `),
+  /* 10 — die SAAT fuer den Vorrat der Runde: je Melder der letzte Stand VOR
+     dem Fenster. Ohne sie begaenne die Summenkurve bei null und stiege in der
+     ersten Woche an, waehrend in Wahrheit nur nach und nach jeder einmal
+     gemeldet haette (siehe `statistikFenster`).
+
+     `max(id)` als "der letzte" - dieselbe Wahl wie in Abfrage 2, und aus
+     demselben Grund: zwei Meldungen in derselben Sekunde trennt nur die id.
+     Der Tag faehrt mit, weil die Seite ab ihm den Verfall zaehlt. */
+  env.DB.prepare(`
+    SELECT r.user_id, r.biere, date(r.gemeldet_am) AS tag
+    FROM reports r
+    JOIN (
+      SELECT user_id, max(id) AS id FROM reports
+      WHERE gemeldet_am <= datetime('now', ?1)
+        AND gemeldet_am >  datetime('now', ?2)
+      GROUP BY user_id
+    ) j ON j.id = r.id
+  `).bind(fenster, vorlauf),
 ];
 
-/* Aus den acht Ergebnissen die Form, die gezeichnet wird. Drei davon werden
+/* Der Vorrat der Runde: eine Zahl je Tag, die Summe der zuletzt gemeldeten
+   Staende ALLER Melder. Hier und nicht in SQL, weil es in SQL ein rekursives
+   Kalender-CTE mit Fortschreibung waere - die Fassung im Rueckblick
+   (Eiskoenig) steht da als Warnung. Die Zeilen liegen ohnehin schon vor: die
+   Kurvenschar in Abfrage 2 ist dieselbe Datenmenge, nur anders gebuendelt.
+
+   Fortgetragen wird als TREPPE, nicht als Gerade: wer am Montag 12 meldet und
+   am Freitag 4, hatte am Mittwoch 12 - und nicht 8. Was in der Schar wie eine
+   Gerade zwischen zwei Punkten aussieht, ist dort die Verbindung zweier
+   Messungen; hier wird eine Zwischenzahl behauptet, und die einzige, die man
+   verantworten kann, ist die zuletzt gemeldete.
+
+   Faellt der letzte Stand eines Melders hinter BESTAND_VERFALL_TAGE zurueck,
+   faellt er ganz heraus. Sinkt die Kurve dadurch auf null, heisst das nicht
+   "nichts mehr da", sondern "seit einer Woche sagt es keiner" - fuer eine
+   Runde, in der Melden der ganze Zweck ist, ist das dieselbe Auskunft. */
+const vorratReihe = (tage, saat, bestandZeilen) => {
+  if (!saat.length && !bestandZeilen.length) return [];
+
+  const proTag = new Map();
+  for (const z of bestandZeilen) {
+    if (!proTag.has(z.tag)) proTag.set(z.tag, []);
+    proTag.get(z.tag).push(z);
+  }
+  // Der Stand VOR dem Fenster, mit dem Tag, an dem er gemeldet wurde.
+  const stand = new Map();
+  for (const z of saat) stand.set(z.user_id, { biere: z.biere, tag: z.tag });
+
+  const TAG = 86400000;
+  const jetzt = Date.now();
+  const reihe = [];
+  let begonnen = false;
+  // `tage` Schritte zurueck bis heute - dieselbe Spanne, die die Abfragen
+  // sehen, und in UTC wie `date()` in SQLite.
+  for (let i = tage; i >= 0; i--) {
+    const tag = new Date(jetzt - i * TAG).toISOString().slice(0, 10);
+    for (const z of proTag.get(tag) || []) stand.set(z.user_id, { biere: z.biere, tag });
+
+    /* Vor der ersten Meldung ueberhaupt faengt die Kurve gar nicht erst an.
+       Eine junge Runde im 90-Tage-Fenster bekaeme sonst sechzig Tage Null
+       vorweg, und eine Null heisst hier "leer", waehrend es in Wahrheit
+       "noch niemand da" war. Dieselbe Zurueckhaltung wie bei den Meldungen
+       je Tag: die haben fuer Tage ohne Meldung schlicht keinen Punkt.
+
+       Die Sperre gilt nur VOR dem ersten Stand, darum das eigene Merkzeichen
+       und nicht `stand.size` allein: faellt spaeter der letzte Melder aus dem
+       Verfall, soll die Kurve auf null SINKEN und nicht abreissen. */
+    if (!begonnen && !stand.size) continue;
+    begonnen = true;
+
+    let summe = 0;
+    for (const [id, s] of stand) {
+      if ((Date.parse(tag) - Date.parse(s.tag)) / TAG > BESTAND_VERFALL_TAGE) stand.delete(id);
+      else summe += s.biere;
+    }
+    reihe.push({ tag, n: summe });
+  }
+  return reihe;
+};
+
+/* Aus den elf Ergebnissen die Form, die gezeichnet wird. Vier davon werden
    umgebaut, der Rest geht durch. */
-const statistikRunde = (ergebnis) => {
-  const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb, anmeldungen, notrufe] = ergebnis;
+const statistikRunde = (ergebnis, tage) => {
+  const [meldungen, bestand, gastgeber, lose, jeMelder, betrieb, anmeldungen, notrufe,
+         betriebJeMelder, abende, saat] = ergebnis;
 
   /* Die Kurvenschar je Nutzer buendeln - eine Linie je Melder, zweimal:
      einmal die Flaschen, einmal die Grad. Dieselbe Zeile fuellt beide, denn
@@ -2091,6 +2251,9 @@ const statistikRunde = (ergebnis) => {
     lose: lose.results,
     lose_je_melder: [...jeMelderZeilen.values()].sort((a, b) => b.gezogen - a.gezogen),
     betrieb: betrieb.results,
+    betrieb_je_melder: betriebJeMelder.results,
+    abende: abende.results,
+    vorrat: vorratReihe(tage, saat.results, bestand.results),
     wachstum,
     notrufe: notrufe.results,
   };
@@ -5952,9 +6115,9 @@ const ROUTEN = {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
-    const { tage, fenster } = statistikFenster(request);
-    const ergebnis = await env.DB.batch(statistikAbfragen(env, fenster));
-    return antwort(request, { tage, ...statistikRunde(ergebnis) }, 200, KEIN_FREMDER_CACHE);
+    const { tage, fenster, vorlauf } = statistikFenster(request);
+    const ergebnis = await env.DB.batch(statistikAbfragen(env, fenster, vorlauf));
+    return antwort(request, { tage, ...statistikRunde(ergebnis, tage) }, 200, KEIN_FREMDER_CACHE);
   },
 
   // -------------------------------------------------------------------------
@@ -5963,12 +6126,12 @@ const ROUTEN = {
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
-    const { tage, fenster } = statistikFenster(request);
+    const { tage, fenster, vorlauf } = statistikFenster(request);
 
     /* Alles in EINEM batch, die Runde und der Betrieb zusammen: zwei Batches
        waeren zwei Rundfluege zur Datenbank fuer eine einzige Seitenansicht. */
     const ergebnis = await env.DB.batch([
-      ...statistikAbfragen(env, fenster),
+      ...statistikAbfragen(env, fenster, vorlauf),
       /* 7 — Mails je Art, Fehler daneben. AUS ZWEI TOEPFEN seit 0025:
          `mail_ausgang` fuehrt die Meldungen des Verteilers (eine Zeile je
          Empfaenger, darum `count(*)`), `versand_ausgang` die fuenf, die daran
@@ -6065,7 +6228,7 @@ const ROUTEN = {
       // Der Zeitraum geht mit zurueck: die Seite beschriftet die Bilder
       // damit, und sie soll dafuer nicht raten muessen, was sie gefragt hat.
       tage,
-      ...statistikRunde(ergebnis),
+      ...statistikRunde(ergebnis, tage),
       mails: mails.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
       mails_je_tag: mailsJeTag.results,
       pushs: pushs.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),

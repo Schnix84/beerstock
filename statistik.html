@@ -559,6 +559,17 @@
   const nurTag = iso => iso
     ? new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
     : '—';
+  /* 'YYYY-MM' zur Säulenmarke. Das Jahr fährt mit, obwohl es meist gleich
+     ist: 90 Tage reichen über einen Jahreswechsel, und zwei Säulen „Jan."
+     nebeneinander wären nicht auseinanderzuhalten. `timeZone: 'UTC'` gegen
+     denselben Sprung — der Erste eines Monats um 00:00 UTC ist westlich von
+     Greenwich noch der Letzte des Vormonats. */
+  const nurMonat = ym => {
+    const [j, m] = String(ym || '').split('-');
+    if (!m) return '—';
+    return new Date(Date.UTC(+j, +m - 1, 1)).toLocaleDateString('de-DE',
+      { month: 'short', year: '2-digit', timeZone: 'UTC' });
+  };
 
   async function ruf(pfad) {
     const t = merke();
@@ -708,6 +719,23 @@
     // und nebeneinander sieht man, ob der Kühlschrank mit dem Nachlegen
     // hochgeht. `|| []` — die alte Antwort kennt das Feld noch nicht.
     ziel.appendChild(Bilder.grad('Temperatur je Melder' + fenster, s.grad || []));
+    /* Die Schar darüber zeigt jeden einzeln, diese Fläche die Runde als
+       Summe — dasselbe Paar wie unten bei den Ziehungen. Der Worker trägt
+       den letzten Stand über meldungslose Tage fort; sinkt die Kurve auf
+       null, hat eine Woche lang keiner gemeldet. */
+    ziel.appendChild(Bilder.flaeche('Vorrat der Runde' + fenster,
+      s.vorrat || [], z => z.n, z => nurTag(z.tag), 'Flaschen'));
+    /* Und wie oft die Runde überhaupt zusammenkommt. Steht direkt vor der
+       Gastgeber-Rangliste: erst wie oft, dann bei wem. „Insgesamt" wie das
+       Wachstum oben und aus demselben Grund — 30 Tage sind ein bis zwei
+       Monatssäulen, und zwei Säulen sind kein Verlauf. */
+    ziel.appendChild(Bilder.saeulen('Bierabende je Monat, insgesamt', s.abende || [], [
+      { feld: 'zuhause',   titel: 'Bei jemandem', farbe: Bilder.reihe[0] },
+      { feld: 'auswaerts', titel: 'Auswärts',     farbe: Bilder.reihe[3] },
+      // Der Zurückhaltungston auf Platz 6: eine Absage ist kein eigenes
+      // Ereignis neben den beiden, sondern eines, das ausgefallen ist.
+      { feld: 'abgesagt',  titel: 'Abgesagt',     farbe: Bilder.reihe[5] },
+    ], g => nurMonat(g.monat)));
     ziel.appendChild(Bilder.liegend('Wer war wie oft Gastgeber, insgesamt',
       s.gastgeber, z => z.name, z => z.n, 'Abende'));
     // `|| []` — die alte Antwort kennt das Feld noch nicht.
@@ -721,6 +749,16 @@
       { feld: 'reaktionen', titel: 'Reaktionen', farbe: Bilder.reihe[1] },
       { feld: 'sterne',     titel: 'Sterne',     farbe: Bilder.reihe[3] },
     ], g => 'KW ' + String(g.woche).slice(-2)));
+    /* Dieselben drei Reihen in denselben drei Farben, nur andere Gruppen:
+       oben wie laut es war, hier wer geredet hat. Die Farben MÜSSEN dieselben
+       sein — zwei Bilder mit gleichem Namen und getauschten Farben liest
+       niemand zweimal richtig. */
+    ziel.appendChild(Bilder.saeulen('Betrieb je Melder' + fenster,
+      s.betrieb_je_melder || [], [
+        { feld: 'kommentare', titel: 'Kommentare', farbe: Bilder.reihe[0] },
+        { feld: 'reaktionen', titel: 'Reaktionen', farbe: Bilder.reihe[1] },
+        { feld: 'sterne',     titel: 'Sterne',     farbe: Bilder.reihe[3] },
+      ], g => g.name));
 
     // Der Name des Bildes für den Screenreader — und der Hinweis auf die
     // Pfeiltasten nur dort, wo es wirklich etwas zu blättern gibt.

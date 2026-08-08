@@ -1091,17 +1091,34 @@ window.Bilder = (function () {
         }));
       });
     });
-    // Nur die erste und die letzte Säule beschriften: bei zwanzig Wochen
-    // überlappen sich sonst alle, und lesbar ist am Ende keine.
-    beschriftung(svg, PAD.l + platz * .5, H - 4, markeVon(gruppen[0]));
-    if (gruppen.length > 1) {
-      beschriftung(svg, PAD.l + platz * (gruppen.length - .5), H - 4,
-        markeVon(gruppen[gruppen.length - 1]));
+    /* Beschriftet wird, was ohne Überlappung hingeht — sonst nur die erste
+       und die letzte Säule. Bei zwanzig Wochen überlagern sich sonst alle
+       und lesbar ist am Ende keine; bei fünf Meldern dagegen IST der Name
+       unter der Säule die halbe Auskunft, und ein Bild, in dem drei von fünf
+       Leuten anonym bleiben, beantwortet seine eigene Überschrift nicht.
+
+       Die Breite wird geschätzt, nicht gemessen: `getComputedTextLength`
+       zwänge zu einem Layout mitten im Zeichnen, und zwar je Bild einmal.
+       4.4 ist die mittlere Zeichenbreite bei `font-size: 8` in dieser
+       Schrift, großzügig gerundet — was knapp wird, fällt zurück auf zwei
+       Marken statt sich zu berühren. */
+    const marken = gruppen.map(markeVon);
+    const alleMarken = marken.length > 1
+      && marken.every(m => String(m).length * 4.4 <= platz - 3);
+    if (alleMarken) {
+      marken.forEach((m, i) =>
+        beschriftung(svg, PAD.l + platz * (i + .5), H - 4, m));
+    } else {
+      beschriftung(svg, PAD.l + platz * .5, H - 4, marken[0]);
+      if (marken.length > 1) {
+        beschriftung(svg, PAD.l + platz * (marken.length - .5), H - 4,
+          marken[marken.length - 1]);
+      }
     }
 
-    /* Genau hier hat die Beschriftung ihre Lücke: nur die erste und die
-       letzte Säule tragen eine, alle dazwischen sind stumm. Der Kasten sagt,
-       welche Woche das ist — und dazu jede Schicht einzeln, denn gestapelt
+    /* Und wo die Beschriftung ihre Lücke behält — bei vielen Säulen tragen
+       nur die erste und die letzte eine —, springt der Kasten ein: er sagt,
+       welche Woche das ist, und dazu jede Schicht einzeln, denn gestapelt
        lässt sich eine mittlere Schicht mit dem Auge nicht messen. */
     treffer(svg, gruppen.map((g, i) => ({
       flaeche: s_el('rect',
