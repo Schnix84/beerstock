@@ -3088,7 +3088,10 @@
                 <input class="feld" id="f-grad" inputmode="decimal" autocomplete="off"
                        placeholder="4,9" required></label>
             </div>
-            <button class="knopf" type="submit">Anschreiben</button>
+            <!-- Die Aufschrift wechselt, siehe `wuerfleAufschrift`. Im Markup
+                 steht das nuechterne Wort: es ist das einzige, das auch ohne
+                 JS erscheint, und es sagt, was der Knopf tut. -->
+            <button class="knopf" id="melde-knopf" type="submit">Anschreiben</button>
             <div class="zeile-klein">
               <span id="wer-bin-ich"></span>
               <span>
@@ -10949,6 +10952,20 @@
     }
   });
 
+  /* Die Aufschrift des Meldeknopfs. Drei Wortlaute, einer davon steht da:
+     gewuerfelt beim Aufbau der Seite und noch einmal nach jeder Meldung,
+     damit der Knopf nicht jeden Abend dasselbe sagt.
+
+     Nur hier und nirgends sonst — der Wirt duldet den Spass am eigenen
+     Deckel, nicht an fremden Formularen. Und die drei sind gleichberechtigt:
+     wer „Vertrau mir Bruder" drueckt, schreibt genauso an wie der andere. */
+  const AUFSCHRIFTEN = ['Anschreiben', 'Stimmt so', 'Vertrau mir Bruder'];
+  function wuerfleAufschrift() {
+    $('melde-knopf').textContent =
+      AUFSCHRIFTEN[Math.floor(Math.random() * AUFSCHRIFTEN.length)];
+  }
+  wuerfleAufschrift();
+
   $('melde-form').addEventListener('submit', async ev => {
     ev.preventDefault();
     const knopf = ev.target.querySelector('button[type=submit]');
@@ -10963,6 +10980,9 @@
         ? 'Eingetragen — du führst das Feld an.'
         : 'Eingetragen. Platz ' + d.rang + '.');
       await hole();
+      // Neu wuerfeln erst nach der geglueckten Meldung: waehrend des Rufs
+      // stuende sonst ein anderes Wort auf einem Knopf, der noch arbeitet.
+      wuerfleAufschrift();
     } catch (e) {
       sagt(e.message, true);
     } finally {
