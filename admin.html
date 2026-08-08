@@ -997,7 +997,7 @@
   .log .wer {
     font-weight: 600; min-width: 68px; text-align: right; white-space: nowrap;
   }
-  /* Der Weg statt eines Namens: dasselbe Feld, aber die Schrift des „ZEIGE"
+  /* Der Weg statt eines Namens: dasselbe Feld, aber die Schrift des „FILTER"
      am Sieb — klein, gesperrt, in Versalien. So steht „PUSH" da, ohne mit dem
      Namen daneben um die Aufmerksamkeit zu ringen. */
   .log .wer.weg {
@@ -1357,6 +1357,13 @@
 
     <h2>Protokoll</h2>
     <div class="werkzeug">
+      <!-- Suche vor Sieb, wie über der Runde — die Begründung steht bei
+           `.werkzeug` im Stilteil und gilt hier unverändert. Das Feld
+           verspricht „Name oder Art", nicht „alles": der Weg (Mail, Push)
+           steht in den Reitern daneben, und die Stückzahlen entstehen erst
+           beim Zeichnen. -->
+      <span class="suche"><input type="text" id="log-suche" placeholder="Name oder Art…"
+                                 aria-label="Protokoll durchsuchen"></span>
       <span class="reiter" id="log-filter"></span>
     </div>
     <ul class="log" id="log"></ul>
@@ -1705,7 +1712,7 @@
       .filter(([k, , n]) => n > 0 || k === 'alle');
     // Ein einziger Reiter ist kein Filter, sondern eine Beschriftung.
     if (sichtbar.length < 2) return;
-    ziel.appendChild(el('span', 'wozu', 'zeige'));
+    ziel.appendChild(el('span', 'wozu', 'filter'));
     sichtbar.forEach(([k, v, n]) => {
       const b = el('button', k === sieb ? 'an' : null, v.titel);
       b.type = 'button';
@@ -2158,7 +2165,7 @@
      ✦) und im gewählten Reiter darüber. Das war eine Zumutung: ein Zeichen
      ist kein Wort, und wer „3 Geräte" liest, muss aus einem vierzackigen
      Stern schließen, dass es ein Push war. Jetzt steht der Weg wieder da —
-     klein und in Versalien wie das „ZEIGE" am Sieb, nicht mehr als
+     klein und in Versalien wie das „FILTER" am Sieb, nicht mehr als
      gleichrangiges fettes Wort mit Pfeil. */
   const logWer = z => (z.quelle === 'admin' ? z.wer
     : (z.quelle === 'push' ? 'Push' : 'Mail'));
@@ -2308,12 +2315,15 @@
   const LOG_ZAEHLER = { alle: 'alle', verwaltet: 'admin', mail: 'mail', push: 'push' };
 
   let logSieb = 'alle';
+  let logWort = '';                 // das Suchwort, siebt ebenfalls im Worker
   let logZeilen = [];               // nur die geladenen Seiten
   let logZaehler = null;            // über die ganze Geschichte, aus der Route
   let logWeiter = null;             // Marke für die nächste Seite, null = Ende
   let logLaedt = false;             // gegen zwei Nachladungen auf einmal
   let logSpaeher = null;            // der IntersectionObserver am Fuß
   let logAutoRest = 0;              // wie oft der Beobachter noch von selbst darf
+  let logLauf = 0;                  // gegen Antworten, die einander überholen
+  let logTipp = null;               // der Wecker der Suche
 
   function logFilterZeichnen() {
     const ziel = $('log-filter');
@@ -2321,7 +2331,7 @@
     // Ein Sieb über einem leeren Buch siebt nichts. Der Satz darunter sagt
     // schon alles, was es zu sagen gibt.
     if (!logZaehler || !logZaehler.alle) return;
-    ziel.appendChild(el('span', 'wozu', 'zeige'));
+    ziel.appendChild(el('span', 'wozu', 'filter'));
     Object.entries(LOG_SIEBE)
       .map(([k, v]) => [k, v, logZaehler[LOG_ZAEHLER[k]] || 0])
       .filter(([k, , n]) => n > 0 || LOG_IMMER.includes(k))
@@ -2394,17 +2404,48 @@
      Reichweite. */
   const LOG_SEITE = 20;
 
+  /* `q` MUSS AUCH AM NACHLADEN HÄNGEN, nicht nur an der ersten Seite: `vor`
+     blättert durch dieselbe Frage weiter. Ritte das Wort nur beim ersten
+     Abruf mit, käme Seite zwei ungesiebt zurück und hängte sich unter das
+     Suchergebnis — lautlos, und die Zeilen sähen echt aus. */
   const logPfad = (vor) => '/api/admin/protokoll?limit=' + LOG_SEITE
     + (LOG_SIEBE[logSieb].quelle ? '&quelle=' + LOG_SIEBE[logSieb].quelle : '')
+    + (logWort ? '&q=' + encodeURIComponent(logWort) : '')
     + (vor ? '&vor=' + encodeURIComponent(vor) : '');
 
-  /* Ein Reiterwechsel ist eine neue Frage, keine Fortsetzung: die Liste geht
-     leer, die Marke auch, und die erste Seite kommt frisch. Die Zahlen an den
-     Reitern bleiben stehen, während geladen wird — sie ändern sich durch einen
-     Reiterwechsel ja nicht, und wegzunehmen was gleich wieder dasteht, ist
-     Flackern ohne Auskunft. */
-  async function logSiebWaehlen(k) {
-    logSieb = k;
+  /* Das Suchwort. Anders als über der Runde fragt es den Worker — der Grund
+     steht dort, wo gesiebt wird (`GET /api/admin/protokoll`): hier liegt immer
+     nur die geladene Seite da.
+
+     DESHALB DER WECKER. Über der Runde filtert jeder Tastendruck eine Liste im
+     Speicher; hier wäre er ein Rundflug zur Datenbank, und zwar kein
+     billiger — die Abfrage baut die ganze Union samt der korrelierten
+     Unterabfragen des Verwaltungszweigs auf. Ein Viertelsekunde Ruhe ist die
+     Grenze, ab der Tippen aufhört und Fragen anfängt. */
+  $('log-suche').addEventListener('input', ev => {
+    const w = ev.target.value.trim();
+    if (w === logWort) return;      // Leerzeichen am Ende sind keine neue Frage
+    logWort = w;
+    clearTimeout(logTipp);
+    logTipp = setTimeout(logNeuStellen, 250);
+  });
+
+  /* Ein Reiterwechsel und ein neues Suchwort sind dasselbe: eine neue Frage,
+     keine Fortsetzung. Die Liste geht leer, die Marke auch, und die erste
+     Seite kommt frisch. Die Zahlen an den Reitern bleiben stehen, während
+     geladen wird — sie ändern sich dadurch ja nicht, und wegzunehmen was
+     gleich wieder dasteht, ist Flackern ohne Auskunft.
+
+     DAS ZÄHLWERK IST NICHT ZIERAT. `logLaedt` allein reicht hier nicht: es
+     hält niemanden ab, eine zweite Frage zu stellen, und beim Tippen sind
+     zwei erste Seiten schnell gleichzeitig unterwegs. Dann gewinnt die, die
+     zuletzt ankommt — nicht die, die zuletzt gefragt wurde. Der Wecker
+     verkleinert dieses Fenster, er schließt es nicht. */
+  async function logNeuStellen() {
+    // Auch der Reiterklick löscht den Wecker: sonst fragt der 250 ms später
+    // dasselbe noch einmal.
+    clearTimeout(logTipp);
+    const lauf = ++logLauf;
     logZeilen = [];
     logWeiter = null;
     logAutoRest = LOG_AUTO;
@@ -2415,26 +2456,40 @@
     logLaedt = true;
     protokollZeichnen();
     try {
-      protokoll(await ruf(logPfad(null)));
+      const d = await ruf(logPfad(null));
+      if (lauf !== logLauf) return;
+      protokoll(d);
     } catch (e) {
+      if (lauf !== logLauf) return;
       logLaedt = false;
       protokollZeichnen();
       sagt('log-sagt', e.message, true);
     }
   }
 
+  function logSiebWaehlen(k) {
+    logSieb = k;
+    logNeuStellen();
+  }
+
   async function logNachladen() {
     if (logLaedt || !logWeiter) return;
+    /* Kein `++`: eine Fortsetzung ist keine neue Frage. Sie merkt sich nur,
+       zu welcher sie gehörte — kommt sie zurück, während längst nach etwas
+       anderem gesucht wird, hängt sie sich nicht mehr darunter. */
+    const lauf = logLauf;
     logLaedt = true;
     logFussZeichnen();                       // der Fuß sagt „lädt…"
     try {
       const d = await ruf(logPfad(logWeiter));
+      if (lauf !== logLauf) return;
       logZeilen = logZeilen.concat(d.zeilen);
       logWeiter = d.weiter;
       logZaehler = d.zaehler;
       logLaedt = false;
       protokollZeichnen();
     } catch (e) {
+      if (lauf !== logLauf) return;
       logLaedt = false;
       /* Die schon geladenen Zeilen bleiben stehen — ein Fehler beim Nachladen
          ist kein Grund, das Gelesene wegzuräumen. Nur der Fuß fällt weg, sonst
@@ -2457,9 +2512,13 @@
          „noch hat niemand etwas verwaltet": das Blatt zeigt seit dem
          Versandprotokoll auch, was von selbst rausging. */
       if (!logLaedt) {
-        ziel.appendChild(el('li', 'leer-hinweis', logSieb === 'alle'
-          ? 'Noch ist nichts passiert.'
-          : 'Unter diesem Sieb steht nichts.'));
+        ziel.appendChild(el('li', 'leer-hinweis',
+          /* Das Wort zuerst: wer gesucht hat, will hören, dass SEIN Wort
+             nichts findet — „Unter diesem Sieb steht nichts" schöbe es auf
+             den Reiter, an dem er gar nicht war. */
+          logWort ? 'Zu „' + logWort + '" steht nichts im Protokoll.'
+            : logSieb === 'alle' ? 'Noch ist nichts passiert.'
+              : 'Unter diesem Sieb steht nichts.'));
       }
       return;
     }
@@ -2471,8 +2530,14 @@
      Verwaltungshandlung, denn danach ist die Geschichte eine andere und
      nachgeladene Seiten von vorhin stünden schief darunter. Das gewählte Sieb
      überlebt: `laden()` fragt die Route mit `logPfad(null)`, und wer im Blatt
-     „push" stand, will nach dem Entsperren nicht wieder bei „alle" landen. */
+     „push" stand, will nach dem Entsperren nicht wieder bei „alle" landen —
+     das Suchwort ebenso, es hängt aus demselben Grund mit im Pfad.
+
+     Das Zählwerk rückt eins weiter, weil eine frische erste Seite alles
+     entwertet, was noch unterwegs ist: eine Fortsetzung von vorhin gehört zu
+     einer Liste, die es nicht mehr gibt. */
   function protokoll(d) {
+    logLauf++;
     logZeilen = d.zeilen;
     logZaehler = d.zaehler;
     logWeiter = d.weiter;
@@ -3359,6 +3424,11 @@
        nacheinander wäre das Kontor fünfmal so lange leer. `health` darf
        scheitern, ohne den Rest mitzureißen — es ist die Ampel, nicht der
        Inhalt. */
+    /* Der Stand des Zählwerks VOR dem Abruf. Wer während des Ladens ins
+       Suchfeld tippt, hat die Frage gewechselt — dann ist dieses Protokoll die
+       Antwort auf die alte, und `protokoll()` bliebe unten aus. Die anderen
+       vier kennen dieses Problem nicht, sie haben kein Suchfeld über sich. */
+    const logStand = logLauf;
     const [leute, stat, log, geplantListe, health] = await Promise.all([
       ruf('/api/admin/nutzer'),
       ruf('/api/admin/statistik?tage=' + zeitraum),
@@ -3387,7 +3457,7 @@
     kopfZeichnen(leute.kopf, mich, health, stat);
     runde(leute.nutzer);
     statistik(stat);
-    protokoll(log);
+    if (logStand === logLauf) protokoll(log);
     geplantZeichnen(geplantListe.zeilen);
     // Die Empfängerzahl auf dem Versandknopf kommt aus `stand` — vor dem
     // ersten Abruf stand dort eine Null.

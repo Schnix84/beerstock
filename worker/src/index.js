@@ -2269,6 +2269,34 @@ const PROTOKOLL_SK = `
   coalesce(cast(anzahl AS text), '') || '|' || coalesce(wen, '') || '|' ||
   coalesce(detail, '')`;
 
+/* Der Heuhaufen, in dem `q` sucht: alles, was auf der Zeile als Sprache steht,
+   in einer Zeichenkette. Nicht spaltenweise mit sieben `OR LIKE` - das waere
+   dasselbe Ergebnis in siebenfacher Schreibweise, und beim naechsten Feld
+   vergisst man eines davon.
+
+   DIE ART STEHT ZWEIMAL DRIN, einmal roh und einmal mit Leerzeichen statt
+   Unterstrichen. Das Kontor zeichnet `aktion.replace(/_/g, ' ')` - auf dem
+   Blatt steht also "MAILWECHSEL WARNUNG", und wer das abtippt, suchte sonst
+   nach etwas, das so in keiner Spalte steht. Gesucht wird, was man LIEST.
+
+   WAS NICHT DRIN IST, IST NICHT VERGESSEN: "Push", "Mail" und "6 Geraete"
+   erfindet die Seite beim Zeichnen (`logWer`, `versandStueck`), sie sind
+   keine Spalten. Den Weg decken die Reiter darueber ab, und eine Zahl sucht
+   niemand als Wort. Deshalb verspricht das Feld im Kontor auch nur "Name oder
+   Art" und nicht "durchsuchen".
+
+   `aktion` STEHT OHNE `coalesce` DA, wie schon in `PROTOKOLL_SK`: die Spalte
+   ist in allen drei Quellen NOT NULL (`admin_log.aktion`, `mail_ausgang.art`,
+   `versand_ausgang.art` - nachgesehen im Schema, nicht angenommen). Waere sie
+   es nicht, faerbte ein einziges NULL die ganze Verkettung auf NULL und die
+   Zeile fiele lautlos aus jedem Suchergebnis. Wer hier eine vierte Quelle
+   anhaengt, prueft das zuerst. */
+const PROTOKOLL_HEUHAUFEN = `
+  coalesce(wer, '') || ' ' || coalesce(wen, '') || ' ' ||
+  aktion || ' ' || replace(aktion, '_', ' ') || ' ' ||
+  coalesce(detail, '') || ' ' || coalesce(ausloeser, '') || ' ' ||
+  coalesce(empfaenger, '')`;
+
 // ---------------------------------------------------------------------------
 // Mailversand ueber AgentMail. Reine HTTP-API, kein SMTP.
 // ---------------------------------------------------------------------------
@@ -6663,7 +6691,19 @@ const ROUTEN = {
      Blaettern die zweite. `sk` haengt Quelle, Art, Anzahl und Betroffenen an
      den Zeitstempel; die Sortierung bleibt chronologisch, weil alle drei
      Quellen ihre Zeit im selben Format 'YYYY-MM-DD HH:MM:SS' fuehren und
-     lexikografisch damit gleich chronologisch ist. */
+     lexikografisch damit gleich chronologisch ist.
+
+     `q` SIEBT AUS DEMSELBEN GRUND HIER UND NICHT AUF DER SEITE wie `quelle`:
+     dort liegt immer nur die geladene Seite. Ein Wortfilter im Browser hiesse
+     "drei Treffer unter den zwanzig, die du gerade siehst" - und der vierte,
+     der eine Seite tiefer liegt, waere unauffindbar, ohne dass irgendwo
+     staende, dass er fehlt.
+
+     DIE ZAEHLER AN DEN REITERN SIEBT ES NICHT MIT, absichtlich und wortgleich
+     zur Runde (siehe `filterZeichnen` im Kontor): eine Zahl, die beim Tippen
+     mitwandert, liest sich, als haette sich die Geschichte geaendert. Die
+     Reiter sagen weiter, wie viel es GIBT; was das Wort davon uebrig laesst,
+     steht darunter. */
   'GET /api/admin/protokoll': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
@@ -6675,6 +6715,21 @@ const ROUTEN = {
     const limit = Math.min(Math.max(1, Number(p.get('limit')) || PROTOKOLL_SEITE),
                            PROTOKOLL_SEITE_MAX);
 
+    /* Das Suchwort. `%` und `_` werden entschaerft, bevor das Muster daraus
+       wird - sonst holt ein getipptes `%` die ganze Geschichte zurueck und ein
+       `_` trifft jedes beliebige Zeichen. Ein Prozentzeichen ist in einem
+       Betreff nichts Ausgefallenes ("30% mehr"), das ist kein Randfall.
+
+       Die Laengengrenze ist kein Schutz, sondern Hausverstand: ein Muster von
+       sechzig Zeichen findet nichts mehr, was ein Mensch gesucht hat.
+
+       GROSS/KLEIN nimmt `LIKE` von selbst, aber nur fuer ASCII - "MUELLER"
+       findet "Mueller", ein falsch geschriebenes "MÜLLER" findet "Müller"
+       nicht. Das lokal nachzubauen hiesse, die Union in JS zu ziehen; das ist
+       fuer einen Umlaut in falscher Schreibweise der falsche Preis. */
+    const wort = (p.get('q') || '').trim().slice(0, 60);
+    const muster = wort ? '%' + wort.replace(/[\\%_]/g, '\\$&') + '%' : null;
+
     /* Eine Zeile mehr holen als gezeigt wird: sie wird nicht ausgeliefert,
        sie beantwortet nur "gibt es noch was". Ein zweiter `count(*)` fuer
        dieselbe Frage waere eine zweite Abfrage fuer ein Ja/Nein. */
@@ -6682,8 +6737,9 @@ const ROUTEN = {
       env.DB.prepare(`
         SELECT * FROM (SELECT *, ${PROTOKOLL_SK} AS sk FROM (${PROTOKOLL_UNION}))
         WHERE (?1 IS NULL OR quelle = ?1) AND (?2 IS NULL OR sk < ?2)
+          AND (?4 IS NULL OR ${PROTOKOLL_HEUHAUFEN} LIKE ?4 ESCAPE '\\')
         ORDER BY sk DESC LIMIT ?3
-      `).bind(quelle, marke, limit + 1),
+      `).bind(quelle, marke, limit + 1, muster),
       /* Die Zahlen an den Sieben, ueber alles. Sie kosten einen vollen
          Durchlauf der Union - vertretbar, weil das Protokoll in Zeilen misst,
          die ein Mensch ausloest, und nicht in Messwerten. */

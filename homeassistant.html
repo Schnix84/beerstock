@@ -643,17 +643,21 @@
     p.hidden = !text;
   }
 
-  /* Grob gerundet, und das ist keine Nachlässigkeit: `tokens.zuletzt` wird im
-     Worker nur einmal je Stunde fortgeschrieben (sonst wären es Tausende
-     Schreibvorgänge am Tag für eine Anzeige). Eine minutengenaue Angabe wäre
-     hier also eine Genauigkeit, die es gar nicht gibt. */
+  /* Wortgleich mit `kurzZeit` auf dem Deckel — dort steht dieselbe Auskunft
+     („Home Assistant, gemeldet …"), und zwei Formulierungen für einen Zeitpunkt
+     lesen sich wie zwei Zeitpunkte. Grob ist die Angabe ohnehin: `tokens.zuletzt`
+     wird im Worker nur einmal je Stunde fortgeschrieben (sonst wären es Tausende
+     Schreibvorgänge am Tag für eine Anzeige). Die Minutenstufe zeigt darum
+     seltener eine Minute als eine Stunde — aber wenn, dann dieselbe wie drüben. */
   function ungefaehr(iso) {
-    const min = Math.max(0, (Date.now() - new Date(iso).getTime()) / 60000);
-    if (min < 90) return 'in der letzten Stunde';
-    const std = min / 60;
-    if (std < 24) return 'vor ' + Math.round(std) + ' Stunden';
-    const tage = Math.round(std / 24);
-    return tage === 1 ? 'gestern' : 'vor ' + tage + ' Tagen';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const min = (Date.now() - d) / 60000;
+    if (min < 2) return 'gerade';
+    if (min < 60) return 'vor ' + Math.floor(min) + ' Min.';
+    if (min < 60 * 24) return 'vor ' + Math.floor(min / 60) + ' Std.';
+    if (min < 60 * 24 * 7) return 'vor ' + Math.floor(min / 1440) + ' Tagen';
+    return d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
   }
   const alsTag = iso => iso
     ? new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })

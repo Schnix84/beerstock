@@ -681,7 +681,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/admin/rundmail/test` 🔒 | dieselben Felder ohne `versand_am`, geht nur an die eigene Adresse — ohne Stundensperre, ohne Protokoll- oder Statistikeintrag |
 | `GET /api/admin/rundmail/geplant` 🔒 | die noch anstehenden und die fehlgeschlagenen geplanten Rundmails — nur Admin |
 | `POST /api/admin/rundmail/geplant/aendern` 🔒 | `{id, ...Felder}` ändert eine geplante Rundmail, `{id, verwerfen:true}` löscht sie — geht nur, solange sie noch `geplant` ist |
-| `GET /api/admin/protokoll` 🔒 | die letzten 50 Adminhandlungen — nur Admin |
+| `GET /api/admin/protokoll` 🔒 | was passiert ist, aus drei Quellen zusammen (Verwaltung, Mail, Push). Blättert: `?limit=` (Vorgabe 20, höchstens 50) und `?vor=` mit der Marke `weiter` der vorigen Seite. `?quelle=admin\|mail\|push` siebt nach Weg, `?q=` nach Wort — gesucht wird in Name, Betroffenem, Art, Detail, Auslöser und Empfängern. Die mitgelieferten `zaehler` zählen über die **ganze** Geschichte und lassen `q` bewusst außen vor. Nur Admin |
 | `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM`, `GIPHY_KEY`, `push` (beide VAPID-Hälften); dazu **zwei Stände**, die das Kontor unter der Ampel nebeneinanderstellt: `version`/`deployed_at` vom letzten Worker-Deploy und `seite_version`/`seite_deployed_at`/`seite_stand` vom letzten Commit auf `main` (bei GitHub erfragt, eine Viertelstunde gecacht) |
 
 🔒 heißt: braucht den `Bearer`-Token, sonst 401. Für die `POST`-Routen gilt das
