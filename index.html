@@ -9622,7 +9622,27 @@
          dafür zu lang findet. `ClipboardItem` nimmt darum ein Versprechen und
          wartet selbst darauf — die Erlaubnis ist da schon erteilt. */
       const png = (async () => {
-        const a = await fetch(url, { mode: 'cors', credentials: 'omit' });
+        /* `cache: 'reload'` ist hier der ganze Unterschied zwischen „Bild
+           kopiert" und „Adresse kopiert", und der Grund ist böse:
+
+           Das Bild steht längst im Browsercache — das `<img>` der Karte hat es
+           dorthin gelegt, lange bevor jemand lang draufdrücken konnte, und der
+           Worker nagelt es mit `immutable, max-age=31536000` fest. Jene
+           Anfrage ging OHNE Ursprungskopf raus, die Antwort hat also keinen
+           `Access-Control-Allow-Origin`. Ein `fetch(…, {mode:'cors'})` bekommt
+           genau diese Antwort aus dem Cache gereicht und fällt durch die
+           CORS-Prüfung — `TypeError: Failed to fetch`, obwohl am Bucket alles
+           richtig steht. Der Kopf fehlt nicht, er ist nur ein Jahr alt.
+
+           `reload` geht an dem Eintrag vorbei und holt frisch, mit Ursprung.
+           Es kostet das Bild ein zweites Mal (hier 107 kB) — aber nur bei
+           einem ausdrücklichen Druck auf „Bild kopieren", und danach steht
+           eine brauchbare Antwort im Cache, das nächste Mal ist also gratis.
+
+           Nachgestellt in `ideas/pruefungen/bild-cache-cors-probe.mjs`: erst
+           per `<img>` laden, dann greifen. Die anderen Proben konnten das
+           nicht sehen, weil sie mit `Network.setCacheDisabled` laufen. */
+        const a = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'reload' });
         if (!a.ok) throw new Error('Bild ' + a.status);
         const blob = await a.blob();
         return blob.type === 'image/png' ? blob : nachPng(blob);
