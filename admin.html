@@ -990,13 +990,50 @@
   }
   .wahl-ebene[hidden] { display: none; }
   .wahl-schirm { position: absolute; inset: 0; background: #000000aa; }
-  .wahl-blatt {
-    position: relative; width: min(340px, 92vw);
-    max-height: 88vh; overflow-y: auto; overscroll-behavior: contain;
-    background: radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
-    border: 6px solid #4a3527; border-radius: 8px;
-    padding: 14px 18px 16px; box-shadow: 0 14px 44px #000c, 0 0 0 1px #0009 inset;
+  /* --- Rahmen und Blatt, zwei Elemente ------------------------------------
+     Hier hing bis zuletzt der alte Rahmen: `border: 6px solid #4a3527`, ein
+     flacher brauner Strich aus der Zeit vor den vier Leisten. Beim Umbau des
+     Holzes (`.rh`, vier Leisten mit eigener Faserrichtung) ist genau dieses
+     eine Popup übersehen worden — es stand daneben wie ein Bilderrahmen aus
+     einem anderen Haushalt.
+
+     ZWEI ELEMENTE und nicht eines, und das ist keine Vorliebe: das Blatt
+     scrollt (`overflow-y: auto`), und damit klippt es an seiner Polsterkante.
+     Ein `.rh` mit negativem Einzug — die Bauart der Blätter oben, wo der
+     Rahmen eine durchsichtige Border ist — läge vollständig außerhalb dieser
+     Kante und wäre schlicht weggeschnitten. Der Rahmen braucht deshalb ein
+     eigenes Element, das NICHT scrollt.
+
+     Genau diese Teilung gibt es drüben schon: `.wr-rahmen` / `.wr-brett` an
+     der Rückblick-Karte. Von dort kommt auch das kleinere `--r` — eine
+     schwebende Karte trägt eine schmalere Leiste als ein Blatt, das die halbe
+     Seite füllt; die vier Farbwerte darunter sind an jeder Stelle dieselben. */
+  .wahl-rahmen {
+    --r: clamp(7px, 1.6vw, 12px);
+    --h-hell:   #f8ecd2;
+    --h-mitte:  #eed5a6;
+    --h-dunkel: #d0b284;
+    --h-tief:   #a98a5e;
+    --fase-hell: .38;
+    --fase-dunkel: .55;
+    position: relative; width: min(340px, 92vw); border-radius: 4px;
+    padding: var(--r);
+    box-shadow: 0 14px 44px #000c, 0 0 0 1px #14110d;
     animation: wahl-kommt .2s ease-out;
+  }
+  .wahl-rahmen > .rh {
+    position: absolute; inset: 0; border-radius: inherit;
+    overflow: hidden; pointer-events: none;
+  }
+  .wahl-blatt {
+    /* Die Höhe zählt der Rahmen mit: ohne den Abzug stünde die Karte um zwei
+       Leistenbreiten über die 88vh hinaus. */
+    position: relative; z-index: 1;
+    max-height: calc(88vh - 2 * var(--r)); overflow-y: auto; overscroll-behavior: contain;
+    background: radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
+    border-radius: 3px;
+    padding: 14px 18px 16px;
+    box-shadow: 0 7px 12px -6px #000a inset, 0 0 0 1px #0009 inset;
   }
   @keyframes wahl-kommt { from { transform: translateY(12px); opacity: .4; } }
   .wahl-kopf { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
@@ -1046,10 +1083,15 @@
        eine Tafel hat einen Rahmen. Am Finger ist es ein Bogen, der von unten
        hochkommt — da wäre der Holzbalken oben kein Rahmen mehr, sondern ein
        Balken quer über der Oberkante, genau dort, wo der Griff liegt. */
-    .wahl-blatt {
+    .wahl-rahmen {
       width: 100%; max-width: 520px; margin: 0 auto;
-      border-width: 0; border-radius: 10px 10px 0 0;
-      padding-top: 0; animation: wahl-hoch .22s ease-out;
+      padding: 0; border-radius: 10px 10px 0 0;
+      animation: wahl-hoch .22s ease-out;
+    }
+    .wahl-rahmen > .rh { display: none; }
+    .wahl-blatt {
+      max-height: 88vh; border-radius: 10px 10px 0 0;
+      padding-top: 0;
     }
     .wahl-griff { display: block; }
     .wahl-zu { display: none; }
@@ -1058,11 +1100,13 @@
 
   /* Gezogen wird ohne Überblendung, die Rückfahrt und der Abgang mit ihr —
      wie drüben am Blatt. */
-  .wahl-blatt { transition: transform .22s ease-out; }
+  /* Verschoben wird der RAHMEN, nicht das Blatt darin — sonst bliebe beim
+     Wischen das Holz stehen und der Schiefer wanderte darunter weg. */
+  .wahl-rahmen { transition: transform .22s ease-out; }
   .wahl-schirm { transition: opacity .22s ease-out; }
-  .wahl-ebene.zieht .wahl-blatt, .wahl-ebene.zieht .wahl-schirm { transition: none; }
+  .wahl-ebene.zieht .wahl-rahmen, .wahl-ebene.zieht .wahl-schirm { transition: none; }
   @media (prefers-reduced-motion: reduce) {
-    .wahl-blatt, .wahl-schirm { transition: none; animation: none; }
+    .wahl-rahmen, .wahl-schirm { transition: none; animation: none; }
   }
 
   /* Wer hier nichts verloren hat, sieht das — und nicht eine leere Seite, die
@@ -1256,13 +1300,19 @@
      gewählt wird hier nur, GEZEIGT wird der Rückblick drüben auf der Tafel. -->
 <div class="wahl-ebene" id="wahl-ebene" hidden>
   <div class="wahl-schirm" id="wahl-schirm" data-wahl-zu></div>
-  <div class="wahl-blatt" id="wahl-blatt" role="dialog" aria-modal="true" aria-label="Jahr wählen">
-    <button class="wahl-griff" type="button" aria-label="Schließen" data-wahl-zu></button>
-    <div class="wahl-kopf">
-      <h3>Dein Jahr — welches?</h3>
-      <button class="wahl-zu" type="button" aria-label="Schließen" data-wahl-zu>×</button>
+  <div class="wahl-rahmen" id="wahl-rahmen">
+    <div class="rh" aria-hidden="true">
+      <i class="rh-l rh-o"></i><i class="rh-l rh-u"></i><i class="rh-l rh-li"></i><i class="rh-l rh-re"></i>
+      <i class="rh-naht"></i><i class="rh-fase"></i><i class="rh-falz"></i>
     </div>
-    <div id="jahr-liste"></div>
+    <div class="wahl-blatt" id="wahl-blatt" role="dialog" aria-modal="true" aria-label="Jahr wählen">
+      <button class="wahl-griff" type="button" aria-label="Schließen" data-wahl-zu></button>
+      <div class="wahl-kopf">
+        <h3>Dein Jahr — welches?</h3>
+        <button class="wahl-zu" type="button" aria-label="Schließen" data-wahl-zu>×</button>
+      </div>
+      <div id="jahr-liste"></div>
+    </div>
   </div>
 </div>
 
@@ -2416,7 +2466,7 @@
 
   function jahrWahlZu() {
     $('wahl-ebene').classList.remove('zieht');
-    $('wahl-blatt').style.transform = '';
+    $('wahl-rahmen').style.transform = '';
     $('wahl-schirm').style.opacity = '';
     $('wahl-ebene').hidden = true;
   }
@@ -2445,12 +2495,18 @@
   {
     const ZUG_AUF = 92, ZUG_SCHLUPF = 8, ZUG_VORSPRUNG = 1.5, ZUG_TAKT = 220;
     const ohneTakt = matchMedia('(prefers-reduced-motion: reduce)');
-    const ebene = $('wahl-ebene'), blatt = $('wahl-blatt'), schirm = $('wahl-schirm');
+    /* Zwei Elemente, zwei Aufgaben: geschoben und gemessen wird der RAHMEN (das
+       Holz gehört mit, und seine Höhe ist die der Karte), gescrollt und
+       angefasst wird das BLATT darin. Wer beides auf denselben Knoten legt,
+       lässt am Finger entweder den Rahmen stehen oder liest einen Scrollstand,
+       den es an dieser Stelle nicht gibt. */
+    const ebene = $('wahl-ebene'), rahmen = $('wahl-rahmen'),
+          blatt = $('wahl-blatt'), schirm = $('wahl-schirm');
     let zug = null;
 
     function zurueck() {
       ebene.classList.remove('zieht');
-      blatt.style.transform = '';
+      rahmen.style.transform = '';
       schirm.style.opacity = '';
       zug = null;
     }
@@ -2480,18 +2536,18 @@
       }
       ev.preventDefault();
       zug.weg = Math.max(0, dy - ZUG_SCHLUPF);
-      blatt.style.transform = 'translateY(' + zug.weg + 'px)';
-      schirm.style.opacity = String(Math.max(0, 1 - zug.weg / (blatt.offsetHeight || 400)));
+      rahmen.style.transform = 'translateY(' + zug.weg + 'px)';
+      schirm.style.opacity = String(Math.max(0, 1 - zug.weg / (rahmen.offsetHeight || 400)));
     }, { passive: false });
 
     blatt.addEventListener('touchend', () => {
       if (!zug || zug.achse !== 'runter' || zug.weg < ZUG_AUF) { zurueck(); return; }
-      const hoehe = blatt.offsetHeight;
+      const hoehe = rahmen.offsetHeight;
       zug = null;
       ebene.classList.remove('zieht');
       if (navigator.vibrate) navigator.vibrate(12);
       if (ohneTakt.matches) { jahrWahlZu(); return; }
-      blatt.style.transform = 'translateY(' + hoehe + 'px)';
+      rahmen.style.transform = 'translateY(' + hoehe + 'px)';
       schirm.style.opacity = '0';
       // Eine Uhr, kein `transitionend`: fällt das Ereignis einmal aus, bliebe
       // das Blatt mit stehen gebliebener Verschiebung offen und unsichtbar.
