@@ -1101,7 +1101,7 @@
 
      DIE NAMENSSPALTE STEHT AUCH DA, WENN SIE LEER IST. Nur die Verwaltung hat
      ein Wer, die Versandzeilen haben keins — ohne den leeren Platzhalter
-     begänne die Pille bei „schnix ⟨SPERREN⟩" um eine Namenslänge weiter
+     begänne die Pille bei „Anna ⟨SPERREN⟩" um eine Namenslänge weiter
      rechts als bei ⟨NOTRUF⟩ darunter. Ein paar leere Pixel sieht niemand,
      eine Spalte, die von Zeile zu Zeile springt, sieht jeder.
 
@@ -2024,7 +2024,7 @@
       ? 'ruht — alle schreiben in ihrer Farbe'
       : !kreis.length
         ? 'niemand hat ihn gewählt — die Vergabe läuft leer'
-        /* Bei EINEM im Kreis wird nichts ausgelost, und „heute Brunx" würde
+        /* Bei EINEM im Kreis wird nichts ausgelost, und „heute Anna" würde
            behaupten, dass es morgen jemand anderes sein könnte. */
         : kreis.length === 1
           ? `immer ${kreis[0].name} — allein im Kreis`
@@ -2537,7 +2537,7 @@
      entscheidet die Darstellung — nicht `aktion`. Der Grund ist eine Falle:
      „rundmail" ist BEIDES, eine Verwaltungshandlung im `admin_log` und eine
      Mailart im Ausgang. Ein Versand durchs Kontor erzeugte darum zwei Zeilen —
-     „schnix → rundmail „Betreff"" und „Mail → rundmail · 6 Mails". Gedacht war
+     „Anna → rundmail „Betreff"" und „Mail → rundmail · 6 Mails". Gedacht war
      das als zwei Auskünfte, gelesen wurde es als Doppelung, und die Lesart hat
      recht: es ist EIN Vorgang. Seit dem 2026-08-08 hängt die Zahl an der
      Verwaltungszeile, und der Worker lässt `rundmail` aus dem Mailteil der
@@ -2580,8 +2580,8 @@
 
      UND DAS LETZTE GLIED IST KEIN NAME. Der Worker kürzt lange Listen
      (`protokollNamen`, EMPFAENGER_NAMEN): aus sieben Empfängern wird
-     „Schnix, Dru, Hubi, Gerf, Duke, Brunx und 1 weitere". Das Schlusstück
-     heißt dann „Brunx und 1 weitere" und ist mit keinem Namen gleich — genau
+     „Anna, Bodo, Carla, Dirk, Eva, Frank und 1 weitere". Das Schlusstück
+     heißt dann „Frank und 1 weitere" und ist mit keinem Namen gleich — genau
      daran ging der Zusatz zuerst vorbei, und zwar sichtbar: derselbe Mensch
      stand in der kurzen Liste mit „:in" und in der langen ohne. Der Schwanz
      wird deshalb abgetrennt, verglichen, und wieder angehängt. NUR am letzten

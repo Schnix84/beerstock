@@ -1120,10 +1120,10 @@ function notrufPost(env, ctx, ich, notrufId, art, lat, lon, empfaenger, bis = nu
     : NOTRUF_MINUTEN * 60;
 
   /* DER NAME STEHT IM TITEL, DIE NOT IN DER ZEILE DARUNTER - und das ist am
-     echten Geraet entschieden worden, nicht am Schreibtisch. `Schnix braucht
+     echten Geraet entschieden worden, nicht am Schreibtisch. `Anna braucht
      Bier und Gesellschaft` ist als Titel zu lang: das Handy schnitt es zu
-     "Schnix braucht Bier und Gesellsc..." ab, und damit fiel ausgerechnet
-     weg, WAS fehlt. Ein Titel muss in eine Zeile passen; "Notruf von Schnix"
+     "Anna braucht Bier und Gesellsc..." ab, und damit fiel ausgerechnet
+     weg, WAS fehlt. Ein Titel muss in eine Zeile passen; "Notruf von Anna"
      tut das immer, egal wie lang der Name ist.
 
      Der Satz "Auf der Tafel steht der Notruf noch 90 Minuten" ist ganz
@@ -2489,8 +2489,8 @@ const PROTOKOLL_ADMIN_SELECT = `
              WHERE ${RUNDMAIL_FENSTER})
          END AS kaputt,
          /* Der Ausloeser ist bei der Verwaltung derselbe wie die Spalte davor
-            (wer): ihn ein zweites Mal danebenzustellen hiesse "schnix hat
-            gesperrt, ausgeloest von schnix". NULL heisst hier also nicht
+            (wer): ihn ein zweites Mal danebenzustellen hiesse "Anna hat
+            gesperrt, ausgeloest von Anna". NULL heisst hier also nicht
             "unbekannt", sondern "steht schon da".
 
             KEINE BACKTICKS IN DIESEN SQL-KOMMENTAREN. Der ganze Block ist ein
@@ -6160,7 +6160,7 @@ const ROUTEN = {
        nicht an der Quelle. Hier stand `quelle === 'ha'` mit der Begruendung
        "ein Konto ohne Postfach kann nicht verwalten"; das war ein Fehlschluss
        aus der Annahme, der Dienstnutzer habe nie eine Adresse. In dieser
-       Instanz hat er eine: `Schnix` ist der Melder aus der Wohnung UND das
+       Instanz hat er eine: der Melder aus der Wohnung ist zugleich das
        persoenliche Konto dahinter, beides dieselbe Zeile. Die Regel hätte
        ausgerechnet dieses Konto vom Kontor ausgesperrt. */
     if (aktion === 'rolle' && ziel.rolle !== 'admin' && !ziel.email) {
@@ -7013,7 +7013,7 @@ const ROUTEN = {
     if (geprueft.fehler) return fehler(request, geprueft.fehler);
 
     /* Ausloeser und Empfaenger sind hier derselbe Mensch, und beide stehen
-       trotzdem da: im Protokoll liest sich "schnix -> TESTMAIL -> an schnix"
+       trotzdem da: im Protokoll liest sich "Anna -> TESTMAIL -> an Anna"
        genau richtig - eine Probe an sich selbst ist, was es ist. */
     await mitProtokoll(env, 'testmail', () =>
       schickeMail(env, ich.email, `[Test] ${geprueft.betreff}`,
@@ -7146,7 +7146,7 @@ const ROUTEN = {
      zufaellig ueber eine Minutengrenze rutscht.
 
      DIE RUNDMAIL HAT NUR NOCH EINE ZEILE. Bis 2026-08-08 hatte sie zwei -
-     "schnix -> rundmail „Betreff"" aus dem `admin_log` und "Mail -> rundmail
+     "Anna -> rundmail „Betreff"" aus dem `admin_log` und "Mail -> rundmail
      · 5 Mails" aus dem Ausgang. Das war als zwei Auskuenfte gedacht (wer, und
      wie viele) und wurde als Doppelung gelesen, zu Recht: es ist EIN Vorgang,
      zwei Sekunden auseinander gebucht. Jetzt haengt die Zahl an der

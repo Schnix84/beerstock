@@ -36,7 +36,7 @@
 -- WAS MIT DEN ALTEN ZEILEN PASSIERT: nichts, sie bleiben NULL. Beim ersten
 -- Bild nach dem Ausrollen hat also jeder seine Farbe aus der Reihenfolge,
 -- und wer eine andere will, holt sie sich im Kontor. Ausdruecklich KEIN
--- `UPDATE ... WHERE name = 'Schnix'` in dieser Datei: welcher Mensch welche
+-- `UPDATE ... WHERE name = 'Anna'` in dieser Datei: welcher Mensch welche
 -- Kreide mag, ist eine Tatsache ueber die Runde von heute und gehoert nicht
 -- in die Schemageschichte.
 --

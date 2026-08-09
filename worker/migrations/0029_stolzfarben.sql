@@ -52,7 +52,7 @@
 -- und bekommen darum immer die echte Kreide. Der Wirt soll seine Leute an
 -- der Farbe wiedererkennen, waehrend er sie verwaltet.
 --
--- KEIN `UPDATE ... WHERE name = 'Brunx'` IN DIESER DATEI - dieselbe Regel
+-- KEIN `UPDATE ... WHERE name = 'Anna'` IN DIESER DATEI - dieselbe Regel
 -- wie bei 0028: wer im Kreis ist, ist eine Tatsache ueber die Runde von
 -- heute und keine Schemageschichte. Beide Spalten fangen bei 0 an, der Rest
 -- wird im Kontor bestellt.
