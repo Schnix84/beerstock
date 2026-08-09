@@ -773,7 +773,7 @@
   .reiter .satz {
     font-size: 11px; color: var(--kreide-weg); letter-spacing: .02em; margin-left: 4px;
   }
-  /* Das Zeichen neben der Regel (`⇄`). Ein Zeichen statt eines Wortes braucht
+  /* Das Zeichen neben der Regel (`↻`). Ein Zeichen statt eines Wortes braucht
      mehr Grad, sonst sitzt es als Krümel in einer Kapsel, die für „verwaltet"
      gebaut ist — und keinen Buchstabenabstand, der gilt Wörtern. */
   .reiter button.dreh {
@@ -1962,16 +1962,23 @@
          `︎` dahinter sagt den Systemen, die es trotzdem in Farbe hätten,
          ausdrücklich „als Text".
 
-         `⇄` UND NICHT DER WÜRFEL, der zuerst dastand: der versprach einen
+         `↻` UND NICHT DER WÜRFEL, der zuerst dastand: der versprach einen
          Zufall, den es hier nicht gibt (gedreht wird um EINEN Schritt), und
          als Kästchen mit Punkten blieb bei 18 px ohnehin nur ein Krümel
-         übrig. Die zwei Pfeile sagen, was bei zweien im Kreis wörtlich
-         passiert — sie tauschen. Die Kandidaten stehen nebeneinander in
-         `ideas/pruefungen/wuerfel-kandidaten.html`.
+         übrig. Ein Pfeil, der einmal herumzeigt, sagt genau das Richtige —
+         eine Runde weiter —, und er steht im Vokabular des Hauses, in dem
+         sich ohnehin eine Flasche dreht.
+
+         ZWEI gebogene Pfeile, die einander jagen, wären das Naheliegendste
+         und gibt es als Schriftzeichen nicht: U+1F5D8 hat in den Schriften
+         hier keine Glyphe, und die bekannte Fassung davon ist ein Emoji.
+         Die Kandidaten stehen nebeneinander in
+         `ideas/pruefungen/wuerfel-kandidaten.html`, samt denen, die als
+         gestreifter Kasten herauskommen.
 
          Ohne Aufschrift braucht der Knopf einen Namen für den Vorleser, und
          der nennt den Mechanismus: einen Schritt weiter. */
-      const b = el('button', 'dreh', '⇄︎');
+      const b = el('button', 'dreh', '↻︎');
       b.type = 'button';
       b.title = 'Einen Schritt weiter durch den Kreis — bis zur Tagesgrenze '
               + 'bliebe es sonst, wie es ist';
