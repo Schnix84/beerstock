@@ -4494,10 +4494,24 @@
       const messung = p && Number.isFinite(p.temperatur);
       const s = stufe(messung ? p.temperatur : 99);
 
-      // Kurz halten: die Ueberschrift bricht bei Bedarf mitten im Wort um
-      // (das braucht sie fuer lange Namen), und „nichts angeschrieben“ tat das.
-      $('marke').textContent =
-        p ? p.name : modus === 'leer' ? 'noch leer' : 'kein Netz';
+      /* Kurz halten: die Ueberschrift bricht bei Bedarf mitten im Wort um
+         (das braucht sie fuer lange Namen), und „nichts angeschrieben“ tat das.
+
+         Fuehrt heute der, der den Regenbogen traegt, dann traegt ihn auch der
+         Kopf der Tafel — es waere die eine Stelle, an der sein Name gross
+         dasteht und trotzdem in Kreide.
+
+         UND ZWAR IN EINER EIGENEN HUELLE: `.hero-name` laeuft ueber die ganze
+         Spalte, und ein Verlauf ueber diese Breite laege unter „Duke“ nur mit
+         seinen ersten Zentimetern — heraus kaeme ein einziges Rot. Ueber das
+         Wort gelegt zeigt er alle sechs. Dieselbe Ueberlegung wie an der Zeile
+         darunter und an der Pille im Kontor. */
+      const marke = $('marke');
+      const stolzKopf = !!p && p.farbe === STOLZ_PLATZ;
+      const wort = el('span', stolzKopf ? 'stolz' : null);
+      wort.textContent = p ? p.name : modus === 'leer' ? 'noch leer' : 'kein Netz';
+      if (stolzKopf) wort.style.backgroundImage = STOLZ_CSS;
+      marke.replaceChildren(wort);
       $('krone').textContent = modus === 'fuehrend' ? 'Führt das Feld an' : '';
       const unter = $('hero-unter');
       unter.textContent = '';
