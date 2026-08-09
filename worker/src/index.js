@@ -387,12 +387,62 @@ const ROLLEN = new Set(['user', 'admin']);
    mehr her - steht ausfuehrlich an `MENSCHEN` in `index.html`. */
 const FARBEN = 7;
 
+/* Der Platz, den es in der Reihe nicht gibt (Schema 29). Wen es heute trifft,
+   traegt statt einer Kreide den Regenbogen - und weil die Reihe bei 6 aufhoert,
+   ist die 7 dafuer frei. Der Gewinn: alles, was `farbe` schon liest - Rad,
+   Tafel, Kurven, Balken, Rueckblick, das eingefrorene Feld einer Ziehung -,
+   traegt den Regenbogen ohne eine zweite Zutat im Datenweg. Die Zeichnung
+   entscheidet, wie er aussieht; hier ist er eine Zahl wie jede andere.
+   WAEHLEN kann diesen Platz niemand, `aktion: 'farbe'` prueft gegen FARBEN. */
+const STOLZ = 7;
+
 /* Der Platz eines Melders als SQL-Ausdruck: sein eingestellter, sonst der aus
    der Anmeldereihenfolge. Eine Funktion, weil nicht jede Abfrage ihre
    Nutzertabelle `u` nennt. Warum die Reihenfolge fuer immer haelt, steht in
-   migrations/0028. */
-const farbeSql = (alias = 'u') =>
-  `coalesce(${alias}.farbe, (SELECT count(*) FROM users x WHERE x.id < ${alias}.id))`;
+   migrations/0028.
+
+   `traeger` ist die Id dessen, den es heute trifft (`stolzTraeger`), oder
+   null. AUSDRUECKLICH EIN ARGUMENT UND KEINE VORGABE: das Kontor zeichnet
+   seine Monogramme und Bilder weiter in echten Kreiden, und eine 7, die dort
+   ankaeme, waere in `admin.html` nicht der Regenbogen, sondern - Rest durch
+   sieben - der ERSTE Mensch. Wer den Regenbogen will, sagt es hier. */
+const farbeSql = (alias = 'u', traeger = null) => {
+  const platz =
+    `coalesce(${alias}.farbe, (SELECT count(*) FROM users x WHERE x.id < ${alias}.id))`;
+  if (!Number.isInteger(traeger)) return platz;
+  return `CASE WHEN ${alias}.id = ${traeger} THEN ${STOLZ} ELSE ${platz} END`;
+};
+
+/* Der Wurf des Tages, aus dem Tag selbst. FNV-1a ueber "2026-08-09" - eine
+   Streuung, kein Zufallsgenerator: sie muss in jedem Isolat und bei jedem
+   Abruf dasselbe ergeben, sonst traegt der Melder auf der Tafel eine andere
+   Farbe als im Rad daneben. */
+const wurf = s => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+};
+
+/* Wen es heute trifft, oder null. Eine kleine Abfrage; wo es sich anbietet,
+   laeuft sie neben `nutzer()` her und kostet dann gar keine Zeit.
+
+   Gesperrte bleiben im Kreis: sie stehen weiter auf der Tafel (nur mit der
+   Marke "ruht"), und wer im Kreis ist, entscheidet der Wirt und nicht die
+   Sperre. Entfernte und Namenlose fallen heraus - sie sind niemand mehr, den
+   man faerben koennte. */
+async function stolzTraeger(env) {
+  const { results } = await env.DB.prepare(`
+    SELECT u.id, (SELECT aktiv FROM stolz_regel WHERE id = 1) AS aktiv
+    FROM users u
+    WHERE u.stolz = 1 AND u.entfernt_am IS NULL AND u.name IS NOT NULL
+    ORDER BY u.id
+  `).all();
+  if (!results.length || !results[0].aktiv) return null;
+  return results[wurf(bierTag()) % results.length].id;
+}
 
 /* Die Zeitraeume, die das Kontor zeigen darf. Der erste ist die Vorgabe.
    Eine LISTE, kein Bereich mit Ober- und Untergrenze: der Wert geht in ein
@@ -610,8 +660,8 @@ function mailWahl(u) {
 
    Und darum steht die Sperre AUCH nur hier: wer gesperrt ist, faellt aus dem
    Topf - aus dem gezeichneten wie aus dem gezogenen, in einem Zug. */
-const losFeldStmt = env => env.DB.prepare(`
-  SELECT u.id, u.name, u.quelle, r.biere, ${farbeSql()} AS farbe
+const losFeldStmt = (env, traeger = null) => env.DB.prepare(`
+  SELECT u.id, u.name, u.quelle, r.biere, ${farbeSql('u', traeger)} AS farbe
   FROM users u
   JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j ON j.user_id = u.id
   JOIN reports r ON r.id = j.id
@@ -1961,7 +2011,12 @@ const statistikFenster = (request) => {
 // dieser Marke ab - eine Zahl von Hand waere beim naechsten Bild falsch.
 const STATISTIK_ABFRAGEN = 11;
 
-const statistikAbfragen = (env, fenster, vorlauf) => [
+/* `traeger` ist die Id dessen, den der Regenbogen heute trifft, oder null
+   (Schema 29). Die RUNDE bekommt ihn, das KONTOR nicht: dort sollen die
+   Monogramme und die Bilder daneben dieselbe echte Kreide tragen, an der der
+   Wirt seine Leute wiedererkennt. Zwei Aufrufer, eine Abfrageliste - deshalb
+   steht es als Argument da und nicht als Vorgabe. */
+const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
   // 1 — Meldungen je Tag. Flaechenkurve.
   env.DB.prepare(`
     SELECT date(gemeldet_am) AS tag, count(*) AS n FROM reports
@@ -1980,7 +2035,8 @@ const statistikAbfragen = (env, fenster, vorlauf) => [
      Zwei Bilder aus einer Abfrage - getrennt waeren es zwei Durchlaeufe ueber
      dieselben Zeilen mit demselben `max(id)` darin. */
   env.DB.prepare(`
-    SELECT r.user_id, coalesce(u.name,'Ehemaliger') AS name, ${farbeSql()} AS farbe,
+    SELECT r.user_id, coalesce(u.name,'Ehemaliger') AS name,
+           ${farbeSql('u', traeger)} AS farbe,
            j.tag, r.biere, r.temperatur, j.tief, j.hoch, j.n
     FROM reports r
     JOIN users u ON u.id = r.user_id
@@ -1996,7 +2052,8 @@ const statistikAbfragen = (env, fenster, vorlauf) => [
   // `ort IS NULL`: ein Abend auswaerts hat keinen Gastgeber (migrations/0024),
   // in der Spalte steht dort nur der, der ihn ausgemacht hat.
   env.DB.prepare(`
-    SELECT coalesce(u.name,'Ehemaliger') AS name, ${farbeSql()} AS farbe, count(*) AS n
+    SELECT coalesce(u.name,'Ehemaliger') AS name, ${farbeSql('u', traeger)} AS farbe,
+           count(*) AS n
     FROM termine t JOIN users u ON u.id = t.gastgeber_id
     WHERE t.abgesagt_am IS NULL AND t.ort IS NULL
     GROUP BY t.gastgeber_id ORDER BY n DESC
@@ -2048,7 +2105,7 @@ const statistikAbfragen = (env, fenster, vorlauf) => [
      mehr tut. Da Entfernen den Namen loescht, waere die Zeile ohnehin nur
      ein "Ehemaliger" ohne erkennbaren Bezug - hier lieber ganz weg. */
   env.DB.prepare(`
-    SELECT u.name, ${farbeSql()} AS farbe, u.notrufe_insgesamt AS n FROM users u
+    SELECT u.name, ${farbeSql('u', traeger)} AS farbe, u.notrufe_insgesamt AS n FROM users u
     WHERE u.notrufe_insgesamt > 0 AND u.entfernt_am IS NULL ORDER BY n DESC
   `),
   /* 8 — derselbe Betrieb, aber je MELDER statt je Woche. Das Wochenbild sagt,
@@ -4530,11 +4587,16 @@ const ROUTEN = {
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
     const tag = bierTag();
+    /* Wen der Regenbogen heute trifft, muss VOR dem Feld feststehen: seine
+       Farbe wird mit dem Feld eingefroren (`losSegmente`), und ein Rad, das
+       sich beim Nachzeichnen umfaerbt, waere kein Beleg mehr. */
+    const traeger = await stolzTraeger(env);
     /* Der Verfallslauf laeuft VOR dem Lesen und im selben batch: wer seit drei
        Stunden nicht geantwortet hat, gibt den Tag hier frei - und die beiden
        Abfragen dahinter sehen das bereits. */
     const [verfallen, tagRoh, feld, termine] = await env.DB.batch([
-      verfallStmt(env, tag), losTagStmt(env, tag), losFeldStmt(env), termineStmt(env),
+      verfallStmt(env, tag), losTagStmt(env, tag), losFeldStmt(env, traeger),
+      termineStmt(env),
     ]);
     const lage = tagesLage(tagRoh.results);
     const topf = losTopf(feld.results, lage);
@@ -4568,7 +4630,7 @@ const ROUTEN = {
             JSON.stringify(losSegmente(topf)), ich.id).run();
 
     const [tagRoh2, feld2, termine2] = await env.DB.batch([
-      losTagStmt(env, tag), losFeldStmt(env), termineStmt(env),
+      losTagStmt(env, tag), losFeldStmt(env, traeger), termineStmt(env),
     ]);
     const lage2 = tagesLage(tagRoh2.results);
     const selbst = gesetzt.meta.changes === 1;
@@ -4712,7 +4774,7 @@ const ROUTEN = {
     }
 
     const [tagRoh2, feld, termine] = await env.DB.batch([
-      losTagStmt(env, tag), losFeldStmt(env), termineStmt(env),
+      losTagStmt(env, tag), losFeldStmt(env, await stolzTraeger(env)), termineStmt(env),
     ]);
     const lage2 = tagesLage(tagRoh2.results);
     // Zusage wie Absage aendern Rad, Liste und Termine auf einen Schlag.
@@ -5848,11 +5910,11 @@ const ROUTEN = {
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
-    const [leute, mails] = await env.DB.batch([
+    const [leute, mails, regel] = await env.DB.batch([
       env.DB.prepare(`
         SELECT u.id, u.name, u.email, u.rolle, u.quelle, u.erstellt,
                u.gesperrt_am, u.gesperrt_grund, u.entfernt_am,
-               u.mail_stumm_am, u.mail_prefs,
+               u.mail_stumm_am, u.mail_prefs, u.stolz,
                -- Der Platz in der Kreidereihe, und daneben ob er GEWAEHLT ist:
                -- das Kontor zeigt "automatisch" anders an als "so bestellt".
                ${farbeSql()} AS farbe, u.farbe AS farbe_gewaehlt,
@@ -5883,6 +5945,9 @@ const ROUTEN = {
           WHERE weg = 'mail' AND erstellt > datetime('now','-1 day')
         )
       `),
+      // Ob die Regenbogenvergabe ueberhaupt laeuft (Schema 29). Eine Zeile,
+      // und sie reitet hier mit, statt eine eigene Route zu bekommen.
+      env.DB.prepare('SELECT aktiv FROM stolz_regel WHERE id = 1'),
     ]);
 
     const alle = leute.results;
@@ -5895,6 +5960,11 @@ const ROUTEN = {
         gesperrt: alle.filter(u => u.gesperrt_am && !u.entfernt_am).length,
         mails_24h: mails.results[0].n,
         mails_kaputt_24h: mails.results[0].kaputt || 0,
+        // Laeuft die Regenbogenvergabe? Und wen kann sie treffen - gezaehlt
+        // aus derselben Liste, damit der Schalter sagen kann, ob sein Kreis
+        // ueberhaupt jemanden enthaelt.
+        stolz_aktiv: !!(regel.results[0] && regel.results[0].aktiv),
+        stolz_kreis: alle.filter(u => !u.entfernt_am && u.stolz).length,
       },
       nutzer: alle.map(u => ({
         id: u.id,
@@ -5908,6 +5978,8 @@ const ROUTEN = {
         // Anmeldereihenfolge (siehe migrations/0028).
         farbe: u.farbe,
         farbe_gewaehlt: u.farbe_gewaehlt != null,
+        // Ob ihn die taegliche Regenbogenauslosung treffen kann (Schema 29).
+        stolz: !!u.stolz,
         seit: utc(u.erstellt),
         gesperrt: u.gesperrt_am
           ? { seit: utc(u.gesperrt_am), grund: u.gesperrt_grund, von: u.gesperrt_von }
@@ -5939,13 +6011,14 @@ const ROUTEN = {
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
     const aktion = String(daten.aktion || '');
-    if (!['sperren', 'entsperren', 'rolle', 'entfernen', 'farbe'].includes(aktion)) {
+    if (!['sperren', 'entsperren', 'rolle', 'entfernen', 'farbe', 'stolz'].includes(aktion)) {
       return fehler(request,
-        "aktion: 'sperren', 'entsperren', 'rolle', 'entfernen' oder 'farbe'");
+        "aktion: 'sperren', 'entsperren', 'rolle', 'entfernen', 'farbe' oder 'stolz'");
     }
 
     const ziel = await env.DB.prepare(`
-      SELECT id, name, email, rolle, quelle, gesperrt_am, entfernt_am FROM users WHERE id = ?
+      SELECT id, name, email, rolle, quelle, gesperrt_am, entfernt_am, stolz
+      FROM users WHERE id = ?
     `).bind(Number(daten.id)).first();
     if (!ziel) return fehler(request, 'Den gibt es nicht', 404);
     if (ziel.entfernt_am) return fehler(request, 'Der ist schon entfernt', 409);
@@ -5954,9 +6027,14 @@ const ROUTEN = {
     /* Die eigene Farbe ist ausdruecklich erlaubt. Die Selbstregel darunter
        schuetzt davor, sich das Kontor zuzuschliessen - eine Kreide kann das
        nicht, und wer seine Farbe nicht selbst waehlen darf, braucht die Wahl
-       nicht. Sie war der Anlass fuer die ganze Spalte. */
+       nicht. Sie war der Anlass fuer die ganze Spalte.
+
+       Fuer den Regenbogenkreis (`stolz`) gilt dasselbe aus demselben Grund,
+       und aus einem zweiten dazu: sich selbst hineinzunehmen oder
+       herauszunehmen ist die Handlung, bei der eine Rueckfrage am wenigsten
+       zu suchen hat. */
     const gegenMich = ziel.id === ich.id;
-    if (gegenMich && aktion !== 'entsperren' && aktion !== 'farbe') {
+    if (gegenMich && aktion !== 'entsperren' && aktion !== 'farbe' && aktion !== 'stolz') {
       /* Auch die Degradierung: wer sich selbst zum `user` macht, sperrt sich
          aus dem Kontor aus. Zurueck kaeme er nur ueber ADMIN_MAIL - und das
          ist der Notausgang, nicht der Weg. */
@@ -6048,6 +6126,17 @@ const ROUTEN = {
       await env.DB.prepare('UPDATE users SET farbe = ? WHERE id = ?')
         .bind(platz, ziel.id).run();
 
+    } else if (aktion === 'stolz') {
+      /* Der Kreis, aus dem taeglich einer gezogen wird (Schema 29). Ein
+         Umschalter und kein Wert: der Knopf im Kontor traegt den Zustand
+         schon, ein mitgeschickter waere eine zweite Wahrheit daneben.
+         Ob die Vergabe ueberhaupt laeuft, steht woanders - `POST
+         /api/admin/stolz`. */
+      const neu = ziel.stolz ? 0 : 1;
+      detail = neu ? 'im Kreis' : 'raus';
+      await env.DB.prepare('UPDATE users SET stolz = ? WHERE id = ?')
+        .bind(neu, ziel.id).run();
+
     } else {
       /* Weich. Ein hartes DELETE risse ueber `kommentare.autor_id`
          ON DELETE CASCADE die Kommentare UND deren Antworten mit, und liefe
@@ -6080,10 +6169,45 @@ const ROUTEN = {
       .bind(ich.id, aktion, ziel.id, detail).run();
 
     /* Sperren, Entfernen und der Rollenwechsel aendern die Tafel: der eine
-       faellt aus dem Topf, der andere aus der Liste. Ohne Anstoss sehen die
-       offenen Seiten den alten Stand bis zum naechsten Nachfassen. */
+       faellt aus dem Topf, der andere aus der Liste. Farbe und Regenbogenkreis
+       aendern sie auch, nur milder - da faellt niemand heraus, es sieht bloss
+       anders aus. Ohne Anstoss sehen die offenen Seiten den alten Stand bis
+       zum naechsten Nachfassen. */
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, { ok: true, aktion, id: ziel.id }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Der Schalter ueber der Regenbogenvergabe (Schema 29). Eine eigene Route,
+     weil er an KEINEM Mitglied haengt: `POST /api/admin/nutzer` verlangt ein
+     Ziel und prueft es gegen vier Schutzregeln, von denen hier keine greift.
+
+     Und ein eigener Schalter neben dem Kreis, weil "niemand ist im Kreis" und
+     "die Vergabe ruht" von aussen gleich aussehen, aber nicht dasselbe sind:
+     das eine loescht die Auswahl, das andere legt sie schlafen. */
+  'POST /api/admin/stolz': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+
+    const daten = await json(request);
+    if (!daten || typeof daten.aktiv !== 'boolean') {
+      return fehler(request, 'aktiv: true oder false');
+    }
+    const aktiv = daten.aktiv ? 1 : 0;
+
+    await env.DB.batch([
+      env.DB.prepare('UPDATE stolz_regel SET aktiv = ? WHERE id = 1').bind(aktiv),
+      /* Ins Protokoll wie jede andere Handlung des Wirts - ohne Ziel-Id, denn
+         es gibt keine: der Schalter gilt der ganzen Runde. */
+      env.DB.prepare(
+        'INSERT INTO admin_log (admin_id, aktion, ziel_id, detail) VALUES (?, ?, ?, ?)')
+        .bind(ich.id, 'stolz_regel', null, aktiv ? 'an' : 'aus'),
+    ]);
+
+    // Die Tafel faerbt sich damit um - sofort, nicht beim naechsten Nachfassen.
+    anstoss(request, env, ctx, 'tafel');
+    return antwort(request, { ok: true, aktiv: !!aktiv }, 200, KEIN_FREMDER_CACHE);
   },
 
   // -------------------------------------------------------------------------
@@ -6116,7 +6240,10 @@ const ROUTEN = {
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
     const { tage, fenster, vorlauf } = statistikFenster(request);
-    const ergebnis = await env.DB.batch(statistikAbfragen(env, fenster, vorlauf));
+    // Die Runde sieht den Regenbogen, das Kontor darunter nicht - siehe
+    // `statistikAbfragen`.
+    const traeger = await stolzTraeger(env);
+    const ergebnis = await env.DB.batch(statistikAbfragen(env, fenster, vorlauf, traeger));
     return antwort(request, { tage, ...statistikRunde(ergebnis, tage) }, 200, KEIN_FREMDER_CACHE);
   },
 
@@ -6293,13 +6420,19 @@ const ROUTEN = {
     const jahrEndeExkl = `${naechsterTag} 00:00:00`;
     const jahrPrefix = `${jahr}-%`;
 
+    /* Der Regenbogen gilt auch im Rueckblick (Schema 29), obwohl der ein
+       ganzes Jahr zeigt: er ist eine Auszeichnung von HEUTE, und der
+       Rueckblick wird heute gelesen. Traege ihn nur die Tafel und nicht das
+       Blatt darin, stuende derselbe Mensch auf einer Seite in zwei Farben. */
+    const traeger = await stolzTraeger(env);
+
     const ergebnis = await env.DB.batch([
       /* 0 - alle Melder mit Namen UND Melderfarbe. Der Platz kommt seit
          Schema 28 von hier und wird nicht mehr auf der Seite aus der
          Reihenfolge gezaehlt: sonst haette derselbe Mensch im Rueckblick eine
          andere Kreide als am Rad und in der Statistik. */
       env.DB.prepare(`SELECT u.id, coalesce(u.name,'Ehemaliger') AS name,
-                             ${farbeSql()} AS farbe
+                             ${farbeSql('u', traeger)} AS farbe
                       FROM users u ORDER BY u.id`),
 
       /* 1 - Eiskoenig: Tage auf Platz 1, Tagesende-Stand mit Carry-Forward.
@@ -7134,6 +7267,11 @@ const ROUTEN = {
     }
 
     const tag = bierTag();
+    /* Wen der Regenbogen heute trifft (Schema 29). Die Abfrage steht hier
+       oben, weil ihr Ergebnis in den TEXT der Abfragen darunter geht - ein
+       gebundener Wert kaeme dafuer zu spaet. Sie kostet eine Zeile aus einer
+       Tabelle mit sieben. */
+    const traeger = await stolzTraeger(env);
     const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler, chronik, notrufe] =
       await env.DB.batch([
       /* Gesperrte bleiben in der Liste stehen - das ist Historie, und ein
@@ -7141,7 +7279,12 @@ const ROUTEN = {
          tragen nur eine stille Marke und fallen aus dem Topf (losFeldStmt).
          Entfernte fallen von selbst heraus: ihr Name ist dann NULL. */
       env.DB.prepare(`
-        SELECT u.id, u.name, u.quelle, u.gesperrt_am, r.biere, r.temperatur, r.gemeldet_am
+        SELECT u.id, u.name, u.quelle, u.gesperrt_am, r.biere, r.temperatur, r.gemeldet_am,
+               /* Die Tafel kennt sonst keine Melderfarben - sie schreibt in
+                  Kreide und in einer. Sie braucht die Spalte trotzdem, denn
+                  am Platz 7 haengt der Regenbogen (Schema 29), und der soll
+                  auch an der Zeile stehen und nicht nur am Rad-Bogen. */
+               ${farbeSql('u', traeger)} AS farbe
         FROM users u
         JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j
           ON j.user_id = u.id
@@ -7165,7 +7308,7 @@ const ROUTEN = {
          soll nichts schreiben. `losTagStmt` rechnet die Frist ohnehin mit aus,
          eingetragen wird sie beim naechsten Dreh. */
       losTagStmt(env, tag),
-      losFeldStmt(env),
+      losFeldStmt(env, traeger),
       termineStmt(env),
       bewertungenStmt(env),
       kommentarZaehlerStmt(env),
@@ -7210,6 +7353,9 @@ const ROUTEN = {
       gemeldet: r.gemeldet_am.replace(' ', 'T') + 'Z',
       gemessen: r.quelle === 'ha',
       gesperrt: !!r.gesperrt_am,
+      // Sein Platz in der Kreidereihe. Die Tafel liest davon nur die 7 - den
+      // Regenbogen (Schema 29); die anderen sechs Plaetze zeichnet sie nicht.
+      farbe: r.farbe,
       best: bestmarke.get(r.id) ?? r.biere,
       verlauf: kurve.get(r.id) || [r.biere],
     }));

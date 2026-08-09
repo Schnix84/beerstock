@@ -496,6 +496,31 @@ Ziehung, die Anteile einer Säule, zugesagt gegen abgesagt. Zwei Reihen, zwei
 Aufgaben; wer sie zusammenlegt, färbt irgendwann einen Menschen wie einen
 Zustand.
 
+**Und einer trägt den Regenbogen** (Schema 29). Aus einem Kreis, den der Wirt im
+Kontor unter *Mitglieder* zusammenstellt, wird jeden Tag einer ausgelost; er
+schreibt dann nicht in seiner Kreide, sondern in sechs Tönen — sein Bogen am
+Rad, sein Name und sein Bestand daneben, seine Zeile auf der Tafel, seine Kurve
+und seine Balken in den Statistiken. Zwei Griffe im Kontor, und sie sind nicht
+dasselbe: ein Schalter über den Karten sagt, **ob** überhaupt gelost wird, ein
+Knopf an jeder Karte, **wen** es treffen kann (null bis alle). Wer abschaltet,
+verliert seinen Kreis nicht.
+
+Technisch ist der Regenbogen der **Platz 7** in einer Reihe, die bei 6 aufhört:
+alles, was `farbe` schon liest, trägt ihn ohne eine zweite Zutat im Datenweg —
+auch das eingefrorene Feld einer Ziehung, ein Rad von vorgestern zeichnet sich
+also mit den Farben von vorgestern. Wählen kann diesen Platz niemand, und im
+Kontor kommt er nicht an: dort tragen die Monogramme und Bilder weiter die echte
+Kreide, damit der Wirt seine Leute beim Verwalten wiedererkennt.
+
+Wer es heute ist, wird nirgends gespeichert — es wird aus dem Biertag gerechnet
+(`bierTag()`, Tagesgrenze um 2 Uhr statt um Mitternacht) und fällt darum überall
+gleich aus, ohne dass eine Leseroute dafür schreiben müsste. Die sechs Töne sind
+die Hue-Winkel der Flagge, gehoben in dasselbe Helligkeits- und Buntheitsband
+wie die sieben Kreiden (`ideas/pruefungen/stolz-reihe.mjs`): die Flagge selbst
+geht auf Schiefer nicht — ihr Grün hat dort einen Kontrast von 1,6 und wird zu
+einem Loch, ihr Gelb sticht so heraus, dass vom Verlauf nur Gelb bleibt. Es ist
+ein Regenbogen **aus Kreide**, kein Neonschild.
+
 ### Architektur
 
 Nur der Worker schreibt; alles andere ist statisch oder ruft bei ihm an. Die
@@ -682,7 +707,8 @@ Drei Dinge, die dazugehören:
 | `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit. Stumme Tage stehen dort **nicht** in der Antwort — die schreibt erst die Zeichnung fort (siehe unten). Zwei Reihen folgen dem Fenster bewusst nicht: `wachstum` und `abende` sind Fragen an die ganze Geschichte der Runde. `vorrat` dagegen ist die einzige Reihe, die der Worker selbst über stumme Tage fortschreibt, weil eine Summe über alle Melder sich nachträglich nicht zeichnen lässt |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
-| `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen'\|'farbe', grund?, farbe?}` — nur Admin. `farbe` ist der Platz in der Kreidereihe (0–6) oder `null` für „wieder nach Anmeldereihenfolge"; als einzige Aktion auch mit sich selbst erlaubt |
+| `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen'\|'farbe'\|'stolz', grund?, farbe?}` — nur Admin. `farbe` ist der Platz in der Kreidereihe (0–6) oder `null` für „wieder nach Anmeldereihenfolge"; `stolz` ist ein Umschalter ohne Wert und nimmt ihn in den Regenbogenkreis oder heraus. Diese beiden sind auch mit sich selbst erlaubt |
+| `POST /api/admin/stolz` 🔒 | `{aktiv: bool}` — der Schalter über der Regenbogenvergabe. Gilt keinem Mitglied, deshalb eine eigene Route; „aus" behält den Kreis |
 | `GET /api/admin/statistik` 🔒 | dasselbe **plus Betrieb**: Mails je Art und je Tag, Anmeldungen, wer noch Post will, Seitenaufrufe insgesamt/je Tag/je Nutzer — nur Admin |
 | `POST /api/admin/rundmail` 🔒 | `{betreff, text, bild_url?, knopf_text?, knopf_link?}` sofort an alle, die sie wollen — nur Admin |
 | `POST /api/admin/rundmail/planen` 🔒 | dieselben Felder plus `{versand_am}` — vorgemerkt statt sofort verschickt, nur Admin |

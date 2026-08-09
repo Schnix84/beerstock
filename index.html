@@ -2210,6 +2210,32 @@
     font-family: var(--hand); font-size: clamp(16px, 4.4vw, 19px); line-height: 1.15;
     overflow-wrap: anywhere;
   }
+  /* DER REGENBOGEN IN DER SCHRIFT (Schema 29). Der Verlauf liegt HINTER dem
+     Text und wird an dessen Formen beschnitten — anders bekommt Schrift keine
+     sechs Farben. `-webkit-text-fill-color` steht neben `color`, weil Safari
+     sonst die Füllung der Schrift aus der Vererbung nimmt und den Verlauf
+     verdeckt.
+
+     Die Klasse sitzt auf einer EIGENEN Hülle um den Namen und nicht auf
+     `.z-name` selbst: dort hängen die Marken („gemessen", „ruht", „gezogen")
+     und das „du" als `::after`, und die sollen ihre eigenen Farben behalten.
+     Ein durchsichtiger Text mit Verlauf dahinter hätte sie mitgenommen.
+
+     Die Reihe steht im Skript (`STOLZ`) und hier NICHT noch einmal: die
+     Deklaration bekommt sie beim Zeichnen als `background-image` gesetzt. Ein
+     zweiter Satz Töne im Stylesheet liefe früher oder später auseinander. */
+     UND DER RÜCKFALL STEHT ZUERST: durchsichtige Schrift ist nur dann
+     sichtbar, wenn der Beschnitt auch wirklich greift. Wo er es nicht tut,
+     bliebe der Name unsichtbar — kein blasser Fehler, sondern ein
+     verschwundener Mensch. Deshalb erst Kreide, und den Verlauf nur unter
+     `@supports`. */
+  .stolz { color: var(--kreide); }
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    .stolz {
+      background-clip: text; -webkit-background-clip: text;
+      color: transparent; -webkit-text-fill-color: transparent;
+    }
+  }
   .z-marke {
     font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .16em;
     text-transform: uppercase; color: var(--gelb); border: 1px solid #e8c76655;
@@ -3940,9 +3966,102 @@
     '#1d9af0',   // 5  Blau
     '#6956c2',   // 6  Indigo
   ];
-  // Der Platz eines Melders, oder der Rückfall. Siehe `rad()`, warum es ihn gibt.
+  /* DER REGENBOGEN. Platz 7 in einer Reihe, die bei 6 aufhört (Schema 29):
+     wen die tägliche Auslosung trifft, trägt statt seiner Kreide diese sechs
+     Töne. Wer im Kreis ist und ob überhaupt gelost wird, steht im Kontor.
+
+     ES SIND DIE HUE-WINKEL DER FLAGGE UND SONST NICHTS DAVON. Die Flagge
+     selbst geht auf Schiefer nicht — `#008026` hat gegen `#262c2e` einen
+     Kontrast von 1,6, das Grün wird zu einem Loch, und `#FFED00` sticht so
+     heraus, dass der Verlauf nur noch aus Gelb besteht. Helligkeit und
+     Buntheit kommen deshalb aus demselben Band wie die sieben Kreiden
+     (L 0,49–0,665, C 0,10–0,17): ein Regenbogen AUS KREIDE. Ohne den Deckel
+     auf der Buntheit fährt jede Suche an den Gamut-Rand, und dann steht neben
+     sieben Kreiden ein Neonschild.
+
+     Gemessen und abgenommen mit `ideas/pruefungen/stolz-reihe.mjs`: Kontrast
+     2,72 bis 4,65 auf Schiefer UND Kartengrund, Helligkeitsband und
+     Buntheitsboden bestanden. Der Paar-Abstand des Validators gilt hier
+     ausdrücklich NICHT als Maßstab — Rot und Orange sind im Regenbogen
+     Nachbarn und sollen es sein; die sechs stehen nicht für sechs Menschen,
+     sondern zusammen für einen.
+
+     DIESELBEN SECHS stehen in `bilder.js` (Vorgabe) und als `stolz` in
+     `statistik.html` — dieselbe Vervierfachung wie bei `MENSCHEN` und aus
+     demselben Grund: die Tafel lädt `bilder.js` nicht. Im Kontor gibt es sie
+     NICHT, dort wird in echten Kreiden gezeichnet. */
+  const STOLZ_PLATZ = 7;
+  const STOLZ = [
+    '#ca4638',   // Rot
+    '#d77500',   // Orange
+    '#a29600',   // Gelb
+    '#129231',   // Grün
+    '#4273dd',   // Blau
+    '#a551b6',   // Violett
+  ];
+  const STOLZ_CSS = `linear-gradient(90deg, ${STOLZ.join(', ')})`;
+
+  /* Der Platz eines Melders, oder der Rückfall. Siehe `rad()`, warum es ihn
+     gibt.
+
+     Für den Regenbogen kommt der Name `'stolz'` heraus und KEIN Farbwert —
+     ein Verlauf ist keine Farbe, er muss je nach Ort anders geschrieben
+     werden (im SVG ein `url(#…)`, im HTML ein `linear-gradient`). Die beiden
+     Übersetzer dafür stehen gleich darunter.
+
+     Der Rest durch sieben, der hier steht, gilt bewusst nur für die sechs
+     Kreiden: eine 7 durch ihn hindurch wäre nicht der Regenbogen, sondern der
+     ERSTE Mensch — ein falscher Name, kein blasser. Deshalb der Vorrang. */
   const menschenFarbe = (platz, ersatz = 0) =>
-    MENSCHEN[(platz == null ? ersatz : platz) % MENSCHEN.length];
+    platz === STOLZ_PLATZ ? 'stolz'
+      : MENSCHEN[(platz == null ? ersatz : platz) % MENSCHEN.length];
+
+  /* Die Verlaufsdefinition. Sie hängt am SVG selbst und nicht an der Gruppe
+     darin: das Rad leert seine Gruppe bei jedem Neuzeichnen
+     (`g.textContent = ''`), eine Definition darin wäre danach ein toter
+     Verweis.
+
+     ZWEI FASSUNGEN, und die zweite ist kein Schmuck. Ohne `linie` spannt sich
+     der Verlauf über den Umriss des Stücks, das ihn trägt (`objectBounding-
+     Box`) — richtig für einen Balken oder einen Namen. Für einen BOGEN wäre
+     es eine Falle: ein schmaler Bogen bei 3 oder 9 Uhr steht fast senkrecht,
+     sein Umriss ist dann keinen Pixel breit, und ein Verlauf über eine
+     Nullbreite wird nach der Regel gar nicht gezeichnet — der Bogen
+     verschwände. Mit `linie` läuft der Regenbogen stattdessen von einem Ende
+     des Bogens zum anderen, in echten Koordinaten. Gemerkt wird nur die erste
+     Fassung; die zweite ist für jedes Stück eine andere. */
+  let stolzLaufend = 0;
+  function stolzBauen(svg, linie) {
+    const id = 'stolz-v' + (++stolzLaufend);
+    const v = s_el('linearGradient', linie
+      ? { id, gradientUnits: 'userSpaceOnUse',
+          x1: linie[0].toFixed(1), y1: linie[1].toFixed(1),
+          x2: linie[2].toFixed(1), y2: linie[3].toFixed(1) }
+      : { id, x1: '0', y1: '0', x2: '1', y2: '0' });
+    STOLZ.forEach((ton, i) => v.appendChild(s_el('stop', {
+      offset: (i / (STOLZ.length - 1) * 100).toFixed(0) + '%', 'stop-color': ton,
+    })));
+    const defs = s_el('defs');
+    defs.appendChild(v);
+    svg.appendChild(defs);
+    return id;
+  }
+  function stolzVerweis(el, linie) {
+    const svg = el.ownerSVGElement || el;
+    /* Ein einziger Melder im Topf: sein Bogen läuft einmal ganz herum, Anfang
+       und Ende liegen aufeinander, und eine Linie von einem Punkt zu sich
+       selbst ist wieder kein Verlauf. Dann doch der Umriss — bei einem
+       Vollkreis ist er quadratisch und taugt. */
+    if (linie && Math.hypot(linie[2] - linie[0], linie[3] - linie[1]) < 1) linie = null;
+    if (linie) return `url(#${stolzBauen(svg, linie)})`;
+    if (!svg.dataset.stolz) svg.dataset.stolz = stolzBauen(svg);
+    return `url(#${svg.dataset.stolz})`;
+  }
+  // Fürs SVG (fill/stroke) und fürs HTML (background). Wer eine Farbe setzt,
+  // geht durch einen der beiden — sonst steht irgendwo das Wort „stolz" als
+  // Farbwert, und das ist keiner.
+  const malFarbe = (el, ton) => ton === 'stolz' ? stolzVerweis(el) : ton;
+  const cssFarbe = ton => ton === 'stolz' ? STOLZ_CSS : ton;
   let radFelder = [];   // Segmentgrenzen des zuletzt gezeichneten Rades
   let radStand = 0;     // aktueller Drehwinkel, damit die nächste Drehung anschließt
 
@@ -4141,6 +4260,15 @@
         'text-anchor': anker, 'dominant-baseline': 'middle',
       });
       zahl.textContent = m.zahl;
+      /* Als STIL und nicht als Attribut: `.rad-name` setzt seine Farbe im
+         Stylesheet (`fill: var(--kreide)`), und eine Regel schlägt jedes
+         Präsentationsattribut. Die Zahl bleibt dabei die blassere von beiden —
+         der Regenbogen tauscht die Farbe, nicht die Rangfolge. */
+      if (m.stolz) {
+        name.style.fill = stolzVerweis(g);
+        zahl.style.fill = stolzVerweis(g);
+        zahl.style.opacity = .7;
+      }
       g.append(name, zahl);
 
       /* Und jetzt die Breite. Seitlich steht der Schrift nur, was zwischen dem
@@ -4434,7 +4562,15 @@
 
       const mitte = el('div', 'z-mitte');
       const name = el('div', 'z-name kr');
-      name.textContent = p.name;
+      /* Der Name in einer eigenen Hülle, damit der Regenbogen ihn nehmen kann
+         und die Marken dahinter nicht (siehe `.stolz` im Stylesheet). Die
+         Tafel schreibt sonst in EINER Kreide — sie kennt die sechs
+         Melderfarben nicht und soll sie auch nicht kennen; der Platz 7 ist der
+         einzige, den sie liest. */
+      const rufname = el('span', p.farbe === STOLZ_PLATZ ? 'stolz' : null);
+      rufname.textContent = p.name;
+      if (p.farbe === STOLZ_PLATZ) rufname.style.backgroundImage = STOLZ_CSS;
+      name.appendChild(rufname);
       if (p.gemessen) name.appendChild(el('span', 'z-marke', 'gemessen'));
       /* Wer gesperrt ist, bleibt stehen — das ist Historie, und ein Name, der
          über Nacht verschwindet, sieht nach Datenverlust aus. Eine stille
@@ -4468,7 +4604,14 @@
       const sp = el('div', 'z-spark');
       sp.appendChild(sparkline(p.verlauf, s[2], 46, 18));
       rechts.appendChild(sp);
-      rechts.appendChild(el('div', 'z-zahl kr', String(p.biere)));
+      /* Der Bestand trägt ihn mit. „inkl. Namen und Bestand" war die Ansage,
+         und sie ist die richtige: die Zahl ist das zweite, was man an einer
+         Zeile liest, und eine Auszeichnung, die auf halbem Weg aufhört, sieht
+         aus wie ein Darstellungsfehler. */
+      const zahl = el('div', 'z-zahl kr' + (p.farbe === STOLZ_PLATZ ? ' stolz' : ''),
+        String(p.biere));
+      if (p.farbe === STOLZ_PLATZ) zahl.style.backgroundImage = STOLZ_CSS;
+      rechts.appendChild(zahl);
       z.appendChild(rechts);
       /* Der Untertitel hängt NICHT in der Mitte, sondern ist eine eigene Zeile
          des Rasters über die volle Breite (siehe `.z-unter`). Neben Sparkline
@@ -4617,8 +4760,13 @@
            von vor Schema 28 haben ihn nicht — dort tritt der alte Weg ein,
            die Stellung `i`, wie bei `biere` auch. Ein Rad, das beim
            Nachzeichnen andere Farben bekäme als am Abend, wäre kein Beleg. */
+        const ton = menschenFarbe(seg.farbe, i);
         g.appendChild(s_el('path', {
-          class: 'rad-bogen', stroke: menschenFarbe(seg.farbe, i),
+          /* Der Regenbogen läuft ENTLANG des Bogens, von seinem Anfang zu
+             seinem Ende — siehe `stolzVerweis`, warum der Umriss dafür nicht
+             taugt. */
+          class: 'rad-bogen',
+          stroke: ton === 'stolz' ? stolzVerweis(g, [x0, y0, x1, y1]) : ton,
           d: `M${x0.toFixed(1)},${y0.toFixed(1)} A${R},${R} 0 ` +
              `${weite > 180 ? 1 : 0},1 ${x1.toFixed(1)},${y1.toFixed(1)}`,
         }));
@@ -4639,6 +4787,10 @@
           x: bx, y: by, rechts,
           name: kuerze(seg.name, 12),
           zahl: (seg.biere == null ? seg.gewicht : seg.biere) + ' kalt',
+          /* Trägt der Bogen den Regenbogen, tun es Name und Bestand daneben
+             auch. Sonst stünde die Auszeichnung nur an einem Strich, und die
+             Zeile darunter auf der Tafel widerspräche ihr. */
+          stolz: seg.farbe === STOLZ_PLATZ,
         });
         von += weite;
       });
@@ -8385,7 +8537,13 @@
     tip.appendChild(el('div', 'wr-t-titel', titel));
     zeilen.forEach(z => {
       const r = el('div', 'wr-t-zeile');
-      if (z.farbe) { const m = el('i', 'wr-t-marke'); m.style.background = z.farbe; r.appendChild(m); }
+      if (z.farbe) {
+        const m = el('i', 'wr-t-marke');
+        // `background` und nicht `backgroundColor`: der Regenbogen kommt hier
+        // als `linear-gradient`, und das ist ein Bild, keine Farbe.
+        m.style.background = cssFarbe(z.farbe);
+        r.appendChild(m);
+      }
       r.appendChild(el('span', 'wr-t-wert', z.wert));
       r.appendChild(el('span', null, z.was));
       tip.appendChild(r);
@@ -8411,7 +8569,9 @@
       const b = Math.max((r.wert / max) * voll, 2);
       const p = s_el('path', {
         d: `M${lx},${y} h${b - 4} a4,4 0 0 1 4,4 v${hoch - 8} a4,4 0 0 1 -4,4 h${-(b - 4)} Z`,
-        fill: r.farbe,
+        // Der Regenbogen spannt sich über den Balken, nicht über das Bild —
+        // siehe `stolzVerweis`.
+        fill: malFarbe(svg, r.farbe),
       });
       svg.appendChild(p); balken.push(p);
       const n = s_el('text', { x: lx - 9, y: y + hoch - 4.5, 'text-anchor': 'end', 'font-size': 12, fill: '#cfd6cd' });

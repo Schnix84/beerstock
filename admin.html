@@ -759,6 +759,12 @@
     font-size: 11px; color: var(--kreide-weg); letter-spacing: .08em;
     text-transform: uppercase; margin-right: 2px;
   }
+  /* Die Auskunft hinter einer Wahl — bei der Regenbogenregel steht dort, wen
+     sie treffen kann. Dasselbe Leise wie `.wozu` davor, aber als Satz und
+     nicht als Wörtchen: Versalien wären ein zweiter Titel, kein Hinweis. */
+  .reiter .satz {
+    font-size: 11px; color: var(--kreide-weg); letter-spacing: .02em; margin-left: 4px;
+  }
 
   .karte {
     border: 1px solid var(--linie); border-radius: 3px; background: var(--karte);
@@ -793,7 +799,12 @@
      das Rot dort ist die Farbe der Rückfrage vor einer zerstörenden Handlung,
      und Umfärben ist keine. Dieselbe helle Kante wie ein gewählter Reiter —
      „das hier ist gerade offen" heißt im ganzen Kontor dasselbe. */
-  .k-tat button.offen {
+  /* Und dieselbe Kante für einen Knopf, der einen ZUSTAND trägt statt einer
+     offenen Klappe — „Regenbogen" ist gedrückt oder nicht. Eine zweite
+     Formsprache dafür zu erfinden hieße, zwei Arten von „das ist gerade an"
+     nebeneinander zu haben. */
+  .k-tat button.offen,
+  .k-tat button[aria-pressed="true"] {
     border-color: var(--kreide); color: var(--kreide); background: #ffffff0a;
   }
   .k-farben { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
@@ -1265,6 +1276,14 @@
                                  aria-label="Mitglieder durchsuchen"></span>
       <span class="reiter" id="filter"></span>
     </div>
+    <!-- Die Regel über der Regenbogenvergabe (Schema 29). Sie steht ÜBER den
+         Karten und in derselben Form wie das Sieb darüber: sie gilt für alle,
+         und wer sie erst unter den Karten fände, hätte schon gelesen, ohne zu
+         wissen, ob sie überhaupt läuft. Wen es treffen kann, steht dann an
+         jeder Karte einzeln. -->
+    <div class="werkzeug">
+      <span class="reiter" id="stolz-regel"></span>
+    </div>
     <div class="runde" id="runde"></div>
     <p class="sagt" id="runde-sagt" hidden></p>
   </section>
@@ -1729,6 +1748,7 @@
     const ziel = $('runde');
     ziel.textContent = '';
     filterZeichnen(nutzer);
+    stolzRegelZeichnen(nutzer);
     nutzer.filter(u => SIEBE[sieb].passt(u) && passtZurSuche(u)).forEach(u => {
       const k = el('div', 'karte'
         + (u.gesperrt ? ' gesperrt' : '') + (u.entfernt ? ' weg' : ''));
@@ -1741,7 +1761,13 @@
       /* Das Monogramm trägt seine Kreide — dieselbe wie seine Kurve in den
          Bildern oben und sein Bogen am Rad. Damit ist die Farbe an der Stelle
          zu sehen, an der man sie ändert, und nicht bloß eine Zahl in einer
-         Antwort. */
+         Antwort.
+
+         HIER KOMMT NIE DER REGENBOGEN AN, und darauf verlässt sich der Rest
+         durch sieben: die Adminrouten fragen `farbeSql()` ohne Träger (siehe
+         migrations/0029), also steht in `u.farbe` immer ein Platz 0..6. Käme
+         doch eine 7 herein, wäre das Monogramm nicht bunt, sondern das des
+         ERSTEN Menschen — ein falscher Name, kein blasser. */
       mono.style.background = MENSCHEN[u.farbe % MENSCHEN.length];
       kopf.appendChild(mono);
       kopf.appendChild(el('span', 'k-name', u.name || 'Ehemaliger'));
@@ -1788,6 +1814,76 @@
       ziel.appendChild(el('p', 'leer-hinweis', suchwort
         ? 'Niemand passt auf Sieb und Suchwort.'
         : 'Hier steht gerade niemand.'));
+    }
+  }
+
+  /* --- Die Regel über der Regenbogenvergabe (Schema 29) ---------------------
+
+     ZWEI GRIFFE, UND SIE SIND NICHT DASSELBE: hier steht, OB überhaupt
+     gelost wird; an jeder Karte steht, WEN es treffen kann. „Niemand im
+     Kreis" und „die Vergabe ruht" sehen von außen gleich aus — das eine
+     löscht die Auswahl, das andere legt sie schlafen, und wer im Advent
+     abschaltet, will im Juni nicht daneben aufgeschrieben haben, wer vorher
+     drin war.
+
+     Die Form ist die des Siebs darüber: ein Wörtchen, dann die Wahl. An/Aus
+     als ZWEI Knöpfe und nicht als einer, der sich umbeschriftet — bei einem
+     einzigen liest die Hälfte der Leute die Aufschrift als Zustand und die
+     andere als Handlung.
+
+     Der Satz dahinter ist die Auskunft, die ein Verbot ersetzt: eine
+     eingeschaltete Vergabe ohne einen einzigen im Kreis tut nichts, und das
+     soll dastehen, statt dass jemand die Tafel sucht. */
+  function stolzRegelZeichnen(nutzer) {
+    const reihe = $('stolz-regel');
+    reihe.textContent = '';
+    if (!stand) return;
+    const an = !!stand.kopf.stolz_aktiv;
+    const kreis = (nutzer || []).filter(u => !u.entfernt && u.stolz);
+
+    reihe.appendChild(el('span', 'wozu', 'regenbogen'));
+    [[true, 'an'], [false, 'aus']].forEach(([wert, wort]) => {
+      const b = el('button', wert === an ? 'an' : null, wort);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(wert === an));
+      if (wert !== an) b.addEventListener('click', () => stolzRegelSchalten(wert));
+      reihe.appendChild(b);
+    });
+
+    const satz = el('span', 'satz');
+    satz.textContent = !an
+      ? 'ruht — alle schreiben in ihrer Kreide'
+      : !kreis.length
+        ? 'niemand im Kreis — die Vergabe läuft leer'
+        : kreis.length === 1
+          ? `${kreis[0].name} trägt ihn jeden Tag`
+          : `täglich einer aus ${kreis.length}: ${kreis.map(u => u.name).join(', ')}`;
+    reihe.appendChild(satz);
+  }
+
+  async function stolzRegelSchalten(aktiv) {
+    sagt('runde-sagt', '');
+    try {
+      await ruf('/api/admin/stolz', { aktiv });
+      await laden();
+      sagt('runde-sagt', aktiv
+        ? 'Der Regenbogen wird wieder täglich vergeben.'
+        : 'Der Regenbogen ruht. Wer im Kreis steht, bleibt gemerkt.');
+    } catch (e) {
+      sagt('runde-sagt', e.message, true);
+    }
+  }
+
+  async function stolzSetzen(u) {
+    sagt('runde-sagt', '');
+    try {
+      await ruf('/api/admin/nutzer', { id: u.id, aktion: 'stolz' });
+      await laden();
+      sagt('runde-sagt', u.stolz
+        ? `${u.name} ist aus dem Kreis.`
+        : `${u.name} kann es jetzt treffen.`);
+    } catch (e) {
+      sagt('runde-sagt', e.message, true);
     }
   }
 
@@ -1841,6 +1937,19 @@
       runde(stand.nutzer);
     });
     zeile.appendChild(auf);
+
+    /* Und der Kreis für den Regenbogen — wie die Farbe eine Handlung ohne
+       Rückfrage und auch an der eigenen Karte erlaubt: sie sperrt niemanden
+       aus. Der Knopf trägt seinen Zustand selbst (`aria-pressed`), es gibt
+       nichts aufzuklappen. Ob überhaupt gelost wird, steht über den Karten. */
+    const stolz = el('button', null, 'Regenbogen');
+    stolz.type = 'button';
+    stolz.setAttribute('aria-pressed', String(!!u.stolz));
+    stolz.title = u.stolz
+      ? 'Ist im Kreis — kann täglich gezogen werden'
+      : 'Nicht im Kreis';
+    stolz.addEventListener('click', () => stolzSetzen(u));
+    zeile.appendChild(stolz);
 
     // Das Feld für den Sperrgrund steht erst da, wenn die Rückfrage steht:
     // vorher wäre es ein leeres Kästchen an jeder Karte.
@@ -2067,7 +2176,11 @@
        PLATZ (`farbe`) — und den übersetzt diese Zeile, damit ein Nutzer in
        der Säule dieselbe Kreide trägt wie in seiner Kurve und an seiner
        Karte. Die Reihenfolge (meistbeschäftigt zuerst) bleibt, sie ordnet
-       jetzt nur noch die Säulen und nicht mehr die Farben. */
+       jetzt nur noch die Säulen und nicht mehr die Farben.
+
+       Auch hier gilt: eine 7 (der Regenbogen, Schema 29) kommt an den
+       Adminrouten nicht an — sonst führe sie durch den Rest und käme als
+       Kreide des ersten Menschen wieder heraus. */
     const aufrufeReihen = (s.aufrufe_nutzer_reihen || [])
       .map((r, i) => ({ ...r, farbe: MENSCHEN[(r.farbe ?? i) % MENSCHEN.length] }));
 
@@ -2137,6 +2250,10 @@
     rundmail:   ['✉', ''],
     // Der Kreis ist die Farbe selbst, so gut es ein Schriftzeichen kann.
     farbe:      ['◍', ''],
+    // Der Bogen für den Regenbogen — einmal für „X ist im Kreis", einmal für
+    // den Schalter über allen.
+    stolz:       ['◠', ''],
+    stolz_regel: ['◠', ''],
   };
 
   /* Das Protokoll führt seit dem Versandprotokoll drei Quellen, und `quelle`
@@ -2229,6 +2346,10 @@
     if (z.aktion === 'farbe' && /^\d+$/.test(z.detail || '')) {
       return z.wen + ' (Farbe ' + (Number(z.detail) + 1) + ')';
     }
+    /* Der Schalter über der Regenbogenvergabe gilt KEINEM Menschen — `ziel_id`
+       ist null, und die Route fällt für „wen" dann auf das Detail zurück.
+       Ohne diese Zeile stünde dort „an (an)". */
+    if (z.aktion === 'stolz_regel') return 'Vergabe ' + (z.detail || '');
     return z.wen + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
   }
 

@@ -610,7 +610,7 @@
     /* Und die Reihe für die MENSCHEN, getrennt von der für die Rollen: eine
        Kreide je Melder, dieselbe an seiner Kurve hier, an seinem Bogen im Rad
        und an seiner Karte im Kontor. Welchen Platz jemand hat, sagt der Worker
-       (`farbe`, siehe migrations/0028); hier steht nur, wie Platz 0..7
+       (`farbe`, siehe migrations/0028); hier steht nur, wie Platz 0..6
        aussieht.
 
        SIEBEN UND NICHT SECHS: sieben Angemeldete auf sechs Farben hießen,
@@ -628,6 +628,23 @@
        (`FARBEN`), er prüft damit die Wahl im Kontor. */
     menschen:   ['#d153a2', '#be4523', '#c18705', '#017a16',
                  '#39ac6f', '#1d9af0', '#6956c2'],
+    /* Und der Platz DAHINTER, den es in der Reihe nicht gibt: der Regenbogen
+       (Schema 29). Wen die tägliche Auslosung trifft, trägt statt seiner
+       Kreide diese sechs Töne — hier an der Kurve und am Balken, drüben am
+       Rad-Bogen und an seiner Zeile auf der Tafel.
+
+       Es sind die Hue-Winkel der Flagge, gehoben in dasselbe Band wie die
+       sieben Kreiden. Die Flagge selbst geht auf Schiefer nicht: `#008026`
+       hat dagegen einen Kontrast von 1,6 und wird zu einem Loch, `#FFED00`
+       sticht so heraus, dass vom Verlauf nur noch Gelb bleibt. Gemessen mit
+       `ideas/pruefungen/stolz-reihe.mjs` — Kontrast 2,72 bis 4,65 auf
+       Schiefer UND Kartengrund.
+
+       IM KONTOR STEHT DIESE REIHE NICHT, und das ist keine Auslassung: dort
+       kommt nie ein Platz 7 an (der Worker gibt ihn den Adminrouten nicht),
+       damit der Wirt seine Leute beim Verwalten an ihrer Farbe wiedererkennt. */
+    stolz:      ['#ca4638', '#d77500', '#a29600',
+                 '#129231', '#4273dd', '#a551b6'],
     linie:      '#ffffff33',
     text:       '#cfd6cd',
     textWeg:    '#93a09a',

@@ -173,6 +173,7 @@ window.Bilder = (function () {
     Object.assign(P, palette || {});
     if (palette && palette.reihe) REIHE = palette.reihe;
     if (palette && palette.menschen) MENSCHEN = palette.menschen;
+    if (palette && palette.stolz) STOLZ = palette.stolz;
     losFarbenSetzen();
 
     const wurzel = document.documentElement.style;
@@ -228,7 +229,9 @@ window.Bilder = (function () {
       const links = el('span');
       if (z.farbe) {
         const punkt = el('i');
-        punkt.style.background = z.farbe;
+        // `background` und nicht `backgroundColor`: der Regenbogen kommt als
+        // `linear-gradient` herein, und das ist ein Bild, keine Farbe.
+        punkt.style.background = cssFarbe(z.farbe);
         links.appendChild(punkt);
       }
       links.appendChild(document.createTextNode(z.was));
@@ -371,11 +374,60 @@ window.Bilder = (function () {
      sieben und nicht acht, steht dort. */
   let MENSCHEN = ['#d153a2', '#be4523', '#c18705', '#017a16',
                   '#39ac6f', '#1d9af0', '#6956c2'];
+  /* DER REGENBOGEN. Platz 7 in einer Reihe, die bei 6 aufhört (Schema 29):
+     wen die tägliche Auslosung trifft, trägt statt seiner Kreide diese sechs
+     Töne — an der Kurve, am Balken, an der Marke im Tooltip.
+
+     Es sind die Hue-Winkel der Flagge, gehoben in dasselbe Band wie die
+     sieben Kreiden (L 0,49–0,665, C 0,10–0,17); warum die Flagge selbst auf
+     Schiefer nicht geht, steht ausführlich an `STOLZ` in `index.html`.
+     Gemessen mit `ideas/pruefungen/stolz-reihe.mjs`.
+
+     Wer auf Papier zeichnet, reicht seine Fassung über
+     `aufsetzen({ stolz: [...] })` herein — das Kontor tut das AUSDRÜCKLICH
+     NICHT: dort kommt nie eine 7 an, dort wird in echten Kreiden gezeichnet,
+     damit der Wirt seine Leute an der Farbe wiedererkennt. */
+  const STOLZ_PLATZ = 7;
+  let STOLZ = ['#ca4638', '#d77500', '#a29600', '#129231', '#4273dd', '#a551b6'];
+
   /* Die Farbe eines Melders. `ersatz` ist die Stellung im Bild und greift nur
      bei Daten ohne Platz — ein Worker von vor Schema 28, oder ein
-     eingefrorenes Feld von damals. */
+     eingefrorenes Feld von damals.
+
+     Für den Regenbogen kommt der NAME `'stolz'` heraus und kein Farbwert: ein
+     Verlauf muss im SVG anders geschrieben werden als im HTML. Die beiden
+     Übersetzer stehen darunter, und der Rest durch sieben gilt bewusst nur
+     für die Kreiden — eine 7 durch ihn hindurch wäre der ERSTE Mensch und
+     damit ein falscher Name, kein blasser. */
   const menschenFarbe = (platz, ersatz = 0) =>
-    MENSCHEN[(platz == null ? ersatz : platz) % MENSCHEN.length];
+    platz === STOLZ_PLATZ ? 'stolz'
+      : MENSCHEN[(platz == null ? ersatz : platz) % MENSCHEN.length];
+
+  /* Eine Verlaufsdefinition je Bild, gemerkt am SVG selbst. `objectBounding-
+     Box` (die Vorgabe) heißt: der Regenbogen spannt sich über das Stück, das
+     ihn trägt — den Balken, den Ring —, nicht über die ganze Zeichenfläche. */
+  let stolzNr = 0;
+  function stolzVerweis(knoten) {
+    const svg = knoten.ownerSVGElement || knoten;
+    if (!svg.dataset.stolz) {
+      const id = 'stolz-b' + (++stolzNr);
+      const v = s_el('linearGradient', { id, x1: 0, y1: 0, x2: 1, y2: 0 });
+      STOLZ.forEach((ton, i) => v.appendChild(s_el('stop', {
+        offset: (i / (STOLZ.length - 1) * 100).toFixed(0) + '%', 'stop-color': ton,
+      })));
+      const defs = s_el('defs');
+      defs.appendChild(v);
+      svg.appendChild(defs);
+      svg.dataset.stolz = id;
+    }
+    return `url(#${svg.dataset.stolz})`;
+  }
+  // Fürs SVG (fill/stroke) und fürs HTML (background). Wer eine Melderfarbe
+  // setzt, geht durch einen der beiden — sonst steht irgendwo das Wort
+  // „stolz" als Farbwert, und das ist keiner.
+  const malFarbe = (knoten, ton) => ton === 'stolz' ? stolzVerweis(knoten) : ton;
+  const cssFarbe = ton => ton === 'stolz'
+    ? `linear-gradient(90deg, ${STOLZ.join(', ')})` : ton;
 
   function rahmen(titel) {
     const box = el('div', 'bild');
@@ -685,7 +737,7 @@ window.Bilder = (function () {
          `k.farbe` ist sein Platz in der Kreidereihe. Vorher lief das über `i`,
          und damit wechselte eine Kurve die Farbe, sobald jemand anderes
          dazukam oder das Fenster einen Melder herausfiltert. */
-      const farbe = menschenFarbe(k.farbe, i);
+      const farbe = malFarbe(svg, menschenFarbe(k.farbe, i));
       const strich = px.length === 1
         ? s_el('circle', { cx: px[0][0], cy: px[0][1], r: 2.2, fill: farbe })
         : s_el('polyline', {
@@ -736,7 +788,9 @@ window.Bilder = (function () {
           if (!an) return;
           da.forEach(z => zeiger.appendChild(s_el('circle', {
             cx: x(d), cy: y(z.wert), r: z.frisch ? 2.6 : 1.7,
-            fill: P.grund, stroke: z.farbe, 'stroke-width': z.frisch ? 1.4 : 1,
+            // `z.farbe` kann der Regenbogen sein — im SVG ein Verweis, im
+            // Tooltip daneben ein CSS-Verlauf. Deshalb hier der Übersetzer.
+            fill: P.grund, stroke: malFarbe(svg, z.farbe), 'stroke-width': z.frisch ? 1.4 : 1,
             opacity: z.frisch ? 1 : .55,
           })));
         },
@@ -767,7 +821,7 @@ window.Bilder = (function () {
       const s = el('span');
       s.dataset.heb = '1';
       const punkt = el('i');
-      punkt.style.background = menschenFarbe(k.farbe, i);
+      punkt.style.background = cssFarbe(menschenFarbe(k.farbe, i));
       s.appendChild(punkt);
       s.appendChild(document.createTextNode(k.name));
       const heben = an => {
@@ -863,7 +917,7 @@ window.Bilder = (function () {
       const b = (wertVon(z) / max) * (W - lx - 22);
       const r = s_el('rect', {
         x: lx, y, width: Math.max(b, 1), height: hoch, rx: 2,
-        fill: ton(z, i), opacity: stufe(i),
+        fill: malFarbe(svg, ton(z, i)), opacity: stufe(i),
       });
       svg.appendChild(r);
       balken.push(r);
