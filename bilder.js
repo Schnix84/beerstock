@@ -411,19 +411,48 @@ window.Bilder = (function () {
 
   /* Eine Verlaufsdefinition je Bild, gemerkt am SVG selbst. `objectBounding-
      Box` (die Vorgabe) heißt: der Regenbogen spannt sich über das Stück, das
-     ihn trägt — den Balken, den Ring —, nicht über die ganze Zeichenfläche. */
+     ihn trägt — den Balken, den Ring —, nicht über die ganze Zeichenfläche.
+
+     UND GENAU DAS GEHT BEI EINER WAAGERECHTEN LINIE NICHT. Eine Bounding Box
+     ohne Höhe macht den Verlauf nach SVG-Regel entartet, und ein entarteter
+     Verlauf wird nicht blass gezeichnet, sondern GAR NICHT: die Linie
+     verschwindet. Das trifft genau einen Fall, und der ist nicht selten — wer
+     im gezeigten Fenster immer denselben Bestand gemeldet hat, hat eine
+     schnurgerade Kurve. Aufgefallen ist es erst, als jemand über die Legende
+     fuhr und alle anderen Kurven verblassten: übrig blieb nichts.
+
+     Nachgemessen mit `ideas/pruefungen/flache-kurve-probe.mjs` — dieselbe
+     flache Linie in fester Farbe wird gezeichnet, in `objectBoundingBox`
+     nicht, in `userSpaceOnUse` wieder.
+
+     Deshalb der zweite Weg: wer eine SPANNE mitgibt (zwei x-Werte in
+     Nutzerkoordinaten), bekommt eine eigene Definition in `userSpaceOnUse`.
+     Die hängt nicht an der Höhe und kann darum nicht entarten. Sie wird NICHT
+     am SVG gemerkt, weil jede Linie ihre eigene Spanne hat — dieselbe
+     Überlegung wie an `stolzVerweis` in `index.html`, wo der Rad-Bogen es
+     genauso macht. Alles ohne Spanne — Balken, Ringe, Schrift — bleibt beim
+     alten Weg: dort gibt es immer eine Höhe. */
   let stolzNr = 0;
-  function stolzVerweis(knoten) {
+  function stolzVerweis(knoten, spanne) {
     const svg = knoten.ownerSVGElement || knoten;
-    if (!svg.dataset.stolz) {
-      const id = 'stolz-b' + (++stolzNr);
-      const v = s_el('linearGradient', { id, x1: 0, y1: 0, x2: 1, y2: 0 });
+    const bauen = (id, masse) => {
+      const v = s_el('linearGradient', { id, ...masse });
       STOLZ.forEach((ton, i) => v.appendChild(s_el('stop', {
         offset: (i / (STOLZ.length - 1) * 100).toFixed(0) + '%', 'stop-color': ton,
       })));
       const defs = s_el('defs');
       defs.appendChild(v);
       svg.appendChild(defs);
+    };
+    if (spanne) {
+      const id = 'stolz-b' + (++stolzNr);
+      bauen(id, { gradientUnits: 'userSpaceOnUse',
+                  x1: spanne[0], y1: 0, x2: spanne[1], y2: 0 });
+      return `url(#${id})`;
+    }
+    if (!svg.dataset.stolz) {
+      const id = 'stolz-b' + (++stolzNr);
+      bauen(id, { x1: 0, y1: 0, x2: 1, y2: 0 });
       svg.dataset.stolz = id;
     }
     return `url(#${svg.dataset.stolz})`;
@@ -758,7 +787,13 @@ window.Bilder = (function () {
          `k.farbe` ist sein Platz in der Kreidereihe. Vorher lief das über `i`,
          und damit wechselte eine Kurve die Farbe, sobald jemand anderes
          dazukam oder das Fenster einen Melder herausfiltert. */
-      const farbe = malFarbe(svg, menschenFarbe(k.farbe, i));
+      /* MIT SPANNE, und das ist hier keine Feinheit: eine Kurve ohne
+         Bestandsänderung ist waagerecht, und ein Verlauf über eine Box ohne
+         Höhe zeichnet sie weg (siehe `stolzVerweis`). Der Punktfall braucht
+         sie nicht — ein Kreis hat immer Höhe. */
+      const ton = menschenFarbe(k.farbe, i);
+      const farbe = px.length === 1 ? malFarbe(svg, ton)
+        : ton === 'stolz' ? stolzVerweis(svg, [px[0][0], px[px.length - 1][0]]) : ton;
       const strich = px.length === 1
         ? s_el('circle', { cx: px[0][0], cy: px[0][1], r: 2.2, fill: farbe })
         : s_el('polyline', {
