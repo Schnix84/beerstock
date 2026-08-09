@@ -807,12 +807,7 @@
      das Rot dort ist die Farbe der Rückfrage vor einer zerstörenden Handlung,
      und Umfärben ist keine. Dieselbe helle Kante wie ein gewählter Reiter —
      „das hier ist gerade offen" heißt im ganzen Kontor dasselbe. */
-  /* Und dieselbe Kante für einen Knopf, der einen ZUSTAND trägt statt einer
-     offenen Klappe — „Regenbogen" ist gedrückt oder nicht. Eine zweite
-     Formsprache dafür zu erfinden hieße, zwei Arten von „das ist gerade an"
-     nebeneinander zu haben. */
-  .k-tat button.offen,
-  .k-tat button[aria-pressed="true"] {
+  .k-tat button.offen {
     border-color: var(--kreide); color: var(--kreide); background: #ffffff0a;
   }
   .k-farben { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
@@ -828,6 +823,10 @@
   /* „Automatisch" ist kein Ton, sondern das Zurücknehmen der Wahl — also kein
      Punkt, sondern ein Wort. */
   .k-farben button.auto { width: auto; height: auto; border-radius: 3px; padding: 3px 8px; }
+  /* Der achte Punkt trägt alle sechs Töne. Er steht bewusst wie ein Ton da
+     und nicht wie ein Schalter: gewählt wird hier eine Farbe, auch wenn sie
+     erst zugeteilt werden muss. */
+  .k-farben button.stolz { background: var(--pride); }
   .marke {
     font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
     border: 1px solid currentColor; border-radius: 999px; padding: 1px 7px;
@@ -1308,8 +1307,8 @@
     <!-- Die Regel über der Regenbogenvergabe (Schema 29). Sie steht ÜBER den
          Karten und in derselben Form wie das Sieb darüber: sie gilt für alle,
          und wer sie erst unter den Karten fände, hätte schon gelesen, ohne zu
-         wissen, ob sie überhaupt läuft. Wen es treffen kann, steht dann an
-         jeder Karte einzeln. -->
+         wissen, ob sie überhaupt läuft. WER ihn gewählt hat, steht dann in
+         der Farbreihe jeder Karte — als achter Punkt neben den Kreiden. -->
     <div class="werkzeug">
       <span class="reiter" id="stolz-regel"></span>
     </div>
@@ -1575,6 +1574,14 @@
        Worker als `FARBEN`, der damit die Wahl prüft. */
     menschen:   ['#d153a2', '#be4523', '#c18705', '#017a16',
                  '#39ac6f', '#1d9af0', '#6956c2'],
+    /* Und der Platz DAHINTER: der Regenbogen (Schema 29). Er steht auch hier,
+       seit er eine Farbwahl unter den Kreiden ist — wer ihn heute trägt,
+       trägt ihn auf jedem Blatt, und ein Melder, der in der Statistik der
+       Runde bunt und im Kontor grün wäre, machte aus zwei Ansichten zwei
+       Wahrheiten. Dieselben sechs wie in `--pride` weiter oben, die dort die
+       Pille im Protokoll und den Punkt in der Farbreihe färben. */
+    stolz:      ['#ca4638', '#d77500', '#a29600',
+                 '#129231', '#4273dd', '#a551b6'],
     linie:      '#ffffff33',
     text:       '#cfd6cd',
     textWeg:    '#93a09a',
@@ -1792,12 +1799,15 @@
          zu sehen, an der man sie ändert, und nicht bloß eine Zahl in einer
          Antwort.
 
-         HIER KOMMT NIE DER REGENBOGEN AN, und darauf verlässt sich der Rest
-         durch sieben: die Adminrouten fragen `farbeSql()` ohne Träger (siehe
-         migrations/0029), also steht in `u.farbe` immer ein Platz 0..6. Käme
-         doch eine 7 herein, wäre das Monogramm nicht bunt, sondern das des
-         ERSTEN Menschen — ein falscher Name, kein blasser. */
-      mono.style.background = MENSCHEN[u.farbe % MENSCHEN.length];
+         WER HEUTE DEN REGENBOGEN TRÄGT, trägt ihn auch hier — dieselbe Farbe
+         auf jedem Blatt, das ist der ganze Punkt. Er steht aber in einem
+         EIGENEN Feld (`stolz_heute`) und nicht als Platz 7 in `u.farbe`:
+         darunter muss die Kreide sichtbar bleiben, die er gewählt hat und auf
+         die er zurückfällt, sobald es den Nächsten trifft. In `u.farbe` steht
+         darum immer ein Platz 0..6, und der Rest durch sieben ist sicher —
+         eine 7 hier wäre nicht bunt, sondern der ERSTE Mensch. */
+      mono.style.background = u.stolz_heute
+        ? 'var(--pride)' : MENSCHEN[u.farbe % MENSCHEN.length];
       kopf.appendChild(mono);
       kopf.appendChild(el('span', 'k-name', u.name || 'Ehemaliger'));
       if (u.rolle === 'admin') kopf.appendChild(el('span', 'marke admin', 'Admin'));
@@ -1849,11 +1859,11 @@
   /* --- Die Regel über der Regenbogenvergabe (Schema 29) ---------------------
 
      ZWEI GRIFFE, UND SIE SIND NICHT DASSELBE: hier steht, OB überhaupt
-     gelost wird; an jeder Karte steht, WEN es treffen kann. „Niemand im
-     Kreis" und „die Vergabe ruht" sehen von außen gleich aus — das eine
-     löscht die Auswahl, das andere legt sie schlafen, und wer im Advent
-     abschaltet, will im Juni nicht daneben aufgeschrieben haben, wer vorher
-     drin war.
+     gelost wird; in der Farbreihe jeder Karte steht, wer ihn GEWÄHLT hat.
+     „Niemand hat ihn gewählt" und „die Vergabe ruht" sehen von außen gleich
+     aus — das eine löscht die Auswahl, das andere legt sie schlafen, und wer
+     im Advent abschaltet, will im Juni nicht daneben aufgeschrieben haben,
+     wer vorher drin war.
 
      Die Form ist die des Siebs darüber: ein Wörtchen, dann die Wahl. An/Aus
      als ZWEI Knöpfe und nicht als einer, der sich umbeschriftet — bei einem
@@ -1879,14 +1889,17 @@
       reihe.appendChild(b);
     });
 
+    /* Der Satz nennt, WER ihn heute trägt — die Frage, die man an dieser
+       Zeile wirklich hat. „Täglich einer aus zwei" beantwortet sie nicht, und
+       an den Karten nachzusehen heißt scrollen. */
+    const heute = kreis.find(u => u.stolz_heute);
     const satz = el('span', 'satz');
     satz.textContent = !an
       ? 'ruht — alle schreiben in ihrer Kreide'
       : !kreis.length
-        ? 'niemand im Kreis — die Vergabe läuft leer'
-        : kreis.length === 1
-          ? `${kreis[0].name} trägt ihn jeden Tag`
-          : `täglich einer aus ${kreis.length}: ${kreis.map(u => u.name).join(', ')}`;
+        ? 'niemand hat ihn gewählt — die Vergabe läuft leer'
+        : (heute ? `heute ${heute.name}` : 'heute niemand')
+          + (kreis.length > 1 ? ` — einer aus ${kreis.length}` : ', jeden Tag');
     reihe.appendChild(satz);
   }
 
@@ -1909,8 +1922,9 @@
       await ruf('/api/admin/nutzer', { id: u.id, aktion: 'stolz' });
       await laden();
       sagt('runde-sagt', u.stolz
-        ? `${u.name} ist aus dem Kreis.`
-        : `${u.name} kann es jetzt treffen.`);
+        ? `${u.name} schreibt wieder nur in seiner Kreide.`
+        : `${u.name} hat den Regenbogen dazugewählt — getragen wird er immer `
+          + 'nur von einem, bis dahin gilt die Kreide daneben.');
     } catch (e) {
       sagt('runde-sagt', e.message, true);
     }
@@ -1967,19 +1981,6 @@
     });
     zeile.appendChild(auf);
 
-    /* Und der Kreis für den Regenbogen — wie die Farbe eine Handlung ohne
-       Rückfrage und auch an der eigenen Karte erlaubt: sie sperrt niemanden
-       aus. Der Knopf trägt seinen Zustand selbst (`aria-pressed`), es gibt
-       nichts aufzuklappen. Ob überhaupt gelost wird, steht über den Karten. */
-    const stolz = el('button', null, 'Regenbogen');
-    stolz.type = 'button';
-    stolz.setAttribute('aria-pressed', String(!!u.stolz));
-    stolz.title = u.stolz
-      ? 'Ist im Kreis — kann täglich gezogen werden'
-      : 'Nicht im Kreis';
-    stolz.addEventListener('click', () => stolzSetzen(u));
-    zeile.appendChild(stolz);
-
     // Das Feld für den Sperrgrund steht erst da, wenn die Rückfrage steht:
     // vorher wäre es ein leeres Kästchen an jeder Karte.
     if (sicher === u.id + ':sperren') {
@@ -1997,13 +1998,22 @@
     return zeile;
   }
 
-  /* Die acht Kreiden plus „automatisch". Jeder Druck wirkt sofort — es gibt
-     nichts zu bestätigen, und wer sich vertut, drückt daneben.
+  /* Die sieben Kreiden, der Regenbogen und „automatisch". Jeder Druck wirkt
+     sofort — es gibt nichts zu bestätigen, und wer sich vertut, drückt
+     daneben.
 
      Ein Punkt darf mehrfach vergeben sein: sonst ließe sich kein Tausch
      machen, ohne einen der beiden erst auf einen dritten Platz zu schieben.
      Wer schon auf dieser Kreide sitzt, steht als Name darunter — das ist die
-     Auskunft, die ein Verbot ersetzt. */
+     Auskunft, die ein Verbot ersetzt.
+
+     DER REGENBOGEN STEHT NEBEN DEN KREIDEN UND NICHT STATT EINER. Er ist eine
+     Farbwahl wie die anderen — deshalb steht er hier und nicht als eigener
+     Knopf in der Zeile darüber —, aber er ersetzt die Kreide nicht: er wird
+     immer nur von EINEM zugleich getragen, und die anderen aus dem Kreis
+     schreiben so lange in ihrer eigenen. Darum bleibt der gewählte Punkt
+     daneben gedrückt; er ist die Farbe, auf die man zurückfällt, sobald es
+     den Nächsten trifft. */
   function farbreihe(u) {
     const reihe = el('div', 'k-farben');
     MENSCHEN.forEach((ton, i) => {
@@ -2020,6 +2030,22 @@
       b.addEventListener('click', () => farbeSetzen(u, i));
       reihe.appendChild(b);
     });
+    /* Der achte Punkt: der Regenbogen. Er trägt die sechs Töne selbst — ein
+       Punkt, der eine Farbe meint, muss sie zeigen, sonst ist er ein Rätsel
+       neben sieben Antworten. Sein Titel sagt, was das Drücken bedeutet:
+       gewählt heißt „kann drankommen", nicht „ist heute dran". */
+    const stolz = el('button', 'stolz');
+    stolz.type = 'button';
+    stolz.setAttribute('aria-pressed', String(!!u.stolz));
+    stolz.title = u.stolz_heute
+      ? 'Trägt den Regenbogen heute'
+      : u.stolz
+        ? 'Im Kreis — kann täglich drankommen; bis dahin gilt der Punkt daneben'
+        : 'Den Regenbogen dazuwählen — getragen wird er immer nur von einem';
+    stolz.setAttribute('aria-label', stolz.title);
+    stolz.addEventListener('click', () => stolzSetzen(u));
+    reihe.appendChild(stolz);
+
     /* Zurück auf die Anmeldereihenfolge. Steht nur da, wenn es etwas
        zurückzunehmen GIBT — an einer Karte ohne Wahl wäre es ein Knopf, der
        nichts tut. */
@@ -2207,11 +2233,14 @@
        Karte. Die Reihenfolge (meistbeschäftigt zuerst) bleibt, sie ordnet
        jetzt nur noch die Säulen und nicht mehr die Farben.
 
-       Auch hier gilt: eine 7 (der Regenbogen, Schema 29) kommt an den
-       Adminrouten nicht an — sonst führe sie durch den Rest und käme als
-       Kreide des ersten Menschen wieder heraus. */
+       Platz 7 ist der Regenbogen (Schema 29) und darf NICHT durch den Rest —
+       er käme als Kreide des ersten Menschen wieder heraus. Statt eines
+       Farbwerts geht dafür der Name `'stolz'` weiter; `bilder.js` macht
+       daraus, was der Ort braucht (im SVG einen Verweis, im Tooltip einen
+       CSS-Verlauf). */
     const aufrufeReihen = (s.aufrufe_nutzer_reihen || [])
-      .map((r, i) => ({ ...r, farbe: MENSCHEN[(r.farbe ?? i) % MENSCHEN.length] }));
+      .map((r, i) => ({ ...r, farbe: r.farbe === 7
+        ? 'stolz' : MENSCHEN[(r.farbe ?? i) % MENSCHEN.length] }));
 
     gruppe('Betrieb & Post',
       Bilder.saeulen('Betrieb je Woche' + fenster, s.betrieb, [

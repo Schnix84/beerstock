@@ -384,9 +384,10 @@ window.Bilder = (function () {
      Gemessen mit `ideas/pruefungen/stolz-reihe.mjs`.
 
      Wer auf Papier zeichnet, reicht seine Fassung über
-     `aufsetzen({ stolz: [...] })` herein — das Kontor tut das AUSDRÜCKLICH
-     NICHT: dort kommt nie eine 7 an, dort wird in echten Kreiden gezeichnet,
-     damit der Wirt seine Leute an der Farbe wiedererkennt. */
+     `aufsetzen({ stolz: [...] })` herein. BEIDE Seiten bekommen ihn — Verlauf
+     wie Kontor: wer heute den Regenbogen trägt, trägt ihn auf jedem Blatt,
+     sonst wäre derselbe Mensch beim Vergleich zweier Bilder zweimal
+     verschieden. */
   const STOLZ_PLATZ = 7;
   let STOLZ = ['#ca4638', '#d77500', '#a29600', '#129231', '#4273dd', '#a551b6'];
 
@@ -1141,7 +1142,10 @@ window.Bilder = (function () {
         unten -= h;
         svg.appendChild(s_el('rect', {
           x: PAD.l + platz * i + (platz - breit) / 2, y: unten,
-          width: breit, height: h, fill: r.farbe,
+          // Die Reihen dieses Bildes tragen fertige Farben, KEINE Plätze —
+          // aber „Aufrufe je Melder" reicht Menschen herein, und einer davon
+          // kann der Regenbogen sein.
+          width: breit, height: h, fill: malFarbe(svg, r.farbe),
         }));
       });
     });
@@ -1196,7 +1200,7 @@ window.Bilder = (function () {
     reihen.forEach(r => {
       const s = el('span');
       const punkt = el('i');
-      punkt.style.background = r.farbe;
+      punkt.style.background = cssFarbe(r.farbe);
       s.appendChild(punkt);
       s.appendChild(document.createTextNode(r.titel));
       leg.appendChild(s);

@@ -402,10 +402,16 @@ const STOLZ = 7;
    migrations/0028.
 
    `traeger` ist die Id dessen, den es heute trifft (`stolzTraeger`), oder
-   null. AUSDRUECKLICH EIN ARGUMENT UND KEINE VORGABE: das Kontor zeichnet
-   seine Monogramme und Bilder weiter in echten Kreiden, und eine 7, die dort
-   ankaeme, waere in `admin.html` nicht der Regenbogen, sondern - Rest durch
-   sieben - der ERSTE Mensch. Wer den Regenbogen will, sagt es hier. */
+   null. ALLE BILDER wollen ihn - Tafel, Statistik der Runde UND die des
+   Wirts: wer heute den Regenbogen traegt, traegt ihn auf jedem Blatt, sonst
+   ist derselbe Mensch beim Vergleich zweier Bilder zweimal verschieden.
+
+   AUSDRUECKLICH EIN ARGUMENT UND KEINE VORGABE bleibt es trotzdem, wegen der
+   EINEN Abfrage, die ihn nicht haben darf: die Mitgliederliste im Kontor.
+   Dort steht an jeder Karte die Farbreihe, und die muss zeigen, welche
+   KREIDE gewaehlt ist - das ist ja die Farbe, auf die der Traeger
+   zurueckfaellt, sobald es einen anderen trifft. Sie holt sich den
+   Regenbogen darum getrennt, als `stolz_heute`. */
 const farbeSql = (alias = 'u', traeger = null) => {
   const platz =
     `coalesce(${alias}.farbe, (SELECT count(*) FROM users x WHERE x.id < ${alias}.id))`;
@@ -2012,10 +2018,10 @@ const statistikFenster = (request) => {
 const STATISTIK_ABFRAGEN = 11;
 
 /* `traeger` ist die Id dessen, den der Regenbogen heute trifft, oder null
-   (Schema 29). Die RUNDE bekommt ihn, das KONTOR nicht: dort sollen die
-   Monogramme und die Bilder daneben dieselbe echte Kreide tragen, an der der
-   Wirt seine Leute wiedererkennt. Zwei Aufrufer, eine Abfrageliste - deshalb
-   steht es als Argument da und nicht als Vorgabe. */
+   (Schema 29). BEIDE Aufrufer geben ihn weiter - die Statistik der Runde und
+   die des Wirts zeigen dieselben Bilder, und ein Melder, der hier bunt und
+   dort gruen waere, machte aus zwei Ansichten zwei Wahrheiten. Ein Argument
+   ist es trotzdem, weil `farbeSql` es an anderer Stelle ohne braucht. */
 const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
   // 1 — Meldungen je Tag. Flaechenkurve.
   env.DB.prepare(`
@@ -5910,6 +5916,16 @@ const ROUTEN = {
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
+    /* Wen der Regenbogen heute trifft. Das Kontor bekommt ihn seit dem
+       Umbau auf die Farbwahl AUCH - ein Mensch soll auf allen Blättern
+       dieselbe Farbe tragen, und "ausser im Kontor" waere genau die Ausnahme,
+       die man beim Vergleichen zweier Bilder nicht im Kopf hat.
+
+       Er kommt hier aber NICHT als Platz 7 in `farbe`: die Farbreihe an der
+       Karte muss weiter zeigen, welche Kreide gewaehlt ist - das ist ja die
+       Farbe, auf die er zurueckfaellt, sobald es einen anderen trifft. Also
+       zwei Felder: `farbe` die Kreide, `stolz_heute` der Regenbogen. */
+    const traeger = await stolzTraeger(env);
     const [leute, mails, regel] = await env.DB.batch([
       env.DB.prepare(`
         SELECT u.id, u.name, u.email, u.rolle, u.quelle, u.erstellt,
@@ -5978,8 +5994,11 @@ const ROUTEN = {
         // Anmeldereihenfolge (siehe migrations/0028).
         farbe: u.farbe,
         farbe_gewaehlt: u.farbe_gewaehlt != null,
-        // Ob ihn die taegliche Regenbogenauslosung treffen kann (Schema 29).
+        /* Ob er den Regenbogen als Farbe gewaehlt hat - und ob er ihn HEUTE
+           auch traegt. Immer nur einer traegt ihn; die anderen aus dem Kreis
+           schreiben so lange in ihrer Kreide (Schema 29). */
         stolz: !!u.stolz,
+        stolz_heute: u.id === traeger,
         seit: utc(u.erstellt),
         gesperrt: u.gesperrt_am
           ? { seit: utc(u.gesperrt_am), grund: u.gesperrt_grund, von: u.gesperrt_von }
@@ -6240,8 +6259,6 @@ const ROUTEN = {
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
     const { tage, fenster, vorlauf } = statistikFenster(request);
-    // Die Runde sieht den Regenbogen, das Kontor darunter nicht - siehe
-    // `statistikAbfragen`.
     const traeger = await stolzTraeger(env);
     const ergebnis = await env.DB.batch(statistikAbfragen(env, fenster, vorlauf, traeger));
     return antwort(request, { tage, ...statistikRunde(ergebnis, tage) }, 200, KEIN_FREMDER_CACHE);
@@ -6254,11 +6271,15 @@ const ROUTEN = {
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
     const { tage, fenster, vorlauf } = statistikFenster(request);
+    /* Auch hier der Regenbogen: wer ihn heute traegt, traegt ihn auf JEDEM
+       Blatt. Ein Melder, der in der Statistik der Runde bunt ist und im
+       Kontor gruen, waere beim Vergleich zweier Bilder eine Falle. */
+    const traeger = await stolzTraeger(env);
 
     /* Alles in EINEM batch, die Runde und der Betrieb zusammen: zwei Batches
        waeren zwei Rundfluege zur Datenbank fuer eine einzige Seitenansicht. */
     const ergebnis = await env.DB.batch([
-      ...statistikAbfragen(env, fenster, vorlauf),
+      ...statistikAbfragen(env, fenster, vorlauf, traeger),
       /* 7 — Mails je Art, Fehler daneben. AUS ZWEI TOEPFEN seit 0025:
          `mail_ausgang` fuehrt die Meldungen des Verteilers (eine Zeile je
          Empfaenger, darum `count(*)`), `versand_ausgang` die fuenf, die daran
@@ -6326,7 +6347,7 @@ const ROUTEN = {
       // Gastgeber und den Ziehungen oben.
       env.DB.prepare(`
         SELECT z.user_id, coalesce(u.name,'Ehemaliger') AS name,
-               ${farbeSql()} AS farbe, count(*) AS n
+               ${farbeSql('u', traeger)} AS farbe, count(*) AS n
         FROM zugriffe z JOIN users u ON u.id = z.user_id
         GROUP BY z.user_id ORDER BY n DESC
       `),
