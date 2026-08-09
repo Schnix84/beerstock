@@ -775,9 +775,30 @@
   }
   /* Das Zeichen neben der Regel (`↻`). Ein Zeichen statt eines Wortes braucht
      mehr Grad, sonst sitzt es als Krümel in einer Kapsel, die für „verwaltet"
-     gebaut ist — und keinen Buchstabenabstand, der gilt Wörtern. */
+     gebaut ist — und keinen Buchstabenabstand, der gilt Wörtern.
+
+     SENKRECHT SITZT ES NICHT VON SELBST, und zwar aus zwei Gründen, die man
+     auseinanderhalten muss:
+
+     1. Der KASTEN war zu niedrig. Die Nachbarpillen tragen 12 px Schrift auf
+        einer Zeilenhöhe von 1,55 — ihr Zeilenkasten ist 18,6 px hoch. Mit
+        `line-height: 1` waren es hier 18, und die Pille saß einen Tick höher
+        als „an" daneben. Also dieselbe Zeilenhöhe und dieselbe Polsterung.
+
+     2. Die TINTE sitzt in ihrem Kasten nicht mittig. Die Schrift setzt das
+        Zeichen auf die Grundlinie, und wie weit es darüber steht, weiß nur
+        sie. Gemessen (`ideas/pruefungen/dreh-zentrierung.html`, über
+        `TextMetrics`): Ascender 17, Descender 4, Tinte 14,55 über der
+        Grundlinie und 0,32 darunter — die Tintenmitte liegt damit 0,6 px
+        ÜBER der Zeilenmitte. Die Polsterung ist unten um genau diese 0,6 px
+        knapper, das schiebt das Zeichen zurück in die Mitte.
+
+     Kein `translateY`: eine gebrochene Verschiebung macht aus scharfer
+     Schrift eine weiche. Die Polsterung verschiebt den Kasten selbst. */
   .reiter button.dreh {
-    font-size: 18px; line-height: 1; padding: 1px 10px 2px; letter-spacing: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 18px; line-height: 18.6px; letter-spacing: 0;
+    padding: 4.6px 11px 3.4px;
   }
 
   .karte {
