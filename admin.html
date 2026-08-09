@@ -2576,13 +2576,29 @@
 
      Steht kein Traeger fest oder ist die Runde noch nicht geladen, bleibt
      alles, wie es ist. Ein Protokoll, das auf eine Nutzerliste wartet, wäre
-     der falsche Handel. */
+     der falsche Handel.
+
+     UND DAS LETZTE GLIED IST KEIN NAME. Der Worker kürzt lange Listen
+     (`protokollNamen`, EMPFAENGER_NAMEN): aus sieben Empfängern wird
+     „Schnix, Dru, Hubi, Gerf, Duke, Brunx und 1 weitere". Das Schlusstück
+     heißt dann „Brunx und 1 weitere" und ist mit keinem Namen gleich — genau
+     daran ging der Zusatz zuerst vorbei, und zwar sichtbar: derselbe Mensch
+     stand in der kurzen Liste mit „:in" und in der langen ohne. Der Schwanz
+     wird deshalb abgetrennt, verglichen, und wieder angehängt. NUR am letzten
+     Glied, denn nur dort setzt ihn der Worker — ein Name darf „und" und
+     Ziffern enthalten, und in der Mitte einer Liste wäre so etwas ein Name
+     und keine Kürzung. */
   const traegerName = () => stand?.nutzer?.find(u => u.stolz_heute)?.name || null;
+  const REST_SCHWANZ = / und \d+ weitere$/;
   const logName = text => {
     const t = traegerName();
     if (!t || !text) return text;
-    return String(text).split(', ')
-      .map(n => (n === t ? n + ':in' : n)).join(', ');
+    const glieder = String(text).split(', ');
+    return glieder.map((n, i) => {
+      const kuerzung = i === glieder.length - 1 ? (REST_SCHWANZ.exec(n) || [''])[0] : '';
+      const name = kuerzung ? n.slice(0, -kuerzung.length) : n;
+      return (name === t ? name + ':in' : name) + kuerzung;
+    }).join(', ');
   };
 
   const logWer = z => (z.quelle === 'admin' ? logName(z.wer)
