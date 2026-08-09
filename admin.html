@@ -39,6 +39,14 @@
     --gruen:       #7fc08c;
     --linie:       #ffffff22;   /* die Haarlinie auf Schiefer            */
     --karte:       #ffffff08;   /* eine Karte ist hier ein Hauch Kreide  */
+    /* Die sechs Töne des Regenbogens (Schema 29) — hier NUR für die Pille im
+       Protokoll. Sie stehen sonst in `index.html`, in `bilder.js` und in
+       `statistik.html`; dies ist die vierte Fassung und die einzige, die kein
+       Skript anfasst. Die BILDER des Kontors bekommen sie weiterhin nicht:
+       dort kommt gar kein Platz 7 an, damit der Wirt seine Leute beim
+       Verwalten an ihrer echten Kreide wiedererkennt. */
+    --pride: linear-gradient(90deg, #ca4638, #d77500, #a29600,
+                                    #129231, #4273dd, #a551b6);
     --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
     /* Die Breite des Buches. Steht als Variable da, weil sie an ZWEI Stellen
        gebraucht wird — Register und Blätter. Gingen sie auseinander, endete
@@ -1029,6 +1037,27 @@
   }
   .log .art.rot { color: var(--rot); }
   .log .art.gruen { color: var(--gruen); }
+  /* Die Pille der Regenbogenzeilen. Gefärbt ist das WORT, nicht der Umriss —
+     dieselbe Form wie drüben an Name und Bestand auf der Tafel, und damit die
+     einzige Art, wie der Regenbogen in diesem Haus auftritt.
+
+     UND DARUM SITZT DER VERLAUF AUF EINER EIGENEN HÜLLE um das Wort: die
+     Pille hat einen Boden von 96 px und mittigen Text, ein Verlauf über die
+     ganze Pille läge unter den fünf Buchstaben nur mit seiner Mitte, und
+     „pride" käme in einem einzigen Grün heraus. Über das Wort gelegt zeigt er
+     alle sechs.
+
+     Der Rückfall steht zuerst, aus demselben Grund wie auf der Tafel:
+     durchsichtige Schrift ohne greifenden Beschnitt ist keine blasse Schrift,
+     sondern gar keine. */
+  .log .art .pride { color: var(--kreide-matt); }
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    .log .art .pride {
+      background-image: var(--pride);
+      background-clip: text; -webkit-background-clip: text;
+      color: transparent; -webkit-text-fill-color: transparent;
+    }
+  }
   /* Auslöser und Empfänger. Grau und klein: sie stehen am Ende der Rangfolge
      einer Zeile (siehe `logSpur`). `overflow-wrap` statt Abschneiden — eine
      Namensliste, die mit „Yusuf, Mai…" endet, ist keine Auskunft; sie darf
@@ -2371,6 +2400,22 @@
   const logArtTon = z => istProbe(z) ? 'rot'
     : (z.quelle === 'admin' ? (LOG_ZEICHEN[z.aktion] || ['', ''])[1] : '');
 
+  /* Was in der Pille STEHT. Fast immer der Schemaname selbst — die Unterstriche
+     werden zu Leerzeichen, sonst läse sich `mailwechsel_warnung` als ein Wort.
+
+     Die zwei Regenbogenhandlungen heißen in der Datenbank weiter `stolz`
+     (dort steht seit Schema 29 nichts anderes, und alte Zeilen umzuschreiben
+     wäre Geschichtsfälschung), im Protokoll aber **pride** — so nennt es die
+     Runde. Und weil sie das Einzige sind, was hier bunt wird, kommt das Wort
+     in einer eigenen Hülle: der Verlauf gehört über die Buchstaben und nicht
+     über die 96 px breite Pille (siehe `.log .art .pride`). */
+  const LOG_ART_WORT = { stolz: 'pride', stolz_regel: 'pride regel' };
+  function logArtWort(z) {
+    const wort = LOG_ART_WORT[z.quelle === 'admin' ? z.aktion : ''];
+    if (!wort) return document.createTextNode(z.aktion.replace(/_/g, ' '));
+    return el('span', 'pride', wort);
+  }
+
   /* EINE Zeile für zwei Orte: das Protokollblatt und die Vorschaukarte auf der
      Übersicht. `kurz` lässt dort Name und Pille weg — in einer drittel Karte
      ist für drei Spalten kein Platz, und die Frage dort ist ohnehin nur, ob
@@ -2394,8 +2439,9 @@
         logWer(z)));
       // Die Unterstriche der Artnamen sind Schema, nicht Sprache:
       // `mailwechsel_warnung` liest sich als „MAILWECHSEL WARNUNG".
-      tat.appendChild(el('span', ('art ' + logArtTon(z)).trim(),
-        z.aktion.replace(/_/g, ' ')));
+      const pille = el('span', ('art ' + logArtTon(z)).trim());
+      pille.appendChild(logArtWort(z));
+      tat.appendChild(pille);
       li.appendChild(tat);
     }
     li.appendChild(el('span', kurz ? 'wen' : null, logWen(z, kurz)));
