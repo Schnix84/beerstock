@@ -221,7 +221,37 @@
     position: absolute; inset: 0; border-radius: inherit;
     overflow: hidden; pointer-events: none;
   }
-  .rh-l { position: absolute; inset: 0; }
+  /* --- Und wenn ICH heute den Regenbogen trage: das Holz ist bemalt ---------
+     `--rh-ton` ist die oberste Hintergrundebene JEDER Leiste und normalerweise
+     `none` — eine Ebene, die nichts malt, aber mitzählt. Sie ist da, damit der
+     Regenbogen keinen zweiten Satz Verläufe braucht: jede Leiste stellt ihren
+     Stapel einmal auf, und ob eine Farbe darüberliegt, entscheidet EINE
+     Eigenschaft.
+
+     Der Trick daran ist `background-blend-mode: color`. Die Ebene ersetzt das
+     Holz nicht, sie nimmt ihm nur den Ton: Helligkeit und Zeichnung kommen
+     weiter aus der Maserung, dem Flaum und dem Licht darunter. Heraus kommt
+     ein Rahmen, der immer noch Holz ist — Jahresringe, Gehrung, Fase, Falz —,
+     nur eben angestrichen. Ein deckender Verlauf hätte vier bunte Blechstreifen
+     ergeben.
+
+     DIE SECHS TÖNE STEHEN AUCH HIER NICHT. `--stolz-toene` ist eine
+     Farbenliste (kein fertiger Verlauf) und kommt aus dem Skript — als Liste,
+     weil dieselben sechs zweimal gebraucht werden: längs für Ober- und
+     Unterleiste, quer für die Seiten. Ein fertiger `linear-gradient` ließe
+     sich nicht drehen.
+
+     Und die Naht bleibt, wo sie ist: an der Gehrung springt der Ton, weil dort
+     zwei Bretter aneinanderstoßen. Ein Regenbogen, der glatt um die Ecke
+     liefe, wäre eine Folie und kein Anstrich. */
+  .rh-l { position: absolute; inset: 0; --rh-ton: none; }
+  html.stolz-rahmen .rh-o, html.stolz-rahmen .rh-u {
+    --rh-ton: linear-gradient(90deg, var(--stolz-toene));
+  }
+  html.stolz-rahmen .rh-li, html.stolz-rahmen .rh-re {
+    --rh-ton: linear-gradient(180deg, var(--stolz-toene));
+  }
+  html.stolz-rahmen .rh-l { --rh-mischen: color; }
   .rh-o { clip-path: polygon(0 0, 100% 0, calc(100% - var(--r)) var(--r), var(--r) var(--r)); }
   .rh-u { clip-path: polygon(0 100%, var(--r) calc(100% - var(--r)), calc(100% - var(--r)) calc(100% - var(--r)), 100% 100%); }
   .rh-li { clip-path: polygon(0 0, var(--r) var(--r), var(--r) calc(100% - var(--r)), 0 100%); }
@@ -263,10 +293,14 @@
      bleiben die obersten zwei Prozent davon uebrig: eine glatte Flaeche. */
   .rh-o {
     background:
+      var(--rh-ton),
       var(--rh-flaum) 0 0 repeat,
       linear-gradient(180deg, #ffe4bb3d, #ffe4bb00 42%, #2b180536) 0 0 / 100% var(--r) no-repeat,
       var(--rh-bild-h) 0 0 no-repeat,
       var(--h-mitte);
+    /* Ausgeschrieben und nicht abgekürzt: eine kürzere Liste WIEDERHOLT sich
+       über die Ebenen, und dann läge die Mischung auch unter der Maserung. */
+    background-blend-mode: var(--rh-mischen, normal), normal, normal, normal, normal;
   }
   /* Die Unterleiste liegt im Eigenschatten: oben nimmt ihr die Tafel das
      Licht, nach unten hin hellt nur auf, was vom Boden zurueckkommt - und das
@@ -274,30 +308,36 @@
      am Ende heller als die obere, und das Licht kaeme von unten. */
   .rh-u {
     background:
+      var(--rh-ton),
       var(--rh-flaum) 0 100% repeat,
       linear-gradient(180deg, #2b18054f, #2b18051a 60%, #2b180500 82%, #ffe4bb22) 0 100% / 100% var(--r) no-repeat,
       var(--rh-bild-h) 0 100% no-repeat,
       var(--h-dunkel);
+    background-blend-mode: var(--rh-mischen, normal), normal, normal, normal, normal;
   }
   /* Die Seitenleisten zeigen sonst den blassesten Streifen des stehenden
      Bildes; darum der Versatz. */
   .rh-li {
     background:
+      var(--rh-ton),
       var(--rh-flaum) 0 0 repeat,
       var(--licht-v) 0 0 / var(--r) 100% no-repeat,
       linear-gradient(90deg, #ffe4bb30, #2b180536) 0 0 / var(--r) 100% no-repeat,
       var(--rh-bild-v) -21px 0 no-repeat,
       var(--h-mitte);
+    background-blend-mode: var(--rh-mischen, normal), normal, normal, normal, normal, normal;
   }
   /* Rechts ist eine Spur dunkler als links: das Licht steht leicht links ueber
      der Tafel, sonst stuende sie in einem Fotostudio. */
   .rh-re {
     background:
+      var(--rh-ton),
       var(--rh-flaum) 100% 0 repeat,
       var(--licht-v) 100% 0 / var(--r) 100% no-repeat,
       linear-gradient(90deg, #2b18053e, #2b180520) 100% 0 / var(--r) 100% no-repeat,
       var(--rh-bild-v) calc(100% + 19px) 0 no-repeat,
       var(--h-dunkel);
+    background-blend-mode: var(--rh-mischen, normal), normal, normal, normal, normal, normal;
   }
 
   /* Die Gehrungsfuge entsteht schon dadurch, dass an ihr die Faserrichtung
@@ -477,6 +517,18 @@
      Uebernommen von der Live-Seite; hier nur andere Farben, weil auf einer
      Tafel nichts gedruckt ist. Das Bier bleibt bernstein - es ist die einzige
      bunte Kreide auf dem Brett und darf das auch sein. */
+  /* DAS BIER IM REGENBOGEN. Es gehört dem, der oben steht — sein Name daneben
+     trägt ihn ja auch, und ein Glas in Bernstein neben einem bunten Namen
+     hieße, dass die beiden nicht zusammengehören.
+
+     Der Verlauf selbst kommt aus dem Skript (`stolzVerweis`, dieselbe
+     Definition wie am Rad und an der Zeile) und steht deshalb NICHT hier. Was
+     hier steht, ist nur die Tiefenebene: sie liegt still, solange das Bier
+     bernstein ist, und tritt mit dem Regenbogen an — der bringt seine eigene
+     Tiefe nicht mit. */
+  .bier-tiefe { display: none; }
+  .hero-glas.stolz-bier .bier-tiefe { display: block; }
+
   .glas-riss  { fill: none; stroke: var(--kreide); stroke-width: 2.1; stroke-linejoin: round; }
   .glas-innen { fill: none; stroke: var(--kreide-weg); stroke-width: 0.9; opacity: .5; }
   .glas-korpus{ fill: #ffffff; opacity: .07; }
@@ -2223,7 +2275,8 @@
 
      Die Reihe steht im Skript (`STOLZ`) und hier NICHT noch einmal: die
      Deklaration bekommt sie beim Zeichnen als `background-image` gesetzt. Ein
-     zweiter Satz Töne im Stylesheet liefe früher oder später auseinander. */
+     zweiter Satz Töne im Stylesheet liefe früher oder später auseinander.
+
      UND DER RÜCKFALL STEHT ZUERST: durchsichtige Schrift ist nur dann
      sichtbar, wenn der Beschnitt auch wirklich greift. Wo er es nicht tut,
      bliebe der Name unsichtbar — kein blasser Fehler, sondern ein
@@ -2234,6 +2287,54 @@
     .stolz {
       background-clip: text; -webkit-background-clip: text;
       color: transparent; -webkit-text-fill-color: transparent;
+    }
+  }
+
+  /* DER REGENBOGEN ALS RAHMEN. Dieselbe Auszeichnung wie `.stolz`, nur um
+     einen Menschen herum statt durch seinen Namen hindurch — dort, wo ihn die
+     Tafel als Umriss zeigt und nicht als Wort (der Namensknopf im Notrufkreis)
+     oder als Kante über dem, was ihm gehört (der Kopf seines Blattes).
+
+     NICHT auf demselben Element wie `.stolz`. Der Beschnitt dort gilt ALLEN
+     Hintergrundebenen: läge der Rahmenverlauf daneben, verschwände er in den
+     Buchstaben. Deshalb trägt hier ein eigenes Stück den Rahmen und ein
+     Kindelement den Namen — dieselbe Trennung wie an der Zeile und aus
+     demselben Grund.
+
+     Ein Verlauf IN einer Kante geht nur über eine Maske: `border-image`
+     ignoriert `border-radius` und machte aus der Pille ein Rechteck, und der
+     Griff über zwei Hintergrundebenen (`padding-box`/`border-box`) bräuchte
+     die Grundfarbe des Untergrunds als Zutat — die Blätter liegen aber auf
+     einem Verlauf und haben keine. Die Maske braucht sie nicht: sie schneidet
+     die Mitte heraus, was darunter liegt, bleibt liegen.
+
+     `inset: calc(-1 * <Breite>)` und `padding: <Breite>`, weil ein absolut
+     gesetztes Kind am POLSTERRAND hängt und nicht am äußeren: die Ebene wird um
+     die Rahmenbreite nach außen gezogen und trägt sie als eigenes Polster
+     wieder ab. So sitzt der Ring genau dort, wo sonst die Kreidelinie liegt.
+     Die Breite steht als `--stolz-rand-breite` daneben: die Pille im
+     Notrufkreis hat eine 1-px-Linie, die großen Knöpfe der Tafel 1,5.
+
+     Und wieder der Rückfall zuerst — wo die Maske nicht greift, steht eine
+     Kreidelinie und kein Loch. Die sechs Töne stehen auch hier nicht: sie
+     kommen als `--stolz-verlauf` aus dem Skript. */
+  .stolz-rand { border-color: var(--kreide-matt); }
+  @supports ((mask-composite: exclude) or (-webkit-mask-composite: xor)) {
+    .stolz-rand { position: relative; border-color: transparent; }
+    .stolz-rand::before {
+      content: ''; position: absolute;
+      inset: calc(-1 * var(--stolz-rand-breite, 1px));
+      padding: var(--stolz-rand-breite, 1px);
+      border-radius: inherit; background: var(--stolz-verlauf); pointer-events: none;
+      /* Die beiden Kurzformen ZUERST, die Verrechnung danach: `mask` und
+         `-webkit-mask` sind in Safari dasselbe, und die Kurzform setzt die
+         Verrechnung auf ihren Anfangswert zurück. Stünde `-webkit-mask-
+         composite` dazwischen, machte die Zeile darunter es wieder zunichte —
+         und der Ring wäre eine volle Fläche. */
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
     }
   }
   .z-marke {
@@ -2296,6 +2397,9 @@
     font-family: var(--hand); font-size: 16px; letter-spacing: .04em;
     transition: background .2s, border-color .2s, transform .06s;
   }
+  /* Der Ring des Regenbogens muss so breit sein wie die Linie, die er ersetzt
+     — siehe `.stolz-rand`. */
+  .knopf { --stolz-rand-breite: 1.5px; }
   .knopf:hover { background: #ffffff1a; border-color: var(--gelb); }
   .knopf:active { transform: translateY(1px); }
   .knopf[disabled] { opacity: .45; cursor: default; }
@@ -2810,6 +2914,17 @@
                    gross, und ein Punktgitter unterhalb der Pixelgroesse liest
                    sich nicht als Schraffur, sondern als Schmutz. Der Verlauf
                    traegt die Flaeche allein. -->
+              <!-- Die Tiefe, die dem Bernstein von selbst innewohnt: oben ein
+                   Hauch Licht, unten der Schatten des Glasbodens. Sie liegt nur
+                   dann ueber der Flaeche, wenn das Bier den Regenbogen traegt -
+                   sechs Toene nebeneinander sind sonst ein flaches Band, und
+                   aus dem Glas wuerde ein Aufkleber. Reines Weiss und Schwarz,
+                   keine Farbe: was hier faerbt, ist der Verlauf darunter. -->
+              <linearGradient id="bier-tiefe" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0"   stop-color="#ffffff" stop-opacity=".13"/>
+                <stop offset=".38" stop-color="#ffffff" stop-opacity="0"/>
+                <stop offset="1"   stop-color="#000000" stop-opacity=".3"/>
+              </linearGradient>
               <linearGradient id="glanzfarbe" x1="0" y1="0" x2="1" y2="0">
                 <stop offset="0"  stop-color="#ffffff" stop-opacity="0"/>
                 <stop offset=".5" stop-color="#ffffff" stop-opacity=".5"/>
@@ -2831,7 +2946,10 @@
                    Flaeche reicht weit unter den Boden, damit im leeren Glas
                    nichts nachrutscht, was nicht mehr da ist. -->
               <g class="spiegel">
-                <rect x="16" y="46" width="68" height="170" fill="url(#bier)"/>
+                <rect id="bier-flaeche" x="16" y="46" width="68" height="170" fill="url(#bier)"/>
+                <!-- Liegt still da, solange das Bier bernstein ist (siehe
+                     `.bier-tiefe` im Stylesheet). -->
+                <rect class="bier-tiefe" x="16" y="46" width="68" height="170" fill="url(#bier-tiefe)"/>
 
                 <!-- Schaumkrone: Vollflaeche plus ausgefranster Rand -->
                 <g class="krone">
@@ -2942,7 +3060,7 @@
              „Notruf absetzen" weg. -->
         <div class="block-kopf kr" id="abend-kopf">
           <span class="titel">Wo wird heute getrunken?</span>
-          <button class="nr-knopf" id="notruf-auf" type="button">Notruf absetzen</button>
+          <button class="nr-knopf" id="notruf-auf" type="button"><span class="k-wort">Notruf absetzen</span></button>
         </div>
       </section>
 
@@ -2986,7 +3104,7 @@
           </svg>
         </div>
 
-        <button class="knopf" id="rad-knopf" hidden>Flasche drehen</button>
+        <button class="knopf" id="rad-knopf" hidden><span class="k-wort">Flasche drehen</span></button>
         <div class="erg" id="rad-erg" aria-live="polite" hidden></div>
 
         <!-- Nur der Gezogene sieht das, und nur solange er nicht geantwortet
@@ -3117,7 +3235,7 @@
             <!-- Die Aufschrift wechselt, siehe `wuerfleAufschrift`. Im Markup
                  steht das nuechterne Wort: es ist das einzige, das auch ohne
                  JS erscheint, und es sagt, was der Knopf tut. -->
-            <button class="knopf" id="melde-knopf" type="submit">Anschreiben</button>
+            <button class="knopf" id="melde-knopf" type="submit"><span class="k-wort">Anschreiben</span></button>
             <div class="zeile-klein">
               <span id="wer-bin-ich"></span>
               <span>
@@ -4000,6 +4118,16 @@
     '#a551b6',   // Violett
   ];
   const STOLZ_CSS = `linear-gradient(90deg, ${STOLZ.join(', ')})`;
+  /* Und einmal hinüber ins Stylesheet: der Rahmen (`.stolz-rand`) braucht die
+     sechs Töne in einer Regel, die kein Skript anfassen kann — der Ring liegt
+     in einem `::before`, und an ein Pseudoelement kommt von hier aus niemand
+     heran. Er holt sie sich als Eigenschaft, geschrieben wird sie genau hier
+     und nur hier. */
+  document.documentElement.style.setProperty('--stolz-verlauf', STOLZ_CSS);
+  /* Und dieselben sechs noch einmal als LISTE, nicht als fertiger Verlauf: der
+     Holzrahmen braucht sie zweimal in verschiedene Richtungen (`--rh-ton`),
+     und einen fertigen `linear-gradient` kann man nicht drehen. */
+  document.documentElement.style.setProperty('--stolz-toene', STOLZ.join(', '));
 
   /* Der Platz eines Melders, oder der Rückfall. Siehe `rad()`, warum es ihn
      gibt.
@@ -4062,6 +4190,69 @@
   // Farbwert, und das ist keiner.
   const malFarbe = (el, ton) => ton === 'stolz' ? stolzVerweis(el) : ton;
   const cssFarbe = ton => ton === 'stolz' ? STOLZ_CSS : ton;
+
+  /* --- Der Regenbogen am Stück Seite ---------------------------------------
+     Die beiden oben geben eine FARBE zurück; die drei hier hängen sie an ein
+     Element. Wer auf der Tafel einen Menschen hinschreibt, geht durch sie —
+     sonst steht der Griff an jeder neuen Stelle wieder von Hand da, und beim
+     nächsten Mal steht er ein bisschen anders da.
+
+     EINE FRAGE, EINE ANTWORT: `stolz(platz)`. Die Tafel kennt die sechs
+     Melderkreiden nicht und soll sie nicht kennen — Platz 7 ist der einzige,
+     den sie liest, und ob das heute einer ist oder fünf, entscheidet der
+     Worker. Hier steht deshalb nirgends „der Träger", immer nur „dieser hier".
+
+     `farbe` kann fehlen: eine Antwort aus einem älteren Worker kennt das Feld
+     an dieser Stelle noch nicht (und in der halben Minute nach einem Deploy
+     kommt genau die noch). `undefined === 7` ist falsch, also bleibt es dann
+     bei Kreide — der richtige Rückfall, kein Fehler. */
+  const stolz = platz => platz === STOLZ_PLATZ;
+
+  /* Der Name IM Verlauf. Das Element trägt danach nichts als den Namen: der
+     Beschnitt an den Buchstaben nimmt jede Marke und jedes Zeichen daneben
+     mit (siehe `.stolz` im Stylesheet). */
+  function stolzSchrift(knoten, ja) {
+    knoten.classList.toggle('stolz', !!ja);
+    knoten.style.backgroundImage = ja ? STOLZ_CSS : '';
+    return knoten;
+  }
+
+  /* Der Umriss IM Verlauf. Nie am selben Element wie `stolzSchrift` — warum,
+     steht an `.stolz-rand`. */
+  function stolzRand(knoten, ja) {
+    knoten.classList.toggle('stolz-rand', !!ja);
+    return knoten;
+  }
+
+  /* Ein Name in eigener Hülle, fertig zum Anhängen. Der häufigste Fall: der
+     Name steckt in einem Satz („Basti braucht Bier“, „Bierabend bei Basti“),
+     und der Regenbogen gilt dem NAMEN und nicht dem Satz. */
+  const stolzWort = (text, platz) => stolzSchrift(el('span', null, text), stolz(platz));
+
+  /* DIE DREI KNÖPFE DER TAFEL. Sie gehören nicht einem Melder, sondern dem,
+     der davorsteht — genau wie der Holzrahmen, und sie hängen deshalb an
+     derselben Auskunft (`stolz_heute` aus `/api/me`). Wer heute den Regenbogen
+     trägt, greift auch bunt zu.
+
+     Die drei und nicht alle: es sind die Knöpfe, die auf der Tafel SELBST
+     stehen — anschreiben, drehen, Notruf. Was in einem Blatt darüber liegt
+     (die drei Nöte, Absenden, Bewerten), bleibt Kreide; sonst wäre jeder Knopf
+     der Seite ausgezeichnet, und eine Auszeichnung, die überall sitzt, ist
+     keine.
+
+     Rahmen und Schrift liegen auf ZWEI Stücken: der Ring am Knopf, das Wort in
+     seiner Hülle. Der Beschnitt an den Buchstaben nähme sonst nicht nur den
+     Ring mit, sondern auch die Füllung des Knopfes. */
+  const STOLZ_KNOEPFE = ['notruf-auf', 'rad-knopf', 'melde-knopf'];
+  function stolzKnoepfe(ja) {
+    for (const id of STOLZ_KNOEPFE) {
+      const k = $(id);
+      if (!k) continue;
+      stolzRand(k, ja);
+      const wort = k.querySelector('.k-wort');
+      if (wort) stolzSchrift(wort, ja);
+    }
+  }
   let radFelder = [];   // Segmentgrenzen des zuletzt gezeichneten Rades
   let radStand = 0;     // aktueller Drehwinkel, damit die nächste Drehung anschließt
 
@@ -4487,6 +4678,28 @@
   const terminWo = t => t.ort || 'bei ' + t.gastgeber;
   const terminName = t => t.titel || t.ort || 'Bierabend bei ' + t.gastgeber;
 
+  /* Dieselben zwei Sätze als Stück Seite. Sie werden gebraucht, seit der
+     Gastgeber seine Farbe mitbringt: der Regenbogen gilt dem NAMEN und nicht
+     dem Satz um ihn herum, und ein Name in einer Zeichenkette lässt sich nicht
+     einfärben.
+
+     Wo gar kein Gastgeber vorkommt — eigener Titel, auswärts —, bleibt es beim
+     bloßen Text; die Funktionen oben stehen weiter für alles, was einen String
+     will (der Titel über dem Blatt, das `dataset` an der Zeile). */
+  const gastgeberWort = t => stolzWort(t.gastgeber, t.gastgeber_farbe);
+  const terminWoDom = t => {
+    if (t.ort) return document.createTextNode(t.ort);
+    const s = el('span', null, 'bei ');
+    s.appendChild(gastgeberWort(t));
+    return s;
+  };
+  const terminNameDom = t => {
+    if (t.titel || t.ort) return document.createTextNode(t.titel || t.ort);
+    const s = el('span', null, 'Bierabend bei ');
+    s.appendChild(gastgeberWort(t));
+    return s;
+  };
+
   const VARIANTE = {
     kopf(p, modus) {
       const ziel = $('hero-striche');
@@ -4507,11 +4720,20 @@
          Wort gelegt zeigt er alle sechs. Dieselbe Ueberlegung wie an der Zeile
          darunter und an der Pille im Kontor. */
       const marke = $('marke');
-      const stolzKopf = !!p && p.farbe === STOLZ_PLATZ;
-      const wort = el('span', stolzKopf ? 'stolz' : null);
+      const stolzKopf = !!p && stolz(p.farbe);
+      const wort = stolzSchrift(el('span'), stolzKopf);
       wort.textContent = p ? p.name : modus === 'leer' ? 'noch leer' : 'kein Netz';
-      if (stolzKopf) wort.style.backgroundImage = STOLZ_CSS;
       marke.replaceChildren(wort);
+
+      /* Und das Bier im Glas daneben: es ist SEIN Bestand, also trägt es auch
+         seine Farbe. Der Verweis kommt aus derselben Definition wie am Rad und
+         an der Zeile (`stolzVerweis`) — die sechs Töne stehen nirgends zweimal.
+         Zurück auf Bernstein muss ausdrücklich geschrieben werden: das Glas
+         steht fest im Dokument und wird nicht neu gebaut, ein Regenbogen von
+         gestern bliebe sonst hängen. */
+      const bier = $('bier-flaeche');
+      bier.setAttribute('fill', stolzKopf ? stolzVerweis(bier) : 'url(#bier)');
+      $('glas').classList.toggle('stolz-bier', stolzKopf);
       $('krone').textContent = modus === 'fuehrend' ? 'Führt das Feld an' : '';
       const unter = $('hero-unter');
       unter.textContent = '';
@@ -4581,10 +4803,7 @@
          Tafel schreibt sonst in EINER Kreide — sie kennt die sechs
          Melderfarben nicht und soll sie auch nicht kennen; der Platz 7 ist der
          einzige, den sie liest. */
-      const rufname = el('span', p.farbe === STOLZ_PLATZ ? 'stolz' : null);
-      rufname.textContent = p.name;
-      if (p.farbe === STOLZ_PLATZ) rufname.style.backgroundImage = STOLZ_CSS;
-      name.appendChild(rufname);
+      name.appendChild(stolzWort(p.name, p.farbe));
       if (p.gemessen) name.appendChild(el('span', 'z-marke', 'gemessen'));
       /* Wer gesperrt ist, bleibt stehen — das ist Historie, und ein Name, der
          über Nacht verschwindet, sieht nach Datenverlust aus. Eine stille
@@ -4622,10 +4841,8 @@
          und sie ist die richtige: die Zahl ist das zweite, was man an einer
          Zeile liest, und eine Auszeichnung, die auf halbem Weg aufhört, sieht
          aus wie ein Darstellungsfehler. */
-      const zahl = el('div', 'z-zahl kr' + (p.farbe === STOLZ_PLATZ ? ' stolz' : ''),
-        String(p.biere));
-      if (p.farbe === STOLZ_PLATZ) zahl.style.backgroundImage = STOLZ_CSS;
-      rechts.appendChild(zahl);
+      rechts.appendChild(
+        stolzSchrift(el('div', 'z-zahl kr', String(p.biere)), stolz(p.farbe)));
       z.appendChild(rechts);
       /* Der Untertitel hängt NICHT in der Mitte, sondern ist eine eigene Zeile
          des Rasters über die volle Breite (siehe `.z-unter`). Neben Sparkline
@@ -4685,7 +4902,9 @@
       z.appendChild(tag);
 
       const mitte = el('div', 't-mitte');
-      mitte.appendChild(el('div', 't-titel kr', terminName(t)));
+      const ttitel = el('div', 't-titel kr');
+      ttitel.appendChild(terminNameDom(t));
+      mitte.appendChild(ttitel);
 
       const unter = el('div', 't-unter');
       const uhr = x => x.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
@@ -4694,11 +4913,17 @@
          es sind die 26 px, die dieser längsten aller Zeilen fehlten. */
       unter.appendChild(el('span', null,
         e ? uhr(d) + '–' + uhr(e) : uhr(d) + ' Uhr'));
-      if (t.titel) unter.appendChild(el('span', null, '· ' + terminWo(t)));
+      if (t.titel) {
+        const wo = el('span', null, '· ');
+        wo.appendChild(terminWoDom(t));
+        unter.appendChild(wo);
+      }
       // Ausgelost steht oben in der Datumsspalte; von Hand eingetragen nennt
       // hier einen Namen und passt in keine 58 px breite Spalte.
       if (!t.aus_ziehung && t.von && t.von !== t.gastgeber) {
-        unter.appendChild(el('span', null, '· eingetragen von ' + t.von));
+        const wer = el('span', null, '· eingetragen von ');
+        wer.appendChild(stolzWort(t.von, t.von_farbe));
+        unter.appendChild(wer);
       }
       if (t.abgesagt) unter.appendChild(el('span', null, '· abgesagt'));
       /* Wie viel schon geredet wurde — ausgeschrieben, nicht als Sprechblase,
@@ -4844,7 +5069,11 @@
       z.dataset.id = k.id;
 
       const kopf = el('div', 'ko-kopf');
-      kopf.appendChild(el('span', 'ko-autor kr', k.autor));
+      /* Der Autor trägt den Regenbogen an JEDER seiner Karten — sonst wäre
+         derselbe Mensch im selben Faden zweimal verschieden. Die Hülle steht
+         hier ausnahmsweise nicht darin, sondern IST sie: `.ko-autor` trägt
+         nichts als den Namen, die Zeit steht daneben. */
+      kopf.appendChild(stolzSchrift(el('span', 'ko-autor kr', k.autor), stolz(k.farbe)));
       kopf.appendChild(el('span', 'ko-zeit',
         kurzZeit(k.erstellt) + (k.geaendert ? ' · geändert' : '')));
       const anWen = koAnWen(k, wurzelId);
@@ -5200,14 +5429,22 @@
        zu bauen. Sonst holte jede Aktualisierung die Kacheln neu. */
     notruf(n, meiner, alteKarte) {
       const z = el('div', 'nr-zeile' + (meiner ? ' meiner' : ''));
-      const satz = meiner
-        ? (n.art === 'bier' ? 'Du brauchst Bier'
-           : n.art === 'kamerad' ? 'Du suchst Gesellschaft'
-           : 'Du brauchst Bier und Gesellschaft')
-        : n.name + (n.art === 'bier' ? ' braucht Bier'
-           : n.art === 'kamerad' ? ' sucht Gesellschaft'
-           : ' braucht Bier und Gesellschaft');
-      const wer = el('div', 'nr-wer', satz);
+      const not = n.art === 'bier' ? ' braucht Bier'
+                : n.art === 'kamerad' ? ' sucht Gesellschaft'
+                : ' braucht Bier und Gesellschaft';
+      const wer = el('div', 'nr-wer');
+      /* Am eigenen Notruf steht kein Name, sondern „du" — da ist nichts
+         einzufärben. An jedem anderen trägt der NAME die Farbe des Melders und
+         nicht die Not dahinter: die Zeile ist gelb, weil jemand etwas braucht,
+         und das gilt für alle gleich. */
+      if (meiner) {
+        wer.textContent = n.art === 'bier' ? 'Du brauchst Bier'
+          : n.art === 'kamerad' ? 'Du suchst Gesellschaft'
+          : 'Du brauchst Bier und Gesellschaft';
+      } else {
+        wer.appendChild(stolzWort(n.name, n.farbe));
+        wer.appendChild(document.createTextNode(not));
+      }
       wer.appendChild(el('span', 'nr-marke'));
       /* Die Marke für den beschnittenen Kreis. Steht NACH der Live-Marke, und
          das ist keine Kosmetik: `notrufStand` greift die Zeitmarke über
@@ -5656,7 +5893,12 @@
     b.dataset.hin = k.an_id;
     b.title = 'Zur angesprochenen Karte';
     b.appendChild(pfeilIkon());
-    b.appendChild(el('span', null, 'an ' + (k.an_autor || 'Ehemaliger')));
+    /* Das „an" bleibt Kreide, der Name nicht: die Marke nennt einen Menschen,
+       und der trägt seine Farbe auch hier. Nur der Name kommt in die Hülle —
+       der Knick davor behält damit sein Gelb beim Drüberfahren. */
+    const marke = el('span', null, 'an ');
+    marke.appendChild(stolzWort(k.an_autor || 'Ehemaliger', k.an_farbe));
+    b.appendChild(marke);
     return b;
   }
 
@@ -6025,7 +6267,15 @@
 
   const merke = () => { try { return localStorage.getItem(SPEICHER); } catch { return null; } };
   const nimm  = t => { try { localStorage.setItem(SPEICHER, t); } catch {} };
-  const wirf  = () => { try { localStorage.removeItem(SPEICHER); } catch {} };
+  /* Abgemeldet ist auch der Rahmen wieder Holz: er sagt „DU trägst ihn heute",
+     und ohne Ausweis gibt es kein Du. Sonst bliebe er bis zum Neuladen stehen —
+     an einem fremden Gerät, an dem sich gerade jemand abgemeldet hat, die
+     falscheste aller Aussagen. */
+  const wirf  = () => {
+    try { localStorage.removeItem(SPEICHER); } catch {}
+    document.documentElement.classList.remove('stolz-rahmen');
+    stolzKnoepfe(false);
+  };
 
   /* JEDER Ruf an den Worker geht hier durch, auch die lesenden. Seit die
      Leserouten ohne Token nur noch den Siegerplatz herausgeben, ist ein
@@ -6458,9 +6708,25 @@
         feld.appendChild(el('div', 'nr-leute-warten', 'Außer dir schreibt hier noch niemand mit.'));
       } else {
         for (const p of namen) {
-          const b = el('button', 'nr-chip', p.name);
+          /* Der einzige Ort auf der Tafel, an dem ein Mensch ein UMRISS ist
+             und nicht nur ein Name: die Pille steht für ihn. Sie trägt den
+             Regenbogen deshalb zweimal — in der Schrift und in der Kante.
+
+             Zwei Zustände, dieselbe Aussage wie bisher: umrandet heißt „gibt
+             es", gefüllt heißt „gilt jetzt". Gewählt ist der Regenbogen also
+             die Füllung, und die Schrift wird dunkel wie beim gelben Chip
+             daneben; ungewählt ist er die Kante und die Schrift.
+
+             Beides niemals am selben Stück: der Beschnitt an den Buchstaben
+             nähme den Rahmenverlauf mit. Der Knopf trägt die Kante, die Hülle
+             darin den Namen — siehe `.stolz-rand`. */
+          const gewaehlt = kreisGewaehlt.has(p.id);
+          const b = el('button', 'nr-chip');
           b.type = 'button';
-          b.setAttribute('aria-pressed', String(kreisGewaehlt.has(p.id)));
+          b.appendChild(stolzWort(p.name, !gewaehlt && p.farbe));
+          if (stolz(p.farbe) && gewaehlt) b.style.backgroundImage = STOLZ_CSS;
+          stolzRand(b, stolz(p.farbe) && !gewaehlt);
+          b.setAttribute('aria-pressed', String(gewaehlt));
           b.addEventListener('click', () => kreisTippen(p.id));
           feld.appendChild(b);
         }
@@ -8001,6 +8267,18 @@
     const d = flyDaten;
     if (!d) return;
 
+    /* Der Name über dem Blatt. Er steht schon da — `flyAuf` schreibt ihn hin,
+       bevor irgendetwas geladen ist, damit das Blatt nicht ohne Überschrift
+       aufgeht. Hier bekommt er nur noch seine Farbe, sobald der Worker gesagt
+       hat, wessen Blatt das ist (`ziel_farbe`, nur beim Melder — bei einem
+       Abend ist die Überschrift ein Satz und kein Mensch).
+
+       Der Text kommt aus dem Element selbst und nicht von irgendwoher: bei
+       jedem stillen Nachfassen läuft das hier noch einmal, und `replaceChildren`
+       setzt dann wieder GENAU eine Hülle. Ineinandergeschachtelt wird nichts. */
+    const titel = $('fly-titel');
+    titel.replaceChildren(stolzWort(titel.textContent, d.ziel_farbe));
+
     const g = $('fly-gesamt');
     g.textContent = '';
     g.appendChild(el('div', 'fly-note' + (d.schnitt == null ? ' leer' : ''),
@@ -8588,7 +8866,17 @@
         fill: malFarbe(svg, r.farbe),
       });
       svg.appendChild(p); balken.push(p);
-      const n = s_el('text', { x: lx - 9, y: y + hoch - 4.5, 'text-anchor': 'end', 'font-size': 12, fill: '#cfd6cd' });
+      /* Die Beschriftung bleibt Kreide — das Bild schreibt in EINER Farbe und
+         lässt die Melderfarbe dem Balken. Der Regenbogen ist die eine
+         Ausnahme, hier wie überall: er hängt am Menschen, nicht an der
+         Rolle, und ein Träger, der neben seinem Regenbogenbalken in Kreide
+         hieße, wäre auf diesem Blatt ein anderer als auf der Tafel. Im SVG
+         geht das über `malFarbe` und nicht über `.stolz` — Text im SVG kennt
+         keinen Hintergrundbeschnitt. */
+      const n = s_el('text', {
+        x: lx - 9, y: y + hoch - 4.5, 'text-anchor': 'end', 'font-size': 12,
+        fill: r.farbe === 'stolz' ? malFarbe(svg, r.farbe) : '#cfd6cd',
+      });
       n.textContent = r.name; svg.appendChild(n);
       const w = s_el('text', {
         x: lx + b + 8, y: y + hoch - 4.5, 'font-size': 12, 'font-weight': 650,
@@ -8686,7 +8974,7 @@
       const [, wort, farbe] = stufe(mm.grad);
       const dt = new Date(mm.am);
       const s = el('p', 'wr-satz');
-      s.appendChild(el('b', null, mm.name));
+      s.appendChild(stolzSchrift(el('b', null, mm.name), stolz(mm.farbe)));
       s.append(mm.gemessen ? ' (gemessen), ' : ', ');
       s.append(`${dt.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}, `
         + `${dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr. `);
@@ -8717,12 +9005,16 @@
       const erster = d.runde.eiskoenig[0];
       K.push({ bau(k) {
         k.appendChild(el('div', 'wr-oben', 'DER EISKÖNIG'));
-        k.appendChild(el('div', 'wr-held kr', erster.name));
+        k.appendChild(stolzSchrift(
+          el('div', 'wr-held kr', erster.name), stolz(erster.farbe)));
         const h = el('div', 'wr-hero wr-kleiner');
         h.append(wrZahl(erster.tage) + ' ');
         h.appendChild(el('span', 'wr-einheit', erster.tage === 1 ? 'Tag auf Platz 1' : 'Tage auf Platz 1'));
         k.appendChild(h);
-        k.appendChild(el('p', 'wr-satz', `${erster.name} stand öfter oben an der Tafel als alle anderen.`));
+        const satz = el('p', 'wr-satz');
+        satz.appendChild(stolzWort(erster.name, erster.farbe));
+        satz.append(' stand öfter oben an der Tafel als alle anderen.');
+        k.appendChild(satz);
         const reihen = d.runde.eiskoenig.map(z => ({ name: z.name, farbe: wrFarbe(z.id), wert: z.tage }));
         k.appendChild(wrBildKarte('Tage auf dem Siegerplatz', wrBalken(reihen, 'Tage auf Platz 1')));
       } });
@@ -8775,8 +9067,13 @@
           k.appendChild(el('div', 'wr-oben', 'DER ABEND DES JAHRES'));
           // Auswärts heißt der Abend nach seinem Ort — `gastgeberName` ist
           // dann null, dort stand nur der, der ihn ausgemacht hat.
-          k.appendChild(el('div', 'wr-held kr',
-            `${wrWochentag(a.wann)} — ${a.ort || 'bei ' + a.gastgeberName}`));
+          const held = el('div', 'wr-held kr', `${wrWochentag(a.wann)} — `);
+          if (a.ort) held.append(a.ort);
+          else {
+            held.append('bei ');
+            held.appendChild(stolzWort(a.gastgeberName, a.gastgeberFarbe));
+          }
+          k.appendChild(held);
           const h = el('div', 'wr-hero wr-kleiner');
           h.append(a.schnitt.toFixed(1).replace('.', ',') + ' ');
           h.appendChild(el('span', 'wr-einheit', '★ im Schnitt'));
@@ -8798,7 +9095,7 @@
           else k.appendChild(el('div', 'wr-oben', 'GASTGEBER DES JAHRES'));
           const s = el('p', 'wr-satz');
           s.append('Gastgeber des Jahres: ');
-          s.appendChild(el('b', null, g.name));
+          s.appendChild(stolzSchrift(el('b', null, g.name), stolz(g.farbe)));
           s.append(` — ${g.schnitt.toFixed(1).replace('.', ',')} ★ über ${wrZahl(g.abende)} ${g.abende === 1 ? 'Abend' : 'Abende'}.`);
           k.appendChild(s);
         }
@@ -11142,8 +11439,11 @@
     'Anschreiben', 'Stimmt so', 'Vertrau mir Bruder', 'Auf Ehre',
     'No Cap', 'Auf Nacken', 'Digga vertrau', 'Bratan vertrau',
   ];
+  /* In die Hülle, nicht auf den Knopf: `.k-wort` trägt hier den Regenbogen
+     (siehe `stolzKnoepfe`), und ein `textContent` auf dem Knopf selbst würde
+     sie beim ersten Würfeln wegräumen. */
   function wuerfleAufschrift() {
-    $('melde-knopf').textContent =
+    $('melde-knopf').querySelector('.k-wort').textContent =
       AUFSCHRIFTEN[Math.floor(Math.random() * AUFSCHRIFTEN.length)];
   }
   wuerfleAufschrift();
@@ -11204,6 +11504,13 @@
       const d = await r.json();
       meinName = d.name;
       brauchtNamen = !!d.braucht_namen;
+      /* Der Holzrahmen um MEIN Brett. Er gehört dem Leser und nicht der Runde:
+         wer heute den Regenbogen trägt, sieht ihn an seinem eigenen Rahmen,
+         alle anderen sehen Holz. Deshalb hängt die Klasse am Dokument und
+         nicht an einem Melder — und deshalb bekommt die Wrapped-Karte, die
+         denselben Rahmen trägt, ihn ohne eine zweite Zeile mit. */
+      document.documentElement.classList.toggle('stolz-rahmen', !!d.stolz_heute);
+      stolzKnoepfe(!!d.stolz_heute);
     } catch { /* offline - dann eben ohne Hervorhebung */ }
   }
 

@@ -829,11 +829,13 @@ function pruefeEnde(roh, beginn) {
 /* Kommende Termine plus ein Rueckblick: der letzte Abend soll noch dastehen,
    damit man ihn bewerten kann. Abgesagte bleiben in der Liste, sie tragen ihre
    Absage sichtbar - sonst verschwindet ein Abend, unter dem Kommentare stehen. */
-const termineStmt = env => env.DB.prepare(`
+const termineStmt = (env, traeger = null) => env.DB.prepare(`
   SELECT t.id, t.gastgeber_id, t.beginnt_am, t.endet_am, t.titel, t.los_id,
          t.abgesagt_am, t.erstellt_von, t.ort,
          coalesce(u.name, 'Ehemaliger') AS gastgeber,
-         coalesce(e.name, 'Ehemaliger') AS eingetragen_von
+         ${farbeSql('u', traeger)} AS gastgeber_farbe,
+         coalesce(e.name, 'Ehemaliger') AS eingetragen_von,
+         CASE WHEN e.id IS NULL THEN NULL ELSE ${farbeSql('e', traeger)} END AS von_farbe
   FROM termine t
   JOIN users u ON u.id = t.gastgeber_id
   LEFT JOIN users e ON e.id = t.erstellt_von
@@ -851,8 +853,13 @@ const terminAntwort = (t, noten, wieViele) => ({
      hier gar nicht erst hinaus - eine Stelle auf der Seite, die ihn trotzdem
      hinschreibt, faellt so sofort auf, statt still den Falschen zu nennen. */
   gastgeber: t.ort ? null : t.gastgeber,
+  /* Seine Kreide - und mit `traeger` die 7, wenn er heute den Regenbogen
+     traegt. Sie faellt mit dem Namen weg und nicht erst danach: auswaerts gibt
+     es keinen Gastgeber, also auch keine Farbe fuer einen. */
+  gastgeber_farbe: t.ort ? null : t.gastgeber_farbe,
   ort: t.ort || null,
   von: t.eingetragen_von || null,
+  von_farbe: t.eingetragen_von ? (t.von_farbe ?? null) : null,
   beginnt_am: utc(t.beginnt_am),
   /* NULL nur bei einer Zeile, die aelter ist als Schema 10 und die Nachpflege
      nicht erwischt hat - die Seite faellt dann auf "ab HH:MM" zurueck. */
@@ -889,9 +896,9 @@ const terminAntwort = (t, noten, wieViele) => ({
    nur fuer die Eingetragenen. Der Filter steht HIER und nicht in der Seite -
    was der Worker herausgibt, ist das Einzige, was zaehlt; ein Ausblenden im
    Browser waere ein Vorhang vor offenen Daten. */
-const notrufeStmt = (env, ichId) => env.DB.prepare(`
+const notrufeStmt = (env, ichId, traeger = null) => env.DB.prepare(`
   SELECT n.id, n.user_id, n.art, n.lat, n.lon, n.genau, n.erstellt, n.bis,
-         n.live, n.standort_am, u.name,
+         n.live, n.standort_am, u.name, ${farbeSql('u', traeger)} AS farbe,
          (SELECT count(*) FROM notruf_kreis k WHERE k.notruf_id = n.id) AS kreis_gross,
          (SELECT group_concat(k.user_id) FROM notruf_kreis k WHERE k.notruf_id = n.id) AS kreis_ids
   FROM notrufe n
@@ -918,6 +925,10 @@ const notrufAntwort = (n, ichId = null) => ({
   id: n.id,
   wer: n.user_id,
   name: n.name,
+  /* Sein Platz in der Kreidereihe. Die Zeile schreibt einen ganzen Satz
+     ("Basti braucht Bier"), der Regenbogen faellt darin aber nur auf den
+     NAMEN - der Rest ist die Not und nicht der Mensch. */
+  farbe: n.farbe ?? null,
   art: n.art,
   lat: n.lat,
   lon: n.lon,
@@ -963,8 +974,8 @@ const mapsLink = (lat, lon) =>
 
    NACH NAMEN sortiert und nicht nach Bestand: das hier ist ein Adressbuch,
    keine Bestenliste, und wer jemanden sucht, sucht ihn alphabetisch. */
-const kreisWaehlbarStmt = (env, ichId) => env.DB.prepare(`
-  SELECT id, name FROM users
+const kreisWaehlbarStmt = (env, ichId, traeger = null) => env.DB.prepare(`
+  SELECT id, name, ${farbeSql('users', traeger)} AS farbe FROM users
   WHERE id <> ? AND name IS NOT NULL
     AND gesperrt_am IS NULL AND entfernt_am IS NULL
   ORDER BY name COLLATE NOCASE
@@ -1767,7 +1778,7 @@ async function zielFehlt(env, ziel) {
    Seite zeigt auf Tippen, wer wie reagiert hat, und dafuer ist die Zahl allein
    zu wenig. Gezaehlt wird jetzt beim Zusammenstecken, und die eigene Reaktion
    faellt dabei ab: die dritte Abfrage (nur die eigenen) ist damit weg. */
-const baumStmts = (env, ziel) => [
+const baumStmts = (env, ziel, traeger = null) => [
   /* `k.sterne` ist der Schnappschuss aus dem Moment des Absendens, kein Join
      auf `bewertungen` - die Zeile dort wird ueberschrieben, die Karte hier
      soll stehen bleiben (siehe 0009_sterne_am_kommentar.sql). */
@@ -1819,7 +1830,16 @@ const baumStmts = (env, ziel) => [
     SELECT k.id, k.autor_id, k.antwort_auf, k.an_id, k.text, k.erstellt, k.geaendert,
            k.geloescht_am, k.bild_key, k.sterne,
            coalesce(u.name, 'Ehemaliger') AS autor,
+           /* Seine Kreide, und mit einem Traeger die 7. Ein Ehemaliger hat
+              keine mehr - farbeSql rechnet ihm trotzdem eine aus der
+              Anmeldereihenfolge aus, und das ist richtig so: sein Name steht
+              ja auch noch da, nur eben als "Ehemaliger". */
+           ${farbeSql('u', traeger)} AS autor_farbe,
            au.name AS an_autor,
+           /* Und dieselbe Auskunft fuer den Angesprochenen. Die Zeile au kann
+              fehlen (Antwort von vor 0020, Karte inzwischen weg) - dann steht
+              hier NULL, und die Seite laesst es bei Kreide. */
+           CASE WHEN au.id IS NULL THEN NULL ELSE ${farbeSql('au', traeger)} END AS an_autor_farbe,
            v.url AS v_url, v.titel AS v_titel, v.text AS v_text,
            v.host AS v_host, v.bild_key AS v_bild, v.fehler AS v_fehler
     FROM kommentare k
@@ -1862,6 +1882,12 @@ function baumBauen(zeilen, reaktionen, ichId, env) {
     return {
       id: z.id,
       autor: z.autor,
+      /* Der Platz des Autors in der Kreidereihe - 7 heisst Regenbogen. Er
+         reitet an JEDER Karte mit und nicht nur an der obersten: derselbe
+         Mensch schreibt im selben Faden mehrfach, und ein Name, der einmal
+         den Regenbogen traegt und drei Karten weiter nicht mehr, saehe wie
+         zwei Menschen aus. */
+      farbe: z.autor_farbe,
       // Der Text eines geloeschten Kommentars verlaesst den Worker nicht.
       text: weg ? null : z.text,
       // Dasselbe fuer das Foto - und im Bucket liegt es dann auch nicht mehr,
@@ -1886,6 +1912,7 @@ function baumBauen(zeilen, reaktionen, ichId, env) {
          jeder Antwort von vor 0020 so, und die Seite bleibt dann stumm. */
       an_id: z.an_id || null,
       an_autor: z.an_id ? (z.an_autor || 'Ehemaliger') : null,
+      an_farbe: z.an_id ? (z.an_autor_farbe ?? null) : null,
       meins: z.autor_id === ichId,
       sterne: weg ? null : sterne,
       reaktionen: [...(proKommentar.get(z.id) || new Map()).values()],
@@ -3823,7 +3850,10 @@ const ROUTEN = {
      dieser Antwort `value_json.name`. Erweitern ist frei, umbenennen nicht -
      zusaetzliche Schluessel stoeren das Template nicht, ein fehlender schon. */
   'GET /api/me': async (request, env) => {
-    const ich = await nutzer(request, env);
+    // Der Traeger laeuft neben dem Ausweis her - siehe `stolzTraeger`. Er
+    // beantwortet genau eine Frage auf jeder Seite: ist MEIN Holzrahmen heute
+    // bemalt.
+    const [ich, traeger] = await Promise.all([nutzer(request, env), stolzTraeger(env)]);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     /* Nur die Zahl. Sie ist hoeher, als der Nutzer Geraete benutzt hat: JEDES
        Einloesen eines Magic Links legt ein neues Token an, auch im selben
@@ -3859,6 +3889,11 @@ const ROUTEN = {
     return antwort(request, {
       name: ich.name,
       braucht_namen: !ich.name,
+      /* Trage ICH ihn heute? Kein Platz und kein Farbwert, sondern die eine
+         Tatsache, die jede Seite hier braucht: ihr Holzrahmen ist dann bemalt.
+         Wer den Regenbogen NUR gewaehlt hat, ihn heute aber nicht traegt,
+         bekommt hier `false` - der Rahmen gehoert dem Tag, nicht der Wahl. */
+      stolz_heute: traeger === ich.id,
       gemessen: ich.quelle === 'ha',
       email: ich.email,
       rolle: ich.rolle,
@@ -4449,9 +4484,13 @@ const ROUTEN = {
      ist fuer sie ohnehin verborgen, und die Seite laesst einen Fehler hier
      still fallen - der naechste Nachtrag kommt in fuenf Sekunden. */
   'GET /api/notrufe': async (request, env) => {
-    const ich = await nutzer(request, env);
+    /* Der Traeger laeuft NEBEN dem Ausweis her und nicht dahinter - genau der
+       Fall, fuer den `stolzTraeger` gebaut ist. Diese Route wird alle fuenf
+       Sekunden gerufen; eine zusaetzliche Runde hintereinander waere hier von
+       allen Stellen die teuerste. */
+    const [ich, traeger] = await Promise.all([nutzer(request, env), stolzTraeger(env)]);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    const notrufe = await notrufeStmt(env, ich.id).all();
+    const notrufe = await notrufeStmt(env, ich.id, traeger).all();
     return antwort(request, {
       notrufe: notrufe.results.map(n => notrufAntwort(n, ich.id)),
     }, 200, KEIN_NOTRUF_CACHE);
@@ -4557,9 +4596,9 @@ const ROUTEN = {
      einmal gemeldet hat. Wer angemeldet ist und nie gemeldet hat, bekommt die
      Notruf-Mail und fiele aus einer Auswahl aus `feld` still heraus. */
   'GET /api/kreis': async (request, env) => {
-    const ich = await nutzer(request, env);
+    const [ich, traeger] = await Promise.all([nutzer(request, env), stolzTraeger(env)]);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    const leute = await kreisWaehlbarStmt(env, ich.id).all();
+    const leute = await kreisWaehlbarStmt(env, ich.id, traeger).all();
     /* `probe` ist die eigene Id, und nur der Wirt bekommt sie - er darf sich
        selbst waehlen und damit den Notruf in der laufenden Anlage ausprobieren
        (siehe `notrufKreis`). Sie steht NEBEN der Liste und nicht darin: `leute`
@@ -4608,7 +4647,7 @@ const ROUTEN = {
        Abfragen dahinter sehen das bereits. */
     const [verfallen, tagRoh, feld, termine] = await env.DB.batch([
       verfallStmt(env, tag), losTagStmt(env, tag), losFeldStmt(env, traeger),
-      termineStmt(env),
+      termineStmt(env, traeger),
     ]);
     const lage = tagesLage(tagRoh.results);
     const topf = losTopf(feld.results, lage);
@@ -4642,7 +4681,7 @@ const ROUTEN = {
             JSON.stringify(losSegmente(topf)), ich.id).run();
 
     const [tagRoh2, feld2, termine2] = await env.DB.batch([
-      losTagStmt(env, tag), losFeldStmt(env, traeger), termineStmt(env),
+      losTagStmt(env, tag), losFeldStmt(env, traeger), termineStmt(env, traeger),
     ]);
     const lage2 = tagesLage(tagRoh2.results);
     const selbst = gesetzt.meta.changes === 1;
@@ -4785,8 +4824,9 @@ const ROUTEN = {
       }, ich.id, 'zugesagt');
     }
 
+    const traeger = await stolzTraeger(env);
     const [tagRoh2, feld, termine] = await env.DB.batch([
-      losTagStmt(env, tag), losFeldStmt(env, await stolzTraeger(env)), termineStmt(env),
+      losTagStmt(env, tag), losFeldStmt(env, traeger), termineStmt(env, traeger),
     ]);
     const lage2 = tagesLage(tagRoh2.results);
     // Zusage wie Absage aendern Rad, Liste und Termine auf einen Schlag.
@@ -4860,7 +4900,7 @@ const ROUTEN = {
       titel: titel || null, fassung: 0,
     }, ich.id, 'eingetragen');
 
-    const alle = await termineStmt(env).all();
+    const alle = await termineStmt(env, await stolzTraeger(env)).all();
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
       ok: true, id: neu.id, gastgeber: ort ? null : gast.name, ort: ort || null,
@@ -4919,7 +4959,7 @@ const ROUTEN = {
       }
       await env.DB.batch(schritte);
       mailTerminAendert(env, ctx, { ...t, fassung: t.fassung + 1 }, ich.id, 'abgesagt');
-      const alle = await termineStmt(env).all();
+      const alle = await termineStmt(env, await stolzTraeger(env)).all();
       anstoss(request, env, ctx, 'tafel');
       return antwort(request, {
         ok: true, abgesagt: true,
@@ -4999,7 +5039,7 @@ const ROUTEN = {
       }, ich.id, verschoben ? 'verschoben' : 'umbenannt');
     }
 
-    const alle = await termineStmt(env).all();
+    const alle = await termineStmt(env, await stolzTraeger(env)).all();
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, { ok: true, termine: alle.results.map(t => terminAntwort(t)) });
   },
@@ -5745,12 +5785,17 @@ const ROUTEN = {
     if (!ich) return fehler(request, 'Dafür muss man mitschreiben', 401);
 
     const ichId = ich.id;
+    /* Wen der Regenbogen heute traegt, entscheidet hier ueber zwei Dinge: den
+       Namen ueber dem Blatt und jeden Autor im Faden darunter. Beides muss
+       aus DERSELBEN Auskunft kommen - sonst traegt ein Mensch ihn im Kopf des
+       Blattes und in seinem eigenen Kommentar zwei Zeilen tiefer nicht mehr. */
+    const traeger = await stolzTraeger(env);
     const stmts = [
       env.DB.prepare('SELECT ziel_art, ziel_id, sterne FROM bewertungen WHERE ziel_art = ? AND ziel_id = ?')
         .bind(ziel.art, ziel.id),
       env.DB.prepare('SELECT sterne FROM bewertungen WHERE autor_id = ? AND ziel_art = ? AND ziel_id = ?')
         .bind(ichId, ziel.art, ziel.id),
-      ...baumStmts(env, ziel),
+      ...baumStmts(env, ziel, traeger),
     ];
     /* Bei einem Abend haengt das Bewerten an seinem Zustand - dieselbe Regel
        wie in POST /api/bewerten, nur andersherum gelesen: die Seite soll das
@@ -5763,6 +5808,20 @@ const ROUTEN = {
         SELECT abgesagt_am, gastgeber_id, ort, (beginnt_am <= datetime('now')) AS gewesen
         FROM termine WHERE id = ?
       `).bind(ziel.id));
+    } else if (ziel.art === 'user') {
+      /* Nur fuer den Namen ueber dem Blatt - der IST hier der Mensch, und ein
+         Mensch traegt auf jedem Blatt dieselbe Farbe. Eine eigene Zeile im
+         selben batch und keine Runde extra; der Titel steht damit im
+         Regenbogen, egal woher das Blatt aufgeschlagen wurde: aus der Liste,
+         aus einem Link oder aus einer Mail.
+
+         Beim ABEND gibt es das nicht, und das ist Absicht: dort heisst der
+         Titel "Bierabend bei Basti", und der Regenbogen gilt dem Menschen und
+         nicht dem Satz um ihn herum. Sein Name traegt ihn dort, wo er als Name
+         dasteht - in der Zeile der Terminliste (`gastgeber_farbe`). */
+      stmts.push(env.DB.prepare(
+        `SELECT ${farbeSql('u', traeger)} AS farbe FROM users u WHERE u.id = ?`,
+      ).bind(ziel.id));
     }
     const [alle, meins, roh, reakt, abend] = await env.DB.batch(stmts);
 
@@ -5805,6 +5864,9 @@ const ROUTEN = {
 
     return antwort(request, {
       ziel: `${ziel.art}:${ziel.id}`,
+      // Der Platz DESSEN, um den es auf diesem Blatt geht - nur beim Melder,
+      // siehe die Statementliste oben.
+      ziel_farbe: ziel.art === 'user' && a ? a.farbe : null,
       ...schnittAntwort(e),
       kategorien,
       meins: eigeneSterne,
@@ -5858,11 +5920,17 @@ const ROUTEN = {
     /* Eines mehr holen, als herausgeht: daran - und nur daran - ist zu sehen,
        ob es hinter dieser Seite noch weitergeht. Ein zweites `count(*)` ueber
        das ganze Archiv waere derselbe Satz zum doppelten Preis. */
+    // Einmal geholt, zweimal eingesetzt - Gastgeber und Eintragender lesen
+    // denselben Traeger, sonst traegt einer von beiden ihn und der andere nicht.
+    const chronikTraeger = await stolzTraeger(env);
     const zeilen = await env.DB.prepare(`
       SELECT t.id, t.gastgeber_id, t.beginnt_am, t.endet_am, t.titel, t.los_id,
              t.abgesagt_am, t.erstellt_von, t.ort,
          coalesce(u.name, 'Ehemaliger') AS gastgeber,
-         coalesce(e.name, 'Ehemaliger') AS eingetragen_von
+         ${farbeSql('u', chronikTraeger)} AS gastgeber_farbe,
+         coalesce(e.name, 'Ehemaliger') AS eingetragen_von,
+         CASE WHEN e.id IS NULL THEN NULL
+              ELSE ${farbeSql('e', chronikTraeger)} END AS von_farbe
       FROM termine t
       JOIN users u ON u.id = t.gastgeber_id
       LEFT JOIN users e ON e.id = t.erstellt_von
@@ -6289,7 +6357,12 @@ const ROUTEN = {
     const { tage, fenster, vorlauf } = statistikFenster(request);
     const traeger = await stolzTraeger(env);
     const ergebnis = await env.DB.batch(statistikAbfragen(env, fenster, vorlauf, traeger));
-    return antwort(request, { tage, ...statistikRunde(ergebnis, tage) }, 200, KEIN_FREMDER_CACHE);
+    return antwort(request, {
+      tage, ...statistikRunde(ergebnis, tage),
+      // Damit der Holzrahmen dieser Seite weiss, ob er heute bemalt ist -
+      // dieselbe Auskunft wie in `/api/me`, nur ohne eine zweite Runde.
+      stolz_heute: traeger === ich.id,
+    }, 200, KEIN_FREMDER_CACHE);
   },
 
   // -------------------------------------------------------------------------
@@ -6745,6 +6818,9 @@ const ROUTEN = {
     // -- kaeltester/waermster Moment -------------------------------------------
     const momentAntwort = z => z ? {
       grad: z.grad, userId: z.user_id, name: z.name,
+      // Aus derselben Karte wie die Balken daneben - wer heute den Regenbogen
+      // traegt, traegt ihn auf DIESEM Blatt an jeder Stelle oder an keiner.
+      farbe: farben.get(z.user_id) ?? null,
       gemessen: z.quelle === 'ha', am: utc(z.am),
     } : null;
 
@@ -6786,6 +6862,8 @@ const ROUTEN = {
         // Auswaerts nennt das Blatt den Ort; der Name in `gastgeber_id` ist
         // dort nur der Eintragende und geht deshalb gar nicht erst hinaus.
         gastgeberName: t.ort ? null : t.gastgeber_name, ort: t.ort || null,
+        // Wie ueberall: die Farbe faellt mit dem Namen weg, nicht danach.
+        gastgeberFarbe: t.ort ? null : (farben.get(t.gastgeber_id) ?? null),
         sterne: KATEGORIEN.termin.map(([feld, name]) => {
           const j = e.je.get(feld);
           return { feld, name, schnitt: j ? note(j.summe, j.zahl) : null };
@@ -6813,6 +6891,7 @@ const ROUTEN = {
     }
     const gastgeber = gastgeberGewinner ? {
       id: gastgeberGewinner.id, name: namen.get(gastgeberGewinner.id) || 'Ehemaliger',
+      farbe: farben.get(gastgeberGewinner.id) ?? null,
       schnitt: gastgeberGewinner.schnitt, abende: abendeJeGastgeber.get(gastgeberGewinner.id) || 0,
     } : null;
 
@@ -7358,7 +7437,7 @@ const ROUTEN = {
          eingetragen wird sie beim naechsten Dreh. */
       losTagStmt(env, tag),
       losFeldStmt(env, traeger),
-      termineStmt(env),
+      termineStmt(env, traeger),
       bewertungenStmt(env),
       kommentarZaehlerStmt(env),
       /* Wie viele Abende die Chronik ueberhaupt herzugeben hat. Nur die Zahl,
@@ -7372,7 +7451,7 @@ const ROUTEN = {
          Vorbeikommende oben enthaelt keine Zeile davon, und das ist keine
          Sparsamkeit, sondern die Bedingung. Ein Ort geht niemanden etwas an,
          der kein Token hat. */
-      notrufeStmt(env, ich.id),
+      notrufeStmt(env, ich.id, traeger),
     ]);
 
     const bestmarke = new Map(best.results.map(r => [r.user_id, r.best]));

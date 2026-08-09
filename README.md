@@ -506,11 +506,29 @@ Kreis ändert. Darum bleibt neben dem Regenbogen auch immer ein Kreidepunkt
 gedrückt: das ist die Farbe darunter.
 
 Wer ihn trägt, trägt ihn **überall** — Bogen, Name und Bestand am Rad, seine
-Zeile auf der Tafel und der große Name darüber, seine Kurve und seine Balken in
-den Statistiken der Runde **und** in denen des Wirts, sein Monogramm im Kontor.
-Wer ihn gewählt hat, ihn heute aber nicht trägt, ist dort am Ring um sein
-Monogramm zu erkennen: außen die sechs Töne, innen die Kreide, in der er heute
-schreibt.
+Zeile auf der Tafel und der große Name darüber, der Kopf seines Blattes, jeder
+seiner Beiträge im Faden (und jedes „an ihn" darüber), sein Name über einem
+Bierabend und unter „eingetragen von", seine Notrufzeile, sein Name und seine
+Balkenbeschriftung im Jahresrückblick, seine Kurve und seine Balken in den
+Statistiken der Runde **und** in denen des Wirts, sein Monogramm im Kontor. Wer ihn gewählt hat, ihn heute aber nicht trägt, ist dort am Ring um
+sein Monogramm zu erkennen: außen die sechs Töne, innen die Kreide, in der er
+heute schreibt.
+
+Zweimal ist er kein Name. Das **Bier im Glas** oben auf der Tafel gehört dem,
+der das Feld anführt — steht dort ein Träger, ist auch sein Bier bunt. Und der
+**Holzrahmen** um das Brett gehört dem Leser: wer heute den Regenbogen trägt,
+sieht ihn um seine Tafel, seine Statistiken, sein Kontor und seinen
+Wohnungsschlüssel. Alle anderen sehen Holz. Der Rahmen ist dabei weiter Holz —
+Maserung, Gehrung, Fase und Falz bleiben, die sechs Töne liegen nur als Anstrich
+darüber.
+
+Der Regenbogen gilt sonst immer dem **Namen** und nie dem Satz um ihn herum:
+„Bierabend bei Jonas" bleibt Kreide bis auf das eine Wort. Einmal ist er
+statt eines Namens ein **Umriss** — der Namensknopf im Empfängerkreis des
+Notrufs steht für einen Menschen, nicht neben ihm. Er trägt ihn deshalb als
+Kante, solange er nur wählbar ist, und als Füllung, sobald er gewählt ist:
+dieselbe Aussage wie bei allen anderen Knöpfen dort, umrandet heißt „gibt es",
+gefüllt heißt „gilt jetzt".
 
 Ein Schalter über den Karten sagt zusätzlich, **ob** überhaupt gelost wird
 („aus" behält die Auswahl), und daneben steht **weiterdrehen**: ein Schritt
@@ -713,7 +731,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/notruf/standort` 🔒 | `{lat, lon, genau?}` — trägt nur den Standort am laufenden Notruf nach, ohne neue Mail |
 | `POST /api/notruf/live` 🔒 | `{live}` — legt den Schieberegler am laufenden Notruf um, ohne Koordinaten und ohne Mail |
 | `POST /api/notruf/kreis` 🔒 | `{kreis}` — ersetzt den Empfängerkreis am laufenden Notruf, in beide Richtungen. Dazugekommene werden angeschrieben (Doppelmails bremst `mail_einmal`), Weggenommenen verschwindet die Karte |
-| `GET /api/kreis` 🔒 | `{leute:[{id, name}], probe}` — wer sich anwählen lässt: alle Angemeldeten mit Namen außer einem selbst, ohne Gesperrte und Entfernte. `probe` ist die eigene Id für den Wirt und sonst `null` — daraus baut die Seite den Knopf „Ich selbst (Probe)". Nicht aus `feld`, das kennt nur, wer schon einmal gemeldet hat |
+| `GET /api/kreis` 🔒 | `{leute:[{id, name, farbe}], probe}` — wer sich anwählen lässt: alle Angemeldeten mit Namen außer einem selbst, ohne Gesperrte und Entfernte. `probe` ist die eigene Id für den Wirt und sonst `null` — daraus baut die Seite den Knopf „Ich selbst (Probe)". Nicht aus `feld`, das kennt nur, wer schon einmal gemeldet hat |
 | `POST /api/notruf/weg` 🔒 | nimmt den eigenen zurück; zweimal gerufen ist kein Fehler |
 | `GET /api/kachel` | `?z=&x=&y=` — Kartenkachel über den Worker statt direkt von OSM; sieben Tage im Cache, fremder Referer → 403 |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |

@@ -135,7 +135,26 @@
     position: absolute; inset: 0; border-radius: inherit;
     overflow: hidden; pointer-events: none;
   }
-  .rh-l { position: absolute; inset: 0; }
+  /* --- Und wenn ICH heute den Regenbogen trage: das Holz ist bemalt ---------
+     `--rh-ton` ist die oberste Hintergrundebene JEDER Leiste und normalerweise
+     `none` — eine Ebene, die nichts malt, aber mitzählt. `background-blend-mode:
+     color` nimmt dem Holz dann nur den TON: Helligkeit und Zeichnung kommen
+     weiter aus Maserung, Flaum und Licht darunter. Es bleibt Holz — Jahresringe,
+     Gehrung, Fase, Falz —, nur eben angestrichen.
+
+     Der Rahmen gehört dem LESER, nicht der Runde: er steht genau dann, wenn
+     `/api/me` sagt `stolz_heute`. Die sechs Töne kommen als Farbenliste
+     (`--stolz-toene`) aus dem Skript — als Liste, weil sie zweimal in
+     verschiedene Richtungen gebraucht werden und ein fertiger Verlauf sich
+     nicht drehen lässt. Ausführlich steht das alles in `index.html`. */
+  .rh-l { position: absolute; inset: 0; --rh-ton: none; }
+  html.stolz-rahmen .rh-o, html.stolz-rahmen .rh-u {
+    --rh-ton: linear-gradient(90deg, var(--stolz-toene));
+  }
+  html.stolz-rahmen .rh-li, html.stolz-rahmen .rh-re {
+    --rh-ton: linear-gradient(180deg, var(--stolz-toene));
+  }
+  html.stolz-rahmen .rh-l { --rh-mischen: color; }
   .rh-o { clip-path: polygon(0 0, 100% 0, calc(100% - var(--r)) var(--r), var(--r) var(--r)); }
   .rh-u { clip-path: polygon(0 100%, var(--r) calc(100% - var(--r)), calc(100% - var(--r)) calc(100% - var(--r)), 100% 100%); }
   .rh-li { clip-path: polygon(0 0, var(--r) var(--r), var(--r) calc(100% - var(--r)), 0 100%); }
@@ -177,10 +196,12 @@
      bleiben die obersten zwei Prozent davon uebrig: eine glatte Flaeche. */
   .rh-o {
     background:
+      var(--rh-ton),
       var(--rh-flaum) 0 0 repeat,
       linear-gradient(180deg, #ffe4bb3d, #ffe4bb00 42%, #2b180536) 0 0 / 100% var(--r) no-repeat,
       var(--rh-bild-h) 0 0 no-repeat,
       var(--h-mitte);
+    background-blend-mode: var(--rh-mischen, normal), normal, normal, normal, normal;
   }
   /* Die Unterleiste liegt im Eigenschatten: oben nimmt ihr die Tafel das
      Licht, nach unten hin hellt nur auf, was vom Boden zurueckkommt - und das
@@ -188,30 +209,36 @@
      am Ende heller als die obere, und das Licht kaeme von unten. */
   .rh-u {
     background:
+      var(--rh-ton),
       var(--rh-flaum) 0 100% repeat,
       linear-gradient(180deg, #2b18054f, #2b18051a 60%, #2b180500 82%, #ffe4bb22) 0 100% / 100% var(--r) no-repeat,
       var(--rh-bild-h) 0 100% no-repeat,
       var(--h-dunkel);
+    background-blend-mode: var(--rh-mischen, normal), normal, normal, normal, normal;
   }
   /* Die Seitenleisten zeigen sonst den blassesten Streifen des stehenden
      Bildes; darum der Versatz. */
   .rh-li {
     background:
+      var(--rh-ton),
       var(--rh-flaum) 0 0 repeat,
       var(--licht-v) 0 0 / var(--r) 100% no-repeat,
       linear-gradient(90deg, #ffe4bb30, #2b180536) 0 0 / var(--r) 100% no-repeat,
       var(--rh-bild-v) -21px 0 no-repeat,
       var(--h-mitte);
+    background-blend-mode: var(--rh-mischen, normal), normal, normal, normal, normal, normal;
   }
   /* Rechts ist eine Spur dunkler als links: das Licht steht leicht links ueber
      der Tafel, sonst stuende sie in einem Fotostudio. */
   .rh-re {
     background:
+      var(--rh-ton),
       var(--rh-flaum) 100% 0 repeat,
       var(--licht-v) 100% 0 / var(--r) 100% no-repeat,
       linear-gradient(90deg, #2b18053e, #2b180520) 100% 0 / var(--r) 100% no-repeat,
       var(--rh-bild-v) calc(100% + 19px) 0 no-repeat,
       var(--h-dunkel);
+    background-blend-mode: var(--rh-mischen, normal), normal, normal, normal, normal, normal;
   }
 
   /* Die Gehrungsfuge entsteht schon dadurch, dass an ihr die Faserrichtung
@@ -589,6 +616,14 @@
     p.hidden = !text;
   }
 
+  /* Die sechs Töne des Regenbogens, EINMAL in dieser Datei. Sie gehen an zwei
+     Stellen: an die Bilder (unten als `stolz`) und an den Holzrahmen, der sie
+     als Farbenliste in einer CSS-Eigenschaft braucht. Zwei Sätze davon liefen
+     früher oder später auseinander. */
+  const STOLZ_TOENE = ['#ca4638', '#d77500', '#a29600',
+                       '#129231', '#4273dd', '#a551b6'];
+  document.documentElement.style.setProperty('--stolz-toene', STOLZ_TOENE.join(', '));
+
   /* Die Farben der Tafel für die Bilder aus `bilder.js`. Dieselben Formen wie
      im Kontor, aber Kreide statt Tinte — und `stark` ist hier HELL: der Wisch,
      der eine Säule hinterlegt, muss auf Schiefer aufhellen, nicht abdunkeln.
@@ -643,8 +678,7 @@
        IM KONTOR STEHT DIESE REIHE NICHT, und das ist keine Auslassung: dort
        kommt nie ein Platz 7 an (der Worker gibt ihn den Adminrouten nicht),
        damit der Wirt seine Leute beim Verwalten an ihrer Farbe wiedererkennt. */
-    stolz:      ['#ca4638', '#d77500', '#a29600',
-                 '#129231', '#4273dd', '#a551b6'],
+    stolz:      STOLZ_TOENE,
     linie:      '#ffffff33',
     text:       '#cfd6cd',
     textWeg:    '#93a09a',
@@ -718,6 +752,11 @@
   function zeichnen(s) {
     Bilder.tippZu();
     zeitraumZeichnen();
+    /* Der Holzrahmen dieser Seite. Er gehört dem Leser: trägt ER heute den
+       Regenbogen, ist das Holz bemalt. Die Auskunft reitet in der Statistik
+       mit, statt eine eigene Runde nach `/api/me` zu kosten — und weil sie an
+       jeder Antwort hängt, geht sie beim Wechsel des Zeitraums nicht verloren. */
+    document.documentElement.classList.toggle('stolz-rahmen', !!s.stolz_heute);
     const ziel = $('bilder');
     ziel.textContent = '';
 
