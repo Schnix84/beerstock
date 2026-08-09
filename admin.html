@@ -1909,7 +1909,11 @@
     reihe.textContent = '';
     if (!stand) return;
     const an = !!stand.kopf.stolz_aktiv;
-    const kreis = (nutzer || []).filter(u => !u.entfernt && u.stolz);
+    /* Dieselbe Regel wie im Worker (`stolzTraeger`): entfernt fällt raus, ohne
+       Namen auch — wer nie einen gesetzt hat, ist niemand, den man färben
+       könnte. Zählte diese Zeile ihn mit, stünde hier „einer aus 3", während
+       nur zwei drankommen können. */
+    const kreis = (nutzer || []).filter(u => !u.entfernt && u.name && u.stolz);
 
     reihe.appendChild(el('span', 'wozu', 'regenbogen'));
     [[true, 'an'], [false, 'aus']].forEach(([wert, wort]) => {
@@ -1929,8 +1933,12 @@
       ? 'ruht — alle schreiben in ihrer Kreide'
       : !kreis.length
         ? 'niemand hat ihn gewählt — die Vergabe läuft leer'
-        : (heute ? `heute ${heute.name}` : 'heute niemand')
-          + (kreis.length > 1 ? ` — einer aus ${kreis.length}` : ', jeden Tag');
+        /* Bei EINEM im Kreis wird nichts ausgelost, und „heute Brunx" würde
+           behaupten, dass es morgen jemand anderes sein könnte. */
+        : kreis.length === 1
+          ? `immer ${kreis[0].name} — allein im Kreis`
+          : (heute ? `heute ${heute.name}` : 'heute niemand')
+            + ` — einer aus ${kreis.length}`;
     reihe.appendChild(satz);
   }
 
