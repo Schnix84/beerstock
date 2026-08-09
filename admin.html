@@ -48,9 +48,10 @@
        drehen. `--pride` bleibt daneben stehen — die Pille im Protokoll und
        die Farbknöpfe wollen genau diesen einen, waagerechten.
 
-       Die BILDER des Kontors bekommen den Regenbogen weiterhin nicht: dort
-       kommt gar kein Platz 7 an, damit der Wirt seine Leute beim Verwalten an
-       ihrer echten Kreide wiedererkennt. */
+       Die MITGLIEDERLISTE des Kontors bekommt den Regenbogen nicht als Platz:
+       dort kommt gar keine Marke an, damit der Wirt seine Leute beim Verwalten
+       an ihrer echten Kreide wiedererkennt. Dass es einen Träger gibt, sagt
+       ihm `stolz_heute` — daran hängen das Monogramm und das „:in". */
     --stolz-toene: #ca4638, #d77500, #a29600, #129231, #4273dd, #a551b6;
     --pride: linear-gradient(90deg, var(--stolz-toene));
     --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
@@ -893,9 +894,12 @@
   .karte.gesperrt .k-mono, .karte.weg .k-mono { border-width: 0; }
 
   /* --- Die Kreide eines Menschen -------------------------------------------
-     Sieben Punkte in einer Reihe, dieselbe Bauform wie die Knopfzeile darüber.
+     Neun Punkte in einer Reihe, dieselbe Bauform wie die Knopfzeile darüber.
      Sie stehen erst da, wenn „Farbe" gedrückt wurde — an jeder Karte
-     dauerhaft sieben Punkte wären ein Farbkasten, wo eine Verwaltung steht.
+     dauerhaft neun Punkte wären ein Farbkasten, wo eine Verwaltung steht.
+     Die Reihe bricht um, wenn die Karte zu schmal wird (`flex-wrap` an
+     `.k-farben`); zehn Punkte plus „automatisch" passen auf einem Telefon
+     nicht mehr nebeneinander.
      --------------------------------------------------------------------- */
   /* Der Knopf, solange die Reihe offen steht. Ausdrücklich NICHT `.sicher`:
      das Rot dort ist die Farbe der Rückfrage vor einer zerstörenden Handlung,
@@ -1659,15 +1663,16 @@
        an seiner Karte in der Runde unten. Welchen Platz jemand hat, sagt der
        Worker (`farbe`, siehe migrations/0028) — und hier ist es einstellbar.
 
-       SIEBEN UND NICHT SECHS: sieben Angemeldete auf sechs Farben hießen,
-       dass sich immer ein Paar eine teilt. Und nicht acht, weil der
-       Kreidebereich auf Schiefer nicht mehr hergibt (Begründung und Messwerte
-       stehen an `MENSCHEN` in `index.html`). Wer die Reihe ändert, ändert sie
-       an allen vier Stellen (hier, `statistik.html`, die Vorgabe in
-       `bilder.js`, `MENSCHEN` in `index.html`) — und die Zahl sieben steht im
-       Worker als `FARBEN`, der damit die Wahl prüft. */
+       NEUN. Sieben davon liegen im Kreideband, mehr trägt es nicht; die
+       letzten zwei liegen darüber, bei L 0,79, und lesen sich merklich heller
+       als der Rest. Beide harten Abstandsböden hält die Reihe trotzdem auf
+       dem Wert der alten sieben — Begründung und Messwerte stehen an
+       `MENSCHEN` in `index.html`. Wer die Reihe ändert, ändert sie an allen
+       vier Stellen (hier, `statistik.html`, die Vorgabe in `bilder.js`,
+       `MENSCHEN` in `index.html`) — und die Zahl neun steht im Worker als
+       `FARBEN`, der damit die Wahl prüft. */
     menschen:   ['#d153a2', '#be4523', '#c18705', '#017a16',
-                 '#39ac6f', '#1d9af0', '#6956c2'],
+                 '#39ac6f', '#1d9af0', '#6956c2', '#adc83e', '#61ccdb'],
     /* Und der Platz DAHINTER: der Regenbogen (Schema 29). Er steht auch hier,
        seit er eine Farbwahl unter den Kreiden ist — wer ihn heute trägt,
        trägt ihn auf jedem Blatt, und ein Melder, der in der Statistik der
@@ -1895,11 +1900,11 @@
 
          WER HEUTE DEN REGENBOGEN TRÄGT, trägt ihn auch hier — dieselbe Farbe
          auf jedem Blatt, das ist der ganze Punkt. Er steht aber in einem
-         EIGENEN Feld (`stolz_heute`) und nicht als Platz 7 in `u.farbe`:
+         EIGENEN Feld (`stolz_heute`) und nicht als Marke in `u.farbe`:
          darunter muss die Kreide sichtbar bleiben, die er gewählt hat und auf
          die er zurückfällt, sobald es den Nächsten trifft. In `u.farbe` steht
-         darum immer ein Platz 0..6, und der Rest durch sieben ist sicher —
-         eine 7 hier wäre nicht bunt, sondern der ERSTE Mensch. */
+         darum immer ein Platz 0..8, und der Rest durch neun ist sicher —
+         eine Marke hier wäre nicht bunt, sondern irgendein Mensch. */
       const kreide = MENSCHEN[u.farbe % MENSCHEN.length];
       if (u.stolz_heute) {
         mono.style.background = 'var(--pride)';
@@ -1915,7 +1920,18 @@
         mono.style.background = kreide;
       }
       kopf.appendChild(mono);
-      kopf.appendChild(el('span', 'k-name', u.name || 'Ehemaliger'));
+      /* Und das „:in" dahinter, wenn es ihn heute trifft. Es hängt an
+         `stolz_heute` und nicht an der Farbe: der NAME bleibt hier in Kreide
+         (bunt ist nur das Monogramm links davon), aber der Zusatz gehört dem
+         Menschen und nicht der Schriftfarbe. Wer im Kreis steht und heute
+         nicht dran ist, bekommt ihn nicht — er ist die Auszeichnung des Tages
+         und keine Eigenschaft.
+
+         Über `Bilder` und nicht mit einem eigenen `+ ':in'`: das Wort steht in
+         dieser Familie an genau einer Stelle, so wie die Kreidereihe auch. Die
+         Tafel hat ihre zweite Fassung nur, weil sie `bilder.js` nicht lädt. */
+      kopf.appendChild(el('span', 'k-name',
+        Bilder.stolzZusatz(u.name || 'Ehemaliger', u.stolz_heute && 'stolz')));
       if (u.rolle === 'admin') kopf.appendChild(el('span', 'marke admin', 'Admin'));
       if (u.gemessen) kopf.appendChild(el('span', 'marke', 'gemessen'));
       if (u.ich) kopf.appendChild(el('span', 'marke ich', 'du'));
@@ -2142,14 +2158,14 @@
      drei Klicks voll Farbkästen. */
   let farbeOffen = null;
 
-  /* Die sieben Kreiden, wortgleich mit der `menschen`-Reihe an
+  /* Die neun Kreiden, wortgleich mit der `menschen`-Reihe an
      `Bilder.aufsetzen` oben — beide Fassungen stehen absichtlich in derselben
      Datei zwei Bildschirme auseinander, weil die eine die Bilder färbt und
      die andere die Punkte im Bedienteil. Über `Bilder` ginge es auch, aber
-     dann hinge das Kontor für eine Reihe von sieben Zeichenketten an einer
+     dann hinge das Kontor für eine Reihe von neun Zeichenketten an einer
      fremden Datei. */
   const MENSCHEN = ['#d153a2', '#be4523', '#c18705', '#017a16',
-                    '#39ac6f', '#1d9af0', '#6956c2'];
+                    '#39ac6f', '#1d9af0', '#6956c2', '#adc83e', '#61ccdb'];
 
   function knoepfe(u) {
     const zeile = el('div', 'k-tat');
@@ -2198,7 +2214,7 @@
     return zeile;
   }
 
-  /* Die sieben Kreiden, der Regenbogen und „automatisch". Jeder Druck wirkt
+  /* Die neun Kreiden, der Regenbogen und „automatisch". Jeder Druck wirkt
      sofort — es gibt nichts zu bestätigen, und wer sich vertut, drückt
      daneben.
 
@@ -2230,9 +2246,9 @@
       b.addEventListener('click', () => farbeSetzen(u, i));
       reihe.appendChild(b);
     });
-    /* Der achte Punkt: der Regenbogen. Er trägt die sechs Töne selbst — ein
+    /* Der zehnte Punkt: der Regenbogen. Er trägt die sechs Töne selbst — ein
        Punkt, der eine Farbe meint, muss sie zeigen, sonst ist er ein Rätsel
-       neben sieben Antworten. Sein Titel sagt, was das Drücken bedeutet:
+       neben neun Antworten. Sein Titel sagt, was das Drücken bedeutet:
        gewählt heißt „kann drankommen", nicht „ist heute dran". */
     const stolz = el('button', 'stolz');
     stolz.type = 'button';
@@ -2433,13 +2449,16 @@
        Karte. Die Reihenfolge (meistbeschäftigt zuerst) bleibt, sie ordnet
        jetzt nur noch die Säulen und nicht mehr die Farben.
 
-       Platz 7 ist der Regenbogen (Schema 29) und darf NICHT durch den Rest —
-       er käme als Kreide des ersten Menschen wieder heraus. Statt eines
-       Farbwerts geht dafür der Name `'stolz'` weiter; `bilder.js` macht
-       daraus, was der Ort braucht (im SVG einen Verweis, im Tooltip einen
-       CSS-Verlauf). */
+       Die Regenbogenmarke (Schema 29) darf NICHT durch den Rest — sie käme als
+       Kreide irgendeines Menschen wieder heraus. Statt eines Farbwerts geht
+       dafür der Name `'stolz'` weiter; `bilder.js` macht daraus, was der Ort
+       braucht (im SVG einen Verweis, im Tooltip einen CSS-Verlauf).
+
+       DIE MARKE KOMMT AUS `Bilder` UND STEHT HIER NICHT ALS ZAHL. Sie stand
+       einmal als blanke `7` da und wäre beim Umzug auf die 99 stehen geblieben
+       — ohne Fehler, nur mit dem falschen Menschen in Regenbogenfarben. */
     const aufrufeReihen = (s.aufrufe_nutzer_reihen || [])
-      .map((r, i) => ({ ...r, farbe: r.farbe === 7
+      .map((r, i) => ({ ...r, farbe: r.farbe === Bilder.stolzPlatz
         ? 'stolz' : MENSCHEN[(r.farbe ?? i) % MENSCHEN.length] }));
 
     gruppe('Betrieb & Post',

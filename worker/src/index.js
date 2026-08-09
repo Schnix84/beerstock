@@ -376,25 +376,35 @@ const ROLLEN = new Set(['user', 'admin']);
    weiss nur, WIE VIELE es sind - und das muss er wissen, sonst liesse sich
    `farbe` nicht pruefen.
 
-   SIEBEN, UND DIESE SIEBEN STEHEN AN VIER STELLEN: `MENSCHEN` in
+   NEUN, UND DIESE NEUN STEHEN AN VIER STELLEN: `MENSCHEN` in
    `index.html` (die Tafel ist eine geschlossene Datei und laedt `bilder.js`
    nicht), die Vorgabe in `bilder.js` und die `menschen`-Reihe, die
    `statistik.html` und `admin.html` an `Bilder.aufsetzen` reichen. Wer die
    Reihe aendert, aendert alle vier UND diese Zahl; erzwingen laesst sich das
    von hier aus nicht.
 
-   Warum sieben und nicht acht - der Kreidebereich auf Schiefer gibt nicht
-   mehr her - steht ausfuehrlich an `MENSCHEN` in `index.html`. */
-const FARBEN = 7;
+   Warum neun und was sie kosten - die zwei juengsten liegen ueber dem
+   Kreideband - steht ausfuehrlich an `MENSCHEN` in `index.html`. */
+const FARBEN = 9;
 
 /* Der Platz, den es in der Reihe nicht gibt (Schema 29). Wen es heute trifft,
-   traegt statt einer Kreide den Regenbogen - und weil die Reihe bei 6 aufhoert,
-   ist die 7 dafuer frei. Der Gewinn: alles, was `farbe` schon liest - Rad,
-   Tafel, Kurven, Balken, Rueckblick, das eingefrorene Feld einer Ziehung -,
-   traegt den Regenbogen ohne eine zweite Zutat im Datenweg. Die Zeichnung
-   entscheidet, wie er aussieht; hier ist er eine Zahl wie jede andere.
-   WAEHLEN kann diesen Platz niemand, `aktion: 'farbe'` prueft gegen FARBEN. */
-const STOLZ = 7;
+   traegt statt einer Kreide den Regenbogen. Der Gewinn: alles, was `farbe`
+   schon liest - Rad, Tafel, Kurven, Balken, Rueckblick, das eingefrorene Feld
+   einer Ziehung -, traegt den Regenbogen ohne eine zweite Zutat im Datenweg.
+   Die Zeichnung entscheidet, wie er aussieht; hier ist er eine Zahl wie jede
+   andere. WAEHLEN kann diesen Platz niemand, `aktion: 'farbe'` prueft gegen
+   FARBEN.
+
+   99 UND NICHT `FARBEN` - die Marke darf dem Ende der Reihe nicht folgen.
+   Anfangs war es die 7, weil die Reihe bei 6 aufhoerte; als die Reihe auf
+   neun wuchs, waere daraus die 9 geworden, und DIE haette ein Melder
+   bekommen, ohne im Kreis zu sein: wer `farbe` NULL hat, bekommt seinen
+   Platz aus der Anmeldereihenfolge (siehe `farbeSql`), der zehnte Melder
+   also die 9. `FARBEN` haelt nur die WAHL im Kontor auf, den automatischen
+   Platz nicht - der zehnte haette den Regenbogen getragen, jeden Tag, fuer
+   alle. Eine Marke jenseits jeder erreichbaren Anmeldezahl kann das nicht
+   passieren; sie muss mit der Reihe nie wieder mitwandern. */
+const STOLZ = 99;
 
 /* Der Platz eines Melders als SQL-Ausdruck: sein eingestellter, sonst der aus
    der Anmeldereihenfolge. Eine Funktion, weil nicht jede Abfrage ihre
@@ -853,9 +863,9 @@ const terminAntwort = (t, noten, wieViele) => ({
      hier gar nicht erst hinaus - eine Stelle auf der Seite, die ihn trotzdem
      hinschreibt, faellt so sofort auf, statt still den Falschen zu nennen. */
   gastgeber: t.ort ? null : t.gastgeber,
-  /* Seine Kreide - und mit `traeger` die 7, wenn er heute den Regenbogen
-     traegt. Sie faellt mit dem Namen weg und nicht erst danach: auswaerts gibt
-     es keinen Gastgeber, also auch keine Farbe fuer einen. */
+  /* Seine Kreide - und mit `traeger` die Regenbogenmarke, wenn er heute den
+     Regenbogen traegt. Sie faellt mit dem Namen weg und nicht erst danach:
+     auswaerts gibt es keinen Gastgeber, also auch keine Farbe fuer einen. */
   gastgeber_farbe: t.ort ? null : t.gastgeber_farbe,
   ort: t.ort || null,
   von: t.eingetragen_von || null,
@@ -1830,7 +1840,8 @@ const baumStmts = (env, ziel, traeger = null) => [
     SELECT k.id, k.autor_id, k.antwort_auf, k.an_id, k.text, k.erstellt, k.geaendert,
            k.geloescht_am, k.bild_key, k.sterne,
            coalesce(u.name, 'Ehemaliger') AS autor,
-           /* Seine Kreide, und mit einem Traeger die 7. Ein Ehemaliger hat
+           /* Seine Kreide, und mit einem Traeger die Regenbogenmarke. Ein
+              Ehemaliger hat
               keine mehr - farbeSql rechnet ihm trotzdem eine aus der
               Anmeldereihenfolge aus, und das ist richtig so: sein Name steht
               ja auch noch da, nur eben als "Ehemaliger". */
@@ -2102,8 +2113,13 @@ const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
   // 4b — dasselbe je Melder: wer wurde wie oft gezogen, und was hat er daraus
   // gemacht. Der Balken daneben beantwortet nur den Anteil ueber alle; wer
   // dauernd zieht und dauernd absagt, faellt darin nicht auf.
+  /* `farbe` reitet mit, obwohl die Balken hier nach AUSGANG gefaerbt sind und
+     nicht nach Mensch: der NAME davor gehoert trotzdem einem, und wer heute
+     den Regenbogen traegt, traegt ihn auf jedem Blatt. Ohne die Spalte stuende
+     derselbe Mensch zwei Bilder weiter oben bunt und hier grau. */
   env.DB.prepare(`
     SELECT l.user_id, coalesce(u.name,'Ehemaliger') AS name,
+           ${farbeSql('u', traeger)} AS farbe,
            l.status, count(*) AS n
     FROM los l JOIN users u ON u.id = l.user_id
     GROUP BY l.user_id, l.status
@@ -2326,7 +2342,7 @@ const statistikRunde = (ergebnis, tage) => {
   for (const z of jeMelder.results) {
     if (!jeMelderZeilen.has(z.user_id)) {
       jeMelderZeilen.set(z.user_id, {
-        name: z.name, gezogen: 0,
+        name: z.name, farbe: z.farbe, gezogen: 0,
         zugesagt: 0, abgelehnt: 0, verfallen: 0, offen: 0,
       });
     }
@@ -5995,7 +6011,7 @@ const ROUTEN = {
        dieselbe Farbe tragen, und "ausser im Kontor" waere genau die Ausnahme,
        die man beim Vergleichen zweier Bilder nicht im Kopf hat.
 
-       Er kommt hier aber NICHT als Platz 7 in `farbe`: die Farbreihe an der
+       Er kommt hier aber NICHT als Marke in `farbe`: die Farbreihe an der
        Karte muss weiter zeigen, welche Kreide gewaehlt ist - das ist ja die
        Farbe, auf die er zurueckfaellt, sobald es einen anderen trifft. Also
        zwei Felder: `farbe` die Kreide, `stolz_heute` der Regenbogen. */
@@ -7398,7 +7414,7 @@ const ROUTEN = {
     /* Wen der Regenbogen heute trifft (Schema 29). Die Abfrage steht hier
        oben, weil ihr Ergebnis in den TEXT der Abfragen darunter geht - ein
        gebundener Wert kaeme dafuer zu spaet. Sie kostet eine Zeile aus einer
-       Tabelle mit sieben. */
+       Tabelle mit neun Zeilen. */
     const traeger = await stolzTraeger(env);
     const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler, chronik, notrufe] =
       await env.DB.batch([
@@ -7410,8 +7426,11 @@ const ROUTEN = {
         SELECT u.id, u.name, u.quelle, u.gesperrt_am, r.biere, r.temperatur, r.gemeldet_am,
                /* Die Tafel kennt sonst keine Melderfarben - sie schreibt in
                   Kreide und in einer. Sie braucht die Spalte trotzdem, denn
-                  am Platz 7 haengt der Regenbogen (Schema 29), und der soll
-                  auch an der Zeile stehen und nicht nur am Rad-Bogen. */
+                  auf der Marke STOLZ sitzt der Regenbogen (Schema 29), und der
+                  soll auch an der Zeile stehen, nicht nur am Rad-Bogen.
+                  KEINE RUECKWAERTSSTRICHE HIER DRIN - dieser Kommentar steht
+                  in einem Template-Literal, und einer davon macht daraus zwei
+                  Zeichenketten und aus dem Bau einen Syntaxfehler. */
                ${farbeSql('u', traeger)} AS farbe
         FROM users u
         JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j
@@ -7481,8 +7500,8 @@ const ROUTEN = {
       gemeldet: r.gemeldet_am.replace(' ', 'T') + 'Z',
       gemessen: r.quelle === 'ha',
       gesperrt: !!r.gesperrt_am,
-      // Sein Platz in der Kreidereihe. Die Tafel liest davon nur die 7 - den
-      // Regenbogen (Schema 29); die anderen sechs Plaetze zeichnet sie nicht.
+      // Sein Platz in der Kreidereihe. Die Tafel liest davon nur die Marke
+      // `STOLZ` - den Regenbogen (Schema 29); die neun Kreiden zeichnet sie nicht.
       farbe: r.farbe,
       best: bestmarke.get(r.id) ?? r.biere,
       verlauf: kurve.get(r.id) || [r.biere],

@@ -469,7 +469,7 @@ Kreide (Verlauf) und einmal in Tinte (Kontor). **Die Tafel lädt sie nicht** —
 `index.html` gilt weiter: eine Datei, keine externen Ressourcen. Sie zeigt nur
 einen Knopf, der hinüberführt.
 
-**Jeder Melder hat eine Farbe, und zwar überall dieselbe.** Sieben Kreiden, und
+**Jeder Melder hat eine Farbe, und zwar überall dieselbe.** Neun Kreiden, und
 welche jemand trägt, sagt der Worker als *Platz* (`users.farbe`, Schema 28) —
 entweder der im Kontor gewählte oder der aus der Anmeldereihenfolge. Damit ist
 derselbe Mensch am Rad-Bogen, an seiner Bestands- und Temperaturkurve, an den
@@ -477,27 +477,35 @@ liegenden Balken, im Jahresrückblick und am Monogramm im Kontor gleich gefärbt
 Vorher hing die Farbe an der *Stellung* im jeweiligen Bild, und wer heute vorn
 lag, war grün.
 
-Die sieben Töne stehen an vier Stellen: als Vorgabe in `bilder.js`, als
+Die neun Töne stehen an vier Stellen: als Vorgabe in `bilder.js`, als
 `menschen`-Reihe in `statistik.html` und `admin.html` und als `MENSCHEN` in
 `index.html` (die Tafel lädt `bilder.js` ja nicht). Wer die Reihe ändert, ändert
-alle vier — und die Zahl sieben kennt zusätzlich der Worker als `FARBEN`, er
+alle vier — und die Zahl neun kennt zusätzlich der Worker als `FARBEN`, er
 prüft damit die Wahl im Kontor.
 
-Sie sind gezogen, nicht gewählt (`ideas/pruefungen/kreide-suche.mjs`, abgenommen
-vom Validator des dataviz-Skills): engster Abstand zweier Töne 15,6 gegen eine
-Schwelle von 15, bei Rot-/Grünblindheit 6,4 — beides auf Schiefer **und**
-Kartengrund. **Sieben ist keine runde Zahl, sondern die Grenze:** acht Töne im
-Kreidebereich kommen über 13,5 nicht hinaus und fallen durch. Ein achter Melder
-teilt sich darum Magenta mit dem ersten — der Unterschied zu früher ist, dass
-der Wirt das im Kontor auflösen kann.
+Sie sind gezogen, nicht gewählt (`ideas/pruefungen/kreide-suche.mjs`): engster
+Abstand zweier Töne 15,6 gegen eine Schwelle von 15, bei Rot-/Grünblindheit 6,4
+— beides auf Schiefer **und** Kartengrund. **Sieben war einmal die Grenze, und
+im Kreidebereich ist sie es weiter:** acht Töne kommen dort über 13,5 nicht
+hinaus und fallen durch. Die achte und neunte gibt es trotzdem, weil nicht der
+Farbraum der Riegel war, sondern das selbstgesetzte Helligkeitsband — `#adc83e`
+und `#61ccdb` liegen darüber und lesen sich merklich heller als der Rest. Die
+beiden harten Abstandsböden bleiben dabei auf dem Wert der alten sieben; der
+Validator des dataviz-Skills sagt zu der Reihe nur deshalb *durchgefallen*, weil
+er das Band prüft. Das ist eine **benannte Abweichung, keine bestandene
+Prüfung** — und der Preis dafür, dass neun Melder neun Kreiden haben. Der zehnte
+teilt sich Magenta mit dem ersten; der Wirt kann das im Kontor auflösen.
+
+Angehängt und nicht nach Farbton einsortiert: der Index **ist** die Identität,
+und ein Einsortieren zöge jedem ab Platz 2 die Kreide unter den Füßen weg.
 
 Getrennt davon bleibt die `reihe`: die färbt *Rollen* — den Ausgang einer
 Ziehung, die Anteile einer Säule, zugesagt gegen abgesagt. Zwei Reihen, zwei
 Aufgaben; wer sie zusammenlegt, färbt irgendwann einen Menschen wie einen
 Zustand.
 
-**Und einer trägt den Regenbogen** (Schema 29). Er ist eine **achte Farbwahl**
-neben den sieben Kreiden: im Kontor unter *Mitglieder* öffnet „Farbe" die
+**Und einer trägt den Regenbogen** (Schema 29). Er ist eine **zehnte Farbwahl**
+neben den neun Kreiden: im Kontor unter *Mitglieder* öffnet „Farbe" die
 Punktreihe, und der letzte Punkt darin ist der Regenbogen. Getragen wird er
 aber **immer nur von einem zugleich** — aus allen, die ihn gewählt haben, lost
 der Biertag einen aus. Alle anderen schreiben so lange in ihrer Kreide, und wer
@@ -513,6 +521,14 @@ Balkenbeschriftung im Jahresrückblick, seine Kurve und seine Balken in den
 Statistiken der Runde **und** in denen des Wirts, sein Monogramm im Kontor. Wer ihn gewählt hat, ihn heute aber nicht trägt, ist dort am Ring um
 sein Monogramm zu erkennen: außen die sechs Töne, innen die Kreide, in der er
 heute schreibt.
+
+**Und hinter seinem Namen steht ein „:in".** Überall dort, wo der Regenbogen den
+Namen färbt, hängt der Zusatz mit dran — „Basti:in" auf der Tafel, am Rad, im
+Faden, in den Statistiken und auf seiner Karte im Kontor. Er entsteht beim
+Zeichnen und wird nirgends gespeichert: im Worker heißt jeder weiter, wie er
+heißt, und morgen steht er wieder ohne da. Zwei Stellen bekommen ihn bewusst
+nicht: die Auswahlliste im Formular und die Sätze des Rades („… hat abgesagt"),
+denn dort ist der Name ohnehin nicht bunt.
 
 Zweimal ist er kein Name. Das **Bier im Glas** oben auf der Tafel gehört dem,
 der das Feld anführt — steht dort ein Träger, ist auch sein Bier bunt. Und der
@@ -537,8 +553,9 @@ kein neuer Wurf — bei zweien im Kreis fiele ein echter Wurf in der Hälfte der
 Fälle wieder auf denselben, und ein Knopf, der sichtbar nichts tut, sieht kaputt
 aus.
 
-Technisch ist der Regenbogen der **Platz 7** in einer Reihe, die bei 6 aufhört:
-alles, was `farbe` schon liest, trägt ihn ohne eine zweite Zutat im Datenweg —
+Technisch ist der Regenbogen der **Platz 99** — eine Marke, die die Kreidereihe
+nie erreicht: alles, was `farbe` schon liest, trägt ihn ohne eine zweite Zutat
+im Datenweg —
 auch das eingefrorene Feld einer Ziehung, ein Rad von vorgestern zeichnet sich
 also mit den Farben von vorgestern. Nur die Mitgliederliste im Kontor bekommt
 ihn getrennt (`stolz_heute`): dort muss unter dem Regenbogen die gewählte Kreide

@@ -370,25 +370,30 @@ window.Bilder = (function () {
 
      Die Vorgabe hier ist die Kreidereihe; wer auf Papier zeichnet, reicht
      ihre Tintenfassung über `aufsetzen({ menschen: [...] })` herein. Dieselben
-     sieben in derselben Ordnung stehen als `MENSCHEN` in `index.html` — warum
-     sieben und nicht acht, steht dort. */
+     neun in derselben Ordnung stehen als `MENSCHEN` in `index.html` — warum
+     neun, was die letzten zwei kosten und warum sie hinten stehen statt nach
+     Farbton einsortiert, steht dort. */
   let MENSCHEN = ['#d153a2', '#be4523', '#c18705', '#017a16',
-                  '#39ac6f', '#1d9af0', '#6956c2'];
-  /* DER REGENBOGEN. Platz 7 in einer Reihe, die bei 6 aufhört (Schema 29):
+                  '#39ac6f', '#1d9af0', '#6956c2', '#adc83e', '#61ccdb'];
+  /* DER REGENBOGEN. Ein Platz, den die Kreidereihe nie erreicht (Schema 29):
      wen die tägliche Auslosung trifft, trägt statt seiner Kreide diese sechs
-     Töne — an der Kurve, am Balken, an der Marke im Tooltip.
+     Töne — an der Kurve, am Balken, an der Marke im Tooltip. Warum die Marke
+     99 heißt und nicht schlicht die nächste freie Zahl, steht an `STOLZ_PLATZ`
+     in `index.html`; die kurze Fassung: sie darf dem Ende der Reihe nicht
+     folgen, sonst bekommt sie irgendwann ein Melder aus der
+     Anmeldereihenfolge.
 
-     Es sind die Hue-Winkel der Flagge, gehoben in dasselbe Band wie die
-     sieben Kreiden (L 0,49–0,665, C 0,10–0,17); warum die Flagge selbst auf
-     Schiefer nicht geht, steht ausführlich an `STOLZ` in `index.html`.
-     Gemessen mit `ideas/pruefungen/stolz-reihe.mjs`.
+     Es sind die Hue-Winkel der Flagge, gehoben in das Kreideband
+     (L 0,49–0,665, C 0,10–0,17); warum die Flagge selbst auf Schiefer nicht
+     geht, steht ausführlich an `STOLZ` in `index.html`. Gemessen mit
+     `ideas/pruefungen/stolz-reihe.mjs`.
 
      Wer auf Papier zeichnet, reicht seine Fassung über
      `aufsetzen({ stolz: [...] })` herein. BEIDE Seiten bekommen ihn — Verlauf
      wie Kontor: wer heute den Regenbogen trägt, trägt ihn auf jedem Blatt,
      sonst wäre derselbe Mensch beim Vergleich zweier Bilder zweimal
      verschieden. */
-  const STOLZ_PLATZ = 7;
+  const STOLZ_PLATZ = 99;
   let STOLZ = ['#ca4638', '#d77500', '#a29600', '#129231', '#4273dd', '#a551b6'];
 
   /* Die Farbe eines Melders. `ersatz` ist die Stellung im Bild und greift nur
@@ -397,8 +402,8 @@ window.Bilder = (function () {
 
      Für den Regenbogen kommt der NAME `'stolz'` heraus und kein Farbwert: ein
      Verlauf muss im SVG anders geschrieben werden als im HTML. Die beiden
-     Übersetzer stehen darunter, und der Rest durch sieben gilt bewusst nur
-     für die Kreiden — eine 7 durch ihn hindurch wäre der ERSTE Mensch und
+     Übersetzer stehen darunter, und der Rest durch neun gilt bewusst nur für
+     die Kreiden — die Marke durch ihn hindurch wäre irgendein Mensch und
      damit ein falscher Name, kein blasser. */
   const menschenFarbe = (platz, ersatz = 0) =>
     platz === STOLZ_PLATZ ? 'stolz'
@@ -429,6 +434,21 @@ window.Bilder = (function () {
   const malFarbe = (knoten, ton) => ton === 'stolz' ? stolzVerweis(knoten) : ton;
   const cssFarbe = ton => ton === 'stolz'
     ? `linear-gradient(90deg, ${STOLZ.join(', ')})` : ton;
+
+  /* Und der dritte Übersetzer: derselbe Mensch, in Schrift. Wer heute den
+     Regenbogen trägt, trägt hinter seinem Namen ein „:in" — an der Kurve, am
+     Balken, in der Legende und in der Tabelle darunter.
+
+     ER FRAGT DEN TON UND NICHT DEN PLATZ, aus zwei Gründen. Erstens ist der Ton
+     das, was an der Zeichenstelle ohnehin schon dasteht (`ton(z, i)`,
+     `menschenFarbe(k.farbe, i)`) — der Zusatz kann dann gar nicht auseinander-
+     laufen mit der Farbe. Zweitens gibt es Bilder, die ihre Farben von außen
+     bekommen und den Platz nie sehen (das Kontor reicht sie fertig herein).
+
+     Die Tabelle unter jedem Bild bekommt ihn auch: sie ist die barrierefreie
+     Fassung derselben Zeichnung, und was dort fehlt, fehlt genau dem, der auf
+     sie angewiesen ist. */
+  const stolzZusatz = (name, ton) => ton === 'stolz' ? name + ':in' : name;
 
   function rahmen(titel) {
     const box = el('div', 'bild');
@@ -767,7 +787,8 @@ window.Bilder = (function () {
         .map((k, i) => {
           const s = stand[i][d];
           return !s ? null : {
-            farbe: menschenFarbe(k.farbe, i), was: k.name,
+            farbe: menschenFarbe(k.farbe, i),
+            was: stolzZusatz(k.name, menschenFarbe(k.farbe, i)),
             wert: k.werte[s.j], zeigt: text(k, s.j),
             frisch: s.frisch, seit: k.tage[s.j],
           };
@@ -824,7 +845,7 @@ window.Bilder = (function () {
       const punkt = el('i');
       punkt.style.background = cssFarbe(menschenFarbe(k.farbe, i));
       s.appendChild(punkt);
-      s.appendChild(document.createTextNode(k.name));
+      s.appendChild(document.createTextNode(stolzZusatz(k.name, menschenFarbe(k.farbe, i))));
       const heben = an => {
         striche.forEach((st, j) => st.setAttribute('opacity', !an || j === i ? 1 : .15));
         [...leg.children].forEach((c, j) => c.classList.toggle('matt', an && j !== i));
@@ -840,7 +861,7 @@ window.Bilder = (function () {
        stünde dort ein Stand, den an diesem Tag niemand gemeldet hat, als
        wäre er von diesem Tag. Wo noch nichts bekannt war, bleibt die Zelle
        leer statt null zu behaupten. */
-    return tabelleAn(box, ['', ...mitWerten.map(k => k.name)],
+    return tabelleAn(box, ['', ...mitWerten.map((k, i) => stolzZusatz(k.name, menschenFarbe(k.farbe, i)))],
       tage.map((tag, d) => [nurTag(tag), ...mitWerten.map((k, i) => {
         const s = stand[i][d];
         if (!s) return null;
@@ -924,7 +945,7 @@ window.Bilder = (function () {
       balken.push(r);
       const n = s_el('text',
         { x: lx - 6, y: y + hoch - 4, 'text-anchor': 'end', 'font-size': 9.5, fill: P.text });
-      n.textContent = nameVon(z);
+      n.textContent = stolzZusatz(nameVon(z), ton(z, i));
       svg.appendChild(n);
       const w = s_el('text',
         { x: lx + Math.max(b, 1) + 5, y: y + hoch - 4, 'font-size': 9.5, fill: P.textWeg });
@@ -939,14 +960,14 @@ window.Bilder = (function () {
         { x: 0, y: i * (hoch + luft), width: W, height: hoch + luft }),
       hervor: an => balken[i].setAttribute('opacity', an ? 1 : stufe(i)),
       inhalt: () => ({
-        titel: nameVon(z),
+        titel: stolzZusatz(nameVon(z), ton(z, i)),
         zeilen: [{ farbe: ton(z, i), was: was || 'Anzahl', wert: zahl(wertVon(z)) }],
         fuss: summe ? Math.round((wertVon(z) / summe) * 100) + ' % der gezeigten Zeilen' : null,
       }),
     })));
     box.appendChild(svg);
     return tabelleAn(box, ['', was || 'Anzahl'],
-      zeilen.map(z => [nameVon(z), zahl(wertVon(z))]));
+      zeilen.map((z, i) => [stolzZusatz(nameVon(z), ton(z, i)), zahl(wertVon(z))]));
   }
 
   /* 4 — Ein einziger gestapelter Balken. Die Frage ist der ANTEIL: wie oft
@@ -1039,7 +1060,15 @@ window.Bilder = (function () {
      `<title>` je Segment: der Browser braucht dafür eine Sekunde, malt seinen
      eigenen grauen Kasten — und ein Streifen von vier Pixeln ist ohnehin
      nicht anzielbar. Jetzt zeigt eine Zeile alle vier Ausgänge auf einmal,
-     was sowieso die Frage ist, die man an eine Zeile hat. */
+     was sowieso die Frage ist, die man an eine Zeile hat.
+
+     UND HIER TRÄGT DER NAME DEN REGENBOGEN, NICHT DER BALKEN. Die Balken sind
+     das einzige Stück dieser Datei, das nach AUSGANG färbt und nicht nach
+     Mensch — der Regenbogen darüberzulegen hieße, „zugesagt" bunt zu machen.
+     Der Name davor gehört aber trotzdem einem, und wer heute den Regenbogen
+     trägt, trägt ihn auf jedem Blatt. Also bekommt ihn die Schrift, samt
+     „:in". Ohne das stünde derselbe Mensch ein Bild weiter oben bunt und
+     hier grau. */
   const LOS_ORDNUNG = ['zugesagt', 'abgelehnt', 'verfallen', 'offen'];
   function bildLosJeMelder(titel, daten) {
     const box = rahmen(titel);
@@ -1069,9 +1098,16 @@ window.Bilder = (function () {
         x += b;
       });
       reihen.push(meine);
+      /* OHNE `ersatz`, anders als in den anderen Bildern: hier wird nur
+         gefragt, ob DIESE Zeile der Regenbogen ist. Eine Zeile ohne Platz
+         (Worker von vor Schema 28) fällt auf die erste Kreide, und die ist
+         nie die Marke — genau der Rückfall, den man will. Gezeichnet wird
+         die Kreide ohnehin nicht, nur der Verlauf. */
+      const ton = menschenFarbe(z.farbe);
       const n = s_el('text',
-        { x: lx - 6, y: y + hoch - 4, 'text-anchor': 'end', 'font-size': 9.5, fill: P.text });
-      n.textContent = z.name;
+        { x: lx - 6, y: y + hoch - 4, 'text-anchor': 'end', 'font-size': 9.5,
+          fill: ton === 'stolz' ? stolzVerweis(svg) : P.text });
+      n.textContent = stolzZusatz(z.name, ton);
       svg.appendChild(n);
       const w = s_el('text',
         { x: lx + Math.max(laenge, 1) + 5, y: y + hoch - 4, 'font-size': 9.5, fill: P.textWeg });
@@ -1084,7 +1120,7 @@ window.Bilder = (function () {
         { x: 0, y: i * (hoch + luft), width: W, height: hoch + luft }),
       hervor: an => reihen[i].forEach(r => r.setAttribute('opacity', an ? 1 : .82)),
       inhalt: () => ({
-        titel: z.name,
+        titel: stolzZusatz(z.name, menschenFarbe(z.farbe)),
         // Nur die Ausgänge zeigen, die es bei ihm gab: vier Zeilen, von denen
         // drei „0" sagen, sind drei Zeilen zuviel.
         zeilen: LOS_ORDNUNG.filter(st => z[st]).map(st => ({
@@ -1110,7 +1146,8 @@ window.Bilder = (function () {
     box.appendChild(leg);
     return tabelleAn(box,
       ['', 'gezogen', ...LOS_ORDNUNG.map(st => LOS_TITEL[st])],
-      zeilen.map(z => [z.name, zahl(z.gezogen), ...LOS_ORDNUNG.map(st => zahl(z[st] || 0))]));
+      zeilen.map(z => [stolzZusatz(z.name, menschenFarbe(z.farbe)),
+                       zahl(z.gezogen), ...LOS_ORDNUNG.map(st => zahl(z[st] || 0))]));
   }
 
   /* 5/6 — Gestapelte Säulen. Eine Woche (oder eine Mailart) je Säule, die
@@ -1230,5 +1267,12 @@ window.Bilder = (function () {
     // auf einen Punkt, den es nicht mehr gibt.
     tippZu: () => { tipFest = false; tipAus(); },
     get reihe() { return REIHE; },
+    /* Die Regenbogenmarke nach draußen. Das Kontor übersetzt Plätze in Farben,
+       bevor es sie hereinreicht (die Säulen bekommen fertige Farbwerte), und
+       muss die Marke dafür erkennen. Sie stand dort als blanke `7` — genau die
+       Sorte Zahl, die beim nächsten Umzug stehen bleibt und still das Falsche
+       tut. Jetzt gibt es sie nur hier. */
+    get stolzPlatz() { return STOLZ_PLATZ; },
+    stolzZusatz,
   };
 })();

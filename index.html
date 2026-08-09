@@ -4046,38 +4046,55 @@
      Ein Bogen je Melder, die Länge proportional zum Gewicht. 0° ist oben,
      dorthin zeigt der Flaschenhals im Ruhezustand; gerechnet wird im
      Uhrzeigersinn, in die Richtung, in die man eine Flasche anstößt. */
-  /* DIE MELDERFARBEN. Sieben Kreiden, eine je Mensch.
+  /* DIE MELDERFARBEN. Neun Kreiden, eine je Mensch.
 
      JEDE FARBE GEHÖRT EINEM MENSCHEN, nicht einem Platz. Welchen Platz der
      Melder hat, sagt der Worker (`farbe`, siehe migrations/0028): entweder
      der im Kontor gewählte oder der aus der Anmeldereihenfolge. Hier steht
-     nur, wie Platz 0..6 aussieht. Vorher hing die Farbe an der Stellung im
+     nur, wie Platz 0..8 aussieht. Vorher hing die Farbe an der Stellung im
      jeweiligen Bild — bei sieben Meldern und sechs Kreiden teilte sich immer
      genau ein Paar eine Farbe, und welches, entschied die Bestandsliste des
      Tages.
 
-     WARUM SIEBEN UND NICHT ACHT, obwohl acht bequemer wären: sie gehen nicht.
-     Auf Schiefer, im Kreidebereich (OKLCH L 0,48–0,67, C ≥ 0,10), trägt der
-     Farbraum sieben Töne, die alle Pflichtprüfungen bestehen — acht kommen
-     über einen engsten Abstand von 13,5 nicht hinaus und fallen am
-     Normalsicht-Boden (15) durch. Gemessen mit
-     `ideas/pruefungen/kreide-suche.mjs`, abgenommen vom Validator des
-     dataviz-Skills, auf Schiefer UND Kartengrund: engster Abstand 15,6, bei
-     Rot-/Grünblindheit 6,4. Der CVD-Wert liegt im Warnband und ist NUR
-     zulässig, weil an jedem Bogen der Name steht und an jeder Kurve auch. Wer
-     die Beschriftung wegnimmt, muss die Reihe neu ziehen.
+     ES WAREN SIEBEN, UND WARUM: im Kreidebereich (OKLCH L 0,49–0,665,
+     C ≥ 0,10) trägt der Farbraum genau sieben Töne, die alle Pflichtprüfungen
+     bestehen. Acht kamen über einen engsten Abstand von 13,5 nicht hinaus und
+     fielen am Normalsicht-Boden (15) durch — im BAND ist bei sieben Schluss,
+     daran ändert kein Suchlauf etwas.
 
-     WAS BEIM ACHTEN MELDER PASSIERT: die Reihe fängt von vorn an, er teilt
-     sich Magenta mit dem Ersten. Das ist der alte Zustand, nur um einen
-     Melder später — und diesmal mit einem Ausweg: im Kontor lässt sich jede
-     Kreide von Hand vergeben. Eine achte Farbe zu erfinden wäre der falsche
-     Ausweg; sie wäre von einer der sieben nicht mehr zu unterscheiden.
+     DIE ACHTE UND NEUNTE GIBT ES TROTZDEM, weil nicht der Farbraum der Riegel
+     war, sondern das Band. `#adc83e` und `#61ccdb` liegen bei L 0,79 und damit
+     ÜBER dem Kreideband; sie lesen sich merklich heller als die anderen
+     sieben. Das ist der ganze Preis, und er ist bewusst bezahlt:
 
-     DIESELBEN SIEBEN IN DERSELBEN ORDNUNG stehen als `menschen` in
+       Normalsicht    15,6  (PASS — derselbe Wert wie bei sieben)
+       Rot-/Grünblind  6,4  (WARN — derselbe Wert wie bei sieben)
+       Helligkeitsband WARN (die zwei Neuen liegen außerhalb)
+
+     Der Validator des dataviz-Skills sagt zu dieser Reihe darum
+     DURCHGEFALLEN, und das ist keine bestandene Prüfung, sondern eine
+     benannte Abweichung: die beiden HARTEN Böden hält sie, das gebrochene
+     Band ist eine Zusage über den Stil und keine über die Lesbarkeit. Der
+     CVD-Wert liegt wie vorher im Warnband und ist NUR zulässig, weil an jedem
+     Bogen der Name steht und an jeder Kurve auch. Wer die Beschriftung
+     wegnimmt, muss die Reihe neu ziehen. Nachzurechnen mit
+     `ideas/pruefungen/kreide-suche.mjs`, der Aufruf steht in dessen Kopf.
+
+     ANGEHÄNGT UND NICHT EINSORTIERT. Nach Farbton gehörte das Lindgrün
+     zwischen Gold und Dunkelgrün — es steht trotzdem hinten. Der INDEX ist
+     die Identität: wer heute Gold ist, ist Platz 2, und ein Einsortieren
+     würde jedem ab Platz 2 die Kreide unter den Füßen wegziehen.
+
+     WAS BEIM ZEHNTEN MELDER PASSIERT: die Reihe fängt von vorn an, er teilt
+     sich Magenta mit dem Ersten — und im Kontor lässt sich jede Kreide von
+     Hand vergeben. Eine zehnte zu erfinden hieße, das Band ein zweites Mal
+     zu weiten; irgendwann steht neben der Kreide ein Neonschild.
+
+     DIESELBEN NEUN IN DERSELBEN ORDNUNG stehen als `menschen` in
      `statistik.html` und `admin.html` — die Tafel ist eine geschlossene Datei
      und lädt `bilder.js` nicht (CLAUDE.md), also gibt es die Reihe zweimal.
      Wer eine ändert, ändert beide, sonst trägt derselbe Mensch drüben eine
-     andere Kreide. Die Zahl sieben steht außerdem im Worker (`FARBEN`), der
+     andere Kreide. Die Zahl neun steht außerdem im Worker (`FARBEN`), der
      damit die Wahl im Kontor prüft. */
   const MENSCHEN = [
     '#d153a2',   // 0  Magenta
@@ -4087,19 +4104,33 @@
     '#39ac6f',   // 4  Grün
     '#1d9af0',   // 5  Blau
     '#6956c2',   // 6  Indigo
+    '#adc83e',   // 7  Lindgrün   — über dem Band, siehe oben
+    '#61ccdb',   // 8  Türkis     — über dem Band, siehe oben
   ];
-  /* DER REGENBOGEN. Platz 7 in einer Reihe, die bei 6 aufhört (Schema 29):
+  /* DER REGENBOGEN. Ein Platz, den die Kreidereihe nie erreicht (Schema 29):
      wen die tägliche Auslosung trifft, trägt statt seiner Kreide diese sechs
      Töne. Wer im Kreis ist und ob überhaupt gelost wird, steht im Kontor.
+
+     99 UND NICHT DIE NÄCHSTE FREIE ZAHL — die Marke darf dem Ende der Reihe
+     nicht folgen. Anfangs war es die 7, weil die Reihe bei 6 aufhörte; als sie
+     auf neun wuchs, wäre daraus die 9 geworden, und die hätte ein Melder
+     bekommen, ohne im Kreis zu sein: wer keine Kreide gewählt hat, bekommt
+     seinen Platz aus der Anmeldereihenfolge, der zehnte also die 9. Der Riegel
+     im Kontor (`FARBEN` im Worker) hält nur die WAHL auf, nicht den
+     automatischen Platz — der zehnte Melder hätte den Regenbogen getragen,
+     jeden Tag, für alle. Eine Marke jenseits jeder erreichbaren Anmeldezahl
+     kann das nicht passieren.
 
      ES SIND DIE HUE-WINKEL DER FLAGGE UND SONST NICHTS DAVON. Die Flagge
      selbst geht auf Schiefer nicht — `#008026` hat gegen `#262c2e` einen
      Kontrast von 1,6, das Grün wird zu einem Loch, und `#FFED00` sticht so
      heraus, dass der Verlauf nur noch aus Gelb besteht. Helligkeit und
-     Buntheit kommen deshalb aus demselben Band wie die sieben Kreiden
-     (L 0,49–0,665, C 0,10–0,17): ein Regenbogen AUS KREIDE. Ohne den Deckel
-     auf der Buntheit fährt jede Suche an den Gamut-Rand, und dann steht neben
-     sieben Kreiden ein Neonschild.
+     Buntheit kommen deshalb aus dem Kreideband (L 0,49–0,665, C 0,10–0,17):
+     ein Regenbogen AUS KREIDE. Ohne den Deckel auf der Buntheit fährt jede
+     Suche an den Gamut-Rand, und dann steht neben den Kreiden ein Neonschild.
+     Dass die zwei jüngsten Kreiden inzwischen selbst über dem Band liegen,
+     ändert daran nichts: der Verlauf steht für EINEN Menschen und muss neben
+     allen neun bestehen, nicht neben zweien.
 
      Gemessen und abgenommen mit `ideas/pruefungen/stolz-reihe.mjs`: Kontrast
      2,72 bis 4,65 auf Schiefer UND Kartengrund, Helligkeitsband und
@@ -4112,7 +4143,7 @@
      `statistik.html` — dieselbe Vervierfachung wie bei `MENSCHEN` und aus
      demselben Grund: die Tafel lädt `bilder.js` nicht. Im Kontor gibt es sie
      NICHT, dort wird in echten Kreiden gezeichnet. */
-  const STOLZ_PLATZ = 7;
+  const STOLZ_PLATZ = 99;
   const STOLZ = [
     '#ca4638',   // Rot
     '#d77500',   // Orange
@@ -4141,9 +4172,9 @@
      werden (im SVG ein `url(#…)`, im HTML ein `linear-gradient`). Die beiden
      Übersetzer dafür stehen gleich darunter.
 
-     Der Rest durch sieben, der hier steht, gilt bewusst nur für die sechs
-     Kreiden: eine 7 durch ihn hindurch wäre nicht der Regenbogen, sondern der
-     ERSTE Mensch — ein falscher Name, kein blasser. Deshalb der Vorrang. */
+     Der Rest durch neun, der hier steht, gilt bewusst nur für die Kreiden:
+     die Marke durch ihn hindurch wäre nicht der Regenbogen, sondern irgendein
+     Mensch — ein falscher Name, kein blasser. Deshalb der Vorrang. */
   const menschenFarbe = (platz, ersatz = 0) =>
     platz === STOLZ_PLATZ ? 'stolz'
       : MENSCHEN[(platz == null ? ersatz : platz) % MENSCHEN.length];
@@ -4201,16 +4232,34 @@
      sonst steht der Griff an jeder neuen Stelle wieder von Hand da, und beim
      nächsten Mal steht er ein bisschen anders da.
 
-     EINE FRAGE, EINE ANTWORT: `stolz(platz)`. Die Tafel kennt die sechs
-     Melderkreiden nicht und soll sie nicht kennen — Platz 7 ist der einzige,
-     den sie liest, und ob das heute einer ist oder fünf, entscheidet der
-     Worker. Hier steht deshalb nirgends „der Träger", immer nur „dieser hier".
+     EINE FRAGE, EINE ANTWORT: `stolz(platz)`. Die Tafel kennt die neun
+     Melderkreiden nicht und soll sie nicht kennen — `STOLZ_PLATZ` ist der
+     einzige, den sie liest, und ob das heute einer ist oder fünf, entscheidet
+     der Worker. Hier steht deshalb nirgends „der Träger", immer nur „dieser
+     hier".
 
      `farbe` kann fehlen: eine Antwort aus einem älteren Worker kennt das Feld
      an dieser Stelle noch nicht (und in der halben Minute nach einem Deploy
-     kommt genau die noch). `undefined === 7` ist falsch, also bleibt es dann
-     bei Kreide — der richtige Rückfall, kein Fehler. */
+     kommt genau die noch). `undefined === 99` ist falsch, also bleibt es dann
+     bei Kreide — der richtige Rückfall, kein Fehler. Dasselbe gilt für die 7,
+     die ein Worker von vor dem Umzug der Marke noch schicken kann: sie ist
+     jetzt eine Kreide und wird als eine gezeichnet. Falsch für eine halbe
+     Minute, aber nicht kaputt. */
   const stolz = platz => platz === STOLZ_PLATZ;
+
+  /* DAS DOPPELPUNKT-I. Wer heute den Regenbogen trägt, trägt hinter seinem
+     Namen ein „:in" — an jeder Stelle, an der der Name bunt ist, und an keiner
+     anderen. Der Zusatz und die Farbe sind dieselbe Auszeichnung in zwei
+     Schreibweisen; wer die eine setzt, setzt die andere.
+
+     AUF EINEM JA/NEIN UND NICHT AUF EINEM PLATZ: am Rad steht der Regenbogen
+     schon als Flagge an der Marke (`m.stolz`), an der Zeile noch als Platz.
+     Ein Wahrheitswert nimmt beides, ohne dass es die Funktion zweimal gibt.
+
+     Kein Anhängen an die gespeicherten Daten: `:in` entsteht hier beim
+     Zeichnen und geht nirgends zurück. Ein Name im Worker heißt weiter, wie
+     er heißt. */
+  const stolzZusatz = (text, ja) => ja ? text + ':in' : text;
 
   /* Der Name IM Verlauf. Das Element trägt danach nichts als den Namen: der
      Beschnitt an den Buchstaben nimmt jede Marke und jedes Zeichen daneben
@@ -4228,10 +4277,18 @@
     return knoten;
   }
 
-  /* Ein Name in eigener Hülle, fertig zum Anhängen. Der häufigste Fall: der
-     Name steckt in einem Satz („Basti braucht Bier“, „Bierabend bei Basti“),
-     und der Regenbogen gilt dem NAMEN und nicht dem Satz. */
-  const stolzWort = (text, platz) => stolzSchrift(el('span', null, text), stolz(platz));
+  /* Ein Name in eigener Hülle, fertig zum Anhängen — samt „:in". Der häufigste
+     Fall: der Name steckt in einem Satz („Basti braucht Bier“, „Bierabend bei
+     Basti“), und der Regenbogen gilt dem NAMEN und nicht dem Satz.
+
+     ZWEI PLÄTZE UND NICHT EINER, weil sie an genau einer Stelle auseinander-
+     gehen: am gewählten Chip im Notruf trägt der KNOPF den Verlauf als Füllung
+     und die Schrift darf ihn dann nicht auch tragen (siehe dort). Der Zusatz
+     gehört trotzdem an den Namen — er hängt am Menschen, nicht daran, wie das
+     Stück gerade gefärbt ist. Wo nichts auseinandergeht, steht nur ein Platz
+     da und `farbPlatz` folgt ihm. */
+  const stolzWort = (text, platz, farbPlatz = platz) =>
+    stolzSchrift(el('span', null, stolzZusatz(text, stolz(platz))), stolz(farbPlatz));
 
   /* DIE DREI KNÖPFE DER TAFEL. Sie gehören nicht einem Melder, sondern dem,
      der davorsteht — genau wie der Holzrahmen, und sie hängen deshalb an
@@ -4449,7 +4506,10 @@
         x: m.x.toFixed(1), y: m.y.toFixed(1), class: 'rad-name',
         'text-anchor': anker, 'dominant-baseline': 'middle',
       });
-      name.textContent = m.name;
+      /* Mit „:in", wenn dieser Bogen der Regenbogen ist — und VOR der
+         Breitenrechnung darunter, sonst misst sie einen Namen, der so
+         nirgends steht. */
+      name.textContent = stolzZusatz(m.name, m.stolz);
       const zahl = s_el('text', {
         x: m.x.toFixed(1), y: (m.y + 13).toFixed(1), class: 'rad-zahl',
         'text-anchor': anker, 'dominant-baseline': 'middle',
@@ -4726,7 +4786,9 @@
       const marke = $('marke');
       const stolzKopf = !!p && stolz(p.farbe);
       const wort = stolzSchrift(el('span'), stolzKopf);
-      wort.textContent = p ? p.name : modus === 'leer' ? 'noch leer' : 'kein Netz';
+      // „:in" nur am NAMEN — „noch leer" und „kein Netz" sind keine Menschen.
+      wort.textContent = p ? stolzZusatz(p.name, stolzKopf)
+        : modus === 'leer' ? 'noch leer' : 'kein Netz';
       marke.replaceChildren(wort);
 
       /* Und das Bier im Glas daneben: es ist SEIN Bestand, also trägt es auch
@@ -5077,7 +5139,8 @@
          derselbe Mensch im selben Faden zweimal verschieden. Die Hülle steht
          hier ausnahmsweise nicht darin, sondern IST sie: `.ko-autor` trägt
          nichts als den Namen, die Zeit steht daneben. */
-      kopf.appendChild(stolzSchrift(el('span', 'ko-autor kr', k.autor), stolz(k.farbe)));
+      kopf.appendChild(stolzSchrift(
+        el('span', 'ko-autor kr', stolzZusatz(k.autor, stolz(k.farbe))), stolz(k.farbe)));
       kopf.appendChild(el('span', 'ko-zeit',
         kurzZeit(k.erstellt) + (k.geaendert ? ' · geändert' : '')));
       const anWen = koAnWen(k, wurzelId);
@@ -6727,7 +6790,10 @@
           const gewaehlt = kreisGewaehlt.has(p.id);
           const b = el('button', 'nr-chip');
           b.type = 'button';
-          b.appendChild(stolzWort(p.name, !gewaehlt && p.farbe));
+          /* Der Zusatz hängt am ERSTEN Platz, die Farbe am zweiten: gewählt
+             trägt der Knopf den Verlauf, die Schrift darin nicht — „:in"
+             gehört ihm trotzdem, es ist ja derselbe Mensch. */
+          b.appendChild(stolzWort(p.name, p.farbe, !gewaehlt && p.farbe));
           if (stolz(p.farbe) && gewaehlt) b.style.backgroundImage = STOLZ_CSS;
           stolzRand(b, stolz(p.farbe) && !gewaehlt);
           b.setAttribute('aria-pressed', String(gewaehlt));
@@ -8281,7 +8347,14 @@
        jedem stillen Nachfassen läuft das hier noch einmal, und `replaceChildren`
        setzt dann wieder GENAU eine Hülle. Ineinandergeschachtelt wird nichts. */
     const titel = $('fly-titel');
-    titel.replaceChildren(stolzWort(titel.textContent, d.ziel_farbe));
+    /* UND DAS „:in" WIRD VORHER ABGESCHNITTEN. Diese Zeile läuft bei jedem
+       stillen Nachfassen noch einmal, und sie liest ihren eigenen Text — ohne
+       das Abschneiden stünde nach dem dritten Durchlauf „Basti:in:in:in" da.
+       Sicher ist es, weil der Doppelpunkt kein Namenszeichen ist: der Worker
+       lässt für Namen nur `[\p{L}\p{N} _.-]` durch, ein echter Name kann also
+       nie auf „:in" enden. Wer das hier vereinfacht, holt den Fehler zurück. */
+    const roh = titel.textContent.replace(/:in$/, '');
+    titel.replaceChildren(stolzWort(roh, d.ziel_farbe));
 
     const g = $('fly-gesamt');
     g.textContent = '';
