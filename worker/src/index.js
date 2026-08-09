@@ -441,13 +441,19 @@ const wurf = s => {
    man faerben koennte. */
 async function stolzTraeger(env) {
   const { results } = await env.DB.prepare(`
-    SELECT u.id, (SELECT aktiv FROM stolz_regel WHERE id = 1) AS aktiv
+    SELECT u.id,
+           (SELECT aktiv   FROM stolz_regel WHERE id = 1) AS aktiv,
+           (SELECT versatz FROM stolz_regel WHERE id = 1) AS versatz
     FROM users u
     WHERE u.stolz = 1 AND u.entfernt_am IS NULL AND u.name IS NOT NULL
     ORDER BY u.id
   `).all();
   if (!results.length || !results[0].aktiv) return null;
-  return results[wurf(bierTag()) % results.length].id;
+  /* `versatz` ist, wie oft der Wirt von Hand weitergedreht hat (Schema 30).
+     Er wird ADDIERT und ersetzt nichts: gespeichert ist weiterhin kein
+     Traeger, nur eine Verschiebung - die Ableitung aus dem Biertag bleibt. */
+  const versatz = results[0].versatz || 0;
+  return results[(wurf(bierTag()) + versatz) % results.length].id;
 }
 
 /* Die Zeitraeume, die das Kontor zeigen darf. Der erste ist die Vorgabe.
@@ -6210,8 +6216,30 @@ const ROUTEN = {
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
     const daten = await json(request);
+
+    /* ZWEI Handgriffe an derselben einen Zeile, und darum an derselben Route:
+       der Schalter und das Weiterdrehen (Schema 30). Getrennte Routen waeren
+       zweimal dieselbe Adminpruefung fuer zwei Aenderungen an `stolz_regel`.
+
+       Weitergedreht wird um EINEN Schritt und nicht neu gewuerfelt: ein
+       echter Wurf faellt bei zweien im Kreis in der Haelfte der Faelle wieder
+       auf denselben, und ein Knopf, der sichtbar nichts tut, sieht kaputt
+       aus. Wer heute dran ist, rechnet `stolzTraeger` weiterhin aus dem
+       Biertag - hier wird nur die Verschiebung erhoeht. */
+    if (daten && daten.weiter === true) {
+      await env.DB.batch([
+        env.DB.prepare('UPDATE stolz_regel SET versatz = versatz + 1 WHERE id = 1'),
+        env.DB.prepare(
+          'INSERT INTO admin_log (admin_id, aktion, ziel_id, detail) VALUES (?, ?, ?, ?)')
+          .bind(ich.id, 'stolz_regel', null, 'weitergedreht'),
+      ]);
+      anstoss(request, env, ctx, 'tafel');
+      return antwort(request, { ok: true, weiter: true, traeger: await stolzTraeger(env) },
+        200, KEIN_FREMDER_CACHE);
+    }
+
     if (!daten || typeof daten.aktiv !== 'boolean') {
-      return fehler(request, 'aktiv: true oder false');
+      return fehler(request, 'aktiv: true oder false — oder weiter: true');
     }
     const aktiv = daten.aktiv ? 1 : 0;
 

@@ -506,9 +506,18 @@ Kreis ändert. Darum bleibt neben dem Regenbogen auch immer ein Kreidepunkt
 gedrückt: das ist die Farbe darunter.
 
 Wer ihn trägt, trägt ihn **überall** — Bogen, Name und Bestand am Rad, seine
-Zeile auf der Tafel, seine Kurve und seine Balken in den Statistiken der Runde
-**und** in denen des Wirts, sein Monogramm im Kontor. Ein Schalter über den
-Karten sagt zusätzlich, **ob** überhaupt gelost wird; „aus" behält die Auswahl.
+Zeile auf der Tafel und der große Name darüber, seine Kurve und seine Balken in
+den Statistiken der Runde **und** in denen des Wirts, sein Monogramm im Kontor.
+Wer ihn gewählt hat, ihn heute aber nicht trägt, ist dort am Ring um sein
+Monogramm zu erkennen: außen die sechs Töne, innen die Kreide, in der er heute
+schreibt.
+
+Ein Schalter über den Karten sagt zusätzlich, **ob** überhaupt gelost wird
+(„aus" behält die Auswahl), und daneben steht **weiterdrehen**: ein Schritt
+weiter durch den Kreis, ohne auf die Tagesgrenze zu warten. Ein Schritt und
+kein neuer Wurf — bei zweien im Kreis fiele ein echter Wurf in der Hälfte der
+Fälle wieder auf denselben, und ein Knopf, der sichtbar nichts tut, sieht kaputt
+aus.
 
 Technisch ist der Regenbogen der **Platz 7** in einer Reihe, die bei 6 aufhört:
 alles, was `farbe` schon liest, trägt ihn ohne eine zweite Zutat im Datenweg —
@@ -713,7 +722,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
 | `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen'\|'farbe'\|'stolz', grund?, farbe?}` — nur Admin. `farbe` ist der Platz in der Kreidereihe (0–6) oder `null` für „wieder nach Anmeldereihenfolge"; `stolz` ist ein Umschalter ohne Wert und wählt den Regenbogen als achte Farbe dazu oder ab — die Kreide daneben bleibt dabei stehen, sie ist die Farbe darunter. Diese beiden sind auch mit sich selbst erlaubt |
-| `POST /api/admin/stolz` 🔒 | `{aktiv: bool}` — der Schalter über der Regenbogenvergabe. Gilt keinem Mitglied, deshalb eine eigene Route; „aus" behält den Kreis |
+| `POST /api/admin/stolz` 🔒 | `{aktiv: bool}` — der Schalter über der Regenbogenvergabe. Gilt keinem Mitglied, deshalb eine eigene Route; „aus" behält den Kreis. `{weiter: true}` dreht den Kreis stattdessen um **einen Schritt** weiter (Schema 30), ohne auf die Tagesgrenze zu warten — gespeichert wird dabei kein Träger, nur eine Verschiebung auf den Wurf |
 | `GET /api/admin/statistik` 🔒 | dasselbe **plus Betrieb**: Mails je Art und je Tag, Anmeldungen, wer noch Post will, Seitenaufrufe insgesamt/je Tag/je Nutzer — nur Admin |
 | `POST /api/admin/rundmail` 🔒 | `{betreff, text, bild_url?, knopf_text?, knopf_link?}` sofort an alle, die sie wollen — nur Admin |
 | `POST /api/admin/rundmail/planen` 🔒 | dieselben Felder plus `{versand_am}` — vorgemerkt statt sofort verschickt, nur Admin |

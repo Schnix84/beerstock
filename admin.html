@@ -1940,6 +1940,23 @@
           : (heute ? `heute ${heute.name}` : 'heute niemand')
             + ` — einer aus ${kreis.length}`;
     reihe.appendChild(satz);
+
+    /* Weiterdrehen — der Griff, der die Wahl bewegt, ohne auf die Tagesgrenze
+       zu warten (04:00 Ortszeit, siehe `bierTag()`). EINEN Schritt durch den
+       Kreis, nicht neu würfeln: bei zweien fiele ein echter Wurf in der
+       Hälfte der Fälle wieder auf denselben, und ein Knopf, der sichtbar
+       nichts tut, sieht kaputt aus.
+
+       Er steht nur da, wenn es etwas zu drehen GIBT: bei ruhender Vergabe
+       oder einem einzigen im Kreis wäre er ein Knopf ohne Wirkung. */
+    if (an && kreis.length > 1) {
+      const b = el('button', null, 'weiterdrehen');
+      b.type = 'button';
+      b.title = 'Einen Schritt weiter durch den Kreis — bis zur Tagesgrenze '
+              + 'bliebe es sonst, wie es ist';
+      b.addEventListener('click', stolzWeiter);
+      reihe.appendChild(b);
+    }
   }
 
   async function stolzRegelSchalten(aktiv) {
@@ -1950,6 +1967,24 @@
       sagt('runde-sagt', aktiv
         ? 'Der Regenbogen wird wieder täglich vergeben.'
         : 'Der Regenbogen ruht. Wer im Kreis steht, bleibt gemerkt.');
+    } catch (e) {
+      sagt('runde-sagt', e.message, true);
+    }
+  }
+
+  /* Der neue Träger steht danach in der frisch geladenen Runde — die Antwort
+     der Route schickt zwar seine Id mit, aber den NAMEN dazu hat erst
+     `stand`, und zwei Wege zu derselben Auskunft laufen früher oder später
+     auseinander. */
+  async function stolzWeiter() {
+    sagt('runde-sagt', '');
+    try {
+      await ruf('/api/admin/stolz', { weiter: true });
+      await laden();
+      const jetzt = stand.nutzer.find(u => u.stolz_heute);
+      sagt('runde-sagt', jetzt
+        ? `Weitergedreht — ${jetzt.name} trägt ihn jetzt.`
+        : 'Weitergedreht.');
     } catch (e) {
       sagt('runde-sagt', e.message, true);
     }

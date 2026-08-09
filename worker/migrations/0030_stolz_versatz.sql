@@ -1,0 +1,36 @@
+-- ===========================================================================
+-- Schema 30: Ein Schritt weiter durch den Regenbogenkreis, von Hand.
+--
+-- Wer den Regenbogen heute traegt, wird nicht gespeichert, sondern aus dem
+-- Biertag gerechnet (siehe 0029, und dort auch, warum das so bleiben muss:
+-- die Bestenliste ist eine Leseroute, die nichts schreiben darf). Genau
+-- daraus folgte aber, dass sich die Wahl bis zur naechsten Tagesgrenze -
+-- 02:00 UTC, also 04:00 Ortszeit - ueberhaupt nicht bewegen liess.
+--
+-- EINE ZAHL, DIE AUF DEN WURF ADDIERT WIRD:
+--
+--   stolz_regel.versatz   wie viele Schritte der Kreis weitergedreht wurde
+--
+--   index = (wurf(bierTag()) + versatz) % groesse_des_kreises
+--
+-- Die Ableitung bleibt damit, wie sie war - es wird weiterhin KEIN Traeger
+-- gespeichert, nur eine Verschiebung. Kein Schreiben auf einer Leseroute,
+-- keine Zeile je Tag, und `stolzTraeger` liest die Regelzeile ohnehin schon:
+-- die Spalte kostet keine zusaetzliche Abfrage.
+--
+-- WARUM WEITERDREHEN UND NICHT NEU WUERFELN. Ein echter Wurf faellt bei zwei
+-- Leuten im Kreis in der Haelfte der Faelle wieder auf denselben, und ein
+-- Knopf, der sichtbar nichts tut, sieht kaputt aus. Ein Schritt weiter ist
+-- bei zweien genau der Tausch, den man meint, und bei mehr eine Runde durch
+-- den Kreis.
+--
+-- WAS ER NICHT KANN: sich selbst zuruecknehmen. Der Versatz bleibt stehen,
+-- die Tagesfolge ist danach dauerhaft um einen Schritt verschoben. Zurueck
+-- geht nur, indem man weiterdreht, bis man wieder herauskommt - bei zwei im
+-- Kreis also noch einmal. Das ist der Preis dafuer, dass hier eine ZAHL steht
+-- und keine Tagestabelle, und er ist billiger als sie.
+--
+-- ZEIT: nichts Neues, die Spalte traegt keine.
+-- ===========================================================================
+
+ALTER TABLE stolz_regel ADD COLUMN versatz INTEGER NOT NULL DEFAULT 0;
