@@ -457,16 +457,44 @@
      `stromStand()` haengt ihn an `stehtDieLeitung()`. Ein Punkt, der "live"
      pulst, waehrend die WebSocket unten ist, waere derselbe Fehler wie ein
      Notruf, der "live" behauptet und seit vierzig Minuten steht - und gegen
-     genau den ist hier eine ganze Dreizustands-Mechanik gebaut worden. */
-  /* Beide werden per `hidden` geschaltet und tragen deshalb ausdrücklich
-     ihre Regel dazu — die Hausregel aus dem Kontor-Umbau: wer `hidden`
-     benutzt, schreibt `[hidden] { display: none }` mit, sonst schlägt
-     irgendwann ein `display` von irgendwoher die Vorgabe des Browsers. */
-  .schild-strom[hidden], .schild-punkt[hidden] { display: none; }
+     genau den ist hier eine ganze Dreizustands-Mechanik gebaut worden.
+
+     ZWEI ZUSTAENDE, beide sagen etwas:
+
+       live   gruen, gefuellt, atmend — die Leitung steht, es kommt von selbst
+       sucht  rot, gefuellt, atmend — sie steht nicht, und die Seite ist dabei,
+              sie wieder aufzubauen (`planeStrom()` mit Backoff) bzw. holt die
+              Zahlen per `nachfassen()`. Auch das Wort atmet: es passiert ja
+              etwas, im Gegensatz zu einem endgueltigen Aus.
+
+     Hier stand einmal gar nichts, wenn die Leitung fiel; das las sich wie
+     „die Seite hat aufgehoert" und war in den allermeisten Faellen falsch —
+     ein Deploy, ein Netzwechsel, ein Tab, der geschlafen hat.
+
+     Die BREITE ist festgesetzt (`min-width` unten): das Schild traegt links
+     „WER HAT KALT" und rechts das Datum, und bei 375 bis 412 px — den
+     gaengigen Telefonen — entscheiden wenige Pixel ueber den Zeilenumbruch.
+     Forderte „sucht" mehr Platz als „live", rueckte die Tafel bei jedem
+     Wechsel und bei jedem Laden einmal um eine Zeile. */
   .puls-punkt {
     display: inline-block; width: 6px; height: 6px; border-radius: 50%;
     background: var(--gruen); box-shadow: 0 0 7px #7fc08c88;
     animation: atmen 2.6s ease-in-out infinite; vertical-align: 1px; margin-right: 4px;
+  }
+  /* Rote Kreide, im selben Takt. Das Wort faerbt mit — es ist die einzige
+     Stelle im Schild, die ueber sich selbst spricht statt ueber den Tag. */
+  .strom-sucht { color: var(--rot); }
+  .strom-sucht .puls-punkt {
+    background: var(--rot); box-shadow: 0 0 7px #d9705f88;
+  }
+  /* Rechtsbuendig, damit der reservierte Platz LINKS liegt — dort, wo neben
+     „WER HAT KALT" ohnehin nichts steht. Am Wort selbst laege er zwischen
+     Punkt und Schrift und saehe aus wie ein Tippfehler. */
+  /* `inline-block`, nicht `inline-flex`: die Grundlinie eines Flex-Kastens ist
+     die seines ersten Kindes, und das ist hier der leere Punkt ohne Schrift —
+     das Wort rutschte damit um vier Pixel unter die Zeile. */
+  .schild-strom {
+    display: inline-block; text-align: right; min-width: 46px;
   }
   @keyframes atmen { 50% { opacity: .45; } }
 
@@ -2856,15 +2884,18 @@
 
       <!-- ============ Das Schild ========================================
            Der Name des Hauses, oben in die Tafel geritzt, und rechts der
-           Tag. Der Punkt daneben sagt, ob die Leitung steht — gesetzt von
-           `stromStand()`, nicht fest angeschrieben.
+           Tag. Der Punkt daneben sagt, wie die Zahlen hereinkommen — gesetzt
+           von `stromStand()`, nicht fest angeschrieben. Angeschrieben steht
+           nur der Startwert, und der ist derselbe wie im Kopf darunter:
+           solange nichts abgerufen wurde, ist „kein Netz“ die Wahrheit.
            ============================================================= -->
       <div class="schild-zeile">
         <div class="schild kr">Wer hat kalt</div>
         <div class="schild-rechts kr">
-          <span class="schild-strom" id="schild-strom" hidden>
-            <span class="puls-punkt" aria-hidden="true"></span>live</span>
-          <span class="schild-punkt" id="schild-punkt" aria-hidden="true" hidden
+          <span class="schild-strom strom-sucht" id="schild-strom">
+            <span class="puls-punkt" aria-hidden="true"></span
+            ><span id="schild-strom-wort">sucht</span></span>
+          <span class="schild-punkt" id="schild-punkt" aria-hidden="true"
                 style="opacity:.45">·</span>
           <span id="schild-datum"></span>
         </div>
@@ -6409,6 +6440,12 @@
   let laeuft = 0;           // eigene Schreibvorgänge, die gerade unterwegs sind
   let nachzuholen = null;   // Anstoß, der warten musste: { tafel, ziel }
   let letzterStand = '';    // rohe letzte Antwort der Bestenliste, zum Vergleich
+  /* Ob der LETZTE Abruf durchkam. Nicht dasselbe wie `ws`: die Leitung fällt
+     bei jedem Deploy, jedem Netzwechsel und jedem schlafenden Tab, waehrend
+     die API weiter antwortet. Vor dem ersten Abruf steht das hier auf `true`
+     — genau wie der Kopf da schon „kein Netz" sagt; nichts zu wissen ist auf
+     dieser Tafel kein eigener Zustand. */
+  let netzWeg = true;
   let letzterThread = '';   // dasselbe fürs Flyout
   let letzteChronik = '';   // ... und für die Chronik
 
@@ -10244,6 +10281,12 @@
       const r = await fetch(API + '/api/leaderboard',
         { headers: mitToken(), cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
+      /* Hier steht fest, dass die API antwortet — und zwar VOR dem Ausstieg
+         eine Zeile tiefer. Stuende es weiter unten, bliebe der Punkt bei
+         einer Tafel, an der sich tagelang nichts aendert, auf ewig rot: der
+         haeufigste Erfolgsfall des stillen Nachfassens ist der, in dem
+         nichts Neues kommt. */
+      netzWeg = false; stromStand();
       const roh = await r.text();
       if (still && roh === letzterStand) return;   // nichts Neues, nichts zu tun
       letzterStand = roh;
@@ -10258,6 +10301,11 @@
       chronikZahl = Number(d.chronik) || 0;
       zeichneFeld(d.feld || [], d.los || null, d.termine || [], d.notrufe || []);
     } catch (e) {
+      /* Der Punkt geht IMMER mit, auch beim stillen Nachfassen — er ist die
+         einzige Stelle, die einen Aussetzer ueberhaupt noch verraet. Der Rest
+         der Tafel bleibt bewusst stehen: wer gerade liest, soll deswegen
+         nicht seinen Stand verlieren. Genau dafuer ist der Punkt da. */
+      netzWeg = true; stromStand();
       if (still) return;
       // API weg: der Siegerplatz sagt genau das, Liste, Rad und Termine bleiben
       // draussen - ohne Worker gibt es keine Ziehung.
@@ -11928,17 +11976,21 @@
 
   const stehtDieLeitung = () => !!ws && ws.readyState === WebSocket.OPEN;
 
-  /* Der Punkt im Schild. Er zeigt NUR, was wahr ist: steht die Leitung, steht
-     „live" da und der Punkt atmet; ist sie unten, verschwindet beides
-     wortlos. Kein „offline"-Wort — dass gerade nichts von selbst hereinkommt,
-     ist keine Nachricht, sondern die Abwesenheit einer.
+  /* Der Punkt im Schild. Er zeigt NUR, was wahr ist, und er zeigt jetzt in
+     beiden Faellen etwas — die Formen dazu stehen bei `.puls-punkt`.
 
-     Auch der Mittelpunkt geht mit: ohne ihn bliebe an einer stillen Leitung
-     ein „·" vor dem Datum stehen, das nichts mehr trennt. */
+     Zwei Bedingungen, ein Wort: „live" braucht die stehende Leitung UND
+     einen Abruf, der durchkam. Beides ist noetig, und das Fehlen von einem
+     reicht. Ein gescheiterter Abruf bei stehender Leitung ist selten, aber
+     moeglich (die Tafel meldet weiter, der Worker antwortet nicht mehr) —
+     dann sind die Zahlen alt, egal was die Leitung tut.
+
+     Weil hier immer ein Wort steht, bleibt auch das „·" davor stehen: es
+     trennt jetzt in jedem Fall etwas. */
   function stromStand() {
-    const an = stehtDieLeitung();
-    $('schild-strom').hidden = !an;
-    $('schild-punkt').hidden = !an;
+    const an = !netzWeg && stehtDieLeitung();
+    $('schild-strom').className = 'schild-strom strom-' + (an ? 'live' : 'sucht');
+    $('schild-strom-wort').textContent = an ? 'live' : 'sucht';
   }
 
   /* Die Seite steht oft lange offen - auf einem Tisch, auf einem Tablet. Also
