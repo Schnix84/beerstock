@@ -1936,7 +1936,7 @@
     const heute = kreis.find(u => u.stolz_heute);
     const satz = el('span', 'satz');
     satz.textContent = !an
-      ? 'ruht — alle schreiben in ihrer Kreide'
+      ? 'ruht — alle schreiben in ihrer Farbe'
       : !kreis.length
         ? 'niemand hat ihn gewählt — die Vergabe läuft leer'
         /* Bei EINEM im Kreis wird nichts ausgelost, und „heute Brunx" würde
@@ -2013,9 +2013,9 @@
       await ruf('/api/admin/nutzer', { id: u.id, aktion: 'stolz' });
       await laden();
       sagt('runde-sagt', u.stolz
-        ? `${u.name} schreibt wieder nur in seiner Kreide.`
+        ? `${u.name} schreibt wieder nur in seiner Farbe.`
         : `${u.name} hat den Regenbogen dazugewählt — getragen wird er immer `
-          + 'nur von einem, bis dahin gilt die Kreide daneben.');
+          + 'nur von einem, bis dahin gilt die Farbe daneben.');
     } catch (e) {
       sagt('runde-sagt', e.message, true);
     }
