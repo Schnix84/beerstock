@@ -2874,7 +2874,11 @@
       <div class="hero-oben">
         <div class="hero-text">
           <div class="krone-zeile kr" id="krone"></div>
-          <h1 class="hero-name kr" id="marke">Kühlschrank</h1>
+          <!-- Vor dem ersten Abruf ist nichts bekannt — und „nichts bekannt“
+               heisst auf dieser Tafel „kein Netz“, genau wie im Fehlerfall in
+               `kopf()`. Ein eigenes Wort dafuer waere ein zweites Vokabular
+               fuer denselben Zustand. -->
+          <h1 class="hero-name kr" id="marke">kein Netz</h1>
           <div class="hero-unter kr" id="hero-unter"></div>
 
           <!-- Die Menge steht in den Strichen, nicht als Ziffer daneben: eine
