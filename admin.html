@@ -773,6 +773,12 @@
   .reiter .satz {
     font-size: 11px; color: var(--kreide-weg); letter-spacing: .02em; margin-left: 4px;
   }
+  /* Der Würfel neben der Regel. Ein Zeichen statt eines Wortes braucht mehr
+     Grad, sonst sitzt es als Krümel in einer Kapsel, die für „verwaltet"
+     gebaut ist — und keinen Buchstabenabstand, der gilt Wörtern. */
+  .reiter button.wuerfel {
+    font-size: 18px; line-height: 1; padding: 1px 10px 2px; letter-spacing: 0;
+  }
 
   .karte {
     border: 1px solid var(--linie); border-radius: 3px; background: var(--karte);
@@ -1950,10 +1956,21 @@
        Er steht nur da, wenn es etwas zu drehen GIBT: bei ruhender Vergabe
        oder einem einzigen im Kreis wäre er ein Knopf ohne Wirkung. */
     if (an && kreis.length > 1) {
-      const b = el('button', null, 'weiterdrehen');
+      /* Ein Würfel, kein Wort. `⚄` ist ein SCHRIFTZEICHEN und kein Emoji —
+         dieselbe Regel wie bei den Zeichen im Protokoll: ein 🎲 käme aus
+         einer fremden Schrift, wäre bunt und säße auf Schiefer wie ein
+         Aufkleber. `︎` sagt den Systemen, die es trotzdem bunt hätten,
+         ausdrücklich „als Text".
+
+         Ohne Aufschrift braucht der Knopf einen Namen für den Vorleser — und
+         der sagt, was wirklich passiert: EINEN Schritt weiter, nicht neu
+         gewürfelt. Das Zeichen darf mehr versprechen als der Mechanismus
+         hält; die Beschriftung darf es nicht. */
+      const b = el('button', 'wuerfel', '⚄︎');
       b.type = 'button';
       b.title = 'Einen Schritt weiter durch den Kreis — bis zur Tagesgrenze '
               + 'bliebe es sonst, wie es ist';
+      b.setAttribute('aria-label', b.title);
       b.addEventListener('click', stolzWeiter);
       reihe.appendChild(b);
     }
