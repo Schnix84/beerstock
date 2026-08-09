@@ -773,10 +773,10 @@
   .reiter .satz {
     font-size: 11px; color: var(--kreide-weg); letter-spacing: .02em; margin-left: 4px;
   }
-  /* Der Würfel neben der Regel. Ein Zeichen statt eines Wortes braucht mehr
-     Grad, sonst sitzt es als Krümel in einer Kapsel, die für „verwaltet"
+  /* Das Zeichen neben der Regel (`⇄`). Ein Zeichen statt eines Wortes braucht
+     mehr Grad, sonst sitzt es als Krümel in einer Kapsel, die für „verwaltet"
      gebaut ist — und keinen Buchstabenabstand, der gilt Wörtern. */
-  .reiter button.wuerfel {
+  .reiter button.dreh {
     font-size: 18px; line-height: 1; padding: 1px 10px 2px; letter-spacing: 0;
   }
 
@@ -1956,17 +1956,22 @@
        Er steht nur da, wenn es etwas zu drehen GIBT: bei ruhender Vergabe
        oder einem einzigen im Kreis wäre er ein Knopf ohne Wirkung. */
     if (an && kreis.length > 1) {
-      /* Ein Würfel, kein Wort. `⚄` ist ein SCHRIFTZEICHEN und kein Emoji —
-         dieselbe Regel wie bei den Zeichen im Protokoll: ein 🎲 käme aus
-         einer fremden Schrift, wäre bunt und säße auf Schiefer wie ein
-         Aufkleber. `︎` sagt den Systemen, die es trotzdem bunt hätten,
+      /* Ein Zeichen, kein Wort — und ein SCHRIFTZEICHEN, kein Emoji: dieselbe
+         Regel wie bei den Zeichen im Protokoll. Ein 🎲 käme aus einer fremden
+         Schrift, wäre bunt und säße auf Schiefer wie ein Aufkleber. Das
+         `︎` dahinter sagt den Systemen, die es trotzdem in Farbe hätten,
          ausdrücklich „als Text".
 
-         Ohne Aufschrift braucht der Knopf einen Namen für den Vorleser — und
-         der sagt, was wirklich passiert: EINEN Schritt weiter, nicht neu
-         gewürfelt. Das Zeichen darf mehr versprechen als der Mechanismus
-         hält; die Beschriftung darf es nicht. */
-      const b = el('button', 'wuerfel', '⚄︎');
+         `⇄` UND NICHT DER WÜRFEL, der zuerst dastand: der versprach einen
+         Zufall, den es hier nicht gibt (gedreht wird um EINEN Schritt), und
+         als Kästchen mit Punkten blieb bei 18 px ohnehin nur ein Krümel
+         übrig. Die zwei Pfeile sagen, was bei zweien im Kreis wörtlich
+         passiert — sie tauschen. Die Kandidaten stehen nebeneinander in
+         `ideas/pruefungen/wuerfel-kandidaten.html`.
+
+         Ohne Aufschrift braucht der Knopf einen Namen für den Vorleser, und
+         der nennt den Mechanismus: einen Schritt weiter. */
+      const b = el('button', 'dreh', '⇄︎');
       b.type = 'button';
       b.title = 'Einen Schritt weiter durch den Kreis — bis zur Tagesgrenze '
               + 'bliebe es sonst, wie es ist';
