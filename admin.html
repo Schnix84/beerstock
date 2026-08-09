@@ -793,10 +793,29 @@
     font-family: var(--hand); font-size: 14px; line-height: 1;
     background: #399c69; color: var(--kreide);
   }
+  /* WER DEN REGENBOGEN GEWÄHLT HAT, IHN HEUTE ABER NICHT TRÄGT: ein Ring
+     außen in den sechs Tönen, innen die Kreide, in der er heute schreibt.
+     Zwei Auskünfte an einem Punkt — „ist dabei" und „schreibt gerade so" —,
+     ohne ein zweites Zeichen daneben.
+
+     Wer ihn HEUTE trägt, bekommt keinen Ring: bei ihm ist die ganze Fläche
+     der Regenbogen, ein Ring in denselben Tönen wäre unsichtbar. Der Ring
+     heißt damit genau „im Kreis, aber heute nicht dran", und das ist die
+     Frage, die man an einer Karte hat.
+
+     Gemacht mit ZWEI Hintergründen und einem durchsichtigen Rahmen:
+     `border-color` kann keinen Verlauf, und `border-image` hält sich nicht an
+     `border-radius` — aus dem Kreis würde ein Quadrat mit Loch. Die Fläche
+     liegt im `padding-box`, der Verlauf im `border-box`. */
+  .k-mono.im-kreis { border: 2px solid transparent; }
+
   /* Gesperrt und entfernt schlagen die Melderfarbe: an einer Karte, die
-     ausgegraut ist, wäre ein kräftiger Punkt eine Einladung. */
+     ausgegraut ist, wäre ein kräftiger Punkt eine Einladung. Der Ring geht
+     mit — sonst bliebe von ihm ein durchsichtiger Saum stehen, denn die
+     Kurzform `background` unten setzt auch den Ursprung zurück. */
   .karte.gesperrt .k-mono { background: #b15041 !important; }
   .karte.weg .k-mono { background: #5a635f !important; }
+  .karte.gesperrt .k-mono, .karte.weg .k-mono { border-width: 0; }
 
   /* --- Die Kreide eines Menschen -------------------------------------------
      Sieben Punkte in einer Reihe, dieselbe Bauform wie die Knopfzeile darüber.
@@ -1806,8 +1825,20 @@
          die er zurückfällt, sobald es den Nächsten trifft. In `u.farbe` steht
          darum immer ein Platz 0..6, und der Rest durch sieben ist sicher —
          eine 7 hier wäre nicht bunt, sondern der ERSTE Mensch. */
-      mono.style.background = u.stolz_heute
-        ? 'var(--pride)' : MENSCHEN[u.farbe % MENSCHEN.length];
+      const kreide = MENSCHEN[u.farbe % MENSCHEN.length];
+      if (u.stolz_heute) {
+        mono.style.background = 'var(--pride)';
+      } else if (u.stolz) {
+        /* Gewählt, heute nicht dran: Ring außen, Kreide innen. Der Ton steht
+           zweimal im Verlauf, weil ein `linear-gradient` die einzige Art ist,
+           eine FLÄCHE in die Ebene `padding-box` zu legen — eine schlichte
+           Farbe kann dort nicht neben einem zweiten Hintergrund stehen. */
+        mono.classList.add('im-kreis');
+        mono.style.background =
+          `linear-gradient(${kreide}, ${kreide}) padding-box, var(--pride) border-box`;
+      } else {
+        mono.style.background = kreide;
+      }
       kopf.appendChild(mono);
       kopf.appendChild(el('span', 'k-name', u.name || 'Ehemaliger'));
       if (u.rolle === 'admin') kopf.appendChild(el('span', 'marke admin', 'Admin'));
