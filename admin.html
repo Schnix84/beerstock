@@ -797,9 +797,24 @@
      Schrift eine weiche. Die Polsterung verschiebt den Kasten selbst. */
   .reiter button.dreh {
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: 18px; line-height: 18.6px; letter-spacing: 0;
-    padding: 4.6px 11px 3.4px;
+    padding: 4px 10px;
   }
+  /* DIE HÖHE IST DIE DER NACHBARN, und zwar nicht ungefähr: „an" trägt 12 px
+     Schrift auf der geerbten Zeilenhöhe 1,55 — sein Zeilenkasten ist 18,6 px
+     hoch, dazu 4 px Polsterung oben und unten. Genau dieselben 18,6 px hoch
+     ist das Sichtfeld hier, bei derselben Polsterung. Beide Pillen sind damit
+     26,6 px hoch und stehen auf derselben Linie.
+
+     Der Pfeil darin ist in seinem Sichtfeld mittig GERECHNET (siehe
+     `drehZeichen`), und `align-items: center` setzt das Sichtfeld mittig in
+     die Pille. Kein Nachschieben, keine Korrekturzahl, keine Abhängigkeit
+     davon, welche Ersatzschrift der Browser für ein Pfeilzeichen wählt. */
+  .reiter button.dreh svg {
+    width: 18.6px; height: 18.6px; display: block;
+    fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .reiter button.dreh svg .dreh-spitze { fill: currentColor; stroke: none; }
 
   .karte {
     border: 1px solid var(--linie); border-radius: 3px; background: var(--karte);
@@ -1983,23 +1998,27 @@
          `︎` dahinter sagt den Systemen, die es trotzdem in Farbe hätten,
          ausdrücklich „als Text".
 
-         `↻` UND NICHT DER WÜRFEL, der zuerst dastand: der versprach einen
-         Zufall, den es hier nicht gibt (gedreht wird um EINEN Schritt), und
-         als Kästchen mit Punkten blieb bei 18 px ohnehin nur ein Krümel
-         übrig. Ein Pfeil, der einmal herumzeigt, sagt genau das Richtige —
-         eine Runde weiter —, und er steht im Vokabular des Hauses, in dem
-         sich ohnehin eine Flasche dreht.
+         GEZEICHNET UND NICHT GESETZT. Erst stand hier das Schriftzeichen
+         `↻` (U+21BB), und es saß in der Pille zu hoch. Das war kein
+         Einstellungsfehler, sondern die Sache selbst: eine Schrift setzt ein
+         Zeichen auf die GRUNDLINIE, nicht in die Mitte seines Kastens, und
+         wie weit seine Tinte darüber steht, entscheidet die Schrift — im
+         Zweifel eine Ersatzschrift, die je nach Browser eine andere ist. Ein
+         Nachschieben um „0,6 px" gilt dann genau in einem Browser.
 
-         ZWEI gebogene Pfeile, die einander jagen, wären das Naheliegendste
-         und gibt es als Schriftzeichen nicht: U+1F5D8 hat in den Schriften
-         hier keine Glyphe, und die bekannte Fassung davon ist ein Emoji.
-         Die Kandidaten stehen nebeneinander in
-         `ideas/pruefungen/wuerfel-kandidaten.html`, samt denen, die als
-         gestreifter Kasten herauskommen.
+         Als Form gibt es das Problem nicht: der Bogen ist in seinem
+         Sichtfeld mittig gerechnet, und `align-items: center` setzt das
+         Sichtfeld in die Pille. Damit sitzt er überall mittig, in jedem
+         Browser und ohne eine einzige Korrekturzahl.
+
+         Was er ZEIGT, bleibt der Kreispfeil: eine Runde weiter, kein neuer
+         Wurf. Die durchprobierten Schriftzeichen stehen weiter in
+         `ideas/pruefungen/wuerfel-kandidaten.html`.
 
          Ohne Aufschrift braucht der Knopf einen Namen für den Vorleser, und
          der nennt den Mechanismus: einen Schritt weiter. */
-      const b = el('button', 'dreh', '↻︎');
+      const b = el('button', 'dreh');
+      b.appendChild(drehZeichen());
       b.type = 'button';
       b.title = 'Einen Schritt weiter durch den Kreis — bis zur Tagesgrenze '
               + 'bliebe es sonst, wie es ist';
@@ -2020,6 +2039,30 @@
     } catch (e) {
       sagt('runde-sagt', e.message, true);
     }
+  }
+
+  /* Der Kreispfeil als FORM. Sichtfeld 24 × 24, Kreis um (12|12) mit Radius
+     8: ein Bogen von 45° im Uhrzeigersinn über 270° bis 315°, die Lücke
+     liegt rechts, und dort sitzt die Spitze — sie zeigt in die Richtung, in
+     die der Bogen läuft.
+
+     DIE ZAHLEN SIND GERECHNET, nicht abgeschrieben: Endpunkt (17,66|17,66)
+     und (17,66|6,34) sind r·cos/sin von 45° und 315°, die Spitze steht auf
+     der Tangente am Ende. Senkrecht spannt die Tinte damit von y 3 bis y 21
+     — mittig im Sichtfeld, und genau darum geht es hier.
+
+     `currentColor` an Strich und Fläche: der Knopf hellt beim Überfahren auf
+     (`button:hover`), und der Pfeil geht mit. Eine feste Farbe bliebe beim
+     Aufhellen zurück. */
+  function drehZeichen() {
+    const svg = s_el('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+    svg.appendChild(s_el('path', {
+      class: 'dreh-bogen', d: 'M17.66,17.66 A8,8 0 1,1 17.66,6.34',
+    }));
+    svg.appendChild(s_el('path', {
+      class: 'dreh-spitze', d: 'M15.82,8.18 L20.63,9.31 L19.50,4.50 Z',
+    }));
+    return svg;
   }
 
   /* Der neue Träger steht danach in der frisch geladenen Runde — die Antwort
