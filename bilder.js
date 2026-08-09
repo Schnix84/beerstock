@@ -1260,8 +1260,12 @@ window.Bilder = (function () {
       },
       inhalt: () => ({
         titel: markeVon(g),
+        /* `r.titel` ist hier nicht immer eine Rolle: „Aufrufe je Melder"
+           reicht MENSCHEN als Reihen herein, und einer davon kann der
+           Regenbogen sein. Derselbe Zusatz wie an jeder anderen Beschriftung
+           — er fragt den Ton, und der steht hier schon fertig da. */
         zeilen: reihen.map(r => ({
-          farbe: r.farbe, was: r.titel, wert: zahl(g[r.feld] || 0),
+          farbe: r.farbe, was: stolzZusatz(r.titel, r.farbe), wert: zahl(g[r.feld] || 0),
         })),
         fuss: 'zusammen ' + zahl(summen[i]),
       }),
@@ -1274,13 +1278,13 @@ window.Bilder = (function () {
       const punkt = el('i');
       punkt.style.background = cssFarbe(r.farbe);
       s.appendChild(punkt);
-      s.appendChild(document.createTextNode(r.titel));
+      s.appendChild(document.createTextNode(stolzZusatz(r.titel, r.farbe)));
       leg.appendChild(s);
     });
     box.appendChild(leg);
     // Die Summe hinten dran: gestapelt ist sie die Gesamthöhe der Säule, und
     // die ist die eine Zahl, die man an einem Stapel wirklich abliest.
-    return tabelleAn(box, ['', ...reihen.map(r => r.titel), 'zusammen'],
+    return tabelleAn(box, ['', ...reihen.map(r => stolzZusatz(r.titel, r.farbe)), 'zusammen'],
       gruppen.map((g, i) => [markeVon(g),
         ...reihen.map(r => zahl(g[r.feld] || 0)), zahl(summen[i])]));
   }

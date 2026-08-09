@@ -2561,7 +2561,31 @@
      Stern schließen, dass es ein Push war. Jetzt steht der Weg wieder da —
      klein und in Versalien wie das „FILTER" am Sieb, nicht mehr als
      gleichrangiges fettes Wort mit Pfeil. */
-  const logWer = z => (z.quelle === 'admin' ? z.wer
+  /* DAS „:in" IM PROTOKOLL. Hier steht als einziger Ort keine Farbe an den
+     Zeilen — das Protokoll kennt Namen nur als Text (`wer`, `wen`,
+     `ausloeser`, `empfaenger`), und eine Farbe je Zeile nachzureichen hiesse,
+     vier Spalten durch den Worker zu ziehen, damit hinten zwei Zeichen
+     herauskommen. Der Traeger steht aber ohnehin schon auf dem Tisch: die
+     Mitgliederliste sagt `stolz_heute`, und die liegt seit `laden()` da.
+
+     ÜBER DEN NAMEN, wie an dieser Anwendung überall (auf der Tafel hängt
+     „bin ich das?" an derselben Gleichheit). Deshalb der Vergleich auf
+     GLEICHHEIT und keine Suche im Text: „an Kai, Mira" ist eine Aufzählung
+     und wird zerlegt, bevor verglichen wird — ein `replace` über die ganze
+     Zeichenkette träfe sonst auch ein Wort, das den Namen nur enthält.
+
+     Steht kein Traeger fest oder ist die Runde noch nicht geladen, bleibt
+     alles, wie es ist. Ein Protokoll, das auf eine Nutzerliste wartet, wäre
+     der falsche Handel. */
+  const traegerName = () => stand?.nutzer?.find(u => u.stolz_heute)?.name || null;
+  const logName = text => {
+    const t = traegerName();
+    if (!t || !text) return text;
+    return String(text).split(', ')
+      .map(n => (n === t ? n + ':in' : n)).join(', ');
+  };
+
+  const logWer = z => (z.quelle === 'admin' ? logName(z.wer)
     : (z.quelle === 'push' ? 'Push' : 'Mail'));
 
   /* Auslöser und Empfänger, seit migrations/0026 — die zwei Fragen, die ein
@@ -2585,8 +2609,8 @@
      ehrlicher als ein Gedankenstrich, der Auskunft vortäuscht. */
   function logSpur(z) {
     const stuecke = [];
-    if (z.ausloeser)  stuecke.push('von ' + z.ausloeser);
-    if (z.empfaenger) stuecke.push('an ' + z.empfaenger);
+    if (z.ausloeser)  stuecke.push('von ' + logName(z.ausloeser));
+    if (z.empfaenger) stuecke.push('an ' + logName(z.empfaenger));
     return stuecke.join(' · ');
   }
 
@@ -2621,13 +2645,13 @@
        schreibt den Platz, und „Kai (5)" liest sich wie ein Zähler. Das Wort
        davor macht daraus eine Auskunft. „automatisch" bleibt, wie es ist. */
     if (z.aktion === 'farbe' && /^\d+$/.test(z.detail || '')) {
-      return z.wen + ' (Farbe ' + (Number(z.detail) + 1) + ')';
+      return logName(z.wen) + ' (Farbe ' + (Number(z.detail) + 1) + ')';
     }
     /* Der Schalter über der Regenbogenvergabe gilt KEINEM Menschen — `ziel_id`
        ist null, und die Route fällt für „wen" dann auf das Detail zurück.
        Ohne diese Zeile stünde dort „an (an)". */
     if (z.aktion === 'stolz_regel') return 'Vergabe ' + (z.detail || '');
-    return z.wen + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
+    return logName(z.wen) + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
   }
 
   /* Die Art als Pille. EINE Pille je Zeile, nicht zwei: die Probe trug bis
