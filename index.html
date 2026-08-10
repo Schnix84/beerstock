@@ -2568,7 +2568,7 @@
   .ph-strich.duenn { height: 8px; margin-top: 9px; background: #ffffff14; }
   .ph-zahl { width: 34px; height: 26px; border-radius: 2px; background: #ffffff20; }
 
-  /* `flex-wrap` seit dem dritten Weg („Rundgang"): zu zweit passte die Zeile
+  /* `flex-wrap` seit dem dritten Weg („Tour"): zu zweit passte die Zeile
      auf jedes Handy, zu dritt auf keines mehr — bei 360 px fehlten selbst dem
      kürzesten Wort noch Pixel, gemessen an der echten Schrift. Sie bricht
      deshalb sauber um (Kennung oben, die Wege darunter), statt sich die
@@ -2584,7 +2584,7 @@
   }
 
   /* --- Ein Wort, hinter dem ein Film liegt ---------------------------------
-     Zweimal auf der Seite: „how to" am Türsteher und „Rundgang" in der kleinen
+     Zweimal auf der Seite: „how to" am Türsteher und „Tour" in der kleinen
      Zeile. Beide Male dasselbe Zeichen, damit man am Zeichen erkennt, dass
      dahinter kein Text wartet, sondern Bewegtbild.
 
@@ -2598,7 +2598,7 @@
 
      KEIN `inline-flex`, und das ist hier gemessen worden: als Flex-Kasten gibt
      das erste Kind die Grundlinie vor, und das ist das SVG — es hat keine, also
-     zählt seine Unterkante. „Rundgang" stand dadurch vier Pixel höher als
+     zählt seine Unterkante. „Tour" stand dadurch vier Pixel höher als
      „mein Deckel" daneben. Als gewöhnlicher Fluss trägt der Knopf die
      Grundlinie seines Textes, und das Zeichen hängt sich mit `vertical-align`
      daran. Dann sitzen alle drei Wörter der kleinen Zeile auf einer Linie.
@@ -3387,10 +3387,17 @@
                  steht das nuechterne Wort: es ist das einzige, das auch ohne
                  JS erscheint, und es sagt, was der Knopf tut. -->
             <button class="knopf" id="melde-knopf" type="submit"><span class="k-wort">Anschreiben</span></button>
-            <!-- Die Meta-Zeile: was nicht Bier ist, steht hier. „Rundgang"
+            <!-- Die Meta-Zeile: was nicht Bier ist, steht hier. „Tour"
                  steht VOR dem Paar und nicht zwischen ihm — „mein Deckel" und
                  „abmelden" gehören beide zum eigenen Konto und bleiben
                  zusammen, und der Ausgang bleibt der letzte.
+
+                 „Tour" und nicht „Rundgang", seit die Zeile mit einem Namen
+                 ab fünf Buchstaben umbrach: das Wort ist der einzige Platz in
+                 dieser Zeile, an dem sich sparen ließ — die anderen beiden
+                 sagen, was sie tun. Die Id heißt weiter `rundgang`, wie
+                 `verlauf-auf` das Blatt „Statistiken" öffnet; im Haus weichen
+                 innerer Name und Aufschrift öfter voneinander ab.
 
                  Warum hier und nicht oben neben „Statistiken": ein dritter Weg
                  im Kopf der Tafel zerlegte dort bei 360 px „Stand von heute"
@@ -3405,7 +3412,7 @@
                     <circle cx="12" cy="12" r="9"/>
                     <path d="M10.2 8.4l6 3.6-6 3.6z" fill="currentColor" stroke="none"/>
                   </svg>
-                  <span>Rundgang</span>
+                  <span>Tour</span>
                 </button>
                 ·
                 <button type="button" id="deckel-auf">mein Deckel</button>
@@ -3691,7 +3698,7 @@
     <div class="fly-blatt" role="dialog" aria-labelledby="rg-titel" aria-modal="true">
       <div class="fly-kopf">
         <div>
-          <div class="fly-titel" id="rg-titel">Rundgang</div>
+          <div class="fly-titel" id="rg-titel">Tour</div>
           <div class="fly-unter">sieben kurze Filme, was die Tafel kann</div>
         </div>
         <button class="fly-zu" id="rg-zu" type="button" aria-label="Schließen">×</button>

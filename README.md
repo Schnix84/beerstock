@@ -215,7 +215,7 @@ Drei Nähte bleiben offen, mit Absicht:
   erfundene Runde auf der Testinstanz — wer die Adresse errät, sieht eine
   Vorführung und kein Innenleben.
 
-## Der Rundgang
+## Die Tour
 
 Acht kurze Filme zeigen, was die Seite kann — hochkant, gedreht gegen die
 Testinstanz mit einer erfundenen Runde, zwischen 33 und 97 Sekunden lang.
@@ -225,7 +225,7 @@ Sie stehen an **zwei** Stellen, und keine davon doppelt die andere:
 | Wo | Was | Für wen |
 |---|---|---|
 | Türsteher, unter den drei Schritten: **▶ how to** | **Film 0, „Mitmachen"** — der einzige, der von draußen spielt | wer noch nicht mitschreibt |
-| Kleine Zeile unter dem Anschreiben: **Rundgang** | die anderen **sieben**, als Blatt mit Standbildern | wer angemeldet ist |
+| Kleine Zeile unter dem Anschreiben: **Tour** | die anderen **sieben**, als Blatt mit Standbildern | wer angemeldet ist |
 
 Die Null ist bewusst nicht im Blatt: drinnen hat die Frage, wie man hereinkommt,
 niemand mehr. Und die sieben sind bewusst nicht draußen: sie zeigen Innenräume —
@@ -494,8 +494,8 @@ Die vier Geschwisterdateien im Wurzelverzeichnis holt der Browser **nicht** beim
 Aufbau der Seite: `og.png` sehen nur Vorschau-Sammler, `manifest`/`sw.js`/`icon.png`
 nur, wer die Tafel installiert. „Eine geschlossene Datei" bleibt damit heil.
 
-Dasselbe gilt für die Fotos an den Kommentaren und für die acht Filme des
-Rundgangs: sie liegen in R2 und werden geholt, wenn jemand sie ansieht — nie beim
+Dasselbe gilt für die Fotos an den Kommentaren und für die acht Filme der
+Tour: sie liegen in R2 und werden geholt, wenn jemand sie ansieht — nie beim
 Aufbau. Die Filme liegen dort unter `filme/`; im Repo liegt keiner von ihnen.
 
 `bilder.js` ist die einzige geteilte Datei, und sie ist es aus einem Grund: an
