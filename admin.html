@@ -925,6 +925,28 @@
      und nicht wie ein Schalter: gewählt wird hier eine Farbe, auch wenn sie
      erst zugeteilt werden muss. */
   .k-farben button.stolz { background: var(--pride); }
+
+  /* Der Geburtstagskasten (Schema 31). Er klappt unter derselben Knopfzeile
+     auf wie die Kreidereihe und sieht deshalb aus wie sie: volle Breite,
+     dieselbe Luft darüber. Das Feld nimmt, was übrig ist, die zwei Knöpfe
+     nehmen, was sie brauchen — bei „merken" allein und bei „merken/löschen"
+     zu zweit, ohne dass die Verteilung irgendwo als Zahl dasteht. */
+  .k-geb {
+    flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px;
+    align-items: center; margin-top: 8px;
+  }
+  /* Drei Räder statt eines Kalenders — warum, steht an `gebFeld`. Tag und
+     Jahr bleiben schmal, der Monat trägt die Wörter und bekommt den Rest;
+     alle drei dürfen schrumpfen, sonst schiebt „September" den Knopf hinaus. */
+  /* `width: auto` MUSS hier stehen: die Feldregel oben gibt jedem `select` die
+     volle Breite, und drei volle Breiten in einem Flexkasten stapeln sich
+     untereinander statt nebeneinander zu stehen — gemessen, nicht vermutet.
+     Die Breiten kommen stattdessen aus `flex-basis`: Tag und Jahr so schmal
+     wie ihr Inhalt, der Monat nimmt den Rest, weil er die Wörter trägt. */
+  .k-geb select { width: auto; min-width: 0; }
+  .k-geb .k-geb-t { flex: 0 1 5em; }
+  .k-geb .k-geb-m { flex: 1 1 7em; }
+  .k-geb .k-geb-j { flex: 0 1 6.5em; }
   .marke {
     font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
     border: 1px solid currentColor; border-radius: 999px; padding: 1px 7px;
@@ -990,13 +1012,18 @@
      danach im Blatt. */
   button.gross.sicher { border-color: var(--rot); color: var(--rot); background: #d9705f1a; }
 
+  /* `select` steht in derselben Reihe: die Räder des Geburtstags sind Felder
+     wie die anderen und sollen so aussehen. `color-scheme: dark` gilt der
+     aufklappenden Liste — die malt der Browser selbst, und ohne den Hinweis
+     kommt sie auf der Schiefertafel in Weiß. */
   input[type="text"], input[type="email"], input[type="date"], input[type="time"],
-  textarea {
+  select, textarea {
     font: inherit; font-size: 14px; width: 100%;
     border: 1px solid #ffffff33; border-radius: 3px; background: #00000033;
     color: var(--kreide); padding: 7px 9px;
   }
-  input:focus, textarea:focus { outline: none; border-color: var(--gruen); }
+  select { color-scheme: dark; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gruen); }
   textarea { resize: vertical; min-height: 130px; line-height: 1.55; }
   label.feld-titel {
     display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
@@ -2157,6 +2184,12 @@
      sofort zurücknehmen. Immer nur eine Karte, sonst steht das Kontor nach
      drei Klicks voll Farbkästen. */
   let farbeOffen = null;
+  /* Und dasselbe für den Geburtstag (Schema 31). Zwei Merker und nicht einer
+     mit zwei Werten: sie schließen sich nicht aus — wer gerade umfärbt, darf
+     danebenstehend sehen, wann der Mensch Geburtstag hat —, und ein
+     gemeinsamer Merker hätte genau das verboten, ohne dass ein Grund dafür
+     dastünde. */
+  let gebOffen = null;
 
   /* Die neun Kreiden, wortgleich mit der `menschen`-Reihe an
      `Bilder.aufsetzen` oben — beide Fassungen stehen absichtlich in derselben
@@ -2197,6 +2230,24 @@
     });
     zeile.appendChild(auf);
 
+    /* Der Geburtstag, ebenfalls an jeder Karte und ebenfalls auch an der
+       eigenen — und zwar an dieser als einziger mit einem echten Grund: der
+       Betreffende ist der Einzige, der ihn sicher weiß. Alle anderen raten.
+
+       Der Knopf trägt eine Krone, sobald einer eingetragen ist. Nicht das
+       Datum: es steht drei Zeilen tiefer im Feld, sobald man aufklappt, und an
+       einem Knopf wäre es die längste Aufschrift der ganzen Zeile für die
+       Auskunft mit der geringsten Eile. */
+    const geb = el('button', gebOffen === u.id ? 'offen' : null,
+      u.geburtstag ? 'Geburtstag \u{1F451}' : 'Geburtstag');
+    geb.setAttribute('aria-expanded', String(gebOffen === u.id));
+    geb.type = 'button';
+    geb.addEventListener('click', () => {
+      gebOffen = gebOffen === u.id ? null : u.id;
+      runde(stand.nutzer);
+    });
+    zeile.appendChild(geb);
+
     // Das Feld für den Sperrgrund steht erst da, wenn die Rückfrage steht:
     // vorher wäre es ein leeres Kästchen an jeder Karte.
     if (sicher === u.id + ':sperren') {
@@ -2211,7 +2262,117 @@
     }
 
     if (farbeOffen === u.id) zeile.appendChild(farbreihe(u));
+    if (gebOffen === u.id) zeile.appendChild(gebFeld(u));
     return zeile;
+  }
+
+  /* --- Der Geburtstag an der Karte ----------------------------------------
+     DREI RÄDER, wortgleich mit dem Deckel auf der Tafel (`index.html`). Hier
+     stand erst ein Textfeld, dann ein `<input type="date">`; beides ist am
+     Zweck vorbei. Ein Geburtstag liegt Jahrzehnte zurück — der native Kalender
+     öffnet im laufenden Monat und blättert monatsweise, bis 1988 sind das über
+     vierhundert Klicks. In einer Liste springt man mit der Tastatur direkt auf
+     die Jahreszahl.
+
+     Und sie können, was der Kalender nicht konnte: das Jahr weglassen. Ein Rad
+     mit einem Strich darin ist eine gültige Wahl, und Schema 31 hat `MM-TT`
+     immer erlaubt.
+
+     Die Doppelung mit `index.html` ist Absicht, dieselbe wie bei den Kreiden:
+     die Tafel lädt keine fremde Datei. Beim Ändern also beide Stellen. */
+  const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+                  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+  /* Der 0. des Folgemonats IST der letzte des laufenden — das spart eine
+     Tabelle mit zwölf Zahlen und die Schaltjahresregel daneben. Ohne Jahr gilt
+     ein Schaltjahr, sonst fiele der 29. Februar aus der Liste, den man gerade
+     dann wählen können muss, wenn man kein Jahr angibt. */
+  const tageImMonat = (monat, jahr) =>
+    new Date(Date.UTC(jahr || 2024, monat, 0)).getUTCDate();
+
+  function gebFeld(u) {
+    const kasten = el('div', 'k-geb');
+    const roh = String(u.geburtstag || '');
+    const jahr = roh.length === 10 ? Number(roh.slice(0, 4)) : null;
+    const monat = roh.length >= 5 ? Number(roh.slice(-5, -3)) : null;
+    const tag = roh.length >= 5 ? Number(roh.slice(-2)) : null;
+    const jetzt = new Date().getUTCFullYear();
+
+    const rad = (klasse, werte, gewählt) => {
+      const s = el('select', klasse);
+      werte.forEach(([v, text]) => {
+        const o = el('option', null, text);
+        o.value = v;
+        if (v === String(gewählt ?? '')) o.selected = true;
+        s.appendChild(o);
+      });
+      kasten.appendChild(s);
+      return s;
+    };
+
+    /* Ein leerer erster Eintrag in jedem Rad: „nichts eingetragen" muss ein
+       Zustand sein, den man wiederherstellen kann. */
+    const tagWahl = rad('k-geb-t', [['', '–']], tag);
+    const monatWahl = rad('k-geb-m',
+      [['', '–']].concat(MONATE.map((n, i) => [String(i + 1), n])), monat);
+    const jahrWahl = rad('k-geb-j', [['', '–']].concat(
+      Array.from({ length: 100 }, (_, i) => [String(jetzt - i), String(jetzt - i)])), jahr);
+
+    /* Die Tagesliste hängt an den beiden anderen und wird bei jeder Änderung
+       daran neu gebaut: wer den 31. gewählt hatte und dann auf Februar stellt,
+       hätte sonst einen Tag stehen, den es nicht gibt — und bekäme die Absage
+       erst vom Worker. */
+    const tage = behalten => {
+      const m = Number(monatWahl.value) || 0;
+      const j = Number(jahrWahl.value) || 0;
+      const war = behalten ?? (Number(tagWahl.value) || null);
+      tagWahl.textContent = '';
+      [['', '–']].concat(Array.from({ length: m ? tageImMonat(m, j) : 31 },
+        (_, i) => [String(i + 1), String(i + 1) + '.'])).forEach(([v, text]) => {
+        const o = el('option', null, text);
+        o.value = v;
+        if (war && v === String(war)) o.selected = true;
+        tagWahl.appendChild(o);
+      });
+    };
+    tage(tag);
+    monatWahl.addEventListener('change', () => tage());
+    jahrWahl.addEventListener('change', () => tage());
+
+    const sichern = el('button', null, 'merken');
+    sichern.type = 'button';
+    sichern.addEventListener('click', () => {
+      /* Ohne Tag ODER ohne Monat gibt es kein Datum — dann ist es das Löschen,
+         und ein halbes Datum kommt gar nicht erst hinaus. */
+      const t = tagWahl.value, m = monatWahl.value, j = jahrWahl.value;
+      const zwei = n => String(n).padStart(2, '0');
+      gebSetzen(u, !t || !m ? null : (j ? j + '-' : '') + zwei(m) + '-' + zwei(t));
+    });
+    kasten.appendChild(sichern);
+    return kasten;
+  }
+
+  // 'JJJJ-MM-TT' -> '10.08.1985', 'MM-TT' -> '10.08.'
+  const gebDeutsch = iso => {
+    const t = iso.slice(-5).split('-');
+    return t[1] + '.' + t[0] + '.' + (iso.length === 10 ? iso.slice(0, 4) : '');
+  };
+
+  /* Der Wähler gibt `JJJJ-MM-TT` oder eine leere Zeichenkette — es gibt hier
+     nichts mehr zu übersetzen. `|| null` macht aus dem Leeren das Löschen. */
+  async function gebSetzen(u, wert) {
+    sagt('runde-sagt', '');
+    const iso = wert || null;
+    try {
+      await ruf('/api/admin/nutzer', { id: u.id, aktion: 'geburtstag', geburtstag: iso });
+      gebOffen = null;
+      await laden();
+      sagt('runde-sagt', iso
+        ? `${u.name} feiert am ${gebDeutsch(iso)}`
+        : `Bei ${u.name} steht kein Geburtstag mehr.`);
+    } catch (e) {
+      sagt('runde-sagt', e.message, true);
+    }
   }
 
   /* Die neun Kreiden, der Regenbogen und „automatisch". Jeder Druck wirkt

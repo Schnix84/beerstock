@@ -440,18 +440,38 @@
      Seite als Ganzes darunter und bleibt rechts. */
   .schild-zeile {
     display: flex; flex-wrap: wrap; align-items: baseline;
-    justify-content: space-between; gap: 2px 10px;
+    /* Der Abstand zwischen beiden Hälften geht mit der Schrift mit — dieselbe
+       Überlegung wie an `.schild-strom`. `flex-wrap: wrap` bleibt als
+       Notausgang stehen: lieber zwei Zeilen als eine, die aus der Tafel läuft. */
+    justify-content: space-between; gap: 2px clamp(6px, 2vw, 10px);
     margin-bottom: clamp(10px, 3vw, 16px);
   }
+  /* SCHRIFT UND LAUFWEITE SKALIEREN MIT, damit die Zeile EINE bleibt. Fest auf
+     13 px und .22em gesetzt brauchte „WER HAT KALT" links und „live · Mo ·
+     10. August" rechts zusammen rund 310 px — bei einem 375-px-Telefon stehen
+     nach Rahmen und Polster aber nur etwa 300 zur Verfügung, und die Zeile
+     klappte auseinander. Auf dem Mac fiel das nie auf, dort ist Platz.
+
+     Die Laufweite geht dabei mit und nicht nur der Schriftgrad: bei .22em
+     steckt fast ein Fünftel der Breite in den Lücken zwischen den Buchstaben,
+     und eine Versalzeile verliert davon weniger, als sie an Platz gewinnt. Die
+     Untergrenzen sind so gewählt, dass die Zeile bis 360 px zusammenbleibt;
+     darunter kürzt das Skript zusätzlich den Monat (siehe `schild-datum`).
+
+     `white-space: nowrap` steht in beiden Teilen weiter — es hält jeden Teil
+     für sich zusammen. Der Umbruch fiel ZWISCHEN ihnen, und den entscheidet
+     `flex-wrap` an der Zeile darüber. */
   .schild {
-    font-family: var(--hand); font-size: 13px; letter-spacing: .22em;
+    font-family: var(--hand); font-size: clamp(11px, 3.1vw, 13px);
+    letter-spacing: clamp(.12em, .5vw, .22em);
     text-transform: uppercase; color: var(--kreide-matt); opacity: .85;
     transform: rotate(-.4deg); white-space: nowrap;
   }
   .schild-rechts {
-    display: flex; align-items: baseline; gap: 9px; margin-left: auto;
-    font-family: var(--hand); font-size: 12px; color: var(--kreide-weg);
-    white-space: nowrap;
+    display: flex; align-items: baseline; gap: clamp(6px, 2.4vw, 9px);
+    margin-left: auto;
+    font-family: var(--hand); font-size: clamp(10.5px, 2.9vw, 12px);
+    color: var(--kreide-weg); white-space: nowrap;
   }
   /* Der Punkt sagt die WAHRHEIT ueber die Leitung, er ist keine Zierde:
      `stromStand()` haengt ihn an `stehtDieLeitung()`. Ein Punkt, der "live"
@@ -493,8 +513,12 @@
   /* `inline-block`, nicht `inline-flex`: die Grundlinie eines Flex-Kastens ist
      die seines ersten Kindes, und das ist hier der leere Punkt ohne Schrift —
      das Wort rutschte damit um vier Pixel unter die Zeile. */
+  /* Der reservierte Platz skaliert mit der Schrift, aus der er gerechnet ist —
+     46 px waren für 12-px-Kreide gemessen. Auf einem 320-px-Gerät schrumpft
+     die Schrift, der feste Riegel blieb und hielt allein 16 px Luft fest, die
+     der Zeile am Ende zum Umbruch fehlten. */
   .schild-strom {
-    display: inline-block; text-align: right; min-width: 46px;
+    display: inline-block; text-align: right; min-width: clamp(38px, 12vw, 46px);
   }
   @keyframes atmen { 50% { opacity: .45; } }
 
@@ -816,13 +840,41 @@
     color: var(--kreide-weg); text-decoration: underline; cursor: pointer;
   }
   .t-zeile {
-    display: grid; grid-template-columns: 58px 1fr auto; gap: 0 11px;
+    display: grid; grid-template-columns: 68px 1fr auto; gap: 0 11px;
     align-items: baseline; padding: 10px 0 9px;
     border-bottom: 1px dashed #ffffff1f;
   }
   .t-zeile:last-child { border-bottom: none; }
+  /* --- Die Datumsspalte bleibt ZWEIZEILIG ----------------------------------
+     „10. Aug." braucht in dieser Handschrift 57 px, die Spalte war 58 breit —
+     ein Pixel Luft. Auf einem Telefon, dessen Schrift anders gerastert wird,
+     reicht das nicht: das Datum brach in „10." und „Aug.", die Spalte wurde
+     dreizeilig, und weil die erste Rasterreihe so hoch ist wie ihr höchstes
+     Feld, WUCHS DAMIT DER ABSTAND ZWISCHEN TITEL UND UNTERZEILE — an einer
+     Stelle, die mit dem Datum nichts zu tun hat. Genau dieselbe Kopplung, wegen
+     der die Marken darunter absolut gesetzt sind (siehe `.t-marken`).
+
+     Zwei Griffe, und beide werden gebraucht. `nowrap` ist die GARANTIE: das
+     Datum ist ein Stück und bricht nie, egal wie eng es wird — im schlimmsten
+     Fall ragt es in die 11 px Rinne daneben, die ohnehin leer ist. Die zehn
+     Pixel mehr Spalte sind der PLATZ, damit es dazu nicht kommt; sie gehen von
+     der Titelspalte ab, und die ist `1fr` und verkraftet es.
+
+     UND DIE BREITE IST ÜBER ALLE ZWÖLF MONATE GEMESSEN, nicht über den, in dem
+     gerade gebaut wurde. Der August war mit 57 px einer der schmalsten; die
+     Reihe geht bis
+
+       30. März    62,2 px      der längste Fall
+       30. Sept.   60,1 px
+       30. Juni    58,8 px
+       10. Aug.    57,3 px      der Tag, an dem das hier entstand
+
+     Mit 58 px hätte der März also nicht gepasst und mit 62 px auf ein Zehntel
+     genau — beides sind Zahlen, die im Herbst wieder umbrechen. 68 px lassen
+     knapp 6 px Luft, und die braucht es: gemessen ist in Chrome, gelesen wird
+     auf einem Telefon, dessen Schrift anders gerastert wird. */
   .t-tag {
-    position: relative;
+    position: relative; white-space: nowrap;
     font-family: var(--hand); font-size: 13px; line-height: 1.25; color: var(--gelb);
   }
   .t-tag span { display: block; font-size: 11px; color: var(--kreide-weg); }
@@ -848,9 +900,12 @@
      Zeilenhöhe gibt den Rand nach innen. Ein Kasten mit 1 px Polster oben und
      unten wie in der Unterzeile schöbe den zweiten über den Strich.
 
-     Breit: „ausgelost" im Kasten misst 63 px und ist damit breiter als die
-     58 px der Spalte. Das geht, weil die Marken ausgehängt sind und die zweite
-     Rasterreihe in Spalte 1 leer ist — Platz ist bis zur Unterzeile bei 69 px.
+     Breit: „ausgelost" im Kasten misst 63 px und passt damit in die 68 px der
+     Spalte. Das war einmal anders — die Spalte war 58 px breit, der Kasten ragte
+     um fünf heraus, und das ging nur, weil die Marken ausgehängt sind und die
+     zweite Rasterreihe in Spalte 1 leer ist. Seit das Datum die Spalte breiter
+     gemacht hat (siehe `.t-tag`), ist dieser Überstand weg; der Grund, warum er
+     erlaubt WÄRE, bleibt hier stehen, damit ihn niemand neu suchen muss.
      Die Sperrung ist dafür knapper als früher, sonst wird es dort eng.
 
      Gemessen am engsten Fall — beide Marken an einem einzeiligen Titel —
@@ -1397,6 +1452,32 @@
     gap: 8px; min-width: 0;
   }
   .dk-tat .feld { flex: 1 1 auto; width: auto; min-width: 0; }
+  /* --- Der Geburtstag: drei Räder statt eines Kalenders --------------------
+     Hier stand ein `<input type="date">`, und es war für genau diesen Zweck
+     das falsche Werkzeug. Ein Geburtstag liegt dreißig bis fünfzig Jahre
+     zurück; der native Kalender öffnet im laufenden Monat und blättert
+     monatsweise — bis 1988 sind das über vierhundert Klicks. Auf dem Telefon
+     gibt es zwar eine Jahreswalze, aber auch die dreht man durch.
+
+     Drei Auswahlfelder lösen es: das Jahr ist eine LISTE, und in einer
+     geöffneten Liste springt man mit der Tastatur direkt auf „1988", auf dem
+     Telefon wischt man eine Walze mit hundert Rasten statt vierhundert
+     Monatsblättern. Sie bringen nebenbei zurück, was der Kalender genommen
+     hatte: das Jahr darf wieder wegbleiben (Schema 31 hat es immer erlaubt),
+     denn ein Rad mit einem Strich darin ist eine gültige Wahl.
+
+     Und sie sehen überall gleich aus. Der Kalender war das einzige Stück der
+     Seite, das der Browser selbst ausmalt — in drei Browsern drei Formen, und
+     ohne `color-scheme: dark` ein weißes Blatt auf der Schiefertafel.
+
+     Volle Breite unter dem Wort: nebeneinander mit „Geburtstag" davor blieben
+     für drei Felder auf einem 390er keine 12em. */
+  .dk-datum { flex-basis: 100%; justify-content: flex-start; gap: 6px; }
+  /* Tag und Jahr sind schmal, der Monat trägt die Wörter. Alle drei dürfen
+     schrumpfen (`min-width: 0`), sonst schiebt „September" den Haken hinaus. */
+  .dk-datum select { flex: 0 1 auto; min-width: 0; padding-right: 2px; }
+  .dk-datum .dk-geb-m { flex: 1 1 auto; }
+  .dk-datum .dk-ok { flex: none; width: auto; padding: 6px 14px; margin-left: auto; }
   .dk-wert {
     font-family: var(--hand); font-size: 14px; overflow-wrap: anywhere;
   }
@@ -2347,9 +2428,39 @@
     text-align: right; font-variant-numeric: tabular-nums;
   }
   .zeile.erster .z-rang, .zeile.erster .z-name { color: var(--gelb); }
+  /* --- Der Anhang: was zusammen umbricht ----------------------------------
+     „Kai · Geburtstag · heute hier · du" passt auf dem Telefon nicht in eine
+     Zeile, und der Bruch fiel an der falschen Stelle: „heute hier" blieb oben,
+     „du" stand allein darunter. Ein einzelnes Kringelchen auf einer eigenen
+     Zeile sieht nach Versehen aus.
+
+     Die beiden gehören zusammen — sie sagen dasselbe über DIESEN Abend: wer
+     gezogen wurde und wer man selbst ist. Also stecken sie in einer Hülle mit
+     `nowrap`; brechen darf es davor, nicht dazwischen. Heraus kommt
+
+       Kai  👑 GEBURTSTAG
+       heute hier  du
+
+     Die Krone bleibt bewusst DRAUSSEN: sie gehört zum Namen wie „gemessen"
+     oder „ruht" und beschreibt den Menschen, nicht den Abend. Und je enger die
+     Hülle, desto sicherer passt sie: `nowrap` verhindert den Umbruch, es
+     schafft aber keinen Platz — drei Marken darin liefen auf einem schmalen
+     Telefon aus der Spalte heraus.
+
+     Der Abstand nach links kommt vom Leerzeichen davor und nicht mehr aus dem
+     `margin-left` der Marke: ein Außenabstand bleibt am Zeilenanfang stehen und
+     rückt die zweite Zeile ein, Weißraum fällt dort weg. Zwei Regeln, weil es
+     zwei Fälle gibt — steht „heute hier" im Anhang, trägt es den Abstand; ist
+     der Anhang leer und nur das „du" hängt daran, trägt ihn dessen `::after`.
+     `:empty` sieht Pseudoelemente nicht, genau darum trifft es hier zu. */
+  .z-anhang { white-space: nowrap; }
+  .z-anhang > :first-child { margin-left: 0; }
+  .z-anhang:empty::after { margin-left: 0; }
   /* Die eigene Zeile ist nicht farbig markiert, sondern umkringelt - so, wie
-     man an einer Tafel etwas markiert. */
-  .zeile.ich .z-name::after {
+     man an einer Tafel etwas markiert. Das „du" hängt am Anhang und nicht mehr
+     am ganzen Namen: sonst stünde es hinter der Hülle statt darin und bräche
+     genau so ab, wie es nicht soll. */
+  .zeile.ich .z-anhang::after {
     content: "du"; font-size: 11px; color: var(--rot); margin-left: 8px;
     border: 1px solid #d9705f80; border-radius: 40% 60% 55% 45% / 60% 40% 60% 40%;
     padding: 1px 7px 2px; vertical-align: 2px; letter-spacing: .04em;
@@ -2434,11 +2545,267 @@
       mask-composite: exclude;
     }
   }
+  /* --- WER HEUTE GEBURTSTAG HAT --------------------------------------------
+     Dieselbe Bauart wie `.stolz` und ausdrücklich NICHT dieselbe Auszeichnung:
+     der Regenbogen ersetzt die Kreide eines Menschen, die Feier legt sich
+     darüber. Beide können am selben Tag denselben Namen treffen — dann steht
+     der Name im Regenbogen und die Krone daneben, und keines weicht (siehe
+     `worker/migrations/0031`, dort steht die Regel).
+
+     GOLD UND KEINE SIEBENTE KREIDE. Die Töne sind die gelbe Kreide (`--gelb`,
+     die des Ersten) und zwei Nachbarn — heller Champagner und tiefes Messing.
+     Ein zweiter bunter Verlauf neben dem Regenbogen wäre eine Konkurrenz um
+     dieselbe Aufmerksamkeit; Gold gehört auf dieser Tafel ohnehin schon dem
+     Besonderen und ist deshalb der ruhigste Weg, laut zu sein.
+
+     DER SCHIMMER WANDERT, und das ist der ganze Effekt: der Verlauf ist zweieinhalb
+     mal so breit wie der Name und schiebt sich langsam durch ihn hindurch. Ein
+     stehender Goldverlauf sieht aus wie eine andere Kreide; ein wandernder wie
+     Metall im Licht. Er läuft nach LINKS (`to { background-position: -250% }`),
+     weil ein Glanz, der der Leserichtung folgt, dem Auge davonläuft, statt ihm
+     entgegenzukommen.
+
+     Und wieder der Rückfall zuerst — dieselbe Falle wie bei `.stolz`: greift
+     der Beschnitt nicht, wäre der Name unsichtbar. Also erst die gelbe Kreide,
+     den Verlauf nur unter `@supports`. */
+  .feier { color: var(--gelb); }
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    .feier {
+      background-image: var(--feier-verlauf); background-size: 250% 100%;
+      background-clip: text; -webkit-background-clip: text;
+      color: transparent; -webkit-text-fill-color: transparent;
+      animation: feier-schimmer 4.2s linear infinite;
+    }
+  }
+  @keyframes feier-schimmer { to { background-position: -250% 0; } }
+
+  /* HIER STAND EINMAL EIN FUNKELN über der Zeile — zwölf Lichtpunkte aus
+     `box-shadow`, versetzt blinkend. Es ist wieder weg, und der Grund gehört
+     aufgeschrieben, damit es niemand für eine gute Idee hält und neu baut: auf
+     einer Tafel, die ohnehin aus Kreidestaub und Wischspuren besteht, liest
+     sich ein Punkt, der auf- und abblendet, nicht als Glitzer, sondern als
+     Bildfehler — „da schwirrt was". Der wandernde Goldschimmer im Namen sagt
+     dasselbe ruhiger und bleibt an dem Ding kleben, um das es geht.
+
+     --- Der Konfettiregen ---------------------------------------------------
+     Er liegt ÜBER allem und nimmt nichts an: `pointer-events: none` ist hier
+     keine Feinheit, sondern die Bedingung — eine Sekunde lang läge sonst eine
+     unsichtbare Scheibe über der Tafel, und wer in dem Moment tippt, tippt
+     ins Leere.
+
+     Die Schnipsel selbst baut das Skript (`feierRegen`), weil jeder eine
+     eigene Bahn, Farbe und Dauer hat. Was HIER steht, ist nur, was für alle
+     gilt. */
+  .konfetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 90; }
+  .konfetti i {
+    position: absolute; top: -20px; display: block;
+    width: 7px; height: 11px; border-radius: 1px;
+    animation: konfetti-fall linear forwards;
+  }
+  /* Der Fall und die Drehung in EINEM Bild: zwei Animationen auf demselben
+     Stück stritten sich um `transform`, und die zweite gewönne. */
+  @keyframes konfetti-fall {
+    from { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 1; }
+    to   { transform: translate3d(var(--drift, 0px), 105vh, 0) rotate(var(--dreh, 540deg));
+           opacity: .15; }
+  }
+
+  /* Der Gruß, der mit dem Regen kommt. Er steht in derselben Handschrift wie
+     die Tafel und verschwindet von selbst — ein Blatt mit einem Wegklicken
+     wäre eine Aufgabe, und ein Geburtstagsgruß stellt keine. */
+  /* MIT EIGENER RÜCKWAND, und das ist kein Schmuck: der erste Anlauf stand
+     ohne — freie Kreideschrift auf einer Tafel voller Kreideschrift, und der
+     Gruß las sich in die Zeilen darunter hinein („Wo wird getrunken?" ging
+     mitten durch ihn hindurch). Eine Schrift, die über einer anderen liegt,
+     braucht etwas dazwischen, und der Schiefer der Seite ist das Naheliegende:
+     der Gruß sieht dann aus wie ein Zettel, der an die Tafel gepinnt wurde,
+     und nicht wie ein Fehler beim Wischen.
+
+     `left/right` statt `left: 50%` mit Verschiebung: der Kasten soll bis zu
+     seiner Höchstbreite wachsen und dann mittig stehen — mit `translateX`
+     müsste die Verschiebung in JEDEM Bild der Animation wiederholt werden, und
+     genau daran ist die erste Fassung schon einmal verrutscht. So trägt
+     `transform` nur die Bewegung. */
+  .feier-gruss {
+    position: fixed; left: 0; right: 0; top: 18%; margin-inline: auto;
+    z-index: 91; pointer-events: none; text-align: center;
+    width: max-content; max-width: min(88vw, 420px);
+    font-family: var(--hand); font-size: clamp(19px, 5.4vw, 26px); line-height: 1.3;
+    padding: 16px 22px; border-radius: 4px;
+    background: var(--schiefer-t); border: 1.5px solid #e8c76666;
+    box-shadow: 0 22px 44px -18px #000e, 0 0 0 1px #00000055;
+    animation: feier-gruss-auf 4.6s ease-out forwards;
+  }
+  /* Das Konfetti-Zeichen auf eine eigene Zeile, groß: im Fließtext hing es am
+     Ende des Satzes und wurde bei zwei Namen als einziges Zeichen in die
+     dritte Zeile umgebrochen — ein Emoji allein auf einer Zeile sieht aus wie
+     ein Ladefehler. Als eigene Zeile ist es Absicht. */
+  .feier-gruss .feier-zeichen { display: block; font-size: 1.5em; margin-top: 6px; }
+  /* Die Ansage unter dem Gruß: kleiner, in Gold, aber nicht im wandernden
+     Schimmer — der gehört dem Namen. Zwei Dinge, die sich bewegen, streiten
+     sich in einem Kasten von zwei Zeilen. */
+  .feier-gruss .feier-zusatz {
+    margin-top: 6px; font-size: .68em; letter-spacing: .02em; color: var(--gelb);
+  }
+  @keyframes feier-gruss-auf {
+    0%        { opacity: 0; transform: translateY(14px) scale(.94); }
+    12%, 72%  { opacity: 1; transform: translateY(0)    scale(1); }
+    100%      { opacity: 0; transform: translateY(-10px) scale(1); }
+  }
+
+  /* --- DIE ZEILE DES GEBURTSTAGSKINDS --------------------------------------
+     Bis hierher trug die Feier nur der Name: Goldschimmer und Krone. Das war an
+     einer Stelle zu wenig — wer heute den Regenbogen trägt, bekommt den Schimmer
+     NICHT (zwei Verläufe auf denselben Buchstaben gibt es nicht, siehe oben), und
+     von seinem Geburtstag blieb eine kleine Marke übrig. Was hier steht, hängt an
+     der ZEILE und nicht an der Schrift; es kommt also zu beidem dazu, ohne mit
+     irgendetwas um dieselbe Eigenschaft zu streiten.
+
+     Zwei Dinge in einem Kasten:
+
+       das Lauflicht   ein heller Bogen, der einmal um den Rahmen wandert
+       die Girlande    eine Wimpelkette an der Oberkante
+
+     HIER HING EINMAL KONFETTI DRIN — Schnipsel fielen in die Zeile und blieben
+     im Fuß liegen. Es ist wieder weg, und der Grund gehört aufgeschrieben,
+     damit es niemand für eine gute Idee hält und neu baut: über der Tafel fällt
+     beim Öffnen ohnehin schon Konfetti (`feierRegen`), und dieselbe Geste ein
+     zweites Mal, kleiner und in Dauerschleife, war keine Steigerung, sondern
+     eine Wiederholung. Eine Girlande sagt dasselbe mit einem anderen Wort.
+
+     KEIN `overflow: hidden` AN DER ZEILE, so nahe es läge — sie ist ein <button>,
+     und ihr Tastaturrahmen (`:focus-visible`, `outline-offset: -2px`) würde
+     mitbeschnitten. Die Girlande braucht es nicht: sie steht innerhalb der Zeile.
+
+     Der Rahmen ist ein Innenschatten und keine `border`. `button.zeile` setzt
+     `border: 0` mit eigener `border-bottom`, `.zeile:last-child` nimmt die wieder
+     weg — eine dritte Partei in diesem Streit hätte an jeder Stelle eine andere
+     Spezifität, und der Fuß der letzten Zeile sähe anders aus als der Rest. Ein
+     `box-shadow` steht daneben und ändert kein Maß.
+
+     Die neun Pixel mehr Kopf sind kein Luftholen, sondern der Platz, an dem die
+     Wimpel hängen: ohne sie hingen sie im Namen. */
+  .zeile.feiert {
+    position: relative; border-bottom: 0; border-radius: 4px;
+    padding: 19px 6px 10px; margin-inline: -6px;
+    background: #e8c7660a; box-shadow: inset 0 0 0 1px #e8c76640;
+  }
+
+  /* Der Ring entsteht aus zwei Masken, die einander ausstanzen: die eine deckt
+     den Innenraum (`content-box`), die andere die ganze Fläche — übrig bleibt
+     genau das eine Pixel Polster dazwischen. Ohne diesen Griff müsste ein Verlauf
+     auf einen `border` gelegt werden, und Verläufe auf Rahmen können keine Ecken
+     runden.
+
+     `@supports` steht davor, weil der Rückfall sonst schlimmer wäre als der
+     Verzicht: ohne Maske läge der Kegelverlauf über der GANZEN Zeile, und der
+     Name stünde in einem Goldnebel. Fällt die Regel aus, bleibt der ruhige Rahmen
+     von oben, und der ist für sich schon eine Auszeichnung.
+
+     `@property` macht den Winkel überhaupt erst animierbar — eine eigene
+     Eigenschaft ohne angemeldeten Typ ist für den Browser eine Zeichenkette, und
+     Zeichenketten interpoliert er nicht. Wo das fehlt, steht der helle Bogen
+     still: ein Glanzpunkt statt einer Runde, kein Bruch.
+
+     Der Verlauf ist über zwei Drittel seines Kreises durchsichtig. Das ist die
+     ganze Rechnung — ein Bogen, der überall gleich hell wäre, ist ein goldener
+     Rahmen und kein Licht, das herumläuft. */
+  @property --feier-winkel { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+  @keyframes z-lauflicht { to { --feier-winkel: 360deg; } }
+
+  @supports ((mask-composite: exclude) or (-webkit-mask-composite: xor)) {
+    .zeile.feiert::before {
+      content: ''; position: absolute; inset: 0; z-index: 1;
+      border-radius: 4px; padding: 1px; pointer-events: none;
+      background: conic-gradient(from var(--feier-winkel),
+        #f7ecc800 0deg, #f7ecc800 228deg, #e8c76688 286deg,
+        #fff6dc 316deg, #e8c76688 346deg, #f7ecc800 360deg);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      mask-composite: exclude;
+      animation: z-lauflicht 3.4s linear infinite;
+      /* Woher der Versatz kommt und warum es ihn braucht: siehe `feierPhase`. */
+      animation-delay: var(--feier-ab, 0s);
+    }
+  }
+
+  /* --- DIE GIRLANDE --------------------------------------------------------
+     Eine Wimpelkette an der Oberkante, und sie besteht aus GENAU NICHTS: kein
+     Element, kein Skript, ein einziges Pseudoelement mit einer Maske.
+
+     Der Wimpel ist ein Kegelausschnitt, dessen Spitze unten sitzt
+     (`at 50% 100%`) und der sich nach oben öffnet — das ergibt ein Dreieck mit
+     gerader Oberkante und Spitze nach unten, also genau einen Wimpel. Über
+     `mask-size` und `repeat-x` wiederholt sich die Kachel alle 26 px, und die
+     Farbbänder im Hintergrund sind ebenso breit: jeder Wimpel bekommt seinen
+     eigenen Ton, im Dreierwechsel.
+
+     DER GRUND FÜR DIE KACHEL IN PIXELN UND NICHT IN PROZENT: die Zeile ist auf
+     dem Telefon 380 px breit und auf dem Rechner über 900. Eine feste Zahl
+     Wimpel stünde dort einzeln herum wie Zaunpfähle. So ist der Abstand überall
+     derselbe, und die Kette wird nur länger.
+
+     Die Schnur ist die Oberkante des Rahmens selbst — eine zweite Linie
+     danebenzumalen hieße, dieselbe Linie zweimal zu haben.
+
+     `@supports` wieder davor, und wieder, weil der Rückfall das Schlimmere
+     wäre: ohne Maske stünde hier ein durchgehender goldener Balken über dem
+     Namen. Ohne die Regel bleibt der Rahmen, und der genügt.
+
+     Das tiefe Messing aus `FEIER` kommt hier NICHT vor. Ein 11 px breiter
+     Wimpel in `#b8862c` auf Schiefer ist kein dunkler Wimpel, sondern eine
+     Lücke in der Kette; der mittlere Ton hält die Reihe geschlossen. */
+  /* Die Abfrage prüft `mask-repeat` und NICHT den Kegelverlauf selbst, und das
+     ist Absicht: in einem Kegelverlauf sind die Haltepunkte Winkel, eine
+     Kurzschreibweise wie `conic-gradient(#000 0 0)` ist also schon als Test
+     zweifelhaft. Lehnt ein Browser sie ab, gilt der ganze Block als nicht
+     unterstützt — und die Girlande verschwände dort spurlos, ohne Fehler und
+     ohne Ersatz. `mask-repeat` ist eindeutig und kommt aus derselben Familie. */
+  @supports ((mask-repeat: repeat-x) or (-webkit-mask-repeat: repeat-x)) {
+    .zeile.feiert::after {
+      content: ''; position: absolute; left: 7px; right: 7px; top: 0;
+      height: 13px; z-index: 0; pointer-events: none;
+      background: repeating-linear-gradient(90deg,
+        #e8c766 0 26px, #f7ecc8 26px 52px, #cfa23c 52px 78px);
+      -webkit-mask-image: conic-gradient(from -23deg at 50% 100%, #000 0 46deg, #0000 46deg);
+      -webkit-mask-size: 26px 13px;
+      -webkit-mask-repeat: repeat-x;
+      mask-image: conic-gradient(from -23deg at 50% 100%, #000 0 46deg, #0000 46deg);
+      mask-size: 26px 13px;
+      mask-repeat: repeat-x;
+    }
+  }
+
+  /* SPARSAM HEISST NICHT UNSICHTBAR. Wer Bewegung abbestellt hat, bekommt den
+     Regen gar nicht erst (das entscheidet das Skript) — aber Schimmer, Rahmen,
+     Girlande und Gruß bleiben als STEHENDE Auszeichnung stehen. Ein Geburtstag,
+     der ohne Animation komplett verschwindet, wäre für diese Leute keiner. */
+  @media (prefers-reduced-motion: reduce) {
+    .feier { animation: none; }
+    .feier-gruss { animation: none; }
+    /* Nur der Bogen steht still. Die Girlande war nie in Bewegung — sie ist der
+       Teil dieser Feier, der auch ohne Animation dasteht. */
+    .zeile.feiert::before { animation: none; }
+  }
+
+  /* `nowrap`, seit die Krone dazukam: eine Marke aus Zeichen UND Wort
+     („👑 Geburtstag") bricht sonst mitten in sich selbst um, sobald neben ihr
+     noch „heute hier" und „du" stehen — die Krone bleibt dann als leerer
+     Kasten hinter dem Namen hängen und das Wort rutscht in die nächste Zeile.
+     Gilt für alle Marken: „gemessen" ist nur zufällig kurz genug. */
   .z-marke {
     font-family: system-ui, sans-serif; font-size: 8px; letter-spacing: .16em;
     text-transform: uppercase; color: var(--gelb); border: 1px solid #e8c76655;
     border-radius: 2px; padding: 1px 4px; margin-left: 7px; vertical-align: 3px;
+    white-space: nowrap;
   }
+  /* Die Krone trägt Gold statt der halbdurchsichtigen Linie: sie ist die eine
+     Marke an der Zeile, die eine gute Nachricht ist, und „gemessen" daneben
+     soll blasser bleiben als sie. Die Laufweite fällt aus — sie ist für
+     Versalien gedacht, und ein Emoji mit `letter-spacing` hat rechts eine
+     Lücke, die aussieht wie ein vergessenes Zeichen. */
+  .z-marke.feiert { color: var(--gelb); border-color: var(--gelb); letter-spacing: .04em; }
   /* Eine eigene Rasterzeile unter Name UND Zahl, nicht nur unter dem Namen:
      rechts stehen Sparkline und Bierzahl in der ersten Reihe, darunter ist die
      Spalte leer. Der Untertitel holt sich diesen Platz (rund 90 px mehr) und
@@ -2488,6 +2855,24 @@
   }
   .feld:focus { outline: none; border-bottom-color: var(--gelb); border-bottom-style: solid; }
   .feld::placeholder { color: #ffffff30; }
+  /* Ein `select` mit `.feld` trägt sonst die Systemform: hellgrauer Kasten mit
+     Rahmen, mitten in der Kreide. `appearance: none` nimmt sie weg, das eigene
+     Pfeilchen kommt als Verlauf im Hintergrund — ein SVG als `background-image`
+     wäre eine externe Ressource oder ein data-URI in der Zeile, und die Tafel
+     kommt seit jeher ohne beides aus.
+
+     `color-scheme: dark` gilt der Liste, die aufklappt: die malt der Browser,
+     nicht wir, und ohne den Hinweis kommt sie auf Schiefer in Weiß. */
+  select.feld {
+    appearance: none; -webkit-appearance: none; color-scheme: dark;
+    padding-right: 14px; cursor: pointer;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--kreide-weg) 50%),
+      linear-gradient(135deg, var(--kreide-weg) 50%, transparent 50%);
+    background-size: 5px 5px, 5px 5px;
+    background-position: right 4px center, right 0 center;
+    background-repeat: no-repeat;
+  }
   .knopf {
     width: 100%; border: 1.5px solid #ffffff55; border-radius: 3px; padding: 11px;
     background: #ffffff0d; color: var(--kreide); cursor: pointer;
@@ -3747,6 +4132,28 @@
         </div>
       </form>
 
+      <!-- Der eigene Geburtstag (Schema 31). Er steht hier und nicht nur im
+           Kontor, weil er die eine Angabe im ganzen Datenbestand ist, die der
+           Betreffende sicher weiß und alle anderen raten. Dieselbe Form wie
+           der Name darüber: Feld und Haken.
+
+           DREI RÄDER STATT EINES KALENDERS — warum, steht ausführlich am
+           Stylesheet bei `.dk-datum`. Kurz: ein Geburtstag liegt Jahrzehnte
+           zurück, und dorthin blättert man mit einem Monatskalender nicht.
+
+           Die Listen füllt das Skript (`gebRaeder`), nicht das Markup: hundert
+           Jahreszahlen von Hand hinzuschreiben wäre hundert Zeilen, die jedes
+           Jahr um eine falscher werden. -->
+      <form class="dk-zeile" id="dk-geb-form">
+        <span class="dk-was">Geburtstag</span>
+        <div class="dk-tat dk-datum">
+          <select class="feld dk-geb-t" id="dk-geb-t" aria-label="Tag"></select>
+          <select class="feld dk-geb-m" id="dk-geb-m" aria-label="Monat"></select>
+          <select class="feld dk-geb-j" id="dk-geb-j" aria-label="Jahr"></select>
+          <button class="knopf dk-ok" type="submit" aria-label="Geburtstag merken">✓</button>
+        </div>
+      </form>
+
       <div class="dk-zeile">
         <span class="dk-was">Mailadresse</span>
         <div class="dk-tat">
@@ -4513,6 +4920,344 @@
   const stolzWort = (text, platz, farbPlatz = platz) =>
     stolzSchrift(el('span', null, stolzZusatz(text, stolz(platz))), stolz(farbPlatz));
 
+  /* --- DIE FEIER (Schema 31) -----------------------------------------------
+     Der zweite Tageszustand, der an einem Menschen hängt. Er ist dem
+     Regenbogen nachgebaut und an genau einer Stelle anders gebaut, und die ist
+     der Punkt: er reitet NICHT auf `farbe` mit, sondern kommt als eigenes
+     `geburtstag` an der Zeile. Sonst müsste sich am 10. August entscheiden,
+     ob ein Mensch den Regenbogen oder die Krone trägt — und diese Entscheidung
+     will niemand treffen. So trägt er beides.
+
+     VIER TÖNE UND EIN ANKER. `--gelb` in der Mitte ist die Kreide des Ersten,
+     also eine Farbe, die auf dieser Tafel schon lebt; darum herum ein heller
+     Champagner und ein tiefes Messing, damit der wandernde Verlauf überhaupt
+     eine Kante zum Wandern hat. Der letzte Ton ist wieder der erste — ein
+     Verlauf, der im Kreis läuft, hat keine Naht, und die Naht wäre bei einem
+     endlos wiederholten Schimmer alle vier Sekunden zu sehen.
+
+     Sie stehen hier und nicht im Stylesheet, aus demselben Grund wie bei
+     `STOLZ`: die Regel darunter (`.feier`) holt sie sich als Eigenschaft, und
+     ein zweiter Satz Töne liefe früher oder später auseinander. */
+  const FEIER = ['#b8862c', '#e8c766', '#f7ecc8', '#e8c766', '#b8862c'];
+  const FEIER_CSS = `linear-gradient(100deg, ${FEIER.join(', ')})`;
+  document.documentElement.style.setProperty('--feier-verlauf', FEIER_CSS);
+
+  /* Der Name IM Goldschimmer. Wie `stolzSchrift`, und wie dort gilt: das
+     Element trägt danach nichts als den Namen — der Beschnitt an den Buchstaben
+     nähme jede Marke daneben mit. */
+  function feierSchrift(knoten, ja) {
+    knoten.classList.toggle('feier', !!ja);
+    knoten.style.backgroundImage = ja ? FEIER_CSS : '';
+    return knoten;
+  }
+
+  /* Die Marke an der Zeile. EINE KRONE UND KEINE TORTE: an diesem Tag ist der
+     Mensch der Wichtigste an der Tafel, und das sagt eine Krone. Eine Torte
+     sagt, dass es Kuchen gibt — hier gibt es Bier.
+
+     UND KEINE ZAHL. Hier stand „wird 41", und das ist wieder herausgeflogen:
+     ein Alter neben dem Namen ist eine Auskunft über einen Menschen, die die
+     Tafel für ihn herausgibt und nicht er. Ein Jahr darf trotzdem im Kontor
+     stehen (Schema 31 nimmt es an) — es geht nur nirgends hinaus. */
+  const feierMarke = () => el('span', 'z-marke feiert', '👑 Geburtstag');
+
+  /* --- Die Zeile feiert mit ------------------------------------------------
+     Hier standen zehn Konfettibahnen (`Z_SCHNIPSEL`) samt der Wanne, die sie
+     auffing. Beides ist weg: die Zeile trägt jetzt eine Girlande, und die ist
+     eine reine Stylesheet-Angelegenheit (`.zeile.feiert::after`) — eine Maske
+     aus Kegelausschnitten, kein einziges Element. Was vom Skript bleibt, ist
+     der Versatz für das Lauflicht.
+  /* Die Runde des Lauflichts. Sie steht ZWEIMAL da — hier und als `3.4s` an
+     `z-lauflicht` im Stylesheet —, und das ist der einzige Weg: eine Animation
+     an einem Pseudoelement lässt sich von außen nicht ansprechen, ihr Versatz
+     kommt nur über eine Eigenschaft an der Zeile herein. Wer die eine Zahl
+     ändert, ändert die andere mit. */
+  const FEIER_RUNDE = 3.4;
+
+  /* DER KNIFF GEGEN DEN NEUAUFBAU. Eine Animation beginnt am frisch gebauten
+     Element bei null — bei jeder Meldung spränge das ganze Konfetti zurück nach
+     oben und das Lauflicht in die Ecke, in der es startet. Ein NEGATIVER Versatz
+     lässt sie stattdessen dort einsteigen, wo sie stünde, wenn sie seit dem
+     Laden liefe.
+
+     Die Rechnung dahinter, weil sie beim Lesen nicht auf der Hand liegt: der
+     Versatz hängt an der ABSOLUTEN Uhr und nicht am Alter des Elements. Ein
+     Stück, das zum Zeitpunkt `b` gebaut wird, steht danach bei
+     `(t + versatz) mod dauer` — und darin kommt `b` nicht mehr vor. Alt und neu
+     stehen also zu jedem Zeitpunkt gleich, ganz gleich, wie oft dazwischen neu
+     gebaut wurde.
+
+     GENAU BIS AUF EINEN REST, und der ist gemessen statt geschätzt: die
+     Animation startet nicht beim Bauen, sondern beim nächsten Bild, und
+     dazwischen liegen der Aufbau der ganzen Liste und ein Bildwechsel. An der
+     Testinstanz waren das rund 60 ms — sieben Grad am Lauflicht, drei bis fünf
+     Pixel an einem fallenden Schnipsel. Ohne den Versatz spränge der Winkel
+     dagegen auf 0 zurück und jedes Stück an den oberen Rand. Der Rest ist nicht
+     zu sehen, der Sprung wäre es.
+
+     `performance.now()` und nicht `Date.now()`: gebraucht wird die Zeit SEIT
+     DEM LADEN, und nur die läuft gleichmäßig — eine Systemuhr, die unterwegs
+     nachgestellt wird, risse einen Sprung hinein. */
+  const feierPhase = (dauer, versatz) =>
+    (-(((performance.now() / 1000) + versatz) % dauer)).toFixed(2) + 's';
+
+  /* --- Die drei Räder des Geburtstags --------------------------------------
+     Tag, Monat, Jahr als drei Listen (siehe `.dk-datum` im Stylesheet, warum
+     nicht als Kalender). Dieselben Funktionen stehen im Kontor noch einmal —
+     dieselbe Vervierfachung wie bei den Kreidefarben, aus demselben Grund: die
+     Tafel ist eine geschlossene Datei und lädt keine fremde.
+
+     DAS JAHR IST FREIWILLIG, und das ist keine Nachlässigkeit, sondern die
+     Eigenschaft, die Schema 31 von Anfang an hat: wer feiern will, ohne dass
+     irgendwo sein Jahrgang steht, wählt oben den Strich. Ein Kalenderfeld
+     konnte das nicht — eine Liste kann es.
+
+     HUNDERT JAHRE, absteigend. Absteigend, weil die jüngeren Jahrgänge oben
+     stehen sollen, wenn man von Hand scrollt; hundert, weil das die Spanne
+     ist, die der Worker annimmt (`geburtstagPruefen` weist alles vor 1900 ab)
+     und weil eine Liste, die weiter reicht, niemandem etwas gibt. */
+  const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+                  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+  /* Wie viele Tage der Monat hat. Ohne Jahr gilt das Schaltjahr — sonst fiele
+     der 29. Februar aus der Liste, den man gerade dann wählen können muss,
+     wenn man kein Jahr angibt. Der 0. des Folgemonats IST der letzte des
+     laufenden; das spart eine Tabelle mit zwölf Zahlen und eine Schaltjahres-
+     regel daneben. */
+  const tageImMonat = (monat, jahr) =>
+    new Date(Date.UTC(jahr || 2024, monat, 0)).getUTCDate();
+
+  /* Die drei Listen füllen und auf einen Wert stellen. `wert` ist 'MM-TT',
+     'JJJJ-MM-TT' oder leer.
+
+     EIN LEERER ERSTER EINTRAG in Tag und Monat, damit „nichts eingetragen" ein
+     Zustand ist, den man auch wieder herstellen kann: wer seinen Geburtstag
+     löschen will, stellt beide auf den Strich und drückt den Haken. Ohne ihn
+     stünde nach dem ersten Öffnen immer ein 1. Januar da, den niemand gewählt
+     hat. */
+  function gebRaeder(tagWahl, monatWahl, jahrWahl, wert) {
+    const roh = String(wert || '');
+    const jahr = roh.length === 10 ? Number(roh.slice(0, 4)) : null;
+    const monat = roh.length >= 5 ? Number(roh.slice(-5, -3)) : null;
+    const tag = roh.length >= 5 ? Number(roh.slice(-2)) : null;
+    const jetzt = new Date().getUTCFullYear();
+
+    const füllen = (feld, werte, gewählt) => {
+      feld.textContent = '';
+      werte.forEach(([v, text]) => {
+        const o = document.createElement('option');
+        o.value = v;
+        o.textContent = text;
+        if (v === String(gewählt ?? '')) o.selected = true;
+        feld.appendChild(o);
+      });
+    };
+
+    füllen(monatWahl, [['', '–']].concat(
+      MONATE.map((n, i) => [String(i + 1), n])), monat);
+    füllen(jahrWahl, [['', '–']].concat(
+      Array.from({ length: 100 }, (_, i) => [String(jetzt - i), String(jetzt - i)])), jahr);
+    /* Der Tag hängt an den beiden anderen und wird darum zuletzt gefüllt —
+       und bei jeder Änderung daran neu (siehe die Zuhörer beim Aufbau). */
+    gebTage(tagWahl, monatWahl, jahrWahl, tag);
+  }
+
+  /* Die Tagesliste, passend zum gewählten Monat. Sie wird neu gebaut, sobald
+     Monat oder Jahr wechseln: wer den 31. gewählt hatte und dann auf Februar
+     stellt, hätte sonst einen Tag stehen, den es nicht gibt — und bekäme die
+     Absage erst vom Worker, nachdem er den Haken gedrückt hat. */
+  function gebTage(tagWahl, monatWahl, jahrWahl, behalten) {
+    const monat = Number(monatWahl.value) || 0;
+    const jahr = Number(jahrWahl.value) || 0;
+    const wieViele = monat ? tageImMonat(monat, jahr) : 31;
+    /* Klammern nicht wegkürzen: `a ?? b || c` ist ein SYNTAXfehler in JS, die
+       beiden Operatoren dürfen ohne Klammern nicht nebeneinanderstehen. */
+    const war = behalten ?? (Number(tagWahl.value) || null);
+    tagWahl.textContent = '';
+    [['', '–']].concat(Array.from({ length: wieViele },
+      (_, i) => [String(i + 1), String(i + 1) + '.'])).forEach(([v, text]) => {
+      const o = document.createElement('option');
+      o.value = v;
+      o.textContent = text;
+      /* Der zuvor gewählte Tag überlebt den Monatswechsel, WENN es ihn dort
+         gibt. Sonst fällt die Wahl auf den Strich zurück — lieber leer als
+         still auf den 28. verschoben. */
+      if (war && v === String(war)) o.selected = true;
+      tagWahl.appendChild(o);
+    });
+  }
+
+  /* Aus den drei Rädern der Wert für die Spalte: 'JJJJ-MM-TT', 'MM-TT' oder
+     `null`. Ohne Tag ODER ohne Monat gibt es kein Datum — dann ist es das
+     Löschen, und ein halbes Datum kommt gar nicht erst hinaus. */
+  function gebAusRaedern(tagWahl, monatWahl, jahrWahl) {
+    const t = tagWahl.value, m = monatWahl.value, j = jahrWahl.value;
+    if (!t || !m) return null;
+    const zwei = n => String(n).padStart(2, '0');
+    return (j ? j + '-' : '') + zwei(m) + '-' + zwei(t);
+  }
+
+
+  /* Der Tag, nach dem sich diese Seite richtet — DIESELBE Rechnung wie
+     `bierTag()` im Worker, und sie muss dieselbe bleiben: die Tagesgrenze liegt
+     um zwei Uhr UTC, nicht um Mitternacht. Gebraucht wird sie hier für genau
+     eine Frage, nämlich ob der Regen heute schon gefallen ist. Ein Kalendertag
+     ließe ihn um Mitternacht ein zweites Mal fallen, mitten in den Abend
+     hinein, an dem gefeiert wird. */
+  const LOS_GRENZE = 2;
+  const bierTag = () =>
+    new Date(Date.now() - LOS_GRENZE * 3600e3).toISOString().slice(0, 10);
+
+  /* --- Der Regen -----------------------------------------------------------
+     EINMAL JE AUFBAU DER SEITE — also bei jedem Öffnen wieder, und nicht bei
+     jedem Blick darauf.
+
+     Der Unterschied ist der ganze Merker. Die Tafel lädt sich im Minutentakt
+     nach und wird dabei neu gezeichnet; ohne diese eine Variable fiele der
+     Regen sechzigmal in der Stunde, und was beim ersten Mal eine Überraschung
+     ist, wäre beim dritten eine Belästigung. Wer die Seite dagegen zumacht und
+     wieder aufmacht, will ihn wieder sehen — das ist der Sinn.
+
+     EINE SITZUNGSVARIABLE UND KEIN `localStorage`. Hier stand erst der Biertag
+     im Speicher, dann der Biertag samt Name (weil der Speicher am Browser
+     hängt und nicht am Menschen: als Timo kam der Gruß, danach als Kai
+     nichts). Beides ist jetzt hinfällig — was einen Seitenaufbau nicht
+     überleben SOLL, gehört in keine Ablage, die ihn überlebt. Das Zurückholen
+     einer laufenden App aus dem Hintergrund zählt bewusst nicht als Öffnen;
+     sonst regnete es bei jedem Wechsel zwischen zwei Fenstern.
+
+     WER BEWEGUNG ABBESTELLT HAT, BEKOMMT KEINEN. Kein halber Regen, kein
+     langsamerer: fallende Schnipsel sind genau das, was `prefers-reduced-
+     motion` meint. Schimmer und Krone an der Zeile bleiben trotzdem stehen —
+     der Geburtstag ist dann ruhig und nicht abwesend. */
+  let feierSchonGefallen = false;
+
+  /* Die Namen zu einem Satz. Bei einem steht er da, bei zweien mit „und", bei
+     mehr mit Kommas davor — dieselbe Form wie an jeder anderen Aufzählung
+     dieser Seite, damit ein Geburtstagsgruß nicht die einzige Stelle ist, an
+     der Namen anders aneinandergereiht werden. */
+  const feierNamen = namen =>
+    namen.length < 2 ? (namen[0] || '')
+      : namen.slice(0, -1).join(', ') + ' und ' + namen[namen.length - 1];
+
+  /* Ein Schnipsel. Die Streuung steckt in drei Eigenschaften, die das
+     Stylesheet als Variablen liest — Bahn (`--drift`), Drehung (`--dreh`) und
+     Dauer. Sie werden hier gewürfelt und nicht dort, weil ein CSS ohne Skript
+     dreißig gleich fallende Rechtecke ergäbe, und dreißig gleich fallende
+     Rechtecke sind ein Vorhang und kein Konfetti.
+
+     KEIN `will-change`. Dreißig Stücke, die zweieinhalb Sekunden fallen und
+     dann verschwinden, sind für den Verbund keine Last; ein `will-change` auf
+     jedem einzelnen legte dagegen dreißig eigene Ebenen an — auf einem alten
+     Telefon der teurere Weg. */
+  const FEIER_SCHNIPSEL = 34;
+  function feierRegen() {
+    const raum = el('div', 'konfetti');
+    /* `aria-hidden`, und das ist keine Nachlässigkeit: der Regen ist reine
+       Zierde, der Gruß daneben trägt die Auskunft. Ein Vorleser, der
+       vierunddreißig leere Kästen aufzählt, hätte den Geburtstag verpasst. */
+    raum.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < FEIER_SCHNIPSEL; i++) {
+      const s = el('i');
+      const ton = FEIER[Math.floor(Math.random() * FEIER.length)];
+      s.style.background = ton;
+      s.style.left = (Math.random() * 100).toFixed(1) + '%';
+      s.style.setProperty('--drift', (Math.random() * 160 - 80).toFixed(0) + 'px');
+      s.style.setProperty('--dreh', (Math.random() * 900 + 360).toFixed(0) + 'deg');
+      s.style.animationDuration = (Math.random() * 1.6 + 2.2).toFixed(2) + 's';
+      /* Der Versatz ist der Unterschied zwischen einem Regen und einem Wurf:
+         ohne ihn starten alle vierunddreißig in derselben Zeile. */
+      s.style.animationDelay = (Math.random() * 1.1).toFixed(2) + 's';
+      raum.appendChild(s);
+    }
+    document.body.appendChild(raum);
+    /* Weggeräumt wird nach der längsten möglichen Bahn plus Versatz, mit einem
+       Schlag Luft. Kein `animationend` am einzelnen Stück: das feuerte
+       vierunddreißigmal, und der Raum darf erst weg, wenn das LETZTE unten ist. */
+    setTimeout(() => raum.remove(), 5200);
+  }
+
+  /* Der Gruß. Er kommt mit dem Regen und geht mit ihm — und er kommt AUCH
+     ohne, wenn Bewegung abbestellt ist: dann steht er still da und blendet
+     nicht auf (das erledigt die Regel unter `prefers-reduced-motion`).
+
+     `role="status"` und nicht `alert`: ein Geburtstag ist eine Mitteilung und
+     kein Alarm, und `alert` unterbräche einen Vorleser mitten im Satz. */
+  function feierGruss(namen, gewinnt) {
+    const g = el('div', 'feier-gruss');
+    g.setAttribute('role', 'status');
+
+    /* ZWEI SÄTZE, UND DER UNTERSCHIED IST DER GANZE PUNKT. Wer selbst gefeiert
+       wird, bekommt einen WUNSCH und keine Meldung: „Kai hat heute Geburtstag"
+       auf dem eigenen Bildschirm zu lesen, ist die eine Fassung, die niemand
+       gemeint hat. Alle anderen bekommen die Nachricht — die ist für sie ja
+       tatsächlich neu.
+
+       Über den Namen und nicht über eine Id, wie überall sonst auf dieser
+       Seite: `/api/me` gibt keine her, und `meinName` steht fest, bevor die
+       Liste überhaupt gezeichnet wird (siehe `werBinIch`). */
+    const andere = namen.filter(n => n !== meinName);
+    const selbst = !!meinName && andere.length < namen.length;
+
+    if (selbst) {
+      g.appendChild(el('span', null, 'Alles Gute, '));
+      g.appendChild(feierSchrift(el('span', null, meinName), true));
+      /* Wer am selben Tag Geburtstag hat, gehört in denselben Gruß und nicht
+         in einen zweiten Zettel darunter — sonst stünde da zweimal dasselbe
+         Wort für zweimal dieselbe Sache. */
+      g.appendChild(el('span', null, andere.length
+        ? '! Und ' + feierNamen(andere) + (andere.length > 1 ? ' feiern' : ' feiert') + ' mit.'
+        : '!'));
+    } else {
+      g.appendChild(feierSchrift(el('span', null, feierNamen(namen)), true));
+      g.appendChild(el('span', null, namen.length > 1
+        ? ' haben heute Geburtstag' : ' hat heute Geburtstag'));
+    }
+    /* Die Ansage darunter, kleiner und in derselben Kreide wie jeder andere
+       Nebentext der Tafel. Sie sagt, was der Tag praktisch bedeutet: die
+       Flasche zeigt heute auf ihn, und zwar bei jedem Dreh — die erste ist
+       echt, alle weiteren sind Ehrenrunden (siehe `ehrenLage` im Worker).
+
+       Ein eigener Absatz und kein angehängter Halbsatz: die erste Zeile ist
+       der Gruß, die zweite die Regel. Zusammen in einem Satz läse sich beides
+       wie eine Bedingung — als würde gratuliert, WEIL gewonnen wird. */
+    if (gewinnt) {
+      g.appendChild(el('div', 'feier-zusatz',
+        selbst ? 'Du gewinnst heute — immer!'
+          : namen.length > 1 ? 'Und gewinnen heute — immer!'
+          : 'Und gewinnt heute — immer!'));
+    }
+    g.appendChild(el('span', 'feier-zeichen', '\u{1F389}'));
+    document.body.appendChild(g);
+    setTimeout(() => g.remove(), 5200);
+  }
+
+  /* Die eine Stelle, an der beides zusammenkommt — gerufen von dort, wo die
+     Tafel gezeichnet wird. Sie prüft selbst, ob heute überhaupt jemand feiert
+     und ob der Regen schon gefallen ist; der Aufrufer soll das nicht wissen
+     müssen, sonst steht die Bedingung an der nächsten Stelle wieder ein
+     bisschen anders da. */
+  function feierAnstossen(feld, los) {
+    const kinder = (feld || []).filter(p => p.geburtstag && p.name);
+    if (!kinder.length || feierSchonGefallen) return;
+    /* NOCH NICHT, solange nicht feststeht, WER davorsteht. `werBinIch()` läuft
+       in der Aufbaukette vor dem ersten `hole()` — aber es fängt seine Fehler
+       ab und lässt `meinName` bei einem Aussetzer schlicht auf `null` stehen.
+       Ohne diese Zeile bekäme das Geburtstagskind dann die Nachricht über sich
+       statt den Wunsch an sich, und weil der Merker schon gesetzt wäre, an
+       diesem Tag nie wieder etwas anderes. Lieber eine Minute später richtig:
+       das stille Nachfassen kommt ohnehin wieder vorbei. */
+    if (merke() && !meinName) return;
+    feierSchonGefallen = true;
+    /* Ob das Versprechen „gewinnt heute — immer!" darunter stehen darf, sagt
+       das Rad und nicht der Kalender: es gilt nur für den, auf den die Flasche
+       heute wirklich zeigen kann (`los.ehre`). Wer Geburtstag hat, aber nichts
+       Kaltes gemeldet hat, ist in keinem Feld — für ihn wäre der Satz eine
+       Ankündigung, die die Tafel nicht halten kann. */
+    feierGruss(kinder.map(p => p.name), !!(los && los.ehre));
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) feierRegen();
+  }
+
   /* DIE DREI KNÖPFE DER TAFEL. Sie gehören nicht einem Melder, sondern dem,
      der davorsteht — genau wie der Holzrahmen, und sie hängen deshalb an
      derselben Auskunft (`stolz_heute` aus `/api/me`). Wer heute den Regenbogen
@@ -5009,7 +5754,21 @@
          darunter und an der Pille im Kontor. */
       const marke = $('marke');
       const stolzKopf = !!p && stolz(p.farbe);
-      const wort = stolzSchrift(el('span'), stolzKopf);
+      /* Und dasselbe für den Geburtstag (Schema 31), mit demselben Vorrang wie
+         an der Zeile: zwei Verläufe auf denselben Buchstaben gibt es nicht.
+         Er MUSS hier mitgehen — führt das Geburtstagskind das Feld an, stünde
+         sein Name sonst oben groß in weißer Kreide, während dieselbe Person
+         drei Bildschirme tiefer golden schimmert. Genau an dem Tag, an dem es
+         auffällt.
+
+         KEINE VERSCHACHTELUNG DER BEIDEN. `feierSchrift(…, false)` räumt das
+         Hintergrundbild ab — das ist an seiner eigenen Stelle richtig und wäre
+         hier fatal: der Regenbogen, den `stolzSchrift` eben gesetzt hat, wäre
+         wieder weg. Also der eine ODER der andere, nie beide nacheinander auf
+         demselben Stück. */
+      const feierKopf = !!p && !!p.geburtstag && !stolzKopf;
+      const wort = feierKopf
+        ? feierSchrift(el('span'), true) : stolzSchrift(el('span'), stolzKopf);
       // „:in" nur am NAMEN — „noch leer" und „kein Netz" sind keine Menschen.
       wort.textContent = p ? stolzZusatz(p.name, stolzKopf)
         : modus === 'leer' ? 'noch leer' : 'kein Netz';
@@ -5072,7 +5831,7 @@
       const klickbar = !!p.id;
       const z = el(klickbar ? 'button' : 'div',
         'zeile' + (ich ? ' ich' : '') + (i === 0 ? ' erster' : '') +
-        (heute ? ' heute' : ''));
+        (heute ? ' heute' : '') + (p.geburtstag ? ' feiert' : ''));
       if (klickbar) {
         z.type = 'button';
         z.dataset.ziel = 'user:' + p.id;
@@ -5093,7 +5852,21 @@
          Tafel schreibt sonst in EINER Kreide — sie kennt die sechs
          Melderfarben nicht und soll sie auch nicht kennen; der Platz 7 ist der
          einzige, den sie liest. */
-      name.appendChild(stolzWort(p.name, p.farbe));
+      /* WER BEIDES HAT, TRÄGT BEIDES — aber nicht beides im Namen. Regenbogen
+         und Goldschimmer sind zwei Verläufe auf denselben Buchstaben, und zwei
+         Verläufe auf einem Element gibt es nicht: der zweite überschriebe den
+         ersten, und der Regenbogen verschwände an dem einen Tag, an dem er
+         besonders sichtbar sein sollte. Also der Vorrang hier — der Name bleibt
+         bunt, die Feier zeigt sich an der Krone und am Rahmen um die Zeile
+         (`.zeile.feiert`). Wer heute nur Geburtstag hat, bekommt den Schimmer.
+
+         SEIT DIE ZEILE SELBST FEIERT, ist dieser Vorrang keine Einbuße mehr:
+         früher blieb dem Regenbogenträger von seinem Geburtstag eine kleine
+         Marke, jetzt bekommt er Lauflicht und Konfetti wie jeder andere. */
+      name.appendChild(p.geburtstag && !stolz(p.farbe)
+        ? feierSchrift(el('span', null, p.name), true)
+        : stolzWort(p.name, p.farbe));
+      if (p.geburtstag) name.appendChild(feierMarke());
       if (p.gemessen) name.appendChild(el('span', 'z-marke', 'gemessen'));
       /* Wer gesperrt ist, bleibt stehen — das ist Historie, und ein Name, der
          über Nacht verschwindet, sieht nach Datenverlust aus. Eine stille
@@ -5106,7 +5879,38 @@
          selbst: „gezogen" solange die Antwort aussteht, „heute hier" erst nach
          der Zusage. Ein Haken für einen Abend, der noch abgesagt werden kann,
          wäre eine Behauptung. */
-      if (heute) name.appendChild(el('span', 'z-heute', heute));
+      /* Zuletzt der Anhang, und er ist eine eigene Hülle statt zweier loser
+         Marken: „heute hier" und das „du" brechen nur GEMEINSAM in die nächste
+         Zeile (siehe `.z-anhang` im Stylesheet). Er entsteht auch, wenn nur
+         eines von beidem gilt — das „du" hängt als `::after` an ihm, und ohne
+         Hülle hätte es nichts, woran es hängen könnte.
+
+         DAS LEERZEICHEN DAVOR IST DER GANZE UMBRUCH. Zwischen zwei Marken gibt
+         es von sich aus keine Bruchstelle: jede trägt `white-space: nowrap`, und
+         das `overflow-wrap: anywhere` am Namen greift nur dort, wo nicht schon
+         eine Marke das Brechen verbietet. Die einzige Stelle, an der die Zeile
+         umbrechen KONNTE, war deshalb hinter dem Namen — heraus kam
+
+           Kai
+           👑 GEBURTSTAG  heute hier  du
+
+         also der Name allein oben und alles andere darunter. Das Leerzeichen
+         bietet genau eine weitere Stelle an, und weil eine Zeile gefüllt wird,
+         solange etwas passt, nimmt sie die spätere: Name und Krone bleiben oben.
+
+         EIN LEERZEICHEN UND KEIN `<wbr>`, obwohl beide brechen dürften — der
+         Unterschied zeigt sich erst nach dem Bruch. Der Abstand vor der Marke
+         kam bisher aus ihrem `margin-left`, und ein Außenabstand bleibt am
+         Zeilenanfang stehen: die zweite Zeile stand sieben Pixel eingerückt
+         unter der ersten. Weißraum dagegen fällt dort weg. Also trägt jetzt das
+         Leerzeichen den Abstand, und der Marke wird er abgenommen (siehe
+         `.z-anhang` im Stylesheet). */
+      if (heute || ich) {
+        name.appendChild(document.createTextNode(' '));
+        const anhang = el('span', 'z-anhang');
+        if (heute) anhang.appendChild(el('span', 'z-heute', heute));
+        name.appendChild(anhang);
+      }
       mitte.appendChild(name);
       const str = el('div', 'z-striche');
       str.appendChild(striche(p.biere, false));
@@ -5141,6 +5945,12 @@
          um. Deshalb steht er hier zuletzt: die automatische Platzierung
          braucht die erste Reihe erst voll, bevor sie ihn darunter setzt. */
       z.appendChild(unter);
+      /* Rahmen und Girlande hängen an der Klasse `feiert` und brauchen von hier
+         nichts. Das eine, was das Stylesheet nicht selbst wissen kann, ist die
+         Stelle, an der das Lauflicht gerade steht: die Liste wird bei jeder
+         Meldung neu gebaut, und ohne diesen Versatz spränge der Bogen jedes Mal
+         in seine Startecke zurück (siehe `feierPhase`). */
+      if (p.geburtstag) z.style.setProperty('--feier-ab', feierPhase(FEIER_RUNDE, 0));
       return z;
     },
 
@@ -5208,10 +6018,16 @@
         wo.appendChild(terminWoDom(t));
         unter.appendChild(wo);
       }
-      // Ausgelost steht oben in der Datumsspalte; von Hand eingetragen nennt
-      // hier einen Namen und passt in keine 58 px breite Spalte.
+      /* Ausgelost steht oben in der Datumsspalte; von Hand eingetragen nennt
+         hier einen Namen und passt in keine schmale Spalte.
+
+         NUR „von" UND NICHT „eingetragen von". Die längste Fassung dieser Zeile
+         — Zeitspanne, Ort und Name — brach auf dem Telefon um, und das Wort
+         „eingetragen" war daran das teuerste Stück: rund 70 px für eine
+         Auskunft, die schon im „von" steckt. Wer sonst sollte den Abend
+         eingetragen haben als der, dessen Name danebensteht. */
       if (!t.aus_ziehung && t.von && t.von !== t.gastgeber) {
-        const wer = el('span', null, '· eingetragen von ');
+        const wer = el('span', null, '· von ');
         wer.appendChild(stolzWort(t.von, t.von_farbe));
         unter.appendChild(wer);
       }
@@ -6663,6 +7479,15 @@
   let letztesFeld = [];     // die Bestenliste, fuer "wer ist nicht im Topf"
   let selbstGedreht = false;// in DIESER Sitzung gedreht: dann bleibt das Rad stehen
   let dreht = false;        // waehrend der Animation nichts neu zeichnen
+  /* Die Ehrenrunde (Schema 31). `ehrenFuer` sind die Namen, auf die die Flasche
+     dabei zeigen darf — vom Worker gerechnet, nicht hier; `ehrenModus` sagt, ob
+     der Rad-Knopf gerade ehrt statt zieht. `ehrenDran` zählt reihum durch, wenn
+     mehrere Geburtstag haben: gewürfelt fiele die Flasche bei zweien in der
+     Hälfte der Fälle wieder auf denselben, und dieselbe Überlegung steht schon
+     in migrations/0030 hinter dem Weiterdrehen des Regenbogenkreises. */
+  let ehrenFuer = [];
+  let ehrenModus = false;
+  let ehrenDran = 0;
 
   /* Der Live-Betrieb (siehe `strom()` weiter unten). Was hier steht, entscheidet
      nur, WANN nachgeladen wird - geladen wird immer über dieselben Routen. */
@@ -7718,10 +8543,35 @@
     const binGewinner = gezogen && !!meinName && los.gewinner === meinName;
     const abgesagt = los.abgesagt || [];
 
+    /* --- Die Ehrenrunde (Schema 31) ---------------------------------------
+       Wem heute zu Ehren gedreht werden kann, sagt der Worker (`ehre.fuer`) —
+       die Seite rechnet die Regel nicht noch einmal nach. Fehlt der Schlüssel,
+       hat niemand Geburtstag oder es antwortet noch ein Worker von vor dem
+       Ausrollen: beides führt hier auf dasselbe gewöhnliche Rad, und das ist
+       der richtige Rückfall.
+
+       DAS RAD BLEIBT AN GEBURTSTAGEN STEHEN, auch nachdem gezogen wurde und
+       auch für den, der nicht selbst gedreht hat: es ist an diesem Tag kein
+       Auslosungswerkzeug mehr, sondern ein Spielzeug, und ein Spielzeug, das
+       nach dem ersten Griff verschwindet, ist keines.
+
+       UND GEGEN DAS GEZEICHNETE FELD GEFILTERT, nicht bloß übernommen. Die
+       beiden Listen stammen aus verschiedenen Zeitpunkten: `ehre.fuer` rechnet
+       der Worker aus dem Topf von JETZT, `los.feld` ist das Feld, das mit der
+       Ziehung eingefroren wurde. Sie gehen auseinander, sobald das
+       Geburtstagskind erst NACH der Ziehung etwas anschreibt — dann verspräche
+       der Knopf „Nochmal für brunx", und die Flasche fände seinen Bogen nicht,
+       weil es ihn in diesem Rad nie gab. Der Filter macht die Aufschrift wahr
+       und setzt zugleich die Regel durch, die ohnehin gilt: wer kein Feld im
+       Rad hat, kann auch nicht angefahren werden. */
+    const imRad = new Set((los.feld || []).map(s => s.name));
+    ehrenFuer = ((los.ehre && los.ehre.fuer) || []).filter(n => imRad.has(n));
+    const ehre = ehrenFuer.length > 0;
+
     /* Das Rad steht, solange nichts gezogen ist — und danach nur noch für den,
        der eben selbst gedreht hat. Wer später dazukommt, liest das Ergebnis;
        ein Rad, das schon steht, will niemand noch einmal anschauen. */
-    const zeigeRad = gezogen ? selbstGedreht : genug;
+    const zeigeRad = ehre || (gezogen ? selbstGedreht : genug);
     $('rad-buehne').hidden = !zeigeRad;
     // Waehrend der Animation nicht neu zeichnen: eine Meldung, die dazwischen
     // eintrudelt, wuerde die Felder verschieben und den Zeiger danebenstellen.
@@ -7742,9 +8592,32 @@
       if (frageWar) losZeitVorbelegen();
     }
 
+    /* DERSELBE KNOPF, ANDERE AUFSCHRIFT — und kein zweiter daneben. Die Tafel
+       hat für jede Sache genau einen Weg; ein „Ehrenrunde"-Knopf neben
+       „Flasche drehen" wären zwei Knöpfe, die dasselbe Ding drehen.
+
+       WANN ER EHRT: sobald die echte Ziehung nicht mehr ansteht — entweder
+       weil sie gelaufen ist (`gezogen`) oder weil sie heute ausfällt, weil der
+       Abend des Geburtstagskindes schon steht (dann sagt der Worker
+       `darf_drehen: false`, siehe `losAntwort`). Vorher ist die erste Drehung
+       die echte, und die gewinnt das Geburtstagskind ohnehin.
+
+       `genug` GILT FÜR DIE EHRENRUNDE NICHT. Sie ist keine Auslosung, sie
+       braucht keinen Mindesttopf: hat außer dem Geburtstagskind niemand etwas
+       Kaltes, wird trotzdem für ihn gedreht. */
     const knopf = $('rad-knopf');
-    knopf.hidden = gezogen || !genug || !darf;
+    const ehrt = ehre && (gezogen || !genug);
+    ehrenModus = ehrt;
+    knopf.hidden = !darf || (!ehrt && (gezogen || !genug));
     knopf.disabled = false;
+    /* Die Aufschrift bei mehreren Geburtstagskindern nennt keinen Namen: „Für
+       Kai und Mira drehen" ist gelogen, es wird ja immer nur einer getroffen.
+       Und zurück auf „Flasche drehen", sobald nicht mehr geehrt wird: der Knopf
+       steht fest im Dokument und wird nicht neu gebaut — ohne diesen Zweig
+       stünde morgen „Nochmal für Kai" über einer ganz gewöhnlichen Ziehung. */
+    knopf.querySelector('.k-wort').textContent = !ehrt ? 'Flasche drehen'
+      : ehrenFuer.length > 1 ? 'Noch eine Ehrenrunde'
+      : 'Nochmal für ' + ehrenFuer[0];
 
     const teile = [];
 
@@ -7759,12 +8632,29 @@
           (z.grund ? ' („' + z.grund + '“)' : '')) + ' — die Flasche ist wieder frei.');
     }
 
-    if (!gezogen && !genug) {
+    /* WARUM DER KNOPF JETZT EHRT. Ohne diesen Satz stünde unter dem Rad die
+       Begründung der Auslosung — und die ist im Ehrenmodus entweder überholt
+       („ausgelost ist") oder schlicht falsch: `darf_drehen` ist bei einem
+       Geburtstagskind mit fertigem Abend `false`, und der alte Satz machte
+       daraus „noch zu wenig gemeldet", während fünf Leute angeschrieben
+       hatten. Drei Lagen, drei Sätze — die dritte ist die, in der wirklich zu
+       wenig im Topf ist und trotzdem gedreht werden darf. */
+    if (ehrt) {
+      teile.push(los.ehre.nur
+        ? 'Der Abend steht schon — heute dreht die Flasche nur noch zu Ehren.'
+        : gezogen
+        ? 'Ausgelost ist. Ab jetzt dreht die Flasche nur noch zu Ehren.'
+        : 'Für eine Auslosung reicht es noch nicht — für eine Ehrenrunde immer.');
+    }
+
+    /* Der gewöhnliche Satz bleibt weg, wo er nicht mehr stimmt: dass heute
+       nicht ausgelost wird, liegt dann am fertigen Abend und nicht am Topf. */
+    if (!gezogen && !genug && !(ehrt && los.ehre.nur)) {
       teile.push(abgesagt.length
         ? 'Heute hat abgesagt, wer da war. Morgen wieder.'
         : 'Noch zu wenig gemeldet — ausgelost wird ab ' + los.mindestens +
           ', die heute etwas Kaltes haben.');
-    } else if (!gezogen) {
+    } else if (!gezogen && genug) {
       /* Wer im Topf ist, entscheidet allein der Bestand — das Alter einer
          Meldung spielt keine Rolle. Draußen ist also nur, wer null gemeldet
          hat, und das ist eine Aussage über ihn und keine über die Uhr. */
@@ -7797,6 +8687,43 @@
     radSagt(teile.join(' '));
   }
 
+  /* --- Die Ehrenrunde -------------------------------------------------------
+     EINE EIGENE FUNKTION UND KEIN `if` IN `dreh()`. Der Unterschied ist nicht
+     die Animation — die ist dieselbe —, sondern dass hier NICHTS geschrieben
+     wird: kein Ruf an den Worker, kein Los, kein Termin, keine Mail, kein
+     Anstoß an die anderen Tafeln. `dreh()` setzt `selbstGedreht`, `heuteBei`
+     und `heuteStatus` und zeichnet aus einer Serverantwort; nichts davon
+     passiert hier. In einem gemeinsamen Rumpf mit einer Abzweigung wäre genau
+     das die Zeile, die beim nächsten Umbau versehentlich für beide gilt.
+
+     Die Flasche zeigt reihum, nicht zufällig — siehe `ehrenDran`.
+
+     KEIN `radSagt` HINTERHER: der Satz unter dem Rad gehört der Auslosung
+     („wartet auf Antwort", „raus für heute"). Eine Ehrenrunde beantwortet
+     nichts, sie feiert nur; was sie zu sagen hat, sagen Flasche und Konfetti. */
+  async function ehrenDreh() {
+    if (!ehrenFuer.length) return;
+    const wen = ehrenFuer[ehrenDran++ % ehrenFuer.length];
+    $('rad-knopf').disabled = true;
+    dreht = true;
+    try {
+      await VARIANTE.radDrehen(wen);
+      /* Der Regen fällt hier ohne den Merker von heute Morgen: die Ehrenrunde
+         ist ja gerade der Anlass, ihn noch einmal fallen zu lassen — genau
+         darum drückt man den Knopf. Nur der Gruß bleibt weg, er stand schon. */
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) feierRegen();
+    } catch (e) {
+      radSagt(e.message, true);
+    } finally {
+      dreht = false;
+      $('rad-knopf').disabled = false;
+      /* Während die Flasche lief, wurde nichts gezeichnet — dieselbe Nachsorge
+         wie bei der echten Drehung, sonst geht eine Meldung verloren, die
+         mitten im Lauf eintrudelt. */
+      nachholen();
+    }
+  }
+
   async function dreh() {
     $('rad-knopf').disabled = true;
     radSagt('');
@@ -7813,6 +8740,13 @@
       }
       selbstGedreht = true;
       await VARIANTE.radDrehen(d.gewinner);
+      /* Trifft die ECHTE Ziehung das Geburtstagskind — und am Geburtstag trifft
+         sie es immer (siehe `ehrenLage` im Worker) —, dann ist das derselbe
+         Augenblick wie eine Ehrenrunde und bekommt dasselbe Konfetti. Ohne
+         diese Zeile fiele es erst beim zweiten Drücken, und das erste, das
+         eigentliche, ginge still vorbei. */
+      if (ehrenFuer.includes(d.gewinner)
+        && !matchMedia('(prefers-reduced-motion: reduce)').matches) feierRegen();
       dreht = false;
       heuteBei = d.gewinner;
       heuteStatus = d.status;
@@ -10289,6 +11223,9 @@
     if (!d) return;
 
     $('dk-name').value = d.name || '';
+    /* Die drei Räder auf den gespeicherten Wert stellen. Sie können jede Form
+       zeigen, die die Spalte kennt — mit Jahr und ohne. */
+    gebRaeder($('dk-geb-t'), $('dk-geb-m'), $('dk-geb-j'), d.geburtstag);
     $('dk-mail').textContent = d.email || '— keine hinterlegt —';
 
     const g = $('dk-gesperrt');
@@ -10601,6 +11538,13 @@
       // Wie viele Abende im Archiv liegen — daran hängt der Knopf zur Chronik.
       chronikZahl = Number(d.chronik) || 0;
       zeichneFeld(d.feld || [], d.los || null, d.termine || [], d.notrufe || []);
+      /* NACH dem Zeichnen und nicht davor: der Regen fällt über die Tafel, und
+         eine Tafel, die noch leer ist, ist ein seltsamer Grund zum Feiern. Er
+         steht hier und nicht in `zeichneFeld`, weil er nichts zeichnet, was zur
+         Tafel gehört — und weil `zeichneFeld` auch der Weg des stillen
+         Nachfassens ist. Dass der Regen trotzdem nur einmal am Tag fällt,
+         entscheidet `feierAnstossen` selbst. */
+      feierAnstossen(d.feld, d.los);
     } catch (e) {
       /* Der Punkt geht IMMER mit, auch beim stillen Nachfassen — er ist die
          einzige Stelle, die einen Aussetzer ueberhaupt noch verraet. Der Rest
@@ -10759,7 +11703,10 @@
   }
 
   // --- Bedienung ------------------------------------------------------------
-  $('rad-knopf').addEventListener('click', dreh);
+  /* Ein Knopf, zwei Taten — die Weiche steht hier und nicht in `dreh()`: was
+     der Knopf gerade ist, entscheidet `zeichneRad` beim Beschriften, und wer
+     die Aufschrift setzt, setzt auch die Tat. */
+  $('rad-knopf').addEventListener('click', () => ehrenModus ? ehrenDreh() : dreh());
   $('los-ja').addEventListener('click', () => antwortLos(true));
   $('los-nein').addEventListener('click', () => antwortLos(false));
   /* Enter im Grundfeld ist eine Absage — es steht unter keinem Formular, also
@@ -10884,6 +11831,49 @@
       knopf.disabled = false;
     }
   });
+
+  /* Der eigene Geburtstag (Schema 31). Dieselbe Form wie das Namensfeld
+     darüber — Feld, Haken, ein Satz zurück.
+
+     EIN LEERES FELD LÖSCHT, und das braucht keinen eigenen Knopf: wer den
+     Eintrag loswerden will, wischt ihn weg und drückt den Haken. Ein
+     „löschen" daneben wäre ein zweiter Weg zu derselben Tat — im Kontor steht
+     er, weil dort ein ganzer Kasten aufklappt und das Feld nicht die einzige
+     Zeile ist.
+
+     KEIN `hole()` HINTERHER, anders als beim Namen. Der Name steht in der
+     Liste und muss sofort dort stehen; ein Geburtstag wirkt frühestens am
+     nächsten passenden Morgen. Wer ihn AM Tag selbst nachträgt, sieht Krone
+     und Schimmer beim nächsten stillen Nachfassen, also binnen einer halben
+     Minute — dafür lohnt keine zusätzliche Runde zum Worker. */
+  $('dk-geb-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const knopf = ev.target.querySelector('button');
+    knopf.disabled = true;
+    dkSagt('');
+    try {
+      const d = await ruf('/api/geburtstag',
+        { geburtstag: gebAusRaedern($('dk-geb-t'), $('dk-geb-m'), $('dk-geb-j')) });
+      deckelStand = { ...deckelStand, geburtstag: d.geburtstag };
+      /* Neu stellen statt stehen lassen: der Worker kann den Wert normiert
+         haben, und die Räder sollen zeigen, was gespeichert ist — nicht, was
+         man gewählt hatte. */
+      gebRaeder($('dk-geb-t'), $('dk-geb-m'), $('dk-geb-j'), d.geburtstag);
+      dkSagt(d.geburtstag
+        ? 'Steht im Kalender. Am Tag selbst wird die Tafel laut.'
+        : 'Dein Geburtstag steht nicht mehr im Kalender.');
+    } catch (e) {
+      dkSagt(e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  /* Der Februar hat nicht immer 29 Tage und der April nie 31: wechselt Monat
+     oder Jahr, wird die Tagesliste neu gebaut. Die Räder stehen fest im
+     Dokument, also darf der Zuhörer hier einmal hängen. */
+  ['dk-geb-m', 'dk-geb-j'].forEach(id => $(id).addEventListener('change',
+    () => gebTage($('dk-geb-t'), $('dk-geb-m'), $('dk-geb-j'))));
 
   $('dk-mail-auf').addEventListener('click', () => {
     const f = $('dk-mail-form');
@@ -12472,11 +13462,27 @@
     /* In zwei Zügen und nicht in einem: `weekday: 'short'` liefert im
        Deutschen „Sa.", mit Punkt, und in der zusammengesetzten Form obendrein
        ein Komma dahinter („Sa., 8. August"). Auf einer Tafel steht „Sa · 8.
-       August" — der Punkt wandert weg, das Komma wird zum Trennpunkt. */
-    const heute = new Date();
-    $('schild-datum').textContent =
-      heute.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '') +
-      ' · ' + heute.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+       August" — der Punkt wandert weg, das Komma wird zum Trennpunkt.
+
+       DER MONAT WIRD AUF SCHMALEN GERÄTEN KURZ. Er ist das längste Stück der
+       Zeile („September" sind neun Zeichen für eine Auskunft, die schon im
+       Datum steht), und unter etwa 360 px reicht selbst die mitskalierende
+       Schrift nicht mehr, um „WER HAT KALT" und das Datum nebeneinander zu
+       halten. „10. Aug." ist dabei keine Notlösung, sondern genau die Form,
+       in der die Termine darunter ohnehin stehen.
+
+       Als Medienabfrage MIT Zuhörer und nicht als einmalige Messung: wer sein
+       Telefon dreht, wechselt die Breite, ohne die Seite neu zu laden. */
+    const eng = matchMedia('(max-width: 380px)');
+    const schild = () => {
+      const heute = new Date();
+      $('schild-datum').textContent =
+        heute.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '') +
+        ' · ' + heute.toLocaleDateString('de-DE',
+          { day: 'numeric', month: eng.matches ? 'short' : 'long' });
+    };
+    schild();
+    eng.addEventListener('change', schild);
   }
 
   Promise.resolve()

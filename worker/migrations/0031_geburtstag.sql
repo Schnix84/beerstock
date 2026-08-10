@@ -1,0 +1,61 @@
+-- ===========================================================================
+-- Schema 31: Wer heute Geburtstag hat, wird gefeiert.
+--
+-- Seit 0029 gibt es einen Tageszustand, der an einem MENSCHEN haengt und
+-- ueberall dort mitgezeichnet wird, wo sein Name steht: der Regenbogen. Der
+-- Geburtstag ist der zweite davon - und er ist bewusst NICHT derselbe.
+--
+-- EINE SPALTE, NULLBAR:
+--
+--   geburtstag   NULL = keiner eingetragen, sonst 'MM-TT' oder 'JJJJ-MM-TT'
+--
+-- WARUM ZWEI LAENGEN IN EINER SPALTE. Das Jahr ist die einzige Angabe hier,
+-- die jemand nicht hergeben will - wer feiern moechte, ohne dass danebensteht,
+-- wie alt er wird, traegt 'MM-TT' ein und die Seite schreibt kein Alter hin.
+-- Zwei Spalten (`tag`, `jahr`) waeren dieselbe Auskunft in zwei Feldern, von
+-- denen das zweite fast immer leer ist; ein Pflichtjahr mit Platzhalter
+-- ('1900-08-10') waere eine Luege in der Datenbank. Der Worker liest den Tag
+-- immer von HINTEN (die letzten fuenf Zeichen), das Jahr nur, wenn zehn
+-- Zeichen dastehen - beide Formen kosten denselben Vergleich.
+--
+-- WARUM NICHT DER GEBURTSTAG AUF DER MARKE `farbe`. Der Regenbogen reitet als
+-- Platz 99 in der Kreidereihe mit (`farbeSql`), und das ist dort richtig: er
+-- ERSETZT die Farbe eines Menschen. Ein zweiter Platz - 98 fuer den
+-- Geburtstag - saehe wie dieselbe Loesung aus und waere die falsche: das
+-- `CASE` gibt genau einen Wert zurueck, und wer an seinem Geburtstag auch den
+-- Regenbogen traegt, verloere eines von beiden, ohne dass irgendwo stuende,
+-- welches. Der Geburtstag geht darum denselben Weg wie `stolz_heute` im
+-- Kontor: ein EIGENES Ja/Nein neben der Farbe. Beide Auszeichnungen koennen
+-- dann am selben Tag am selben Menschen stehen - der Name im Regenbogen, die
+-- Krone daneben, die Girlande ueber der ganzen Zeile -, und keine muss der
+-- anderen weichen.
+--
+-- WELCHER TAG "HEUTE" IST: `bierTag()`, nicht der Kalendertag. Die Tagesgrenze
+-- dieser Anwendung liegt um LOS_GRENZE Uhr UTC (02:00, also 04:00 Ortszeit),
+-- und das ist hier nicht nur Gleichmacherei mit dem Rad, sondern die richtige
+-- Auskunft: wer um drei Uhr nachts noch am Tisch sitzt, hat immer noch
+-- Geburtstag. Ein `date('now')` gaebe ihm um Mitternacht den Hut ab und
+-- braechte ihn - eine Zeitzone weiter - auch noch zwei Stunden zu spaet.
+--
+-- DER 29. FEBRUAR bekommt keine Sonderregel. Wer ihn eintraegt, wird in drei
+-- von vier Jahren nicht gefeiert; das ist die Lage und keine Panne, und jede
+-- Ausweichregel ("dann eben am 28.") ist eine Entscheidung ueber den
+-- Geburtstag eines anderen Menschen, die eine Datenbank nicht treffen soll.
+--
+-- KEIN CHECK. Die Form prueft der Worker beim Eintragen (`POST
+-- /api/admin/nutzer` mit `aktion: 'geburtstag'`), und zwar strenger, als ein
+-- CHECK es koennte: dort wird der Tag auch auf seine Gueltigkeit im Monat
+-- geprueft, was ein `LIKE '__-__'` nie sieht.
+--
+-- KEIN `UPDATE ... WHERE name = '...'` IN DIESER DATEI - dieselbe Regel wie
+-- bei 0028 und 0029: wann jemand Geburtstag hat, ist eine Tatsache ueber die
+-- Runde von heute und keine Schemageschichte. Die Spalte faengt leer an, die
+-- Daten kommen aus dem Kontor.
+--
+-- ZEIT: die Spalte traegt keine. Sie ist ein DATUM ohne Zeitpunkt und ohne
+-- Zone - genau darum steht kein `datetime` darin und wird nie eines daraus.
+-- ===========================================================================
+
+/* Reines ALTER TABLE ADD COLUMN - kein Tabellentausch, also auch kein
+   `PRAGMA foreign_keys = OFF`. */
+ALTER TABLE users ADD COLUMN geburtstag TEXT;

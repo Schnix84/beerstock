@@ -552,7 +552,7 @@ gedrückt: das ist die Farbe darunter.
 Wer ihn trägt, trägt ihn **überall** — Bogen, Name und Bestand am Rad, seine
 Zeile auf der Tafel und der große Name darüber, der Kopf seines Blattes, jeder
 seiner Beiträge im Faden (und jedes „an ihn" darüber), sein Name über einem
-Bierabend und unter „eingetragen von", seine Notrufzeile, sein Name und seine
+Bierabend und unter „von", seine Notrufzeile, sein Name und seine
 Balkenbeschriftung im Jahresrückblick, seine Kurve und seine Balken in den
 Statistiken der Runde **und** in denen des Wirts, sein Monogramm im Kontor. Wer ihn gewählt hat, ihn heute aber nicht trägt, ist dort am Ring um
 sein Monogramm zu erkennen: außen die sechs Töne, innen die Kreide, in der er
@@ -605,6 +605,88 @@ wie die sieben Kreiden (`ideas/pruefungen/stolz-reihe.mjs`): die Flagge selbst
 geht auf Schiefer nicht — ihr Grün hat dort einen Kontrast von 1,6 und wird zu
 einem Loch, ihr Gelb sticht so heraus, dass vom Verlauf nur Gelb bleibt. Es ist
 ein Regenbogen **aus Kreide**, kein Neonschild.
+
+### Wer heute Geburtstag hat
+
+Der zweite Tageszustand, der an einem Menschen hängt — und mit Absicht nicht
+derselbe wie der Regenbogen. **Jeder trägt seinen eigenen unter *mein Deckel*
+ein**, gleich unter dem Namen; der Wirt kann es zusätzlich im Kontor an jeder
+Karte. Beide Stellen haben dieselben **drei Wählräder** — Tag, Monat, Jahr. Ein
+Kalenderfeld wäre hier das falsche Werkzeug: ein Geburtstag liegt Jahrzehnte
+zurück, und der native Kalender öffnet im laufenden Monat und blättert
+monatsweise. In einer Liste springt man mit der Tastatur direkt auf die
+Jahreszahl.
+
+**Das Jahr darf wegbleiben** — der Strich im dritten Rad ist eine gültige Wahl.
+Gespeichert wird dann `MM-TT`, sonst `JJJJ-MM-TT` (`users.geburtstag`,
+Schema 31). Tag oder Monat auf dem Strich löscht den Eintrag. Ob ein Jahr
+dabeisteht, ändert an der Anzeige nichts: **das Alter erscheint nirgends.**
+**Das Jahr wird nirgends angezeigt** — auf der Tafel steht „Geburtstag" und
+keine Zahl. Ein Alter neben dem Namen wäre eine Auskunft
+über einen Menschen, die die Tafel für ihn herausgibt und nicht er. Diese Angabe
+darf man auch im Kontor bei sich selbst setzen, und zwar als einzige mit einem
+echten Grund: der Betreffende ist der Einzige, der sie sicher weiß — und genau
+deshalb steht sie überhaupt am Deckel.
+
+Auf der Tafel feiert die **ganze Zeile** mit. Sie bekommt einen goldenen Rahmen,
+um den ein helles **Lauflicht** wandert, und an der Oberkante hängt eine
+**Girlande** — eine Wimpelkette in Gold und Champagner, deren Schnur die Kante
+des Rahmens selbst ist. Dazu der **wandernde Goldschimmer** im Namen und eine
+Marke mit Krone.
+
+Bei **jedem Öffnen** der Seite fällt zusätzlich einmal Konfetti über die ganze
+Tafel, mit einem Gruß darüber — „brunx hat heute Geburtstag / Und gewinnt heute —
+immer!", und wer selbst gemeint ist, liest „Alles Gute, brunx! / Du gewinnst
+heute — immer!". Einmal je Aufbau, nicht bei jedem Nachladen: die Tafel frischt
+sich im Minutentakt auf, und was beim ersten Mal überrascht, wäre beim dritten
+eine Belästigung. Wer `prefers-reduced-motion` gesetzt hat, bekommt diesen Regen
+nicht; Rahmen, Girlande, Schimmer, Krone und Gruß bleiben stehen — ein
+Geburtstag ist dann ruhig und nicht abwesend.
+
+Anders als der Regenbogen reitet er **nicht** auf `farbe` mit, sondern kommt als
+eigenes `geburtstag` an der Zeile (und als `geburtstag_heute` in `/api/me`). Der
+Grund steht in `worker/migrations/0031`: Platz 99 ersetzt die Kreide eines
+Menschen, und ein zweiter Platz für den Geburtstag hieße, dass sich an einem
+Tag entscheiden müsste, welche der beiden Auszeichnungen verschwindet. So trägt
+wer beides hat auch beides. Innerhalb des Namens gilt dabei weiter der Vorrang
+des Regenbogens — zwei Verläufe auf denselben Buchstaben gibt es nicht —, und
+**seit die Zeile selbst feiert, kostet dieser Vorrang nichts mehr**: Rahmen,
+Lauflicht und Girlande hängen an der Zeile und nicht an der Schrift, der
+Regenbogenträger bekommt sie also genauso wie jeder andere.
+
+„Heute" ist auch hier der **Biertag** und nicht der Kalendertag: wer um drei
+Uhr nachts noch am Tisch sitzt, hat weiter Geburtstag. Der 29. Februar bekommt
+keine Ausweichregel — wer ihn einträgt, wird in drei von vier Jahren nicht
+gefeiert; jede Ersatzregel wäre eine Entscheidung über den Geburtstag eines
+anderen Menschen.
+
+#### Das Rad am Geburtstag
+
+Die Flasche gehört an diesem Tag dem Geburtstagskind, und zwar in zwei Stufen:
+
+1. **Die erste Drehung ist echt und es gewinnt** — mit Termin, Mail und allem.
+   Es richtet aus, das ist das Geschenk der Runde. Gezogen wird trotzdem und
+   nicht gesetzt: haben zwei am selben Tag Geburtstag, entscheidet zwischen
+   ihnen weiter der Bestand.
+2. **Danach sind alle weiteren Drehungen Ehrenrunden.** Der Knopf bleibt stehen
+   und heißt „Nochmal für …"; die Flasche landet immer auf dem Geburtstagskind,
+   es regnet Konfetti — und es passiert **sonst nichts**: kein Los, kein Termin,
+   keine Mail, kein Anstoß an die anderen Tafeln. Die Ehrenrunde läuft
+   vollständig auf der Seite und ruft den Worker gar nicht erst.
+
+Steht der Abend des Geburtstagskindes an diesem Tag schon (es hat ihn selbst
+eingetragen oder er findet bei ihm statt), **entfällt Stufe 1**: dann gibt es
+den ganzen Tag nur Ehrenrunden. Wo getrunken wird, ist ja bereits entschieden,
+und eine Auslosung daneben könnte es nur noch falsch beantworten. `POST
+/api/drehen` antwortet an so einem Tag mit 409 — für den Tab, der seit dem
+Morgen offensteht.
+
+Wer heute geehrt werden kann, sagt der Worker im `los`-Objekt als
+`ehre: {fuer:[Namen], nur:bool}`; fehlt der Schlüssel, hat niemand Geburtstag.
+Ein Geburtstagskind **ohne kaltes Bier** hat kein Feld im Rad und steht deshalb
+nicht darin — die Flasche könnte gar nicht auf es zeigen. Es wird an der Tafel
+trotzdem gefeiert, nur eben ohne Rad. Für die Ehrenrunde gilt die Mindestgröße
+des Topfes **nicht**: sie ist keine Auslosung.
 
 ### Architektur
 
@@ -754,7 +836,8 @@ Drei Dinge, die dazugehören:
 | `POST /api/anmelden` | `{email}` → schickt einen Magic Link |
 | `POST /api/magic` | `{token}` aus dem Link → Geräte-Token |
 | `POST /api/name` | Name für die Liste setzen |
-| `GET /api/me` 🔒 | wem das Token gehört: Name, Adresse, Rolle, Sperre, Mailschalter, Gerätezahl, dazu `vapid` — der öffentliche Push-Schlüssel oder `null`, wenn der Worker kein Push kann. `ha_zugang` ist `{seit, zuletzt}`, wenn ein Schlüssel für Home Assistant eingerichtet ist, sonst `null`; die Gerätezahl zählt ihn **nicht** mit |
+| `POST /api/geburtstag` | `{geburtstag}` — den **eigenen** Geburtstag setzen oder löschen (`JJJJ-MM-TT`, `MM-TT` oder `null`), aus *mein Deckel*. Kennt kein Ziel, schreibt immer auf den Aufrufer; dieselbe Prüfung wie im Kontor. Kein Anstoß an die anderen Tafeln und kein Protokolleintrag |
+| `GET /api/me` 🔒 | wem das Token gehört: Name, Adresse, Rolle, Sperre, Mailschalter, Gerätezahl, dazu `vapid` — der öffentliche Push-Schlüssel oder `null`, wenn der Worker kein Push kann. `ha_zugang` ist `{seit, zuletzt}`, wenn ein Schlüssel für Home Assistant eingerichtet ist, sonst `null`; die Gerätezahl zählt ihn **nicht** mit. `stolz_heute` sagt, ob der eigene Holzrahmen heute bemalt ist, `geburtstag_heute`, ob man heute selbst gefeiert wird. Ein **Alter gibt diese API nirgends heraus** — gefeiert wird, *dass* jemand Geburtstag hat, nicht *wie oft* |
 | `POST /api/report` | `{biere, temperatur}` mit `Bearer`-Token |
 | `POST /api/abmelden` | wirft nur dieses eine Gerät raus |
 | `POST /api/geraete/alle-abmelden` 🔒 | wirft **alle** raus, auch dieses **und den für Home Assistant** — das verlorene Handy |
@@ -765,7 +848,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/push/weg` 🔒 | `{endpoint}` — nur die eigene Zeile; zweimal gerufen ist kein Fehler |
 | `POST /api/mail/aendern` 🔒 | neue Adresse; Link an die **neue**, Warnung an die **alte**, bis dahin gilt die alte |
 | `POST /api/mail/stumm` | `{id, sig}` aus dem Ein-Klick-Abmeldelink — ohne Anmeldung, per HMAC |
-| `POST /api/drehen` | die Flasche drehen; ein zweiter Ruf liefert dasselbe Los |
+| `POST /api/drehen` | die Flasche drehen; ein zweiter Ruf liefert dasselbe Los. Hat heute jemand Geburtstag und noch keinen Abend, **gewinnt er** (siehe *Das Rad am Geburtstag*); steht sein Abend schon, antwortet die Route mit 409 und es gibt nur Ehrenrunden. Die laufen auf der Seite und rufen hier gar nicht an |
 | `POST /api/los/antwort` | `{antwort:'ja'\|'nein', grund?, beginnt_am?, endet_am?}` — nur der Gezogene, per Token **oder** mit `{los, t}` aus der Gewinner-Mail |
 | `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand; mit `{ort}` statt `gastgeber` einer auswärts |
 | `POST /api/termin/aendern` | verschieben, umbenennen, absagen; ohne `endet_am` wandert das Ende beim Verschieben mit |
@@ -792,7 +875,7 @@ Drei Dinge, die dazugehören:
 | `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit. Stumme Tage stehen dort **nicht** in der Antwort — die schreibt erst die Zeichnung fort (siehe unten). Zwei Reihen folgen dem Fenster bewusst nicht: `wachstum` und `abende` sind Fragen an die ganze Geschichte der Runde. `vorrat` dagegen ist die einzige Reihe, die der Worker selbst über stumme Tage fortschreibt, weil eine Summe über alle Melder sich nachträglich nicht zeichnen lässt |
 | `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
-| `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen'\|'farbe'\|'stolz', grund?, farbe?}` — nur Admin. `farbe` ist der Platz in der Kreidereihe (0–6) oder `null` für „wieder nach Anmeldereihenfolge"; `stolz` ist ein Umschalter ohne Wert und wählt den Regenbogen als achte Farbe dazu oder ab — die Kreide daneben bleibt dabei stehen, sie ist die Farbe darunter. Diese beiden sind auch mit sich selbst erlaubt |
+| `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen'\|'farbe'\|'stolz'\|'geburtstag', grund?, farbe?, geburtstag?}` — nur Admin. `farbe` ist der Platz in der Kreidereihe (0–6) oder `null` für „wieder nach Anmeldereihenfolge"; `stolz` ist ein Umschalter ohne Wert und wählt den Regenbogen als achte Farbe dazu oder ab — die Kreide daneben bleibt dabei stehen, sie ist die Farbe darunter. `geburtstag` nimmt `JJJJ-MM-TT`, `MM-TT` (Jahr freiwillig) oder `null` zum Löschen und prüft den Tag auch auf seine Gültigkeit im Monat. Diese drei sind auch mit sich selbst erlaubt |
 | `POST /api/admin/stolz` 🔒 | `{aktiv: bool}` — der Schalter über der Regenbogenvergabe. Gilt keinem Mitglied, deshalb eine eigene Route; „aus" behält den Kreis. `{weiter: true}` dreht den Kreis stattdessen um **einen Schritt** weiter (Schema 30), ohne auf die Tagesgrenze zu warten — gespeichert wird dabei kein Träger, nur eine Verschiebung auf den Wurf |
 | `GET /api/admin/statistik` 🔒 | dasselbe **plus Betrieb**: Mails je Art und je Tag, Anmeldungen, wer noch Post will, Seitenaufrufe insgesamt/je Tag/je Nutzer — nur Admin |
 | `POST /api/admin/rundmail` 🔒 | `{betreff, text, bild_url?, knopf_text?, knopf_link?}` sofort an alle, die sie wollen — nur Admin |

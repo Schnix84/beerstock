@@ -466,6 +466,122 @@ async function stolzTraeger(env) {
   return results[(wurf(bierTag()) + versatz) % results.length].id;
 }
 
+/* Wer heute Geburtstag hat (Schema 31). Eine LISTE und kein einzelner - anders
+   als beim Regenbogen, den es je Tag genau einmal gibt, koennen hier zwei am
+   selben Tag geboren sein, und der eine duerfte dann nicht den anderen
+   verdraengen.
+
+   `substr(?, -5)` ist der Tag OHNE Jahr: gespeichert ist entweder 'MM-TT' oder
+   'JJJJ-MM-TT' (siehe 0031), und von hinten gelesen sind beide dasselbe. Ein
+   `strftime('%m-%d', ...)` ginge nur auf der langen Form und gaebe auf der
+   kurzen NULL zurueck - also stillschweigend nie Geburtstag.
+
+   DER TAG KOMMT AUS `bierTag()` und nicht aus `date('now')`: die Tagesgrenze
+   dieser Anwendung liegt um vier Uhr morgens Ortszeit. Wer um drei noch am
+   Tisch sitzt, hat weiter Geburtstag - und niemand bekommt ihn zwei Stunden zu
+   spaet, weil die Datenbank in UTC rechnet und der Melder nicht.
+
+   Gesperrte bleiben dabei - genau wie im Regenbogenkreis: sie stehen weiter auf
+   der Tafel, nur mit der Marke "ruht", und ein Geburtstag ist keine Belohnung
+   fuers Mitspielen. Entfernte und Namenlose fallen heraus, sie sind niemand
+   mehr, den man feiern koennte.
+
+   DAS ALTER WIRD NICHT AUSGERECHNET UND NICHT HERAUSGEGEBEN. Es stand hier
+   einmal ("wird 41") und ist auf Ansage wieder verschwunden: eine Zahl neben
+   dem Namen ist eine Auskunft ueber einen Menschen, die er nicht selbst
+   herausgibt, sondern die Tafel fuer ihn. Gefeiert wird DASS, nicht WIE OFT.
+   Ein Jahr darf trotzdem in der Spalte stehen (das Kontor nimmt es an, siehe
+   0031) - es geht nur nirgends hinaus. Deshalb gibt diese Funktion Ids zurueck
+   und sonst nichts. */
+async function geburtstagsKinder(env) {
+  const { results } = await env.DB.prepare(`
+    SELECT u.id
+    FROM users u
+    WHERE u.geburtstag IS NOT NULL
+      AND substr(u.geburtstag, -5) = ?
+      AND u.entfernt_am IS NULL AND u.name IS NOT NULL
+    ORDER BY u.id
+  `).bind(bierTag().slice(5)).all();
+  return results.map(r => r.id);
+}
+
+/* --- DAS RAD AM GEBURTSTAG ------------------------------------------------
+   Zwei Fragen auf einmal, und sie haengen zusammen:
+
+     fuer   wem zu Ehren heute gedreht werden kann (Namen, in Radreihenfolge)
+     nur    ob es dabei bleibt - also die echte Ziehung heute ausfaellt
+
+   DIE REGEL. Hat ein Geburtstagskind fuer heute noch keinen Abend, gewinnt es
+   die ERSTE Drehung des Tages in echt, mit Termin, Mail und allem - danach
+   sind alle weiteren Drehungen Ehrenrunden. Steht der Abend dagegen schon
+   (weil das Kind ihn eingetragen hat oder er bei ihm stattfindet), gibt es
+   heute NUR Ehrenrunden: wo getrunken wird, ist dann ja bereits entschieden,
+   und eine Ziehung daneben koennte es nur noch falsch beantworten.
+
+   WER DAZUGEHOERT, MUSS IM TOPF SEIN. Ein Geburtstagskind ohne kaltes Bier hat
+   kein Feld im Rad - die Flasche koennte gar nicht auf es zeigen, und ein
+   Gastgeber ohne Bestand ist auch als Geschenk keine gute Idee. Es feiert
+   dann an der Tafel weiter, nur eben ohne Rad.
+
+   `beginnt_am` STEHT IN UTC UND WIRD GEGEN DEN BIERTAG GEHALTEN. Ein Abend um
+   20 Uhr Ortszeit ist 18:00Z desselben Tages, einer um halb eins nachts noch
+   22:30Z des Vortages - beide fallen damit auf den Biertag, an dem sie
+   gefeiert werden. Genau das ist gemeint.
+
+   Abgesagte Abende zaehlen nicht: eine Absage gibt den Tag frei, hier wie
+   ueberall sonst. Und die Liste der Termine ist ein rollendes Fenster ueber
+   Wochen (`termineStmt`), nicht der heutige Tag - deshalb wird hier gefiltert
+   und nicht bloss gezaehlt. */
+/* Ein eingetippter Geburtstag, geprueft und in die Form der Spalte gebracht -
+   oder ein Satz, warum nicht. EINE Stelle fuer zwei Routen: der Wirt traegt
+   im Kontor ein (`POST /api/admin/nutzer` mit `aktion: 'geburtstag'`), jeder
+   fuer sich selbst am Deckel (`POST /api/geburtstag`), und zwei Kopien
+   derselben Pruefung laufen frueher oder spaeter auseinander - dann nimmt die
+   eine Route an, was die andere abweist.
+
+   `{ wert }` oder `{ fehler }`, nie beides: der Aufrufer prueft auf `fehler`
+   und gibt ihn weiter. `wert: null` ist ein gueltiges Ergebnis und heisst
+   "loeschen" - deshalb taugt `wert` selbst nicht als Erfolgspruefung.
+
+   DIE PRUEFUNG KANN MEHR ALS EINE FORM, und darum steht sie hier und nicht als
+   CHECK im Schema: der 31. Februar hat die richtige Gestalt und ist trotzdem
+   kein Tag. `Date.UTC` nimmt ihn an und rechnet ihn auf den 3. Maerz weiter -
+   was zurueckkommt, muss deshalb wieder DERSELBE Monat und DERSELBE Tag sein.
+
+   Das Schaltjahr braucht dafuer ein Jahr, das eines IST: geprueft wird gegen
+   2024, damit der 29. Februar durchgeht. Ob er in einem gegebenen Jahr
+   stattfindet, ist eine Frage fuer den Tag selbst und nicht fuers Eintragen
+   (siehe 0031, dort auch, warum es dafuer keine Ausweichregel gibt). */
+function geburtstagPruefen(roh) {
+  if (roh === null || roh === undefined || roh === '') return { wert: null };
+  let wert = String(roh).trim();
+  const m = /^(?:(\d{4})-)?(\d{2})-(\d{2})$/.exec(wert);
+  if (!m) return { fehler: 'geburtstag: JJJJ-MM-TT, MM-TT oder null' };
+  const [, jahr, monat, tag] = m;
+  const probe = new Date(Date.UTC(jahr ? Number(jahr) : 2024, Number(monat) - 1, Number(tag)));
+  if (probe.getUTCMonth() + 1 !== Number(monat) || probe.getUTCDate() !== Number(tag)) {
+    return { fehler: 'Den Tag gibt es in dem Monat nicht' };
+  }
+  /* Ein Jahr in der Zukunft oder aus dem 18. Jahrhundert ist keine Angabe,
+     sondern ein Tippfehler. `bierTag()` liefert das laufende Jahr; ein
+     Geburtsjahr davor ist die einzige Richtung, die geht. */
+  if (jahr && (Number(jahr) > Number(bierTag().slice(0, 4)) || Number(jahr) < 1900)) {
+    return { fehler: 'Das Jahr sieht nach Vertipper aus' };
+  }
+  return { wert: (jahr ? jahr + '-' : '') + monat + '-' + tag };
+}
+
+function ehrenLage(kinder, topf, termine, tag) {
+  if (!kinder.length) return null;
+  const drin = new Set(kinder);
+  const fuer = topf.filter(p => drin.has(p.id)).map(p => p.name);
+  if (!fuer.length) return null;
+  const nur = termine.some(t =>
+    !t.abgesagt_am && String(t.beginnt_am || '').slice(0, 10) === tag &&
+    (drin.has(t.gastgeber_id) || drin.has(t.erstellt_von)));
+  return { fuer, nur };
+}
+
 /* Die Zeitraeume, die das Kontor zeigen darf. Der erste ist die Vorgabe.
    Eine LISTE, kein Bereich mit Ober- und Untergrenze: der Wert geht in ein
    `datetime('now', ?)`, und drei erlaubte Zahlen kann man ansehen und
@@ -623,7 +739,7 @@ async function nutzer(request, env) {
     env.DB.prepare(`
       SELECT u.id, u.name, u.email, u.quelle, u.rolle,
              u.gesperrt_am, u.gesperrt_grund, u.entfernt_am,
-             u.mail_prefs, u.mail_stumm_am
+             u.mail_prefs, u.mail_stumm_am, u.geburtstag
       FROM tokens t
       JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?
     `).bind(h),
@@ -1187,10 +1303,21 @@ function notrufKoordinaten(daten) {
    gezogen" - entweder noch gar nicht, oder das letzte Los ist abgelehnt bzw.
    verfallen. In beiden Faellen traegt `feld` den aktuellen Topf statt des
    eingefrorenen, und `zuletzt` sagt, warum wieder gedreht werden darf. */
-function losAntwort(tag, lage, topf, termine = []) {
+/* `kinder` sind die Ids derer, die heute Geburtstag haben (Schema 31). Ein
+   Argument mit Vorgabe und keine Pflicht: die Routen, die das Rad nur
+   nebenher mitliefern, sollen es nicht holen muessen - ohne die Liste fehlt
+   `ehre` schlicht, und die Seite zeichnet dann das gewoehnliche Rad. */
+function losAntwort(tag, lage, topf, termine = [], kinder = []) {
   const z = lage.gueltig;
+  const ehre = ehrenLage(kinder, topf, termine, tag);
   const gemeinsam = {
     tag,
+    /* Wem zu Ehren gedreht werden kann, und ob es dabei bleibt - oder gar
+       nicht erst da: ein FEHLENDER Schluessel ist die richtige Auskunft fuer
+       "heute niemand". Die Seite prueft auf sein Dasein und faellt damit auch
+       in der halben Minute nach einem Deploy sauber zurueck, in der noch ein
+       Worker ohne dieses Feld antwortet. */
+    ...(ehre ? { ehre } : {}),
     mindestens: lage.mindest,
     // Wer heute schon raus ist - fuer "Raus fuer heute: ..." unter dem Rad.
     abgesagt: lage.raus.map(r => r.gewinner),
@@ -1205,7 +1332,14 @@ function losAntwort(tag, lage, topf, termine = []) {
   };
 
   if (!z) {
-    const genug = topf.length >= lage.mindest;
+    /* `ehre.nur` schliesst die echte Ziehung fuer heute - der Abend des
+       Geburtstagskindes steht ja schon. Gedreht wird trotzdem, aber nur zu
+       seinen Ehren, und das entscheidet die Seite an `ehre` und nicht hier:
+       `darf_drehen` beantwortet weiterhin genau eine Frage, naemlich ob
+       `POST /api/drehen` etwas ausrichten wuerde. Die Route sagt dasselbe
+       noch einmal mit einem 409 - ein Tab, der seit dem Morgen offensteht,
+       kennt diese Antwort ja noch nicht. */
+    const genug = topf.length >= lage.mindest && !(ehre && ehre.nur);
     return {
       ...gemeinsam, gewinner: null, status: null, feld: losSegmente(topf),
       // `offen` heisst seit jeher "es kann gedreht werden"; `darf_drehen` ist
@@ -3868,8 +4002,11 @@ const ROUTEN = {
   'GET /api/me': async (request, env) => {
     // Der Traeger laeuft neben dem Ausweis her - siehe `stolzTraeger`. Er
     // beantwortet genau eine Frage auf jeder Seite: ist MEIN Holzrahmen heute
-    // bemalt.
-    const [ich, traeger] = await Promise.all([nutzer(request, env), stolzTraeger(env)]);
+    // bemalt. Die Geburtstagskinder (Schema 31) laufen aus demselben Grund
+    // daneben und beantworten die zweite: bin ICH heute dran.
+    const [ich, traeger, kinder] = await Promise.all([
+      nutzer(request, env), stolzTraeger(env), geburtstagsKinder(env),
+    ]);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     /* Nur die Zahl. Sie ist hoeher, als der Nutzer Geraete benutzt hat: JEDES
        Einloesen eines Magic Links legt ein neues Token an, auch im selben
@@ -3910,6 +4047,18 @@ const ROUTEN = {
          Wer den Regenbogen NUR gewaehlt hat, ihn heute aber nicht traegt,
          bekommt hier `false` - der Rahmen gehoert dem Tag, nicht der Wahl. */
       stolz_heute: traeger === ich.id,
+      /* Habe ICH heute (Schema 31)? Daran haengt der Konfettiregen, und der
+         gehoert dem, der davorsteht - nicht der Zeile. Ein Ja/Nein und keine
+         Zahl: das Alter gibt diese Anwendung nirgends heraus. */
+      geburtstag_heute: kinder.includes(ich.id),
+      /* Und der eingetragene Tag selbst, roh ('MM-TT' oder 'JJJJ-MM-TT') oder
+         `null` - der Deckel zeigt ihn zum Aendern. ZWEI Felder und nicht eines:
+         `geburtstag_heute` ist eine Aussage ueber HEUTE und wird an zwanzig
+         Stellen gelesen, `geburtstag` ist der gespeicherte Wert und wird an
+         genau einer geaendert. Aus dem Datum liesse sich das Heute zwar
+         ausrechnen - aber dann rechnete die Seite die Tagesgrenze nach, und
+         die ist der Biertag und nicht Mitternacht. */
+      geburtstag: ich.geburtstag || null,
       gemessen: ich.quelle === 'ha',
       email: ich.email,
       rolle: ich.rolle,
@@ -3966,6 +4115,39 @@ const ROUTEN = {
     // spaeter umbenennt, hatte schon einen.
     if (!ich.name) meldeNeuenNutzer(env, ctx, { id: ich.id, name, email: ich.email });
     return antwort(request, { ok: true, name });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Den eigenen Geburtstag setzen oder loeschen (Schema 31). Nur den eigenen -
+     die Route kennt gar kein Ziel, sie schreibt auf `ich.id`.
+
+     WARUM NICHT UEBER DAS KONTOR. Der Wirt kann es dort auch (`POST
+     /api/admin/nutzer` mit `aktion: 'geburtstag'`), aber jeder andere kaeme
+     dann nur an seinen eigenen Geburtstag, indem er jemanden bittet. Es ist
+     die eine Angabe im ganzen Datenbestand, die der Betreffende sicher weiss
+     und alle anderen raten - sie gehoert an den Deckel.
+
+     KEIN `anstoss` an die anderen Tafeln, anders als beim Namen darueber. Ein
+     Geburtstag wirkt frueestens am naechsten passenden Morgen; ihn heute
+     einzutragen aendert an keiner fremden Tafel etwas, das jemand sehen
+     wuerde. Am Tag selbst holt der halbminuetige Abgleich es ohnehin nach.
+
+     Und keine Mail, kein Protokolleintrag: der Wirt braucht nicht zu wissen,
+     wer wann seinen Geburtstag nachgetragen hat. Im Kontor steht er ja. */
+  'POST /api/geburtstag': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const geprueft = geburtstagPruefen(daten.geburtstag);
+    if (geprueft.fehler) return fehler(request, geprueft.fehler);
+    await env.DB.prepare('UPDATE users SET geburtstag = ? WHERE id = ?')
+      .bind(geprueft.wert, ich.id).run();
+    /* Der Wert kommt zurueck, wie er gespeichert wurde - die Seite schreibt
+       ihn damit in ihrer eigenen Schreibweise ins Feld zurueck, statt zu
+       raten, was aus dem Getippten geworden ist. */
+    return antwort(request, { ok: true, geburtstag: geprueft.wert });
   },
 
   // -------------------------------------------------------------------------
@@ -4658,6 +4840,9 @@ const ROUTEN = {
        Farbe wird mit dem Feld eingefroren (`losSegmente`), und ein Rad, das
        sich beim Nachzeichnen umfaerbt, waere kein Beleg mehr. */
     const traeger = await stolzTraeger(env);
+    // Wer heute Geburtstag hat (Schema 31) - er entscheidet gleich mit, wer
+    // gewinnt und ob ueberhaupt gezogen wird. Laeuft neben dem Traeger her.
+    const kinderP = geburtstagsKinder(env);
     /* Der Verfallslauf laeuft VOR dem Lesen und im selben batch: wer seit drei
        Stunden nicht geantwortet hat, gibt den Tag hier frei - und die beiden
        Abfragen dahinter sehen das bereits. */
@@ -4667,6 +4852,8 @@ const ROUTEN = {
     ]);
     const lage = tagesLage(tagRoh.results);
     const topf = losTopf(feld.results, lage);
+    const kinder = await kinderP;
+    const ehre = ehrenLage(kinder, topf, termine.results, tag);
 
     // Es gilt schon eines? Dann gilt das, egal wer fragt.
     if (lage.gueltig) {
@@ -4675,7 +4862,16 @@ const ROUTEN = {
          nicht mehr gibt. Ohne diese Aenderung schweigt die Leitung. */
       if (verfallen.meta.changes) anstoss(request, env, ctx, 'tafel');
       return antwort(request,
-        { ...losAntwort(tag, lage, topf, termine.results), schon: true });
+        { ...losAntwort(tag, lage, topf, termine.results, kinder), schon: true });
+    }
+    /* Steht der Abend des Geburtstagskindes schon, faellt die Ziehung heute
+       aus (siehe `ehrenLage`). Die Seite ruft hier dann gar nicht mehr an -
+       ein Tab, der seit dem Morgen offensteht, aber schon. NACH der Pruefung
+       auf ein geltendes Los: ein Ergebnis, das dasteht, soll sich weiter
+       melden duerfen, statt in einen Fehler zu laufen. */
+    if (ehre && ehre.nur) {
+      return fehler(request,
+        'Heute wird gefeiert — der Abend steht schon. Drehen geht nur zu Ehren.', 409);
     }
     if (topf.length < lage.mindest) {
       return fehler(request, lage.raus.length
@@ -4684,7 +4880,17 @@ const ROUTEN = {
           'die heute etwas Kaltes haben.', 409);
     }
 
-    const gewinner = ziehe(topf);
+    /* DIE EINE GEZINKTE ZIEHUNG. Hat heute jemand Geburtstag und noch keinen
+       Abend, zeigt die Flasche auf ihn - er richtet aus, und das ist das
+       Geschenk der Runde an ihn. Gezogen wird trotzdem und nicht gesetzt:
+       bei zwei Geburtstagskindern entscheidet weiterhin der Bestand, wie bei
+       jeder anderen Ziehung auch.
+
+       `losSegmente` unten bekommt weiter den GANZEN Topf. Das Feld wird mit
+       der Ziehung eingefroren und ist der Beleg des Abends - stuende dort nur
+       das Geburtstagskind, zeigte ein Rad von morgen ein Rad mit einem
+       einzigen Bogen, und niemand saehe mehr, gegen wen es gewonnen hat. */
+    const gewinner = ziehe(ehre ? topf.filter(p => ehre.fuer.includes(p.name)) : topf);
     /* Das Rennen zweier gleichzeitiger Dreher entscheidet der partielle
        Unique-Index `los_gueltig`: wer nicht geschrieben hat, liest gleich
        darauf das fremde Ergebnis und zeigt es an. Kein Sperren, keine
@@ -4714,7 +4920,7 @@ const ROUTEN = {
        Empfaenger nichts - sie laden und vergleichen. */
     anstoss(request, env, ctx, 'tafel');
     return antwort(request, {
-      ...losAntwort(tag, lage2, losTopf(feld2.results, lage2), termine2.results),
+      ...losAntwort(tag, lage2, losTopf(feld2.results, lage2), termine2.results, kinder),
       schon: !selbst,
     }, selbst ? 201 : 200);
   },
@@ -4841,6 +5047,7 @@ const ROUTEN = {
     }
 
     const traeger = await stolzTraeger(env);
+    const kinderP = geburtstagsKinder(env);
     const [tagRoh2, feld, termine] = await env.DB.batch([
       losTagStmt(env, tag), losFeldStmt(env, traeger), termineStmt(env, traeger),
     ]);
@@ -4850,7 +5057,8 @@ const ROUTEN = {
     /* Die Terminliste faehrt mit: sonst muesste die Seite gleich darauf die
        Bestenliste nachladen, nur damit der eben angelegte Abend dasteht. */
     return antwort(request, {
-      ...losAntwort(tag, lage2, losTopf(feld.results, lage2), termine.results),
+      ...losAntwort(tag, lage2, losTopf(feld.results, lage2), termine.results,
+                    await kinderP),
       termine: termine.results.map(t => terminAntwort(t)),
     });
   },
@@ -6020,7 +6228,7 @@ const ROUTEN = {
       env.DB.prepare(`
         SELECT u.id, u.name, u.email, u.rolle, u.quelle, u.erstellt,
                u.gesperrt_am, u.gesperrt_grund, u.entfernt_am,
-               u.mail_stumm_am, u.mail_prefs, u.stolz,
+               u.mail_stumm_am, u.mail_prefs, u.stolz, u.geburtstag,
                -- Der Platz in der Kreidereihe, und daneben ob er GEWAEHLT ist:
                -- das Kontor zeigt "automatisch" anders an als "so bestellt".
                ${farbeSql()} AS farbe, u.farbe AS farbe_gewaehlt,
@@ -6089,6 +6297,12 @@ const ROUTEN = {
            schreiben so lange in ihrer Kreide (Schema 29). */
         stolz: !!u.stolz,
         stolz_heute: u.id === traeger,
+        /* Der eingetragene Tag, so wie er dasteht (Schema 31) - 'MM-TT' oder
+           'JJJJ-MM-TT'. ROH und nicht als "hat heute": das Kontor ist die
+           Stelle, an der er GEAENDERT wird, und dafuer muss dastehen, was
+           drinsteht. Ob heute jemand feiert, sieht der Wirt auf der Tafel wie
+           alle anderen. */
+        geburtstag: u.geburtstag || null,
         seit: utc(u.erstellt),
         gesperrt: u.gesperrt_am
           ? { seit: utc(u.gesperrt_am), grund: u.gesperrt_grund, von: u.gesperrt_von }
@@ -6120,9 +6334,10 @@ const ROUTEN = {
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
     const aktion = String(daten.aktion || '');
-    if (!['sperren', 'entsperren', 'rolle', 'entfernen', 'farbe', 'stolz'].includes(aktion)) {
-      return fehler(request,
-        "aktion: 'sperren', 'entsperren', 'rolle', 'entfernen', 'farbe' oder 'stolz'");
+    if (!['sperren', 'entsperren', 'rolle', 'entfernen', 'farbe', 'stolz', 'geburtstag']
+      .includes(aktion)) {
+      return fehler(request, "aktion: 'sperren', 'entsperren', 'rolle', 'entfernen', " +
+        "'farbe', 'stolz' oder 'geburtstag'");
     }
 
     const ziel = await env.DB.prepare(`
@@ -6141,9 +6356,12 @@ const ROUTEN = {
        Fuer den Regenbogenkreis (`stolz`) gilt dasselbe aus demselben Grund,
        und aus einem zweiten dazu: sich selbst hineinzunehmen oder
        herauszunehmen ist die Handlung, bei der eine Rueckfrage am wenigsten
-       zu suchen hat. */
+       zu suchen hat. Und der eigene Geburtstag (Schema 31) ist die einzige
+       Angabe im ganzen Kontor, bei der der Betreffende die Wahrheit sicher
+       kennt und alle anderen sie raten. */
     const gegenMich = ziel.id === ich.id;
-    if (gegenMich && aktion !== 'entsperren' && aktion !== 'farbe' && aktion !== 'stolz') {
+    if (gegenMich && aktion !== 'entsperren' && aktion !== 'farbe' && aktion !== 'stolz'
+      && aktion !== 'geburtstag') {
       /* Auch die Degradierung: wer sich selbst zum `user` macht, sperrt sich
          aus dem Kontor aus. Zurueck kaeme er nur ueber ADMIN_MAIL - und das
          ist der Notausgang, nicht der Weg. */
@@ -6245,6 +6463,17 @@ const ROUTEN = {
       detail = neu ? 'im Kreis' : 'raus';
       await env.DB.prepare('UPDATE users SET stolz = ? WHERE id = ?')
         .bind(neu, ziel.id).run();
+
+    } else if (aktion === 'geburtstag') {
+      /* Ein WERT und kein Umschalter (Schema 31): 'MM-TT', 'JJJJ-MM-TT' oder
+         `null` zum Loeschen. Geprueft wird in `geburtstagPruefen` - dieselbe
+         Stelle, die auch der Deckel benutzt, damit hier nicht angenommen wird,
+         was dort abgewiesen wird. */
+      const geprueft = geburtstagPruefen(daten.geburtstag);
+      if (geprueft.fehler) return fehler(request, geprueft.fehler);
+      detail = geprueft.wert || 'geloescht';
+      await env.DB.prepare('UPDATE users SET geburtstag = ? WHERE id = ?')
+        .bind(geprueft.wert, ziel.id).run();
 
     } else {
       /* Weich. Ein hartes DELETE risse ueber `kommentare.autor_id`
@@ -7416,6 +7645,11 @@ const ROUTEN = {
        gebundener Wert kaeme dafuer zu spaet. Sie kostet eine Zeile aus einer
        Tabelle mit neun Zeilen. */
     const traeger = await stolzTraeger(env);
+    /* Die Geburtstagskinder (Schema 31) daneben. Sie gehen NICHT in den Text
+       der Abfragen darunter - anders als der Regenbogen reiten sie auf keiner
+       Farbmarke mit, sondern kommen als eigenes Feld an der Zeile heraus
+       (warum, steht in 0031). Deshalb darf das hier auch nebenher laufen. */
+    const kinderP = geburtstagsKinder(env);
     const [stand, best, verlauf, los, losFeld, termine, bewertungen, zaehler, chronik, notrufe] =
       await env.DB.batch([
       /* Gesperrte bleiben in der Liste stehen - das ist Historie, und ein
@@ -7486,6 +7720,11 @@ const ROUTEN = {
     const noten = schnitte(bewertungen.results);
     const wieViele = new Map(zaehler.results.map(z => [z.ziel_art + ':' + z.ziel_id, z.anzahl]));
 
+    /* Als Set und nicht als Liste: das Feld sucht je Zeile einmal darin, und
+       bei neun Meldern ist der Unterschied keiner - aber die Absicht steht so
+       da, ohne dass in der Schleife ein `includes` sitzt. */
+    const geburtstage = new Set(await kinderP);
+
     const feld = stand.results.map(r => ({
       // Die Id, damit die Seite eine Bewertung adressieren kann. Ohne Token
       // faengt niemand etwas damit an.
@@ -7503,6 +7742,11 @@ const ROUTEN = {
       // Sein Platz in der Kreidereihe. Die Tafel liest davon nur die Marke
       // `STOLZ` - den Regenbogen (Schema 29); die neun Kreiden zeichnet sie nicht.
       farbe: r.farbe,
+      /* Schema 31, und ausdruecklich NEBEN `farbe` und nicht darin: wer an
+         seinem Geburtstag auch den Regenbogen traegt, soll beides tragen. Ein
+         Ja/Nein und keine Zahl - das Alter gibt diese Anwendung nirgends
+         heraus, gefeiert wird DASS und nicht WIE OFT. */
+      geburtstag: geburtstage.has(r.id),
       best: bestmarke.get(r.id) ?? r.biere,
       verlauf: kurve.get(r.id) || [r.biere],
     }));
@@ -7513,7 +7757,8 @@ const ROUTEN = {
     const lage = tagesLage(los.results);
     return antwort(request, {
       feld,
-      los: losAntwort(tag, lage, losTopf(losFeld.results, lage), termine.results),
+      los: losAntwort(tag, lage, losTopf(losFeld.results, lage), termine.results,
+                      [...geburtstage]),
       termine: termine.results.map(t => terminAntwort(t, noten, wieViele)),
       chronik: chronik.results[0].n,
       notrufe: notrufe.results.map(n => notrufAntwort(n, ich.id)),
