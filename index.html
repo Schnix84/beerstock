@@ -760,6 +760,99 @@
   .fl-schrift { stroke: var(--kreide); stroke-width: 1.3; stroke-linecap: round; opacity: .75; }
   .fl-glanz   { stroke: #ffffff; stroke-width: 2.2; stroke-linecap: round; opacity: .22; }
 
+  /* --- Der Knall ------------------------------------------------------------
+     Steht die Flasche an einem Geburtstag still, fliegt der Korken und das Bier
+     spritzt hinterher. Am Geburtstag gewinnt das Geburtstagskind ohnehin jedes
+     Mal (`ehrenLage` im Worker) — das ist kein Zufall, der leise vorbeigehen
+     müsste, sondern der Augenblick, für den der Knopf gedrückt wurde.
+
+     WARUM EIN ZWEITER, GLEICH GEDREHTER HAUFEN NEBEN DER FLASCHE UND NICHT
+     EINFACH ETWAS IN IHR: `.rad-flasche` dreht sich um die Mitte ihrer EIGENEN
+     Umrissbox (`transform-box: fill-box`, siehe dort). Alles, was in dieser
+     Gruppe liegt, zählt in diese Box hinein — ein Korken, der achtzig Einheiten
+     hochfliegt, zöge den Drehpunkt mit sich, und die Flasche machte beim
+     nächsten Dreh einen sichtbaren Satz. `#rad-knall` ist deshalb ein
+     Geschwister und dreht sich per ATTRIBUT um den festen Punkt (150, 150).
+     Das sieht gleich aus und ist es nicht.
+
+     Aus demselben Grund wird der echte Korken nur durchsichtig statt
+     `display: none`: seine Oberkante IST die Oberkante der Umrissbox (y 95,5).
+     Nähme man sie weg, säße die Flasche vier Einheiten versetzt im Rad. */
+  .fl-kopf-weg { opacity: 0; }
+  #rad-knall { pointer-events: none; }
+
+  /* Der Schub: aus dem Hals heraus, geradeaus. Stark am Anfang, dann
+     auslaufend — ein Korken wird gestoßen und nicht getragen.
+
+     ZWEI SEKUNDEN UND NICHT EINE. Die erste Fassung war nach 1,15 s vorbei, und
+     der Korken war schon fort, bevor man ihn gefunden hatte: die Flasche steht
+     nach vier Sekunden Drehung still, das Auge sitzt noch auf dem Rad, und der
+     Knall spielt sich am Rand ab. Der Weg blieb fast derselbe (weiter geht die
+     viewBox nicht her), die Zeit wurde länger.
+
+     Und die Kurve wurde FLACHER. Mit dem ersten, sehr steilen Auslauf war der
+     Korken nach einem Drittel der Zeit am Ziel und stand die übrigen zwei
+     Drittel still auf dem Namen des Gewinners — länger sichtbar, aber als
+     Aufkleber. Jetzt zieht er bis zuletzt weiter. */
+  .knall-schub { animation: knall-schub 2s cubic-bezier(.14,.6,.4,1) forwards; }
+  @keyframes knall-schub { to { transform: translateY(-78px); } }
+
+  /* Taumel und Seitwärtsdrift laufen GLEICHMÄSSIG, während der Schub nachlässt.
+     Genau daraus wird die Bahn krumm — es steht nirgends eine Kurve, sie
+     entsteht aus den zwei verschiedenen Zeitkurven übereinander. */
+  .knall-korken {
+    transform-box: fill-box; transform-origin: 50% 50%;
+    animation: knall-taumel 2s linear forwards;
+  }
+  @keyframes knall-taumel {
+    78% { opacity: 1; }
+    to  { transform: translateX(var(--kx)) rotate(var(--kdreh)); opacity: 0; }
+  }
+
+  /* Der Plopp: ein Ring, der einmal kurz aus dem Hals geht. Er trägt nichts zur
+     Geschichte bei und ist trotzdem der Grund, warum man den Knall SIEHT statt
+     ihn nur zu bemerken — ohne ihn beginnt alles im Nichts. */
+  .knall-plopp {
+    fill: none; stroke: var(--gelb); stroke-width: 2;
+    transform-box: fill-box; transform-origin: 50% 50%;
+    /* `non-scaling-stroke`, sonst wächst die Linie MIT: bei dreieinhalbfacher
+       Vergrößerung wird aus 2 Einheiten Strich ein sieben Einheiten breiter
+       Reif, und der liest sich auf dem dunklen Schiefer nicht als Ring, sondern
+       als Schmierfleck am Hals. Gemessen am ersten Bau, nicht vermutet. */
+    vector-effect: non-scaling-stroke;
+    animation: knall-plopp .42s cubic-bezier(.1,.8,.3,1) both;
+  }
+  @keyframes knall-plopp {
+    0% { transform: scale(.35); opacity: 1; }
+    to { transform: scale(3.4);  opacity: 0; }
+  }
+
+  /* Das Bier. Ein Tropfen fährt aus dem Hals, wird unterwegs größer und
+     verblasst. Weite, Streuung, Dauer und Versatz würfelt das Skript und nicht
+     dieses Stylesheet — dieselbe Aufteilung wie beim Konfetti (`feierRegen`),
+     und aus demselben Grund: achtundvierzig gleich fliegende Tropfen wären ein
+     Strahl und kein Spritzer.
+
+     ZWEI SORTEN, UND DER UNTERSCHIED IST DIE FORM. Bier sind LÄNGLICHE Tropfen,
+     hochkant in der Flaschenachse — sie ziehen dadurch Striche in Flugrichtung,
+     und das liest sich als Flüssigkeit. Runde Punkte taten es nicht: der erste
+     Bau hatte kleine Kreise, und auf der Bühne sah das aus wie Staub. Schaum
+     dagegen ist rund und dick und bleibt am Hals.
+
+     Die Weite ist gedeckelt. Die viewBox endet bei y = 0, der Hals steht schon
+     54 Einheiten von der Mitte weg; was weiter fliegt, wird an der Kante
+     abgeschnitten, statt auszublenden. */
+  .knall-tropfen {
+    transform-box: fill-box; transform-origin: 50% 50%;
+    animation: knall-spritzer var(--dauer) cubic-bezier(.08,.75,.3,1) var(--warte) both;
+  }
+  @keyframes knall-spritzer {
+    0%  { transform: translate(0, 0) scale(.5); opacity: 0; }
+    12% { opacity: 1; }
+    62% { opacity: 1; }
+    to  { transform: translate(var(--tx), var(--ty)) scale(1.15); opacity: 0; }
+  }
+
   /* Der Anschrieb: was die Auslosung ergeben hat. */
   .erg { text-align: center; margin: 12px 0 4px; }
   .erg-oben {
@@ -3693,11 +3786,16 @@
               <path class="fl-glas" d="M144.5,104 L144.5,132 C144.5,142 132,146 132,158
                                        L132,199 Q132,204 137,204 L163,204 Q168,204 168,199
                                        L168,158 C168,146 155.5,142 155.5,132 L155.5,104 Z"/>
-              <path class="fl-korken" d="M141.5,104 L141.5,99 Q141.5,95.5 145,95.5 L155,95.5
-                                         Q158.5,95.5 158.5,99 L158.5,104 Z"/>
-              <g class="fl-kniff">
-                <path d="M144,104 L144,100 M147,104 L147,100 M150,104 L150,100
-                         M153,104 L153,100 M156,104 L156,100"/>
+              <!-- Korken und Kniff stecken in EINER Gruppe, seit der Korken am
+                   Geburtstag abfliegt: was zusammen fliegt, wird zusammen
+                   kopiert und zusammen unsichtbar (siehe `radKnall`). -->
+              <g id="fl-kopf">
+                <path class="fl-korken" d="M141.5,104 L141.5,99 Q141.5,95.5 145,95.5 L155,95.5
+                                           Q158.5,95.5 158.5,99 L158.5,104 Z"/>
+                <g class="fl-kniff">
+                  <path d="M144,104 L144,100 M147,104 L147,100 M150,104 L150,100
+                           M153,104 L153,100 M156,104 L156,100"/>
+                </g>
               </g>
               <rect class="fl-band" x="143.6" y="108" width="12.8" height="10" rx="1"/>
               <rect class="fl-etikett" x="133.4" y="163" width="33.2" height="32" rx="1.5"/>
@@ -3707,6 +3805,13 @@
             </g>
 
             <circle cx="150" cy="150" r="3" fill="#ffffff30"/>
+
+            <!-- Der Knall zum Geburtstag: hier fliegt der Korken, hier spritzt
+                 das Bier. Ein GESCHWISTER der Flasche und nichts in ihr — der
+                 Grund steht ausführlich am Stylesheet bei `.fl-kopf-weg`. Steht
+                 zuletzt, damit der Spritzer über den Namen geht und nicht unter
+                 ihnen durch. Gefüllt wird er erst beim Knall. -->
+            <g id="rad-knall" aria-hidden="true"></g>
           </svg>
         </div>
 
@@ -5064,6 +5169,20 @@
      springen. An der Zeile braucht es dafür den Kniff mit dem negativen
      Versatz (`feierPhase`); hier braucht es ihn nicht. */
   const FEIER_BREIT = 1.2;
+  /* UND DER KERN MUSS SCHMAL SEIN. Die Töne von `FEIER` liegen an der Zeile
+     gleichmäßig verteilt (0/25/50/75/100 %) — über 210 px ist das ein weicher
+     Verlauf mit einem hellen Bauch in der Mitte. Über 30 px ist derselbe Bauch
+     die halbe Schrift: es wird alles heller und wieder dunkler, und ein Glanz
+     ohne Kante ist keiner. Gemessen ging jedes Drittel des Wortes damit nur
+     um rund 30 Stufen auf und ab.
+
+     Hier stehen die Töne deshalb enger um die Mitte: außen die zwei Fünftel
+     tiefes Messing, in der Mitte ein Kern von einem Fünftel. Das ist ein
+     Lichtstreifen von sechs bis acht Pixeln, der über die Buchstaben zieht,
+     und er hat auf beiden Seiten Dunkel, gegen das er sich abhebt. Dieselben
+     Farben, andere Verteilung — die Palette bleibt die der Zeile, damit Rad
+     und Zeile nicht zwei verschiedene Goldtöne zeigen. */
+  const FEIER_KERN = [0, 40, 50, 60, 100];
   /* Die Runde des Schimmers. Sie steht ZWEIMAL da — hier und als `4.2s` an
      `.feier` im Stylesheet —, aus demselben Grund wie bei `FEIER_RUNDE`: eine
      Regel im Stylesheet kann diese Zahl nicht lesen. Wer die eine ändert,
@@ -5077,7 +5196,7 @@
       id, x1: '0', y1: '0', x2: String(FEIER_BREIT), y2: '0', spreadMethod: 'repeat',
     });
     FEIER.forEach((ton, i) => v.appendChild(s_el('stop', {
-      offset: (i / (FEIER.length - 1) * 100).toFixed(0) + '%', 'stop-color': ton,
+      offset: FEIER_KERN[i] + '%', 'stop-color': ton,
     })));
     /* Wer wenig Bewegung will, bekommt den Verlauf stehend — dieselbe Antwort
        wie im Stylesheet (`.feier { animation: none }`) und nicht etwa wieder
@@ -5432,6 +5551,27 @@
   }
   let radFelder = [];   // Segmentgrenzen des zuletzt gezeichneten Rades
   let radStand = 0;     // aktueller Drehwinkel, damit die nächste Drehung anschließt
+  let knallUhr = null;  // die Uhr, die den Geburtstagsknall wieder abräumt
+
+  /* So viele Tropfen fliegen aus dem Hals. Zwanzig waren es zuerst, und auf der
+     Bühne war das ein Rinnsal: die Tropfen sind klein, die Bühne ist 320 px
+     breit, und sie fliegen auseinander. Achtundvierzig sehen aus, wie eine
+     geschüttelte Flasche aussieht — mehr als beim Konfetti (vierunddreißig),
+     weil die über die ganze Seite fallen und diese hier durch EIN Loch gehen. */
+  const KNALL_TROPFEN = 48;
+
+  /* Alles zurück auf Flasche: Korken wieder da, der Haufen leer. Steht am
+     Anfang JEDER Drehung und am Ende jedes Knalls — `zeichneRad` schreibt nur
+     den Ring neu und käme hier nie vorbei, die Flasche bliebe sonst bis zum
+     nächsten Seitenaufbau ohne Korken stehen. */
+  function radKnallZurueck() {
+    clearTimeout(knallUhr);
+    knallUhr = null;
+    const raum = $('rad-knall');
+    if (raum) { raum.textContent = ''; raum.removeAttribute('transform'); }
+    const kopf = $('fl-kopf');
+    if (kopf) kopf.classList.remove('fl-kopf-weg');
+  }
 
   const radPunkt = (winkel, r) => {
     const b = (winkel - 90) * Math.PI / 180;
@@ -6374,6 +6514,8 @@
        fest — er kommt vom Worker —, hier wird er nur angefahren. Der Hals zeigt
        im Ruhezustand nach oben, also ist der Zielwinkel die Feldmitte selbst. */
     radDrehen(name) {
+      // Ein Knall von vorhin gehört nicht in die nächste Drehung.
+      radKnallZurueck();
       const i = radFelder.findIndex(f => f.name === name);
       if (i < 0) return Promise.resolve();
       const f = radFelder[i], mitte = (f.von + f.bis) / 2;
@@ -6387,6 +6529,78 @@
       g.style.transition = sparsam ? 'none' : 'transform 4.2s cubic-bezier(.16,.9,.24,1)';
       g.style.transform = `rotate(${radStand.toFixed(2)}deg)`;
       return new Promise(fertig => setTimeout(fertig, sparsam ? 60 : 4300));
+    },
+
+    /* Der Knall zum Geburtstag. Läuft NACH `radDrehen`, wenn die Flasche steht —
+       und nur dann: er schießt aus dem Hals heraus, und wohin der Hals zeigt,
+       steht erst am Ende fest. Deshalb braucht er auch kein Argument, er liest
+       `radStand`.
+
+       Der fliegende Korken ist eine KOPIE, das Original wird nur durchsichtig.
+       Warum, steht am Stylesheet bei `.fl-kopf-weg`; kurz: was in der
+       Flaschengruppe liegt, bestimmt ihren Drehpunkt mit.
+
+       Wer Bewegung abbestellt hat, kommt hier gar nicht erst an — die Prüfung
+       steht an den beiden Aufrufstellen, dort, wo auch das Konfetti hängt. */
+    radKnall() {
+      const raum = $('rad-knall'), kopf = $('fl-kopf');
+      if (!raum || !kopf) return;
+      radKnallZurueck();
+      /* Derselbe Winkel wie die Flasche, aber um den festen Mittelpunkt: die
+         Kopie liegt damit im ersten Bild genau auf dem Original. */
+      raum.setAttribute('transform', `rotate(${radStand.toFixed(2)} 150 150)`);
+
+      const flieger = kopf.cloneNode(true);
+      flieger.removeAttribute('id');
+      kopf.classList.add('fl-kopf-weg');
+
+      const taumel = s_el('g', { class: 'knall-korken' });
+      // Zur Seite geht es in die Richtung, in die sich der Korken auch dreht.
+      const hin = Math.random() < .5 ? -1 : 1;
+      taumel.style.setProperty('--kx', (hin * (9 + Math.random() * 13)).toFixed(1) + 'px');
+      taumel.style.setProperty('--kdreh', (hin * (420 + Math.random() * 320)).toFixed(0) + 'deg');
+      taumel.appendChild(flieger);
+      const schub = s_el('g', { class: 'knall-schub' });
+      schub.appendChild(taumel);
+      raum.appendChild(schub);
+
+      /* Der Plopp sitzt am Hals und geht nur einmal kurz auf. Er steht VOR den
+         Tropfen im Baum, damit die über ihn hinwegfliegen und nicht unter ihm
+         durch. */
+      raum.appendChild(s_el('circle', { class: 'knall-plopp', cx: 150, cy: 97, r: 5.5 }));
+
+      for (let i = 0; i < KNALL_TROPFEN; i++) {
+        /* Jeder dritte ist Schaum: kurz, dick, RUND, in Kreide. Er bleibt am
+           Hals stehen, während das Bier darüber hinausfliegt — ohne ihn sieht
+           der Spritzer aus wie Funken und nicht wie eine geschüttelte Flasche.
+
+           Das Bier dagegen ist ein LÄNGLICHER Tropfen in der Flaschenachse (er
+           liegt in der gedrehten Gruppe, „hochkant" heißt hier also „in
+           Flugrichtung"). Warum nicht rund, steht am Stylesheet. */
+        const schaum = i % 3 === 0;
+        const t = schaum
+          ? s_el('circle', { class: 'knall-tropfen', cx: 150, cy: 95,
+              r: (2.2 + Math.random() * 2.6).toFixed(1) })
+          : s_el('ellipse', { class: 'knall-tropfen', cx: 150, cy: 94,
+              rx: (1.1 + Math.random() * 1.1).toFixed(1),
+              ry: (2.6 + Math.random() * 2.8).toFixed(1) });
+        t.style.fill = schaum ? 'var(--kreide)' : 'var(--gelb)';
+        t.style.fillOpacity = schaum ? '.55' : '.88';
+        t.style.setProperty('--ty',
+          (-(schaum ? 14 + Math.random() * 26 : 30 + Math.random() * 52)).toFixed(1) + 'px');
+        t.style.setProperty('--tx',
+          ((Math.random() - .5) * (schaum ? 36 : 54)).toFixed(1) + 'px');
+        t.style.setProperty('--dauer', (.7 + Math.random() * .75).toFixed(2) + 's');
+        /* Erst der Korken, dann das Bier — und dann noch mehr Bier: der Versatz
+           beginnt bei einem Zwölftel und reicht über eine halbe Sekunde, damit
+           es nachschießt statt einmal zu blitzen. */
+        t.style.setProperty('--warte', (.08 + Math.random() * .5).toFixed(2) + 's');
+        raum.appendChild(t);
+      }
+
+      /* Abgeräumt wird nach der längsten Bahn samt Versatz, mit einem Schlag
+         Luft — wie beim Konfetti kein `animationend` am einzelnen Stück. */
+      knallUhr = setTimeout(radKnallZurueck, 2500);
     },
 
     /* Eine Kommentarkarte — für die Wurzel wie für die Antwort dieselbe. Sie
@@ -6925,6 +7139,8 @@
   //     VARIANTE.leer()           was dasteht, wenn noch niemand gemeldet hat
   //     VARIANTE.rad(segmente)    das Gluecksrad zeichnen
   //     VARIANTE.radDrehen(name)  es auf ein Feld fahren; Promise, wenn es steht
+  //     VARIANTE.radKnall()       Korken und Bier, wenn die Flasche am
+  //                               Geburtstag steht — nach `radDrehen`
   //     VARIANTE.losErgebnis(los) der Anschrieb der Ziehung
   //
   // Alles, was ueber Daten entscheidet, steht damit genau einmal; alles, was
@@ -8937,8 +9153,13 @@
       await VARIANTE.radDrehen(wen);
       /* Der Regen fällt hier ohne den Merker von heute Morgen: die Ehrenrunde
          ist ja gerade der Anlass, ihn noch einmal fallen zu lassen — genau
-         darum drückt man den Knopf. Nur der Gruß bleibt weg, er stand schon. */
-      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) feierRegen();
+         darum drückt man den Knopf. Nur der Gruß bleibt weg, er stand schon.
+         Der Korken fliegt mit: die Ehrenrunde ist optisch dieselbe Sache wie
+         die echte Ziehung am Geburtstag, und die knallt auch. */
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        VARIANTE.radKnall();
+        feierRegen();
+      }
     } catch (e) {
       radSagt(e.message, true);
     } finally {
@@ -8973,7 +9194,10 @@
          diese Zeile fiele es erst beim zweiten Drücken, und das erste, das
          eigentliche, ginge still vorbei. */
       if (ehrenFuer.includes(d.gewinner)
-        && !matchMedia('(prefers-reduced-motion: reduce)').matches) feierRegen();
+        && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        VARIANTE.radKnall();
+        feierRegen();
+      }
       dreht = false;
       heuteBei = d.gewinner;
       heuteStatus = d.status;

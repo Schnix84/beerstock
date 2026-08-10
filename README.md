@@ -679,6 +679,14 @@ Die Flasche gehört an diesem Tag dem Geburtstagskind, und zwar in zwei Stufen:
    keine Mail, kein Anstoß an die anderen Tafeln. Die Ehrenrunde läuft
    vollständig auf der Seite und ruft den Worker gar nicht erst.
 
+**Und wenn die Flasche steht, knallt der Korken.** Er fliegt aus dem Hals in die
+Richtung, in die der Hals gerade zeigt — also auf das Geburtstagskind —, taumelt
+zwei Sekunden lang davon, und hinterher spritzt das Bier: achtundvierzig Tropfen
+in Gelb und Schaum in Kreide. Das gilt für beide Stufen, für die echte Ziehung
+wie für jede Ehrenrunde, denn es ist derselbe Augenblick. Danach sitzt der Korken
+wieder auf der Flasche. Wer wenig Bewegung will, bekommt ihn nicht — wie beim
+Konfetti; Krone, Schimmer und Gruß bleiben auch dann stehen.
+
 Steht der Abend des Geburtstagskindes an diesem Tag schon (es hat ihn selbst
 eingetragen oder er findet bei ihm statt), **entfällt Stufe 1**: dann gibt es
 den ganzen Tag nur Ehrenrunden. Wo getrunken wird, ist ja bereits entschieden,
