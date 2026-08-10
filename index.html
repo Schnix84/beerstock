@@ -1477,7 +1477,9 @@
      schrumpfen (`min-width: 0`), sonst schiebt „September" den Haken hinaus. */
   .dk-datum select { flex: 0 1 auto; min-width: 0; padding-right: 2px; }
   .dk-datum .dk-geb-m { flex: 1 1 auto; }
-  .dk-datum .dk-ok { flex: none; width: auto; padding: 6px 14px; margin-left: auto; }
+  /* Nur noch die Lage — Maß und Polster stehen weiter unten für BEIDE Haken
+     gemeinsam. `margin-left: auto` schiebt ihn ans rechte Ende der Radreihe. */
+  .dk-datum .dk-ok { margin-left: auto; }
   .dk-wert {
     font-family: var(--hand); font-size: 14px; overflow-wrap: anywhere;
   }
@@ -1490,9 +1492,22 @@
 
      Zwei Klassen tief, und das mit Absicht: `.dk-ok` allein ist genauso
      spezifisch wie `.knopf`, und `.knopf` steht weiter unten in der Datei —
-     bei Gleichstand gewinnt die spätere Regel. Gemessen, nicht vermutet. */
+     bei Gleichstand gewinnt die spätere Regel. Gemessen, nicht vermutet.
+
+     UND GENAU DARAN IST DER HAKEN AM NAMEN HÄNGENGEBLIEBEN. Die Zeile darunter
+     hieß einmal `.dk-ok { padding: 6px 13px; font-size: 14px }` — eine Klasse
+     tief, also derselbe Gleichstand und dieselbe Niederlage: der Knopf trug
+     weiter die 11 px Polster von `.knopf` und war 45 px hoch. Der Haken am
+     Geburtstag entkam dem nur zufällig, weil er über `.dk-datum .dk-ok` mit
+     zwei Klassen angesprochen wurde und dort sein Polster mitbekam. Zwei Haken
+     nebeneinander, 45 und 35 px hoch, und die Regel, die es hätte richten
+     sollen, stand die ganze Zeit da — sie kam nur nie zum Zug.
+
+     Jetzt steht das Maß EINMAL für beide, mit zwei Klassen. Der Schriftgrad
+     bleibt der von `.knopf`: der Haken am Geburtstag zeigt ihn seit jeher, und
+     an ihn wird angeglichen. */
   .dk-tat .knopf, .dk-wechsel .knopf { width: auto; flex: none; }
-  .dk-ok { padding: 6px 13px; font-size: 14px; }
+  .dk-tat .dk-ok, .dk-wechsel .dk-ok { padding: 6px 14px; }
   .dk-wechsel { gap: 8px; }
   .dk-wechsel .feld { flex: 1 1 11em; width: auto; }
 
