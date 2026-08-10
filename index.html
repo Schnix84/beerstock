@@ -5027,6 +5027,79 @@
     return knoten;
   }
 
+  /* --- Derselbe Schimmer im SVG --------------------------------------------
+     Am Flaschendrehrad steht der Name als `<text>`, und ein `background-clip`
+     gibt es dort nicht. Was an der Zeile ein Hintergrundbild ist, ist hier ein
+     `linearGradient` als Füllung — dieselben Töne aus `FEIER`, dieselbe Runde,
+     dasselbe Wandern nach links. Der Weg ist der von `stolzVerweis`, bis auf
+     drei Unterschiede, und jeder hat einen Grund:
+
+     ENGER ALS AN DER ZEILE, und das ist der Unterschied, der über Schimmern
+     und Nichtschimmern entscheidet. Dort ist der Verlauf zweieinhalbmal so
+     breit wie der Name (`background-size: 250%`) — auf dem Siegerplatz, wo das
+     Wort 210 px misst, wandert der helle Kern dann sichtbar durch die
+     Buchstaben. Am Rad ist derselbe Name 30 px breit; der Kern wäre mit 75 px
+     breiter als das ganze Wort, und dann hebt und senkt sich der Name als
+     Ganzes, statt dass etwas durch ihn hindurchläuft. Gemessen war genau das
+     der erste Versuch: die Buchstaben gingen über eine Runde von Helligkeit
+     158 auf 185 und wieder zurück — ein Pulsieren, kein Glanz.
+
+     Mit `FEIER_BREIT` knapp über eins passt der Kern INS Wort und läuft
+     hindurch. Über eins muss er bleiben: bei genau eins stünde an beiden
+     Enden derselbe Ton, und der Verlauf sähe an den Rändern gespiegelt aus.
+
+     `spreadMethod="repeat"` und ein Weg von genau `FEIER_BREIT`: nur wenn der
+     Schritt so lang ist wie die Kachel, ist die Wiederholung nahtlos. Ein
+     krummer Weg zeigt alle paar Sekunden eine Kante mitten im Namen.
+
+     SMIL UND NICHT CSS. Eine CSS-Animation kann `gradientTransform` nicht
+     verlässlich fassen, und der Verweis auf den Verlauf lässt sich am Text
+     nicht animieren. `animateTransform` ist der Weg, den beide Engines gehen —
+     gemessen in Chrome UND in WebKit (`rad-schimmer-probe.mjs`), weil das die
+     eine Zeile ist, die auf dem Telefon anders ausgehen könnte.
+
+     UND ER ÜBERLEBT DAS NEUZEICHNEN. Die Definition hängt am SVG und nicht an
+     der Gruppe, die das Rad alle halbe Minute leert — der Schimmer läuft
+     deshalb einfach weiter, statt bei jedem Abgleich in seine Startecke zu
+     springen. An der Zeile braucht es dafür den Kniff mit dem negativen
+     Versatz (`feierPhase`); hier braucht es ihn nicht. */
+  const FEIER_BREIT = 1.2;
+  /* Die Runde des Schimmers. Sie steht ZWEIMAL da — hier und als `4.2s` an
+     `.feier` im Stylesheet —, aus demselben Grund wie bei `FEIER_RUNDE`: eine
+     Regel im Stylesheet kann diese Zahl nicht lesen. Wer die eine ändert,
+     ändert die andere mit, sonst schimmern Zeile und Rad verschieden schnell. */
+  const FEIER_SCHIMMER = 4.2;
+
+  let feierLaufend = 0;
+  function feierBauen(svg) {
+    const id = 'feier-v' + (++feierLaufend);
+    const v = s_el('linearGradient', {
+      id, x1: '0', y1: '0', x2: String(FEIER_BREIT), y2: '0', spreadMethod: 'repeat',
+    });
+    FEIER.forEach((ton, i) => v.appendChild(s_el('stop', {
+      offset: (i / (FEIER.length - 1) * 100).toFixed(0) + '%', 'stop-color': ton,
+    })));
+    /* Wer wenig Bewegung will, bekommt den Verlauf stehend — dieselbe Antwort
+       wie im Stylesheet (`.feier { animation: none }`) und nicht etwa wieder
+       weisse Kreide: das Gold bleibt, nur das Wandern hört auf. */
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      v.appendChild(s_el('animateTransform', {
+        attributeName: 'gradientTransform', type: 'translate',
+        from: '0 0', to: `${-FEIER_BREIT} 0`,
+        dur: FEIER_SCHIMMER + 's', repeatCount: 'indefinite',
+      }));
+    }
+    const defs = s_el('defs');
+    defs.appendChild(v);
+    svg.appendChild(defs);
+    return id;
+  }
+  function feierVerweis(el) {
+    const svg = el.ownerSVGElement || el;
+    if (!svg.dataset.feier) svg.dataset.feier = feierBauen(svg);
+    return `url(#${svg.dataset.feier})`;
+  }
+
   /* Die Marke an der Zeile. EINE KRONE UND KEINE TORTE: an diesem Tag ist der
      Mensch der Wichtigste an der Tafel, und das sagt eine Krone. Eine Torte
      sagt, dass es Kuchen gibt — hier gibt es Bier.
@@ -5627,6 +5700,18 @@
         name.style.fill = stolzVerweis(g);
         zahl.style.fill = stolzVerweis(g);
         zahl.style.opacity = .7;
+      } else if (m.krone) {
+        /* Der Goldschimmer, und NUR am Namen. An der Zeile ist es genauso: der
+           Schimmer gehört dem Namen, nicht allem, was daneben steht — die Zahl
+           bleibt Kreide, sonst leuchtet die halbe Ecke des Rades.
+
+           `else if` und nicht ein zweiter Zweig: derselbe Vorrang wie an der
+           Zeile, und aus demselben Grund. Zwei Verläufe auf denselben
+           Buchstaben gibt es nicht, der zweite überschriebe den ersten — und
+           dann verschwände der Regenbogen an dem einen Tag, an dem er
+           besonders sichtbar sein soll. Wer beides hat, behält den Regenbogen
+           im Namen und trägt die Feier an der Krone darüber. */
+        name.style.fill = feierVerweis(g);
       }
       g.append(name, zahl);
 

@@ -686,8 +686,12 @@ und eine Auslosung daneben könnte es nur noch falsch beantworten. `POST
 /api/drehen` antwortet an so einem Tag mit 409 — für den Tab, der seit dem
 Morgen offensteht.
 
-**Über dem Namen am Bogen steht eine Krone** — dasselbe Zeichen wie an der
-Zeile, damit man am Rad selbst sieht, für wen der Tag ist. Sie hängt nicht an
+**Über dem Namen am Bogen steht eine Krone, und der Name schimmert golden** —
+dieselbe Auszeichnung wie an der Zeile, damit man am Rad selbst sieht, für wen
+der Tag ist. Der Schimmer wandert mit derselben Runde wie dort; die Zahl daneben
+bleibt Kreide. Trägt derselbe Mensch den Regenbogen, behält er ihn — im Namen
+gilt derselbe Vorrang wie an der Zeile, gefeiert wird an der Krone darüber.
+Die Krone hängt nicht an
 `ehre`, sondern an einem eigenen `geburtstag` je Feld, und der wird mit dem Feld
 **eingefroren**: wer im nächsten Jahr auf ein altes Rad sieht, findet dort die
 Krone von damals und nicht die von heute. Die andere Rechnung wäre falsch,
