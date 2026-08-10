@@ -617,9 +617,10 @@ zurück, und der native Kalender öffnet im laufenden Monat und blättert
 monatsweise. In einer Liste springt man mit der Tastatur direkt auf die
 Jahreszahl.
 
-Im Deckel stehen die drei zusammen genau so breit wie das Namensfeld darüber und
-zeigen den Monat darum gekürzt („Sep." statt „September"); im Kontor ist Platz
-für die vollen Namen. Gespeichert wird ohnehin die Zahl, nicht die Beschriftung.
+Im Deckel stehen die drei zusammen genau so breit wie das Namensfeld darüber —
+gleiche linke Kante, gleiche rechte, derselbe Haken dahinter. Sie schreiben dort
+eine Spur kleiner als das Namensfeld: auf einem 360 px breiten Telefon ist das
+der Unterschied zwischen „September" und „Septemb".
 
 **Das Jahr darf wegbleiben** — der Strich im dritten Rad ist eine gültige Wahl.
 Gespeichert wird dann `MM-TT`, sonst `JJJJ-MM-TT` (`users.geburtstag`,

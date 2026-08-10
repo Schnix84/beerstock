@@ -1446,9 +1446,30 @@
   /* Beide Hälften dürfen schrumpfen, und die rechte zieht an den Rand. Stünde
      links `flex: 1 0 40%`, schöbe die rechte Hälfte den Haken aus dem Blatt
      hinaus, sobald die Adresse etwas länger ist — gemessen, nicht vermutet. */
-  .dk-was { flex: 1 1 8em; font-size: 12.5px; color: var(--kreide-matt); }
+  /* DIE BESCHRIFTUNG WÄCHST NICHT MIT (`flex-grow: 0`), und das ist der ganze
+     Platzgewinn dieser Spalte. Vorher zogen beide Hälften zu gleichen Teilen an
+     der freien Breite: auf einem 430er standen links 147 px, obwohl die längste
+     Beschriftung 70 braucht — die überzähligen 77 px lagen als Weißraum
+     zwischen „Mailadresse" und der Adresse selbst, während die Adresse rechts
+     abgeschnitten wurde.
+
+     Die 6em sind gemessen: „Mailadresse" ist mit 70,1 px die längste der drei,
+     seit aus „Name in der Liste" ein „Name" geworden ist. Der Rest ist Luft für
+     eine Schrift, die anders gerastert wird als hier. Sie darf schrumpfen
+     (`flex-shrink: 1`) — nur wachsen soll sie nicht.
+
+     FEST BLEIBT SIE TROTZDEM FÜR ALLE DREI ZEILEN, statt jede nach ihrem
+     eigenen Wort zu bemessen: sonst begänne der Name weiter links als die
+     Adresse, und die drei Felder ständen nicht mehr untereinander. Genau die
+     Kante war der Anlass. */
+  .dk-was { flex: 0 1 6em; font-size: 12.5px; color: var(--kreide-matt); }
+  /* 14em statt 12: die Grundbreite entscheidet, WANN die Zeile umbricht — und
+     sie muss es weiter tun, bevor die drei Geburtstagsräder zu eng werden. Mit
+     der schmaleren Beschriftung daneben passte die Zeile plötzlich auch auf ein
+     320er Gerät in eine Reihe, und die Räder hatten dort weniger Platz als
+     vorher, obwohl diese Änderung ihnen welchen geben sollte. */
   .dk-tat {
-    flex: 1 1 12em; display: flex; align-items: center; justify-content: flex-end;
+    flex: 1 1 14em; display: flex; align-items: center; justify-content: flex-end;
     gap: 8px; min-width: 0;
   }
   .dk-tat .feld { flex: 1 1 auto; width: auto; min-width: 0; }
@@ -1477,11 +1498,9 @@
      ihm; die Spalte lief dann bis an den Rand des Blattes und die Zeile darüber
      nicht, was von oben nach unten gelesen ausfranst.
 
-     DER PREIS IST DER PLATZ, und er ist gemessen. In dieser Breite hat der volle
-     Monatsname keinen Raum: „September" braucht allein 83 px, das ganze Feld auf
-     einem 390er 168, und Tag und Jahr wollen davon auch etwas. Das Rad zeigt den
-     Monat darum gekürzt (`MONATE_KURZ`) — ein `select` bricht nicht um, er
-     schneidet ab, und „Septemb" wäre die einzige Alternative gewesen.
+     DER PREIS IST DER PLATZ, und der engste Fall ist ein 360 px breites Telefon:
+     dort hat das Feld 190 px für drei Räder, und „September" allein will davon
+     78. Es geht auf — aber wie knapp, entscheidet die Schriftgröße unten.
 
      KEINE FESTEN ANTEILE, sondern `flex: 1 1 auto` aus `.dk-tat .feld`: die
      Grundbreite eines `select` ist die seiner längsten Beschriftung, und danach
@@ -1490,14 +1509,24 @@
      die Wörter kurz wurden: dann hatte der Monat Luft und dem Jahr fehlten die
      letzten Ziffern. Wer den Inhalt kennt, muss ihn nicht schätzen.
 
-     Schrift und Pfeilchen sind dafür knapper als im Namensfeld: 15 statt 17 px
-     und 8 statt 14 px bis zum Pfeil. Bei drei Feldern nebeneinander zählt jedes
-     Pixel dreimal, und gemessen bleiben auf einem 360er noch zwei übrig. */
+     14 PX UND NICHT 15, und das ist die eine Zahl hier, die nachgemessen werden
+     musste. Bei 15 px stand auf einem 360er „September" bei 83 von 84 Pixeln und
+     „1944" bei 45 von 45 — in Chrome UND in Safari, also kein Rundungsfehler,
+     sondern die Lage. Es passte damit, aber ohne jede Reserve, und ein `select`
+     bricht seinen Text nicht um, er schneidet ihn ab. Ein Punkt weniger macht
+     daraus 78 von 81 und 42 von 45: drei bis vier Pixel Luft, in beiden Browsern
+     gemessen. Dass die Räder damit kleiner schreiben als das Namensfeld darüber,
+     ist der Preis — sie sind ein Bedienelement mit Pfeilchen und keine
+     Handschrift.
+
+     Das Pfeilchen rückt dafür enger an den Text: die 14 px aus `select.feld`
+     sind für ein Feld über die ganze Breite gedacht, hier zählt jedes Pixel
+     dreimal. */
   .dk-raeder {
     flex: 1 1 auto; min-width: 0;
     display: flex; align-items: center; gap: 6px;
   }
-  .dk-raeder .feld { min-width: 0; font-size: 15px; padding-left: 1px; padding-right: 8px; }
+  .dk-raeder .feld { min-width: 0; font-size: 14px; padding-left: 1px; padding-right: 6px; }
   .dk-wert {
     font-family: var(--hand); font-size: 14px; overflow-wrap: anywhere;
   }
@@ -4158,7 +4187,7 @@
       <p class="sagt schlecht" id="dk-gesperrt" hidden></p>
 
       <form class="dk-zeile" id="dk-name-form">
-        <label class="dk-was" for="dk-name">Name in der Liste</label>
+        <label class="dk-was" for="dk-name">Name</label>
         <div class="dk-tat">
           <input class="feld" id="dk-name" maxlength="20" autocomplete="nickname" required>
           <button class="knopf dk-ok" type="submit" aria-label="Namen merken">✓</button>
@@ -5057,21 +5086,6 @@
      und weil eine Liste, die weiter reicht, niemandem etwas gibt. */
   const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
                   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-  /* Dieselben Monate in der Kurzform, für das Rad im Deckel. Sie steht hier und
-     wird nicht gerechnet („die ersten drei Buchstaben"), weil das Deutsche das
-     nicht so macht: März, Mai, Juni und Juli werden nicht gekürzt, und aus
-     Juni/Juli würde sonst zweimal „Jun"/„Jul" ohne Not.
-
-     WARUM ÜBERHAUPT GEKÜRZT. Das Rad ist genauso breit wie das Namensfeld eine
-     Zeile darüber — so war es gewünscht —, und in diese Breite passt der volle
-     Name nicht: „September" braucht allein 83 px, das ganze Feld hat auf einem
-     390er 168, und Tag und Jahr wollen davon auch etwas. Ein `select` bricht
-     seinen Text nicht um, er schneidet ihn ab; „Septemb" wäre die Alternative
-     gewesen. Gespeichert wird ohnehin die Zahl im `value`, die Beschriftung ist
-     reine Anzeige — das Kontor zeigt weiter die langen Namen, dort ist Platz. */
-  const MONATE_KURZ = ['Jan.', 'Feb.', 'März', 'Apr.', 'Mai', 'Juni',
-                       'Juli', 'Aug.', 'Sep.', 'Okt.', 'Nov.', 'Dez.'];
-
   /* Wie viele Tage der Monat hat. Ohne Jahr gilt das Schaltjahr — sonst fiele
      der 29. Februar aus der Liste, den man gerade dann wählen können muss,
      wenn man kein Jahr angibt. Der 0. des Folgemonats IST der letzte des
@@ -5107,7 +5121,7 @@
     };
 
     füllen(monatWahl, [['', '–']].concat(
-      MONATE_KURZ.map((n, i) => [String(i + 1), n])), monat);
+      MONATE.map((n, i) => [String(i + 1), n])), monat);
     füllen(jahrWahl, [['', '–']].concat(
       Array.from({ length: 100 }, (_, i) => [String(jetzt - i), String(jetzt - i)])), jahr);
     /* Der Tag hängt an den beiden anderen und wird darum zuletzt gefüllt —
