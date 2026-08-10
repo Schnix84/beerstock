@@ -5183,11 +5183,22 @@
      Farben, andere Verteilung — die Palette bleibt die der Zeile, damit Rad
      und Zeile nicht zwei verschiedene Goldtöne zeigen. */
   const FEIER_KERN = [0, 40, 50, 60, 100];
-  /* Die Runde des Schimmers. Sie steht ZWEIMAL da — hier und als `4.2s` an
-     `.feier` im Stylesheet —, aus demselben Grund wie bei `FEIER_RUNDE`: eine
-     Regel im Stylesheet kann diese Zahl nicht lesen. Wer die eine ändert,
-     ändert die andere mit, sonst schimmern Zeile und Rad verschieden schnell. */
-  const FEIER_SCHIMMER = 4.2;
+  /* Die Runde. Sie ist KÜRZER als die 4,2 s an der Zeile, und wer beide
+     gleichsetzt, macht den Schimmer wieder unsichtbar — das war der zweite
+     Fehlgriff hier, gleich nach dem zu breiten Verlauf.
+
+     Denn das Auge sieht keine Rundenzeit, es sieht eine GESCHWINDIGKEIT. Am
+     Siegerplatz legt der helle Kern in 4,2 s zweieinhalb Wortbreiten zurück,
+     bei 210 px Wortbreite also gut 125 px in der Sekunde — das liest sich als
+     Wischen. Am Rad ist dieselbe Strecke 1,2 × 30 px = 36 px; mit 4,2 s wären
+     das knapp 9 px in der Sekunde, und so langsam wandert nichts mehr, das
+     wandert dann einfach. Zwei Sekunden machen daraus 18 px/s: der Kern
+     quert das Wort in knapp zwei Sekunden, sichtbar und trotzdem ruhig.
+
+     Die Zahl gehört deshalb NICHT mit `.feier` im Stylesheet gleichgezogen.
+     Wer sie anfasst, rechnet sie gegen die Wortbreite, nicht gegen die Zeile:
+     `FEIER_BREIT × Wortbreite ÷ FEIER_SCHIMMER` ist, was man sieht. */
+  const FEIER_SCHIMMER = 2;
 
   let feierLaufend = 0;
   function feierBauen(svg) {
