@@ -210,12 +210,44 @@ Drei Nähte bleiben offen, mit Absicht:
   Anmeldung. Die Schlüssel sind zufällige UUIDs, also nicht zu erraten.
 - `/api/strom` steht jedem offen. Über die Leitung reisen nur Marken, also
   bestenfalls die Beobachtung, *dass* gerade etwas passiert ist.
+- Die **acht Filme** liegen im selben Bucket unter `filme/`, und ihre Namen sind
+  anders als die der Fotos zu **erraten** (`filme/3-notruf.mp4`). Sie zeigen eine
+  erfundene Runde auf der Testinstanz — wer die Adresse errät, sieht eine
+  Vorführung und kein Innenleben.
+
+## Der Rundgang
+
+Acht kurze Filme zeigen, was die Seite kann — hochkant, gedreht gegen die
+Testinstanz mit einer erfundenen Runde, zwischen 33 und 97 Sekunden lang.
+
+Sie stehen an **zwei** Stellen, und keine davon doppelt die andere:
+
+| Wo | Was | Für wen |
+|---|---|---|
+| Türsteher, unter den drei Schritten: **▶ how to** | **Film 0, „Mitmachen"** — der einzige, der von draußen spielt | wer noch nicht mitschreibt |
+| Kleine Zeile unter dem Anschreiben: **Rundgang** | die anderen **sieben**, als Blatt mit Standbildern | wer angemeldet ist |
+
+Die Null ist bewusst nicht im Blatt: drinnen hat die Frage, wie man hereinkommt,
+niemand mehr. Und die sieben sind bewusst nicht draußen: sie zeigen Innenräume —
+die Tafel über Wochen, den Notruf, den eigenen Deckel.
+
+Angetippt läuft der Film im Vollbild, eine Ebene über dem Blatt, wie ein Foto in
+der Lupe. Geladen wird er **erst dann**: im Blatt stehen nur Standbilder, sonst
+wären acht Abrufe fällig, sobald es aufgeht.
+
+Was im Netz liegt, ist eine schmalere Zweitfassung (540 px statt 780, zusammen
+16 MB); die 780er bleibt die Fassung zum Verschicken. Gebaut wird sie mit
+`./ideas/film/schneiden.sh klein`, hochgeladen von Hand — **mit
+`--content-type video/mp4`**, sonst liegt sie als `application/octet-stream` im
+Bucket und Safari spielt sie weder ab noch lässt sie sich spulen.
 
 ## Wie man mitmacht
 
 Mailadresse eintippen, Link in der Mail klicken, drin. Beim ersten Mal fragt die
 Seite noch, wie man in der Liste heißen soll — das war's. Kein Passwort, also
 auch keines zu vergessen, und nichts zu speichern, was gestohlen werden könnte.
+Wer vorher sehen will, was ihn erwartet: unter den drei Schritten steht **how to**
+— das sind 44 Sekunden Film.
 
 Derselbe Weg funktioniert auf jedem weiteren Gerät und beliebig oft. Wer sein
 Handy wechselt, den Browserspeicher leert oder von Safari nach sieben Tagen
@@ -461,6 +493,10 @@ worker/migrations/   das Schema, eine Datei je Schritt — die Reihenfolge ist d
 Die vier Geschwisterdateien im Wurzelverzeichnis holt der Browser **nicht** beim
 Aufbau der Seite: `og.png` sehen nur Vorschau-Sammler, `manifest`/`sw.js`/`icon.png`
 nur, wer die Tafel installiert. „Eine geschlossene Datei" bleibt damit heil.
+
+Dasselbe gilt für die Fotos an den Kommentaren und für die acht Filme des
+Rundgangs: sie liegen in R2 und werden geholt, wenn jemand sie ansieht — nie beim
+Aufbau. Die Filme liegen dort unter `filme/`; im Repo liegt keiner von ihnen.
 
 `bilder.js` ist die einzige geteilte Datei, und sie ist es aus einem Grund: an
 einem Tooltip, der zweimal dasteht, ändert man beim zweiten Mal nichts mehr. Sie

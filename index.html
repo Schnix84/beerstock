@@ -1306,6 +1306,75 @@
   }
   .ch-mehr[disabled] { opacity: .5; cursor: default; }
 
+  /* --- Der Rundgang: acht Filme --------------------------------------------
+     Dasselbe Blatt wie Chronik und Deckel, und die Zeilen darin sind die der
+     Termine: links eine schmale Spalte, in der Mitte der Titel, rechts die
+     Nebensache. Statt eines Datums steht links das Standbild — es ist die
+     einzige Abweichung, und sie ist der Grund, warum das Blatt überhaupt eines
+     ist: eine Liste von Filmen ohne Bilder liest sich wie eine Liste von
+     Kapiteln.
+
+     Das Bild ist BESCHNITTEN (`cover`) und nicht eingepasst. Die Filme sind
+     780 × 1688 — hochkant wie das Telefon, das sie zeigen; formatfüllend
+     eingepasst wäre die Zeile 110 px hoch, und acht davon wären ein Blatt, das
+     man nur noch scrollt. Der Ausschnitt zeigt die Mitte, und dort ist jeder
+     Film bei seiner Sache.
+     --------------------------------------------------------------------- */
+  .flyout.rundgang { z-index: 38; }
+  .rg-zeile {
+    display: grid; grid-template-columns: 52px 1fr auto; gap: 0 12px;
+    align-items: center; width: 100%; padding: 9px 0;
+    border: none; background: none; font: inherit; color: inherit;
+    text-align: left; cursor: pointer;
+    border-bottom: 1px dashed #ffffff1f;
+  }
+  .rg-zeile:last-child { border-bottom: none; }
+  .rg-bild {
+    position: relative; width: 52px; height: 92px; border-radius: 4px;
+    overflow: hidden; background: var(--schiefer-t, #191d1f);
+  }
+  .rg-bild img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* Das Zeichen, das aus einem Bild einen Film macht. Es liegt IM Bild und
+     nicht daneben: daneben wäre es eine vierte Spalte für eine Auskunft, die
+     das Bild schon gibt. */
+  .rg-bild::after {
+    content: "▶"; position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; color: #fff; text-shadow: 0 1px 4px #000a;
+    background: linear-gradient(#0000 40%, #0006);
+  }
+  .rg-nr {
+    font-family: var(--hand); font-size: 11px; letter-spacing: .1em;
+    color: var(--gelb); opacity: .8;
+  }
+  .rg-titel {
+    font-family: var(--hand); font-size: clamp(15px, 4vw, 17px); line-height: 1.2;
+    overflow-wrap: anywhere; margin-top: 2px;
+  }
+  .rg-dauer { font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg); }
+
+  /* --- Die Vorführung ------------------------------------------------------
+     Ein Film im Vollbild, eine Ebene über dem Blatt — dieselbe Mechanik wie
+     die Lupe beim Foto: Schirm zum Schließen, Escape nimmt erst hier weg.
+
+     `.schau` und nicht `.lupe` mit einem zweiten Kind: die Lupe schließt bei
+     jedem Klick auf sich selbst (`cursor: zoom-out`), und genau das darf hier
+     nicht sein — wer die Zeitleiste anfasst, trifft den Schirm ringsum, und
+     der Film wäre bei jedem Spulversuch weg. */
+  .schau {
+    position: fixed; inset: 0; z-index: 50; display: flex;
+    align-items: center; justify-content: center; padding: 16px;
+    background: #050807f8;
+  }
+  .schau video {
+    max-width: 100%; max-height: 100%; border-radius: 3px; background: #000;
+  }
+  .schau-zu {
+    position: absolute; top: 10px; right: 12px; width: 38px; height: 38px;
+    border: 1px solid #ffffff33; border-radius: 999px; background: #ffffff0d;
+    color: var(--kreide); font-size: 20px; line-height: 1; cursor: pointer;
+  }
+
   /* --- Mein Deckel ---------------------------------------------------------
      Die Selbstverwaltung: Name, Adresse, fünf Schalter, Geräte. Dasselbe
      Blatt wie Flyout und Chronik, auf derselben Ebene wie die Chronik — von
@@ -2455,6 +2524,14 @@
      trotzdem (groessere Schrift im System), steht die Note als Unterzeile -
      das sieht ordentlich aus, kostet nur die 27 px wieder. */
   .tuer-note { font-size: 11.5px; line-height: 1.5; color: var(--kreide-weg); }
+  /* Der Weg zum Film „Mitmachen". Kein voller Knopf: darunter steht schon
+     einer, und der ist der Weg herein. Zwei gleich laute Knöpfe übereinander,
+     und der falsche gewinnt. Die Form trägt `.film-wort` weiter unten. */
+  .tuer-film {
+    margin: 9px 0 0; padding: 0;
+    border: none; background: none; font: inherit; font-size: 11.5px;
+    color: var(--kreide-weg); cursor: pointer;
+  }
   /* Dieselbe Note, aber als eigener Absatz über dem Einsetzfeld statt als
      Beisatz in einer Kopfzeile — dort trägt sie keinen `margin`, hier braucht
      sie einen. Die Trennlinie darüber sagt: das ist der ANDERE Weg herein,
@@ -2491,14 +2568,53 @@
   .ph-strich.duenn { height: 8px; margin-top: 9px; background: #ffffff14; }
   .ph-zahl { width: 34px; height: 26px; border-radius: 2px; background: #ffffff20; }
 
+  /* `flex-wrap` seit dem dritten Weg („Rundgang"): zu zweit passte die Zeile
+     auf jedes Handy, zu dritt auf keines mehr — bei 360 px fehlten selbst dem
+     kürzesten Wort noch Pixel, gemessen an der echten Schrift. Sie bricht
+     deshalb sauber um (Kennung oben, die Wege darunter), statt sich die
+     Wörter gegenseitig zusammenzuschieben. */
   .zeile-klein {
-    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+    display: flex; flex-wrap: wrap;
+    justify-content: space-between; align-items: baseline; gap: 10px;
     margin-top: 11px; font-size: 10px; letter-spacing: .08em; color: var(--kreide-weg);
   }
   .zeile-klein button {
     border: none; background: none; padding: 0; font: inherit; color: var(--kreide-weg);
     text-decoration: underline; cursor: pointer;
   }
+
+  /* --- Ein Wort, hinter dem ein Film liegt ---------------------------------
+     Zweimal auf der Seite: „how to" am Türsteher und „Rundgang" in der kleinen
+     Zeile. Beide Male dasselbe Zeichen, damit man am Zeichen erkennt, dass
+     dahinter kein Text wartet, sondern Bewegtbild.
+
+     Das Zeichen ist GEZEICHNET und kein Schriftzeichen: ein „▶" aus der
+     Schrift stand hier zuerst und las sich bei 9 px wie ein Aufzählungspunkt.
+     Kreis mit gefülltem Dreieck, in derselben Machart wie Foto, GIF und Meme
+     am Schreibfeld — dieselbe Strichstärke, dieselbe `currentColor`.
+
+     Alles in `em`, nicht in px: die beiden Stellen tragen 11,5 und 10 px, und
+     ein festes Maß wäre an einer davon zu groß.
+
+     KEIN `inline-flex`, und das ist hier gemessen worden: als Flex-Kasten gibt
+     das erste Kind die Grundlinie vor, und das ist das SVG — es hat keine, also
+     zählt seine Unterkante. „Rundgang" stand dadurch vier Pixel höher als
+     „mein Deckel" daneben. Als gewöhnlicher Fluss trägt der Knopf die
+     Grundlinie seines Textes, und das Zeichen hängt sich mit `vertical-align`
+     daran. Dann sitzen alle drei Wörter der kleinen Zeile auf einer Linie.
+
+     Der Strich unter dem WORT und nicht unter dem Zeichen — `text-decoration`
+     am Knopf zöge die Linie auch unter das SVG, und ein unterstrichener Kreis
+     sieht aus wie ein Fehler. `button.film-wort` und nicht `.film-wort`, damit
+     die Regel das `text-decoration` von `.zeile-klein button` darüber sicher
+     schlägt; sie steht dafür auch bewusst DANACH.
+     --------------------------------------------------------------------- */
+  button.film-wort { text-decoration: none; }
+  .film-wort svg {
+    width: 1.3em; height: 1.3em; vertical-align: -.28em; margin-right: .4em;
+  }
+  .film-wort span { text-decoration: underline; }
+
   .sagt {
     margin: 13px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 12px;
     line-height: 1.5; background: #ffffff10; color: var(--kreide-matt);
@@ -3271,9 +3387,27 @@
                  steht das nuechterne Wort: es ist das einzige, das auch ohne
                  JS erscheint, und es sagt, was der Knopf tut. -->
             <button class="knopf" id="melde-knopf" type="submit"><span class="k-wort">Anschreiben</span></button>
+            <!-- Die Meta-Zeile: was nicht Bier ist, steht hier. „Rundgang"
+                 steht VOR dem Paar und nicht zwischen ihm — „mein Deckel" und
+                 „abmelden" gehören beide zum eigenen Konto und bleiben
+                 zusammen, und der Ausgang bleibt der letzte.
+
+                 Warum hier und nicht oben neben „Statistiken": ein dritter Weg
+                 im Kopf der Tafel zerlegte dort bei 360 px „Stand von heute"
+                 in drei Zeilen (gemessen, ideas/pruefungen/filme-knopf-*.mjs).
+                 Diese Zeile bricht statt dessen sauber um. -->
             <div class="zeile-klein">
               <span id="wer-bin-ich"></span>
               <span>
+                <button class="film-wort" type="button" id="rundgang-auf">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M10.2 8.4l6 3.6-6 3.6z" fill="currentColor" stroke="none"/>
+                  </svg>
+                  <span>Rundgang</span>
+                </button>
+                ·
                 <button type="button" id="deckel-auf">mein Deckel</button>
                 ·
                 <button type="button" id="abmelden">abmelden</button>
@@ -3304,6 +3438,22 @@
               <li>Link in der Mail klicken</li>
               <li>Namen für die Tafel wählen</li>
             </ol>
+            <!-- Der eine Film, der nach draußen gehört: er zeigt genau diese
+                 drei Schritte und was danach kommt. Er steht HIER und in
+                 keinem Blatt — drinnen hat die Frage niemand mehr, und ein
+                 zweiter Weg zu demselben Film wäre einer zu viel.
+
+                 Eine Zeile in derselben Note wie „Kein Passwort, keine App",
+                 kein Standbild: das Blatt drinnen ist eine Liste und braucht
+                 Bilder zum Unterscheiden, hier gibt es nur diesen einen. -->
+            <button class="tuer-film film-wort" id="tuer-film" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M10.2 8.4l6 3.6-6 3.6z" fill="currentColor" stroke="none"/>
+              </svg>
+              <span>how to</span>
+            </button>
           </div>
           <form id="anmelde-form" hidden>
             <div class="melde eins">
@@ -3522,6 +3672,41 @@
 
       <p class="sagt" id="ch-sagt" hidden></p>
     </div>
+  </div>
+
+  <!-- ============ Der Rundgang ========================================
+       Acht kurze Filme, die zeigen, was die Tafel kann — gedreht gegen die
+       Testinstanz, mit erfundener Runde. Die Liste steht im Markup nicht da:
+       sie kommt aus `FILME` weiter unten, weil dort auch die Adressen und
+       die Sekunden stehen und eine zweite Fassung im HTML am Tag danach
+       falsch wäre.
+
+       Nur für Angemeldete, wie die Statistiken: diese sieben zeigen
+       Innenräume. Der achte ist die Null („Mitmachen"), und er steht NICHT
+       hier, sondern draußen am Türsteher — wer drin ist, hat die Frage, wie
+       man hereinkommt, hinter sich.
+       ================================================================ -->
+  <div class="flyout rundgang" id="rundgang" hidden>
+    <div class="fly-schirm" id="rg-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="rg-titel" aria-modal="true">
+      <div class="fly-kopf">
+        <div>
+          <div class="fly-titel" id="rg-titel">Rundgang</div>
+          <div class="fly-unter">sieben kurze Filme, was die Tafel kann</div>
+        </div>
+        <button class="fly-zu" id="rg-zu" type="button" aria-label="Schließen">×</button>
+      </div>
+
+      <div id="rg-liste"></div>
+    </div>
+  </div>
+
+  <!-- Ein Film groß. Eine Ebene über dem Blatt, dieselbe Mechanik wie die
+       Lupe beim Foto — nur schließt der Schirm hier NICHT bei jedem Klick auf
+       sich selbst, siehe `.schau` im Kopf. -->
+  <div class="schau" id="schau" hidden>
+    <video id="schau-film" controls playsinline preload="metadata"></video>
+    <button class="schau-zu" id="schau-zu" type="button" aria-label="Schließen">×</button>
   </div>
 
   <!-- ============ Mein Deckel ==========================================
@@ -6346,6 +6531,45 @@
     : 'https://beerstock-api.mc-schneider84.workers.dev';
   const SPEICHER = 'beerstock-token';
 
+  /* --- Die acht Filme -------------------------------------------------------
+     Sie liegen im selben öffentlichen Bucket wie die Fotos, unter `filme/`.
+     Die Adresse steht hier fest und kommt NICHT vom Worker: sie ist ohnehin
+     kein Geheimnis (`BILDER_URL` in `worker/wrangler.jsonc`, und das Repo ist
+     offen), und der Weg über den Worker hätte eine Route gekostet, die eine
+     Zeichenkette zurückgibt, die sich nie ändert.
+
+     Anders als bei den Fotos sind diese Schlüssel zu erraten — die Fotos
+     tragen zufällige UUIDs, `filme/3-notruf.mp4` steht hier im Klartext. Das
+     ist bewusst: die Filme zeigen eine erfundene Runde auf der Testinstanz,
+     kein Innenleben. Wer die Adresse errät, sieht eine Vorführung.
+
+     Was nach R2 gehört, baut `ideas/film/schneiden.sh klein` — 540 px statt
+     780, dazu je ein Standbild aus der Mitte des Films. Die Sekunden unten
+     sind GEMESSEN (`ffprobe`), nicht die Sollzeiten aus dem Storyboard.
+
+     Hochgeladen wird von Hand, einmal je Fassung:
+       cd worker && npx wrangler r2 object put beerstock-bilder/filme/<datei> \
+         --file ../ideas/film/kurz/klein/<datei> --content-type video/mp4 --remote
+     Das `--content-type` ist Pflicht: ohne es liegt die Datei als
+     `application/octet-stream` im Bucket, und Safari spielt sie weder ab noch
+     lässt sie sich spulen. */
+  const FILME_URL = 'https://pub-bfc67ecfa1c8457e98f8775506d4ad16.r2.dev/filme';
+  /* Die NULL steht nicht im Rundgang. Sie zeigt, wie man hereinkommt, und das
+     ist genau die Frage, die drinnen niemand mehr hat — sie hängt am
+     Türsteher, wo sie gebraucht wird, und der Rundgang beginnt bei der Eins.
+     Deshalb eine Liste und zwei Nutzungen: `rundgangZeichnen` nimmt alles ab
+     der Eins, `tuer-film` genau die Null. */
+  const FILME = [
+    { nr: 0, datei: '0-mitmachen',          titel: 'Mitmachen',                      dauer: 44 },
+    { nr: 1, datei: '1-was-ist-das',        titel: 'Was ist das hier?',              dauer: 97 },
+    { nr: 2, datei: '2-wo-wird-getrunken',  titel: 'Wo wird heute getrunken?',       dauer: 35 },
+    { nr: 3, datei: '3-notruf',             titel: 'Ich brauche jetzt Bier',         dauer: 46 },
+    { nr: 4, datei: '4-der-abend-danach',   titel: 'Der Abend danach',               dauer: 33 },
+    { nr: 5, datei: '5-handgriffe',         titel: 'Mitreden',                       dauer: 44 },
+    { nr: 6, datei: '6-foto-gif-meme',      titel: 'Foto, GIF, Meme',                dauer: 47 },
+    { nr: 7, datei: '7-die-wohnung-meldet', titel: 'Die Wohnung meldet mit',         dauer: 41 },
+  ];
+
   /* GIFs und Memes an Kommentaren, siehe ideas/gifs-und-memes.md. GIF_SEITE
      spiegelt GIF_LIMIT im Worker - stimmt die Trefferzahl einer Seite nicht
      damit überein, war das schon die letzte, und "mehr laden" bleibt weg. */
@@ -7690,7 +7914,8 @@
   function koerperSperren() {
     document.body.style.overflow =
       (!$('flyout').hidden || !$('chronik').hidden || !$('notruf').hidden
-        || !$('gifblatt').hidden || !$('memeblatt').hidden || !$('wrapped').hidden) ? 'hidden' : '';
+        || !$('gifblatt').hidden || !$('memeblatt').hidden || !$('wrapped').hidden
+        || !$('rundgang').hidden) ? 'hidden' : '';
   }
 
   async function flyAuf(ziel, titel) {
@@ -8786,6 +9011,74 @@
     chronikOffen = false;
     $('chronik').hidden = true;
     koerperSperren();
+  }
+
+  /* --- Der Rundgang: acht Filme --------------------------------------------
+     Die Liste steht EINMAL da und ändert sich nie — sie wird beim ersten
+     Aufschlagen gebaut und bleibt dann liegen. Ein Neuzeichnen bei jedem
+     Öffnen wäre acht neue `<img>` und damit acht neue Abrufe.
+
+     Kein `<video>` in der Liste, nur Standbilder: acht Filme mit
+     `preload="metadata"` sind acht Abrufe, sobald das Blatt aufgeht, und
+     niemand sieht acht Filme auf einmal. Der eine, den jemand wirklich will,
+     bekommt sein `src` erst in `schauAuf`. */
+  function rundgangZeichnen() {
+    const liste = $('rg-liste');
+    if (liste.childElementCount) return;
+    for (const f of FILME.filter(x => x.nr > 0)) {
+      const z = el('button', 'rg-zeile');
+      z.type = 'button';
+
+      const bild = el('div', 'rg-bild');
+      const img = el('img');
+      img.src = `${FILME_URL}/${f.datei}.jpg`;
+      img.alt = '';                  // der Titel daneben sagt es schon
+      img.loading = 'lazy';
+      bild.appendChild(img);
+
+      const mitte = el('div');
+      mitte.appendChild(el('div', 'rg-nr', `FILM ${f.nr}`));
+      mitte.appendChild(el('div', 'rg-titel', f.titel));
+
+      z.append(bild, mitte, el('span', 'rg-dauer', `${f.dauer} s`));
+      z.addEventListener('click', () => schauAuf(f));
+      liste.appendChild(z);
+    }
+  }
+
+  function rundgangAuf() {
+    rundgangZeichnen();
+    $('rundgang').hidden = false;
+    koerperSperren();
+  }
+
+  function rundgangZu() {
+    $('rundgang').hidden = true;
+    koerperSperren();
+  }
+
+  /* Die Vorführung. `load()` nach dem Wechsel des `src` ist nicht überflüssig:
+     ohne den Griff behält das Element in WebKit den vorigen Film im Puffer und
+     spielt beim zweiten Öffnen zuerst dessen letzte Bilder. */
+  function schauAuf(f) {
+    const v = $('schau-film');
+    v.src = `${FILME_URL}/${f.datei}.mp4`;
+    v.poster = `${FILME_URL}/${f.datei}.jpg`;
+    v.load();
+    $('schau').hidden = false;
+    v.play().catch(() => {});     // ohne Zutun des Nutzers verbieten das manche
+  }
+
+  /* Das `src` MUSS weg, nicht nur die Ebene: ein verstecktes `<video>` mit
+     Quelle lädt im Hintergrund weiter, und auf dem Handy ist das echtes Geld.
+     `removeAttribute` und dann `load()` — allein das Leeren hält den Puffer. */
+  function schauZu() {
+    const v = $('schau-film');
+    v.pause();
+    v.removeAttribute('src');
+    v.removeAttribute('poster');
+    v.load();
+    $('schau').hidden = true;
   }
 
   /* Ein Griff ins Archiv. Ohne `vor` ist es der Kopf der Liste, mit `vor` die
@@ -10535,6 +10828,21 @@
   $('ch-schirm').addEventListener('click', chronikZu);
   $('ch-mehr').addEventListener('click', chronikMehr);
 
+  /* --- Der Rundgang -------------------------------------------------------- */
+  $('rundgang-auf').addEventListener('click', rundgangAuf);
+  /* Draußen: der eine Film, ohne Blatt dazwischen. Über die Nummer gesucht und
+     nicht über den Platz in der Liste — die Reihenfolge dort ist Anzeige, die
+     Null ist die Sache. */
+  $('tuer-film').addEventListener('click', () => schauAuf(FILME.find(f => f.nr === 0)));
+  $('rg-zu').addEventListener('click', rundgangZu);
+  $('rg-schirm').addEventListener('click', rundgangZu);
+  $('schau-zu').addEventListener('click', schauZu);
+  /* Nur der Rand schließt, nicht das Bild: `ev.target === ev.currentTarget`
+     trifft genau dann, wenn daneben getippt wurde. Ein Klick auf die
+     Zeitleiste des Films steigt bis hierher auf, und ohne diese Bedingung
+     wäre jeder Spulversuch das Ende der Vorführung. */
+  $('schau').addEventListener('click', ev => { if (ev.target === ev.currentTarget) schauZu(); });
+
   /* --- Mein Deckel --------------------------------------------------------- */
   $('deckel-auf').addEventListener('click', deckelAuf);
   $('dk-zu').addEventListener('click', deckelZu);
@@ -11247,6 +11555,8 @@
     // folgenden gleichzeitig offen sein, steht aber trotzdem zuerst.
     if (!$('wrapped').hidden) { wrappedZu(); return; }
     if (!$('lupe').hidden) { lupeZu(); return; }
+    // Die Vorführung liegt über dem Rundgang, wie die Lupe über dem Blatt.
+    if (!$('schau').hidden) { schauZu(); return; }
     if (!$('gifblatt').hidden) { gifZu(); return; }
     if (!$('memeblatt').hidden) { memeZu(); return; }
     if (!$('notruf').hidden) { notrufZu(); return; }
@@ -11255,6 +11565,7 @@
     if (!$('flyout').hidden && !$('fly-anhang').hidden) { anhangZu(); return; }
     if (!$('flyout').hidden) { flyZu(); return; }
     if (!$('deckel').hidden) { deckelZu(); return; }
+    if (!$('rundgang').hidden) { rundgangZu(); return; }
     if (!$('chronik').hidden) chronikZu();
   });
 
