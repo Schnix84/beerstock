@@ -740,6 +740,14 @@
   .rad-bogen { fill: none; stroke-width: 7; stroke-linecap: butt; opacity: .55; }
   .rad-name { font-family: var(--hand); fill: var(--kreide); font-size: 12.5px; }
   .rad-zahl { font-family: var(--hand); fill: var(--kreide-weg); font-size: 10.5px; }
+  /* Die Krone über dem Namen (Schema 31): wer heute Geburtstag hat, trägt sie
+     an der Zeile, und am Rad soll er sie auch tragen — dasselbe Zeichen, an
+     derselben Stelle über demselben Namen. Ein Zeichen und kein Wort: neben
+     dem Bogen ist Platz für einen Namen und eine Zahl, „👑 Geburtstag" stünde
+     dort im Ring. Wo die Zeile steht und was sie an Platz frisst, steht als
+     RAD_KRONE und RAD_KRONE_HOCH im Skript — das Auseinanderschieben muss
+     beides kennen, hier steht nur der Grad. */
+  .rad-krone { font-size: 11px; }
 
   /* Die Flasche. Braunglas gibt es an der Tafel nicht — es bleibt gelbe
      Kreide, nur die Deckkraft trennt Glas, Korken und Etikett. Ohne das
@@ -5413,9 +5421,31 @@
      die kleinen Melder standen ein gutes Stück neben ihrem Bogen. Der Abstand
      gehört zwischen zwei Marken, nicht zwischen Marke und Achse. */
   const RAD_ZEILE = 27, RAD_OBEN = 24, RAD_UNTEN = 276, RAD_ACHSE = 26;
+  /* Wer heute Geburtstag hat, ist eine Zeile höher: die Krone sitzt über dem
+     Namen, im selben Schritt, in dem die Zahl unter ihm sitzt.
+
+     ZWEI ZAHLEN, weil sie zwei verschiedene Dinge sind. RAD_KRONE ist, wo die
+     Krone STEHT — 13 über der Grundlinie des Namens, derselbe Schritt wie zur
+     Zahl darunter. RAD_KRONE_HOCH ist, was sie an Platz FRISST, und das ist
+     mehr: ein Emoji ist kein Buchstabe, sein Kasten reicht bei 11 px von
+     `y − 22,6` bis `y − 5,1` (gemessen, nicht geschätzt — `kronen-mass.mjs`).
+     Gegen die `y − 6`, mit denen der Rest hier rechnet, sind das 16,6 mehr;
+     aufgerundet die 17. Mit den 13 gerechnet lag die Krone am Fuß des Rades auf
+     dem Bogen — die Probe hat es in jedem Feld gefunden.
+
+     Wer diese Zahl anfasst, muss also beide ansehen: die eine verschiebt das
+     Zeichen, die andere den Platz, den ihm alles andere freihält. */
+  const RAD_KRONE = 13, RAD_KRONE_HOCH = 17;
   /* Die Grenzen für eine MITTIG gesetzte Marke: ihr Block muss ganz über bzw.
      unter dem Ring liegen (y 36,5 … 263,5), sonst kreuzt die Schrift ihn. Oben
-     also y + 19 ≤ 36,5, unten y − 6 ≥ 263,5. */
+     also y + 19 ≤ 36,5, unten y − 6 ≥ 263,5.
+
+     EINE MARKE MIT KRONE KOMMT DORT NICHT HIN, und das ist kein Sonderfall,
+     sondern dieselbe Rechnung mit RAD_KRONE_HOCH mehr: oben führte die Hebung
+     auf y = 17 die Krone auf −5,6 und damit halb aus der viewBox, unten
+     reichte sie bei y = 270 bis 264,9 und läge damit auf dem Ring, der bei
+     263,5 endet. Sie bleibt deshalb seitlich stehen — der Rückfall, den es für
+     zu enge Kuppen ohnehin schon gibt. */
   const RAD_KUPPE = 17, RAD_SOHLE = 270;
   /* Die Außenkante des Bogens: Radius 110 plus die halbe Strichbreite von 7.
      Daran hält sich die Schrift, mit RAD_LUFT Abstand. */
@@ -5457,18 +5487,44 @@
          gleich darauf 9 px nach oben weggerückt ist, und stand danach 11 px
          zu tief — auf der Tafel war das genau die eine, die den Ring kreuzte.
          Der Startwert des Schiebens muss die Hebung deshalb kennen. */
-      if (seite[0].y < 150 && Math.abs(seite[0].x - 150) < RAD_ACHSE) {
+      if (seite[0].y < 150 && Math.abs(seite[0].x - 150) < RAD_ACHSE && !seite[0].krone) {
         seite[0].y = Math.min(seite[0].y, RAD_KUPPE);
       }
 
       if (seite.length < 2) continue;
-      const zeile = Math.min(RAD_ZEILE, (RAD_UNTEN - RAD_OBEN) / (seite.length - 1));
-      let y = Math.min(RAD_OBEN, seite[0].y) - zeile;
-      for (const m of seite) { m.y = Math.max(m.y, y + zeile); y = m.y; }
+      /* Was eine Marke ÜBER sich braucht, zusätzlich zur Zeile: die Krone und
+         nichts sonst. Sie gehört der unteren der beiden Nachbarinnen — der
+         Abstand wächst also da, wo gefeiert wird, und nirgends sonst. */
+      const hoch = m => m.krone ? RAD_KRONE_HOCH : 0;
+      /* Und die Kronen gehen der Zeilenhöhe VORWEG ab. Ohne diesen Abzug ist
+         die Rechnung darunter überbucht, sobald die Seite voll wird: die
+         Zeilenhöhe wird auf die volle Strecke verteilt, die Kronen kommen
+         obendrauf, und der Rücklauf von unten schiebt am Ende die oberste
+         Marke über den Saum der viewBox hinaus. Bei zwölf feiernden Meldern
+         stand sie 13 px über der Kante — sichtbar abgeschnitten.
+         Die Krone der OBERSTEN zählt auch hier nicht mit: über ihr liegt keine
+         Zeile, sondern der Saum. */
+      const kronen = seite.reduce((a, m, i) => a + (i ? hoch(m) : 0), 0);
+      const zeile = Math.min(RAD_ZEILE,
+        Math.max(0, RAD_UNTEN - RAD_OBEN - kronen) / (seite.length - 1));
+      /* Der Startwert nimmt die Krone der obersten wieder heraus: über ihr
+         steht keine zweite Marke, sondern nur der Saum der viewBox, und dort
+         ist Platz (natürlich kommt keine Marke höher als y = 24, die Krone
+         also nicht höher als 5). Ohne diese Rücknahme rutschte die oberste
+         Marke an einem Geburtstag 13 px nach unten, ohne dass ihr dort etwas
+         im Weg gestanden hätte. */
+      let y = Math.min(RAD_OBEN, seite[0].y) - zeile - hoch(seite[0]);
+      for (const m of seite) { m.y = Math.max(m.y, y + zeile + hoch(m)); y = m.y; }
+      /* Zurück von unten, mit demselben Zuschlag — nur trägt ihn hier die eben
+         behandelte, also die UNTERE des Paares: `luft` ist immer die Krone
+         derer, die eine Zeile tiefer steht. Für die unterste selbst bleibt es
+         bei RAD_UNTEN; über ihr wird geschoben, nicht unter ihr. */
       y = RAD_UNTEN + zeile;
+      let luft = 0;
       for (let i = seite.length - 1; i >= 0; i--) {
-        seite[i].y = Math.min(seite[i].y, y - zeile);
+        seite[i].y = Math.min(seite[i].y, y - zeile - luft);
         y = seite[i].y;
+        luft = hoch(seite[i]);
       }
     }
 
@@ -5512,7 +5568,7 @@
        Zufallslauf bei sieben Meldern 33 von 4000 Fällen, Abstand 0,0 px. Über
        oder unter dem Ring ist eben nur für eine Platz. */
     for (const m of marken) {
-      if (m.gedraengt || Math.abs(m.x - 150) >= RAD_ACHSE) continue;
+      if (m.gedraengt || m.krone || Math.abs(m.x - 150) >= RAD_ACHSE) continue;
       if (m.oberste && m.y <= RAD_KUPPE) m.mittig = true;
       if (m.unterste && m.y >= RAD_SOHLE) m.mittig = true;
     }
@@ -5529,7 +5585,7 @@
        mittig gesetzten, die deshalb übersprungen werden. */
     for (const m of marken) {
       if (m.mittig) continue;
-      const kopf = m.y - 6, fuss = m.y + 19;
+      const kopf = m.y - 6 - (m.krone ? RAD_KRONE_HOCH : 0), fuss = m.y + 19;
       const dy = kopf > 150 ? kopf - 150 : fuss < 150 ? 150 - fuss : 0;
       if (dy >= RAD_RING) continue;
       const kante = Math.sqrt(RAD_RING * RAD_RING - dy * dy) + RAD_LUFT;
@@ -5538,6 +5594,18 @@
 
     for (const m of marken) {
       const anker = m.mittig ? 'middle' : m.rechts ? 'start' : 'end';
+      /* Die Krone zuerst, und mit DEMSELBEN Anker wie Name und Zahl: die drei
+         Zeilen sind ein Block und stehen an einer Kante untereinander. Mittig
+         über den Namen gesetzt sähe hübscher aus, verlangte aber, ihn vorher zu
+         messen — und gemessen wird hier erst unten, wenn er hängt. */
+      if (m.krone) {
+        const krone = s_el('text', {
+          x: m.x.toFixed(1), y: (m.y - RAD_KRONE).toFixed(1), class: 'rad-krone',
+          'text-anchor': anker, 'dominant-baseline': 'middle',
+        });
+        krone.textContent = '👑';
+        g.appendChild(krone);
+      }
       const name = s_el('text', {
         x: m.x.toFixed(1), y: m.y.toFixed(1), class: 'rad-name',
         'text-anchor': anker, 'dominant-baseline': 'middle',
@@ -6203,6 +6271,13 @@
              auch. Sonst stünde die Auszeichnung nur an einem Strich, und die
              Zeile darunter auf der Tafel widerspräche ihr. */
           stolz: seg.farbe === STOLZ_PLATZ,
+          /* Und die Krone. Ob heute jemand Geburtstag hat, sagt der Worker im
+             Feld selbst (`losSegmente`) — die Seite gleicht dazu keine zweite
+             Liste über den Namen ab, und das eingefrorene Feld einer alten
+             Ziehung trägt die Krone von DAMALS statt der von heute. Felder von
+             vor dieser Änderung haben den Schlüssel nicht; dann bleibt es beim
+             gewöhnlichen Bogen, so wie bei `biere` und `farbe` auch. */
+          krone: !!seg.geburtstag,
         });
         von += weite;
       });

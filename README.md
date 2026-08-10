@@ -686,6 +686,14 @@ und eine Auslosung daneben könnte es nur noch falsch beantworten. `POST
 /api/drehen` antwortet an so einem Tag mit 409 — für den Tab, der seit dem
 Morgen offensteht.
 
+**Über dem Namen am Bogen steht eine Krone** — dasselbe Zeichen wie an der
+Zeile, damit man am Rad selbst sieht, für wen der Tag ist. Sie hängt nicht an
+`ehre`, sondern an einem eigenen `geburtstag` je Feld, und der wird mit dem Feld
+**eingefroren**: wer im nächsten Jahr auf ein altes Rad sieht, findet dort die
+Krone von damals und nicht die von heute. Die andere Rechnung wäre falsch,
+sobald das Geburtstagskind seinen Abend zugesagt hat — dann ist es aus dem Topf
+und aus `ehre.fuer` heraus, sein Bogen steht aber weiter im Rad.
+
 Wer heute geehrt werden kann, sagt der Worker im `los`-Objekt als
 `ehre: {fuer:[Namen], nur:bool}`; fehlt der Schlüssel, hat niemand Geburtstag.
 Ein Geburtstagskind **ohne kaltes Bier** hat kein Feld im Rad und steht deshalb

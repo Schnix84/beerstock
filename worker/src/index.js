@@ -883,9 +883,19 @@ function ziehe(feld) {
    Farben bekaeme als am Abend selbst, waere kein Beleg mehr. Zeilen von vor
    Schema 28 haben sie nicht - die Seite faellt dort auf den Platz im Rad
    zurueck, so wie bei `biere` auch. */
-const losSegmente = feld =>
-  feld.map(p => ({ name: p.name, gewicht: gewicht(p.biere), biere: p.biere,
-                   gemessen: p.quelle === 'ha', farbe: p.farbe }));
+/* `geburtstag` reitet aus demselben Grund mit und wird ebenso eingefroren: die
+   Krone am Bogen ist eine Aussage ueber DEN TAG der Ziehung. Wer im naechsten
+   Jahr auf ein altes Rad sieht, soll dort die Krone finden, die an dem Abend
+   auch dranstand - und nicht die von heute.
+   Die Ids kommen von `geburtstagsKinder`, dieselbe Liste, aus der `ehrenLage`
+   ihre Ehrenrunde macht; die Route rechnet sie nicht ein zweites Mal aus. Ohne
+   die Liste bleibt die Marke schlicht `false`, wie bei jedem alten Feld. */
+const losSegmente = (feld, kinder = []) => {
+  const feiern = new Set(kinder);
+  return feld.map(p => ({ name: p.name, gewicht: gewicht(p.biere), biere: p.biere,
+                          gemessen: p.quelle === 'ha', farbe: p.farbe,
+                          geburtstag: feiern.has(p.id) }));
+};
 
 /* Wer heute noch gezogen werden kann. Bewusst hier in JS und nicht als
    Unterabfrage im SQL: der Verfall wird erst beim naechsten Schreiben
@@ -1341,7 +1351,7 @@ function losAntwort(tag, lage, topf, termine = [], kinder = []) {
        kennt diese Antwort ja noch nicht. */
     const genug = topf.length >= lage.mindest && !(ehre && ehre.nur);
     return {
-      ...gemeinsam, gewinner: null, status: null, feld: losSegmente(topf),
+      ...gemeinsam, gewinner: null, status: null, feld: losSegmente(topf, kinder),
       // `offen` heisst seit jeher "es kann gedreht werden"; `darf_drehen` ist
       // derselbe Wert unter dem Namen, der ihn erklaert.
       offen: genug, darf_drehen: genug,
@@ -4900,7 +4910,7 @@ const ROUTEN = {
       INSERT INTO los (tag, user_id, biere, feld, gedreht_von) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(tag) WHERE status IN ('offen','zugesagt') DO NOTHING
     `).bind(tag, gewinner.id, gewinner.biere,
-            JSON.stringify(losSegmente(topf)), ich.id).run();
+            JSON.stringify(losSegmente(topf, kinder)), ich.id).run();
 
     const [tagRoh2, feld2, termine2] = await env.DB.batch([
       losTagStmt(env, tag), losFeldStmt(env, traeger), termineStmt(env, traeger),
