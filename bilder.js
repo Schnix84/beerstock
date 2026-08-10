@@ -45,6 +45,24 @@ window.Bilder = (function () {
     return n;
   };
   const zahl = n => (n ?? 0).toLocaleString('de-DE');
+  /* Wie viel Platz die Zahl am Ende eines LIEGENDEN Balkens braucht.
+
+     Hier stand einmal die feste Zahl 22, und sie war eine Wette auf kleine
+     Zahlen: der laengste Balken reicht bis `W - 66 - 22`, die Zahl beginnt
+     fuenf Pixel dahinter — bei „12.345" lief sie damit rechts aus dem Bild.
+     Aufgefallen ist es an den Seitenaufrufen, weil dort als erstes fuenf- und
+     sechsstellige Werte auftauchen; an jedem anderen liegenden Balken waere
+     dasselbe passiert, nur spaeter.
+
+     GESCHAETZT UND NICHT GEMESSEN, wie schon bei den Saeulenbeschriftungen
+     weiter unten: `getComputedTextLength` zwaenge zu einem Layout mitten im
+     Zeichnen. 5,6 ist die Zeichenbreite bei `font-size: 9.5` in dieser
+     Schrift, grosszuegig gerundet — Ziffern sind schmaler, der Tausenderpunkt
+     noch schmaler, und was uebrig bleibt, ist Luft am rechten Rand und kein
+     abgeschnittener Wert. */
+  const WERT_LUFT = 5;
+  const wertPlatz = texte =>
+    Math.max(...texte.map(t => String(t).length), 1) * 5.6 + WERT_LUFT + 3;
   const nurTag = iso => iso
     ? new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
     : '—';
@@ -967,11 +985,13 @@ window.Bilder = (function () {
     const eigen = zeilen.every(z => z && z.farbe != null);
     const ton = (z, i) => eigen ? menschenFarbe(z.farbe) : REIHE[0];
     const stufe = i => eigen ? 1 : Math.max(.34, .85 - i * .07);
+    // Der rechte Rand richtet sich nach der laengsten Zahl, siehe `wertPlatz`.
+    const voll = W - lx - wertPlatz(zeilen.map(z => zahl(wertVon(z))));
 
     const balken = [];
     zeilen.forEach((z, i) => {
       const y = i * (hoch + luft) + 3;
-      const b = (wertVon(z) / max) * (W - lx - 22);
+      const b = (wertVon(z) / max) * voll;
       const r = s_el('rect', {
         x: lx, y, width: Math.max(b, 1), height: hoch, rx: 2,
         fill: malFarbe(svg, ton(z, i)), opacity: stufe(i),
@@ -983,7 +1003,8 @@ window.Bilder = (function () {
       n.textContent = stolzZusatz(nameVon(z), ton(z, i));
       svg.appendChild(n);
       const w = s_el('text',
-        { x: lx + Math.max(b, 1) + 5, y: y + hoch - 4, 'font-size': 9.5, fill: P.textWeg });
+        { x: lx + Math.max(b, 1) + WERT_LUFT, y: y + hoch - 4,
+          'font-size': 9.5, fill: P.textWeg });
       w.textContent = zahl(wertVon(z));
       svg.appendChild(w);
     });
@@ -1114,7 +1135,8 @@ window.Bilder = (function () {
     const hoehe = Math.max(zeilen.length * (hoch + luft) + 6, 40);
     const svg = s_el('svg', { viewBox: `0 0 ${W} ${hoehe}`, role: 'img' });
     const lx = 66;                   // Platz für den Namen, wie beim Balkenbild
-    const voll = W - lx - 22;        // Platz für den längsten Balken
+    // Und derselbe rechte Rand wie dort: so breit, wie die längste Zahl ist.
+    const voll = W - lx - wertPlatz(zeilen.map(z => zahl(z.gezogen)));
 
     const reihen = [];   // je Zeile ihre Segmente, fürs Hervorheben
     zeilen.forEach((z, i) => {
@@ -1145,7 +1167,8 @@ window.Bilder = (function () {
       n.textContent = stolzZusatz(z.name, ton);
       svg.appendChild(n);
       const w = s_el('text',
-        { x: lx + Math.max(laenge, 1) + 5, y: y + hoch - 4, 'font-size': 9.5, fill: P.textWeg });
+        { x: lx + Math.max(laenge, 1) + WERT_LUFT, y: y + hoch - 4,
+          'font-size': 9.5, fill: P.textWeg });
       w.textContent = zahl(z.gezogen);
       svg.appendChild(w);
     });

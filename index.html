@@ -1470,16 +1470,34 @@
      Seite, das der Browser selbst ausmalt — in drei Browsern drei Formen, und
      ohne `color-scheme: dark` ein weißes Blatt auf der Schiefertafel.
 
-     Volle Breite unter dem Wort: nebeneinander mit „Geburtstag" davor blieben
-     für drei Felder auf einem 390er keine 12em. */
-  .dk-datum { flex-basis: 100%; justify-content: flex-start; gap: 6px; }
-  /* Tag und Jahr sind schmal, der Monat trägt die Wörter. Alle drei dürfen
-     schrumpfen (`min-width: 0`), sonst schiebt „September" den Haken hinaus. */
-  .dk-datum select { flex: 0 1 auto; min-width: 0; padding-right: 2px; }
-  .dk-datum .dk-geb-m { flex: 1 1 auto; }
-  /* Nur noch die Lage — Maß und Polster stehen weiter unten für BEIDE Haken
-     gemeinsam. `margin-left: auto` schiebt ihn ans rechte Ende der Radreihe. */
-  .dk-datum .dk-ok { margin-left: auto; }
+     GENAU SO BREIT WIE DAS NAMENSFELD DARÜBER. Die drei stecken dafür in einer
+     eigenen Hülle (`.dk-raeder`), die im Raster den Platz des Eingabefeldes
+     einnimmt — dieselbe linke Kante, dieselbe rechte, derselbe Haken dahinter.
+     Ohne Hülle wären sie drei Geschwister des Hakens und teilten die Zeile mit
+     ihm; die Spalte lief dann bis an den Rand des Blattes und die Zeile darüber
+     nicht, was von oben nach unten gelesen ausfranst.
+
+     DER PREIS IST DER PLATZ, und er ist gemessen. In dieser Breite hat der volle
+     Monatsname keinen Raum: „September" braucht allein 83 px, das ganze Feld auf
+     einem 390er 168, und Tag und Jahr wollen davon auch etwas. Das Rad zeigt den
+     Monat darum gekürzt (`MONATE_KURZ`) — ein `select` bricht nicht um, er
+     schneidet ab, und „Septemb" wäre die einzige Alternative gewesen.
+
+     KEINE FESTEN ANTEILE, sondern `flex: 1 1 auto` aus `.dk-tat .feld`: die
+     Grundbreite eines `select` ist die seiner längsten Beschriftung, und danach
+     verteilt sich der Rest gleichmäßig. Feste Anteile standen hier einen Anlauf
+     lang (2,6 für den Monat, weil er die Wörter trägt) und waren falsch, sobald
+     die Wörter kurz wurden: dann hatte der Monat Luft und dem Jahr fehlten die
+     letzten Ziffern. Wer den Inhalt kennt, muss ihn nicht schätzen.
+
+     Schrift und Pfeilchen sind dafür knapper als im Namensfeld: 15 statt 17 px
+     und 8 statt 14 px bis zum Pfeil. Bei drei Feldern nebeneinander zählt jedes
+     Pixel dreimal, und gemessen bleiben auf einem 360er noch zwei übrig. */
+  .dk-raeder {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .dk-raeder .feld { min-width: 0; font-size: 15px; padding-left: 1px; padding-right: 8px; }
   .dk-wert {
     font-family: var(--hand); font-size: 14px; overflow-wrap: anywhere;
   }
@@ -1498,7 +1516,7 @@
      hieß einmal `.dk-ok { padding: 6px 13px; font-size: 14px }` — eine Klasse
      tief, also derselbe Gleichstand und dieselbe Niederlage: der Knopf trug
      weiter die 11 px Polster von `.knopf` und war 45 px hoch. Der Haken am
-     Geburtstag entkam dem nur zufällig, weil er über `.dk-datum .dk-ok` mit
+     Geburtstag entkam dem nur zufällig, weil er über die Radreihe mit
      zwei Klassen angesprochen wurde und dort sein Polster mitbekam. Zwei Haken
      nebeneinander, 45 und 35 px hoch, und die Regel, die es hätte richten
      sollen, stand die ganze Zeit da — sie kam nur nie zum Zug.
@@ -4153,7 +4171,7 @@
            der Name darüber: Feld und Haken.
 
            DREI RÄDER STATT EINES KALENDERS — warum, steht ausführlich am
-           Stylesheet bei `.dk-datum`. Kurz: ein Geburtstag liegt Jahrzehnte
+           Stylesheet bei `.dk-raeder`. Kurz: ein Geburtstag liegt Jahrzehnte
            zurück, und dorthin blättert man mit einem Monatskalender nicht.
 
            Die Listen füllt das Skript (`gebRaeder`), nicht das Markup: hundert
@@ -4161,10 +4179,16 @@
            Jahr um eine falscher werden. -->
       <form class="dk-zeile" id="dk-geb-form">
         <span class="dk-was">Geburtstag</span>
-        <div class="dk-tat dk-datum">
-          <select class="feld dk-geb-t" id="dk-geb-t" aria-label="Tag"></select>
-          <select class="feld dk-geb-m" id="dk-geb-m" aria-label="Monat"></select>
-          <select class="feld dk-geb-j" id="dk-geb-j" aria-label="Jahr"></select>
+        <div class="dk-tat">
+          <!-- Die drei Räder in einer eigenen Hülle, damit sie ZUSAMMEN das
+               Feld füllen, das eine Zeile höher der Name einnimmt. Ohne sie
+               wären sie drei Geschwister des Hakens und teilten sich die Zeile
+               mit ihm; so sind sie EIN Ding neben ihm, wie das Namensfeld. -->
+          <div class="dk-raeder">
+            <select class="feld dk-geb-t" id="dk-geb-t" aria-label="Tag"></select>
+            <select class="feld dk-geb-m" id="dk-geb-m" aria-label="Monat"></select>
+            <select class="feld dk-geb-j" id="dk-geb-j" aria-label="Jahr"></select>
+          </div>
           <button class="knopf dk-ok" type="submit" aria-label="Geburtstag merken">✓</button>
         </div>
       </form>
@@ -5017,7 +5041,7 @@
     (-(((performance.now() / 1000) + versatz) % dauer)).toFixed(2) + 's';
 
   /* --- Die drei Räder des Geburtstags --------------------------------------
-     Tag, Monat, Jahr als drei Listen (siehe `.dk-datum` im Stylesheet, warum
+     Tag, Monat, Jahr als drei Listen (siehe `.dk-raeder` im Stylesheet, warum
      nicht als Kalender). Dieselben Funktionen stehen im Kontor noch einmal —
      dieselbe Vervierfachung wie bei den Kreidefarben, aus demselben Grund: die
      Tafel ist eine geschlossene Datei und lädt keine fremde.
@@ -5033,6 +5057,20 @@
      und weil eine Liste, die weiter reicht, niemandem etwas gibt. */
   const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
                   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  /* Dieselben Monate in der Kurzform, für das Rad im Deckel. Sie steht hier und
+     wird nicht gerechnet („die ersten drei Buchstaben"), weil das Deutsche das
+     nicht so macht: März, Mai, Juni und Juli werden nicht gekürzt, und aus
+     Juni/Juli würde sonst zweimal „Jun"/„Jul" ohne Not.
+
+     WARUM ÜBERHAUPT GEKÜRZT. Das Rad ist genauso breit wie das Namensfeld eine
+     Zeile darüber — so war es gewünscht —, und in diese Breite passt der volle
+     Name nicht: „September" braucht allein 83 px, das ganze Feld hat auf einem
+     390er 168, und Tag und Jahr wollen davon auch etwas. Ein `select` bricht
+     seinen Text nicht um, er schneidet ihn ab; „Septemb" wäre die Alternative
+     gewesen. Gespeichert wird ohnehin die Zahl im `value`, die Beschriftung ist
+     reine Anzeige — das Kontor zeigt weiter die langen Namen, dort ist Platz. */
+  const MONATE_KURZ = ['Jan.', 'Feb.', 'März', 'Apr.', 'Mai', 'Juni',
+                       'Juli', 'Aug.', 'Sep.', 'Okt.', 'Nov.', 'Dez.'];
 
   /* Wie viele Tage der Monat hat. Ohne Jahr gilt das Schaltjahr — sonst fiele
      der 29. Februar aus der Liste, den man gerade dann wählen können muss,
@@ -5069,7 +5107,7 @@
     };
 
     füllen(monatWahl, [['', '–']].concat(
-      MONATE.map((n, i) => [String(i + 1), n])), monat);
+      MONATE_KURZ.map((n, i) => [String(i + 1), n])), monat);
     füllen(jahrWahl, [['', '–']].concat(
       Array.from({ length: 100 }, (_, i) => [String(jetzt - i), String(jetzt - i)])), jahr);
     /* Der Tag hängt an den beiden anderen und wird darum zuletzt gefüllt —
