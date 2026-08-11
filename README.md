@@ -210,7 +210,7 @@ Drei Nähte bleiben offen, mit Absicht:
   Anmeldung. Die Schlüssel sind zufällige UUIDs, also nicht zu erraten.
 - `/api/strom` steht jedem offen. Über die Leitung reisen nur Marken, also
   bestenfalls die Beobachtung, *dass* gerade etwas passiert ist.
-- Die **acht Filme** liegen im selben Bucket unter `filme/`, und ihre Namen sind
+- Die **neun Filme** liegen im selben Bucket unter `filme/`, und ihre Namen sind
   anders als die der Fotos zu **erraten** (`filme/3-notruf.mp4`). Sie zeigen eine
   erfundene Runde auf der Testinstanz — wer die Adresse errät, sieht eine
   Vorführung und kein Innenleben.
@@ -218,26 +218,34 @@ Drei Nähte bleiben offen, mit Absicht:
 ## Die Tour
 
 Acht kurze Filme zeigen, was die Seite kann — hochkant, gedreht gegen die
-Testinstanz mit einer erfundenen Runde, zwischen 33 und 97 Sekunden lang.
+Testinstanz mit einer erfundenen Runde, zwischen 33 und 97 Sekunden lang. Dazu
+der **Ursprungsfilm**, der als einziger nichts erklärt, sondern erzählt, wie das
+alles angefangen hat (41 s).
 
-Sie stehen an **zwei** Stellen, und keine davon doppelt die andere:
+Sie stehen an **zwei** Stellen:
 
 | Wo | Was | Für wen |
 |---|---|---|
-| Türsteher, unter den drei Schritten: **▶ how to** | **Film 0, „Mitmachen"** — der einzige, der von draußen spielt | wer noch nicht mitschreibt |
-| Kleine Zeile unter dem Anschreiben: **Tour** | die anderen **sieben**, als Blatt mit Standbildern | wer angemeldet ist |
+| Türsteher, unter den drei Schritten: **▶ how to · ▶ wie das anfing** | **Film 0, „Mitmachen"** — der einzige, der von draußen spielt — und der **Ursprungsfilm** | wer noch nicht mitschreibt |
+| Kleine Zeile unter dem Anschreiben: **Tour** | der **Ursprungsfilm** zuoberst, darunter die **sieben** anderen, als Blatt mit Standbildern | wer angemeldet ist |
 
 Die Null ist bewusst nicht im Blatt: drinnen hat die Frage, wie man hereinkommt,
 niemand mehr. Und die sieben sind bewusst nicht draußen: sie zeigen Innenräume —
 die Tafel über Wochen, den Notruf, den eigenen Deckel.
+
+Der Ursprungsfilm steht als **einziger an beiden Stellen**, und das ist der
+Unterschied zur Null: „wie komme ich herein" fragt drinnen niemand mehr, „wo
+kommt das her" fragt man auch nach einem Jahr noch. Er trägt darum auch keine
+Nummer — die acht sind eine Anleitung in Kapiteln, er ist ein Film.
 
 Angetippt läuft der Film im Vollbild, eine Ebene über dem Blatt, wie ein Foto in
 der Lupe. Geladen wird er **erst dann**: im Blatt stehen nur Standbilder, sonst
 wären acht Abrufe fällig, sobald es aufgeht.
 
 Was im Netz liegt, ist eine schmalere Zweitfassung (540 px statt 780, zusammen
-16 MB); die 780er bleibt die Fassung zum Verschicken. Gebaut wird sie mit
-`./ideas/film/schneiden.sh klein`, hochgeladen von Hand — **mit
+19 MB); die große bleibt die Fassung zum Verschicken. Gebaut wird sie mit
+`./ideas/film/schneiden.sh klein` (der Ursprungsfilm von Hand, aus
+`ideas/film/ursprung/`), hochgeladen ebenfalls von Hand — **mit
 `--content-type video/mp4`**, sonst liegt sie als `application/octet-stream` im
 Bucket und Safari spielt sie weder ab noch lässt sie sich spulen.
 

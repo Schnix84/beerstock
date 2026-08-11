@@ -3072,13 +3072,20 @@
      trotzdem (groessere Schrift im System), steht die Note als Unterzeile -
      das sieht ordentlich aus, kostet nur die 27 px wieder. */
   .tuer-note { font-size: 11.5px; line-height: 1.5; color: var(--kreide-weg); }
-  /* Der Weg zum Film „Mitmachen". Kein voller Knopf: darunter steht schon
+  /* Die zwei Wege zu einem Film. Kein voller Knopf: darunter steht schon
      einer, und der ist der Weg herein. Zwei gleich laute Knöpfe übereinander,
-     und der falsche gewinnt. Die Form trägt `.film-wort` weiter unten. */
+     und der falsche gewinnt. Die Form trägt `.film-wort` weiter unten.
+
+     Der Abstand sitzt seit dem zweiten Wort am ABSATZ und nicht mehr an den
+     Wörtern: ein `margin-top` an zwei Knöpfen nebeneinander hebt den Trennpunkt
+     dazwischen aus der Zeile. Aus demselben Grund stehen Schriftgröße und Farbe
+     jetzt hier — der Punkt ist bloßer Text und erbt sie mit. */
+  .tuer-filme {
+    margin: 9px 0 0; font-size: 11.5px; color: var(--kreide-weg);
+  }
   .tuer-film {
-    margin: 9px 0 0; padding: 0;
-    border: none; background: none; font: inherit; font-size: 11.5px;
-    color: var(--kreide-weg); cursor: pointer;
+    padding: 0; border: none; background: none; font: inherit;
+    color: inherit; cursor: pointer;
   }
   /* Dieselbe Note, aber als eigener Absatz über dem Einsetzfeld statt als
      Beisatz in einer Kopfzeile — dort trägt sie keinen `margin`, hier braucht
@@ -4005,22 +4012,45 @@
               <li>Link in der Mail klicken</li>
               <li>Namen für die Tafel wählen</li>
             </ol>
-            <!-- Der eine Film, der nach draußen gehört: er zeigt genau diese
-                 drei Schritte und was danach kommt. Er steht HIER und in
-                 keinem Blatt — drinnen hat die Frage niemand mehr, und ein
-                 zweiter Weg zu demselben Film wäre einer zu viel.
+            <!-- Zwei Filme stehen draußen, und sie beantworten zwei
+                 verschiedene Fragen.
 
-                 Eine Zeile in derselben Note wie „Kein Passwort, keine App",
+                 „how to" ist die Null: sie zeigt genau diese drei Schritte und
+                 was danach kommt. Sie steht HIER und in keinem Blatt — drinnen
+                 hat die Frage niemand mehr.
+
+                 „wie das anfing" ist der Ursprungsfilm, und der steht als
+                 einziger an BEIDEN Stellen, hier und als erste Kachel im Blatt.
+                 Das ist keine Doppelung aus Versehen: „wie komme ich herein"
+                 fragt drinnen niemand mehr, „wo kommt das her" fragt man auch
+                 nach einem Jahr noch.
+
+                 In dieser Reihenfolge, weil die Anleitung zu den drei Schritten
+                 darüber gehört und der Anfang zu nichts — er ist der Umweg, den
+                 nimmt, wer nicht sofort mitschreiben will.
+
+                 Zwei Wörter in derselben Note wie „Kein Passwort, keine App",
                  kein Standbild: das Blatt drinnen ist eine Liste und braucht
-                 Bilder zum Unterscheiden, hier gibt es nur diesen einen. -->
-            <button class="tuer-film film-wort" id="tuer-film" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9"/>
-                <path d="M10.2 8.4l6 3.6-6 3.6z" fill="currentColor" stroke="none"/>
-              </svg>
-              <span>how to</span>
-            </button>
+                 Bilder zum Unterscheiden, hier stehen zwei nebeneinander. -->
+            <p class="tuer-filme">
+              <button class="tuer-film film-wort" id="tuer-film" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"/>
+                  <path d="M10.2 8.4l6 3.6-6 3.6z" fill="currentColor" stroke="none"/>
+                </svg>
+                <span>how to</span>
+              </button>
+              ·
+              <button class="tuer-film film-wort" id="tuer-ursprung" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"/>
+                  <path d="M10.2 8.4l6 3.6-6 3.6z" fill="currentColor" stroke="none"/>
+                </svg>
+                <span>wie das anfing</span>
+              </button>
+            </p>
           </div>
           <form id="anmelde-form" hidden>
             <div class="melde eins">
@@ -4249,9 +4279,10 @@
        falsch wäre.
 
        Nur für Angemeldete, wie die Statistiken: diese sieben zeigen
-       Innenräume. Der achte ist die Null („Mitmachen"), und er steht NICHT
-       hier, sondern draußen am Türsteher — wer drin ist, hat die Frage, wie
-       man hereinkommt, hinter sich.
+       Innenräume. Die Null („Mitmachen") steht NICHT hier, sondern draußen am
+       Türsteher — wer drin ist, hat die Frage, wie man hereinkommt, hinter
+       sich. Zuoberst steht der Ursprungsfilm, der einzige, der an beiden
+       Stellen hängt (der Grund steht bei `FILME`).
        ================================================================ -->
   <div class="flyout rundgang" id="rundgang" hidden>
     <div class="fly-schirm" id="rg-schirm"></div>
@@ -4259,7 +4290,7 @@
       <div class="fly-kopf">
         <div>
           <div class="fly-titel" id="rg-titel">Tour</div>
-          <div class="fly-unter">sieben kurze Filme, was die Tafel kann</div>
+          <div class="fly-unter">wie es anfing, und was die Tafel kann</div>
         </div>
         <button class="fly-zu" id="rg-zu" type="button" aria-label="Schließen">×</button>
       </div>
@@ -7808,7 +7839,7 @@
     : 'https://beerstock-api.mc-schneider84.workers.dev';
   const SPEICHER = 'beerstock-token';
 
-  /* --- Die acht Filme -------------------------------------------------------
+  /* --- Die neun Filme -------------------------------------------------------
      Sie liegen im selben öffentlichen Bucket wie die Fotos, unter `filme/`.
      Die Adresse steht hier fest und kommt NICHT vom Worker: sie ist ohnehin
      kein Geheimnis (`BILDER_URL` in `worker/wrangler.jsonc`, und das Repo ist
@@ -7824,6 +7855,13 @@
      780, dazu je ein Standbild aus der Mitte des Films. Die Sekunden unten
      sind GEMESSEN (`ffprobe`), nicht die Sollzeiten aus dem Storyboard.
 
+     Der neunte kommt nicht von dort, sondern aus `ideas/film/ursprung/klein/`
+     (derselbe Griff von Hand: 540 px, CRF 26, Ton kopiert). Sein Standbild
+     steht bei Sekunde 6,5 und NICHT in der Mitte: in der Mitte läuft bei ihm
+     schon die App, und damit sähe seine Kachel aus wie die acht darunter. Die
+     Regel „aus der Mitte" gilt für Filme, die sich am Anfang gleichen — dieser
+     gleicht sich ihnen am Ende.
+
      Hochgeladen wird von Hand, einmal je Fassung:
        cd worker && npx wrangler r2 object put beerstock-bilder/filme/<datei> \
          --file ../ideas/film/kurz/klein/<datei> --content-type video/mp4 --remote
@@ -7831,20 +7869,32 @@
      `application/octet-stream` im Bucket, und Safari spielt sie weder ab noch
      lässt sie sich spulen. */
   const FILME_URL = 'https://pub-bfc67ecfa1c8457e98f8775506d4ad16.r2.dev/filme';
-  /* Die NULL steht nicht im Rundgang. Sie zeigt, wie man hereinkommt, und das
-     ist genau die Frage, die drinnen niemand mehr hat — sie hängt am
-     Türsteher, wo sie gebraucht wird, und der Rundgang beginnt bei der Eins.
-     Deshalb eine Liste und zwei Nutzungen: `rundgangZeichnen` nimmt alles ab
-     der Eins, `tuer-film` genau die Null. */
+  /* WO EIN FILM HÄNGT, STEHT SEIT DEM NEUNTEN AN IHM und nicht mehr an seiner
+     Nummer. Bis dahin reichte die Zahl: die Null am Türsteher, alles ab der
+     Eins im Rundgang. Der Ursprungsfilm ist der dritte Fall — er hängt an
+     BEIDEN Stellen, und eine Nummer, die zwei Orte bedeutet, sagt nichts mehr.
+     Also `tuer` und `tour` als eigene Spalten, und jede Stelle liest die ihre.
+
+     Dass er zweimal steht, ist der Unterschied zur Null und kein Versehen:
+     „wie komme ich herein" fragt drinnen niemand mehr, „wo kommt das her"
+     fragt man auch nach einem Jahr noch. Wer eine der beiden Zeilen als
+     Doppelung wegräumt, nimmt ihm die Hälfte seines Publikums.
+
+     Er trägt auch keine Nummer, sondern eine `marke`: die acht sind eine
+     Anleitung in Kapiteln, dieser ist ein Film. „FILM 0" über dem Vollmond
+     hieße, er sei das Vorwort einer Anleitung.
+
+     Und er steht ZUERST, weil eine Herkunft vor die Handgriffe gehört. */
   const FILME = [
-    { nr: 0, datei: '0-mitmachen',          titel: 'Mitmachen',                      dauer: 44 },
-    { nr: 1, datei: '1-was-ist-das',        titel: 'Was ist das hier?',              dauer: 97 },
-    { nr: 2, datei: '2-wo-wird-getrunken',  titel: 'Wo wird heute getrunken?',       dauer: 35 },
-    { nr: 3, datei: '3-notruf',             titel: 'Ich brauche jetzt Bier',         dauer: 46 },
-    { nr: 4, datei: '4-der-abend-danach',   titel: 'Der Abend danach',               dauer: 33 },
-    { nr: 5, datei: '5-handgriffe',         titel: 'Mitreden',                       dauer: 44 },
-    { nr: 6, datei: '6-foto-gif-meme',      titel: 'Foto, GIF, Meme',                dauer: 47 },
-    { nr: 7, datei: '7-die-wohnung-meldet', titel: 'Die Wohnung meldet mit',         dauer: 41 },
+    { datei: 'ursprung', marke: 'DER ANFANG', titel: 'Wie das anfing',      dauer: 41, tuer: true, tour: true },
+    { nr: 0, datei: '0-mitmachen',          titel: 'Mitmachen',                      dauer: 44, tuer: true },
+    { nr: 1, datei: '1-was-ist-das',        titel: 'Was ist das hier?',              dauer: 97, tour: true },
+    { nr: 2, datei: '2-wo-wird-getrunken',  titel: 'Wo wird heute getrunken?',       dauer: 35, tour: true },
+    { nr: 3, datei: '3-notruf',             titel: 'Ich brauche jetzt Bier',         dauer: 46, tour: true },
+    { nr: 4, datei: '4-der-abend-danach',   titel: 'Der Abend danach',               dauer: 33, tour: true },
+    { nr: 5, datei: '5-handgriffe',         titel: 'Mitreden',                       dauer: 44, tour: true },
+    { nr: 6, datei: '6-foto-gif-meme',      titel: 'Foto, GIF, Meme',                dauer: 47, tour: true },
+    { nr: 7, datei: '7-die-wohnung-meldet', titel: 'Die Wohnung meldet mit',         dauer: 41, tour: true },
   ];
 
   /* GIFs und Memes an Kommentaren, siehe ideas/gifs-und-memes.md. GIF_SEITE
@@ -10428,7 +10478,7 @@
   function rundgangZeichnen() {
     const liste = $('rg-liste');
     if (liste.childElementCount) return;
-    for (const f of FILME.filter(x => x.nr > 0)) {
+    for (const f of FILME.filter(x => x.tour)) {
       const z = el('button', 'rg-zeile');
       z.type = 'button';
 
@@ -10440,7 +10490,7 @@
       bild.appendChild(img);
 
       const mitte = el('div');
-      mitte.appendChild(el('div', 'rg-nr', `FILM ${f.nr}`));
+      mitte.appendChild(el('div', 'rg-nr', f.marke || `FILM ${f.nr}`));
       mitte.appendChild(el('div', 'rg-titel', f.titel));
 
       z.append(bild, mitte, el('span', 'rg-dauer', `${f.dauer} s`));
@@ -12250,6 +12300,11 @@
      nicht über den Platz in der Liste — die Reihenfolge dort ist Anzeige, die
      Null ist die Sache. */
   $('tuer-film').addEventListener('click', () => schauAuf(FILME.find(f => f.nr === 0)));
+  /* Am `datei` gegriffen und nicht an der Nummer: der Ursprungsfilm hat keine
+     (siehe `FILME`), und sein Schlüssel ist ohnehin das, was er im Bucket
+     heißt — eine zweite Kennung wäre eine zweite Stelle, die falsch sein kann. */
+  $('tuer-ursprung').addEventListener('click',
+    () => schauAuf(FILME.find(f => f.datei === 'ursprung')));
   $('rg-zu').addEventListener('click', rundgangZu);
   $('rg-schirm').addEventListener('click', rundgangZu);
   $('schau-zu').addEventListener('click', schauZu);
