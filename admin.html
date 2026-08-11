@@ -1044,11 +1044,17 @@
      „Jetzt" da — sichtbar, aber ohne Wirkung. */
   #r-spaeter { display: flex; gap: 8px; margin-top: 4px; }
   #r-spaeter[hidden] { display: none; }
-  /* Die Vorschau ist WEISS und bleibt es. Dasselbe Aussehen wie `mailRumpf`
-     und `mailKnopf` im Worker (`worker/src/index.js`) — eine Mail wird in
-     einem fremden Programm auf hellem Grund gelesen, nicht auf der Tafel.
-     Ändert sich dort etwas an Schrift oder Farbe, muss es hier nachgezogen
-     werden, sonst lügt die Vorschau. */
+  /* Die Vorschau ist WEISS und bleibt es — eine Mail wird in einem fremden
+     Programm auf hellem Grund gelesen, nicht auf der Tafel.
+
+     HIER STAND EINMAL EIN NACHBAU von `mailRumpf` und `mailKnopf`, mit der
+     Auflage, ihn nachzuziehen, sobald sich im Worker etwas an Schrift oder
+     Farbe ändert. Die Auflage ist genau einmal vergessen worden (beim
+     Kopfstreifen), und die Vorschau zeigte danach eine Mail, die es so nicht
+     mehr gab. Jetzt rendert der Worker sie: `POST /api/admin/rundmail/vorschau`
+     gibt dasselbe HTML zurück, das gleich in der Post liegt, und es steht in
+     einem eigenen Rahmen — die Kreide des Kontors kommt dort nicht hinein und
+     die Mailschrift nicht hinaus. */
   .mail-vorschau {
     border: 1px solid #0006; border-radius: 3px; overflow: hidden; background: #fff;
   }
@@ -1059,17 +1065,11 @@
     flex-wrap: wrap;
   }
   .mv-kopf strong { font-size: 14px; color: #1d2a24; font-weight: 600; }
-  .mv-rumpf {
-    padding: 18px 16px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    font-size: 16px; line-height: 1.6; color: #1d2a24;
-  }
-  .mv-bild { max-width: 100%; border-radius: 4px; display: block; margin: 0 0 12px; }
-  .mv-knopf {
-    display: inline-block; background: #2f5d4a; color: #f4efe3;
-    padding: 12px 22px; border-radius: 3px; text-decoration: none;
-    letter-spacing: .15em; text-transform: uppercase; font-size: 13px;
-  }
+  /* Der Rahmen um die echte Mail. Seine Höhe setzt das Skript nach dem Laden,
+     weil ein `iframe` sonst auf 150 px stehenbleibt und die Mail darin
+     scrollt — eine Vorschau, die man scrollen muss, zeigt nicht, wie lang die
+     Mail ist. */
+  .mv-rahmen { display: block; width: 100%; border: 0; background: #fff; }
   /* Solange Betreff oder Text fehlen, hat die Vorschau nichts zu zeigen —
      ein leeres weißes Rechteck sähe aus wie ein Ladefehler. */
   .mv-leer {
@@ -1504,9 +1504,9 @@
       </div>
 
       <!-- Die Vorschau steht daneben und schreibt beim Tippen mit. Kein
-           eigenes Gerüst darin: `mailVorschau()` baut den Kasten, und zwar
-           denselben, der vorher auf Knopfdruck erschien — zwei Zeichner
-           liefen auseinander, sobald der Worker seine Mail änderte. -->
+           eigenes Gerüst darin, und seit `POST /api/admin/rundmail/vorschau`
+           auch kein eigener Zeichner mehr: was hier steht, hat der Worker
+           gebaut — dieselbe Mail, die gleich in der Post liegt. -->
       <div>
         <label class="feld-titel" style="margin-top:12px">Vorschau</label>
         <div id="r-vorschau"></div>
@@ -3479,21 +3479,94 @@
     knopfLink: $('r-knopf-link').value.trim(),
   });
 
-  function vorschauZeichnen() {
-    const f = rundmailFelder();
+  /* Ein Satz im leeren Kasten, für beide Fälle, in denen es nichts zu zeigen
+     gibt: noch nichts getippt, oder der Worker sagt, warum das so noch keine
+     Mail ist. Ein leeres weißes Rechteck sähe aus wie ein Ladefehler. */
+  function vorschauSatz(satz) {
     const v = $('r-vorschau');
     v.textContent = '';
-    /* Solange Betreff und Text beide leer sind, gibt es nichts zu zeigen. Ein
-       leerer weißer Kasten sähe aus wie ein Ladefehler, ein Kasten mit
-       „Betreff:" und nichts dahinter wie eine kaputte Mail. */
+    const leer = el('div', 'mail-vorschau');
+    leer.appendChild(el('div', 'mv-leer', satz));
+    v.appendChild(leer);
+  }
+
+  /* Jeder Tastendruck fragt den Worker — aber nicht sofort: `vorschauSchlag`
+     sammelt die Anschläge einer Viertelsekunde ein. Und `vorschauLauf` zählt
+     mit, weil die Antworten nicht in der Reihenfolge zurückkommen müssen, in
+     der sie losgeschickt wurden: eine späte Antwort auf einen alten Stand
+     überschriebe sonst den neuen. */
+  let vorschauSchlag = null;
+  let vorschauLauf = 0;
+
+  function vorschauZeichnen() {
+    clearTimeout(vorschauSchlag);
+    const f = rundmailFelder();
     if (!f.betreff && !f.text) {
-      const leer = el('div', 'mail-vorschau');
-      leer.appendChild(el('div', 'mv-leer',
-        'Sobald oben etwas steht, steht es hier auch.'));
-      v.appendChild(leer);
+      vorschauLauf++;            // eine noch laufende Antwort ist damit alt
+      vorschauSatz('Sobald oben etwas steht, steht es hier auch.');
       return;
     }
-    v.appendChild(mailVorschau(f));
+    vorschauSchlag = setTimeout(() => vorschauHolen(f), 250);
+  }
+
+  async function vorschauHolen(f) {
+    const lauf = ++vorschauLauf;
+    let d;
+    try {
+      d = await ruf('/api/admin/rundmail/vorschau', {
+        betreff: f.betreff, text: f.text, bild_url: f.bildUrl,
+        knopf_text: f.knopfText, knopf_link: f.knopfLink,
+      });
+    } catch (e) {
+      if (lauf === vorschauLauf) vorschauSatz(e.message);
+      return;
+    }
+    if (lauf !== vorschauLauf) return;
+    vorschauStellen(d);
+  }
+
+  /* Die Mail steht in einem `iframe` und nicht im Kontor selbst: das HTML aus
+     dem Worker bringt seine eigene Schrift und seine eigenen Farben mit, und
+     die Regeln dieser Seite (Kreide auf Schiefer) dürfen ihm nicht dazwischen
+     kommen. `srcdoc` als Eigenschaft gesetzt, nicht als Attribut — dann muss
+     nichts maskiert werden.
+
+     `sandbox="allow-same-origin"` OHNE `allow-scripts`: der Rahmen bleibt
+     lesbar (die Höhe wird von innen gemessen), aber nichts darin läuft. Ein
+     Mailprogramm führt auch nichts aus, die Vorschau soll also auch nicht. */
+  function vorschauStellen(d) {
+    const v = $('r-vorschau');
+    v.textContent = '';
+    const kasten = el('div', 'mail-vorschau');
+
+    const kopf = el('div', 'mv-kopf');
+    kopf.appendChild(el('span', null, 'Betreff'));
+    kopf.appendChild(el('strong', null, d.betreff));
+    kasten.appendChild(kopf);
+
+    const rahmen = document.createElement('iframe');
+    rahmen.className = 'mv-rahmen';
+    rahmen.title = 'Die Mail, wie sie ankommt';
+    rahmen.setAttribute('sandbox', 'allow-same-origin');
+    rahmen.height = 120;
+    kasten.appendChild(rahmen);
+    v.appendChild(kasten);
+
+    /* Erst nach dem Anhängen: ein `iframe`, das noch nicht im Dokument steht,
+       hat kein `contentDocument`, und das `srcdoc` liefe ins Leere. */
+    rahmen.addEventListener('load', () => {
+      const dok = rahmen.contentDocument;
+      if (!dok) return;
+      const messen = () => {
+        rahmen.style.height = dok.documentElement.scrollHeight + 'px';
+      };
+      /* Nicht nur einmal messen: die Bilder der Mail kommen aus R2 und treffen
+         nach dem `load` ein — die Mail wird also noch höher, nachdem sie
+         fertig ist. Der Beobachter fängt genau das. */
+      if (window.ResizeObserver) new ResizeObserver(messen).observe(dok.body);
+      messen();
+    });
+    rahmen.srcdoc = d.html;
   }
 
   /* Was auf dem grünen Knopf steht, ist die Zusammenfassung dessen, was er
@@ -3613,47 +3686,6 @@
     vorschauZeichnen();
     knopfBeschriften();
     $('r-betreff').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  /* Der Rahmen um die Mail, wie `mailRumpf` im Worker sie schickt — serifenlos
-     auf Weiß, damit die Vorschau zeigt, was tatsächlich im Postfach landet,
-     nicht das Kontorbuch drumherum. Bild und Knopf kommen 1:1 aus denselben
-     Feldern, die auch die API bekommt. */
-  function mailVorschau({ betreff, text, bildUrl, knopfText, knopfLink }) {
-    const kasten = el('div', 'mail-vorschau');
-    const kopf = el('div', 'mv-kopf');
-    kopf.appendChild(el('span', null, 'Betreff'));
-    kopf.appendChild(el('strong', null, betreff));
-    kasten.appendChild(kopf);
-
-    const rumpf = el('div', 'mv-rumpf');
-    if (bildUrl) {
-      const img = document.createElement('img');
-      img.src = bildUrl;
-      img.alt = '';
-      img.className = 'mv-bild';
-      rumpf.appendChild(img);
-    }
-    text.split(/\n{2,}/).forEach(a => {
-      const p = el('p');
-      p.style.cssText = 'margin:0 0 12px';
-      a.split('\n').forEach((zeile, i) => {
-        if (i) p.appendChild(document.createElement('br'));
-        p.appendChild(document.createTextNode(zeile));
-      });
-      rumpf.appendChild(p);
-    });
-    if (knopfText && knopfLink) {
-      const a = document.createElement('a');
-      a.href = knopfLink;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.className = 'mv-knopf';
-      a.textContent = knopfText;
-      rumpf.appendChild(a);
-    }
-    kasten.appendChild(rumpf);
-    return kasten;
   }
 
   /* Testmail: geht nur an den eigenen Posteingang und an der Stundensperre

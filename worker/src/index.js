@@ -3115,11 +3115,30 @@ function icsAnhang(env, termin, abgesagt) {
   }];
 }
 
-/* Der Rumpf jeder Mail. Dieselbe Schrift und dieselben Farben wie beim Magic
-   Link - das Kontorbuch des Wirts, nicht die Tafel: eine Mail wird in einem
-   fremden Programm auf weissem Grund gelesen. */
+/* Der Kopf über jeder Mail: ein Streifen Schiefer mit Glas und Namen in
+   Kreide. Als BILD, weil die Kreideschrift eine Systemschrift ist - im
+   Mailprogramm des Empfängers gibt es sie nicht, und eine Kopfzeile, die bei
+   jedem anders aussieht, ist keine Marke. Gebaut aus
+   `ideas/film/ursprung/mailkopf.html` mit
+   `ideas/pruefungen/mailkopf-schuss.mjs`.
+
+   DIE ADRESSE STEHT HIER FEST und kommt nicht aus `env.BILDER_URL`, obwohl
+   sie dasselbe Bucket meint: `mailRumpf` wird an einem Dutzend Stellen ohne
+   `env` gerufen, und die alle umzubauen wäre teurer als diese Zeile. Der
+   Preis ist ehrlich zu benennen - wird `BILDER_URL` je getauscht, gehört
+   diese Zeile mitgetauscht, und nichts erinnert daran ausser ihr selbst.
+
+   `width` als ATTRIBUT und nicht nur im `style`: Outlook rechnet das `style`
+   nicht mit und stellte das Bild sonst in voller Pixelbreite ein. */
+const MAIL_KOPF =
+`<p style="margin:0 0 20px"><img
+   src="https://pub-bfc67ecfa1c8457e98f8775506d4ad16.r2.dev/marke/mailkopf.png"
+   alt="wer hat kalt" width="520"
+   style="max-width:100%;border-radius:4px;display:block"></p>`;
+
 const mailRumpf = inhalt =>
-`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
+`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24;max-width:560px;margin:0 auto;padding:8px 20px 24px">
+${MAIL_KOPF}
 ${inhalt}
 </div>`;
 
@@ -3611,9 +3630,13 @@ function rundmailPruefen(daten) {
 }
 
 function rundmailHtml({ text, bildUrl, knopfText, knopfLink }) {
+  /* `margin:0 auto` und nicht `margin:0`: ein Bild ist selten so breit wie die
+     Mail (das Standbild eines hochkanten Films ist es nie), und links geklebt
+     sieht es aus wie ein Anhang, der verrutscht ist. Mittig sieht es aus wie
+     eine Karte. */
   const bild = bildUrl
     ? `<p><img src="${nurText(bildUrl)}" alt="" style="max-width:100%;border-radius:4px;
-         display:block;margin:0 0 4px"></p>`
+         display:block;margin:0 auto 4px"></p>`
     : '';
   const absaetze = text.split(/\n{2,}/)
     .map(a => `<p>${nurText(a).replace(/\n/g, '<br>')}</p>`).join('\n');
@@ -7239,6 +7262,39 @@ const ROUTEN = {
 
      Im Protokoll traegt genau diese Art eine rote Marke "Test" (`istProbe` in
      `admin.html`). Wer sie hier umbenennt, nimmt sie dort still ab. */
+  // -------------------------------------------------------------------------
+  /* Die Vorschau im Kontor - und zwar die ECHTE Mail, nicht ihr Nachbau.
+     Zurueck kommt genau das HTML, das gleich in der Post liegt; das Kontor
+     stellt es in einen eigenen Rahmen und redet ihm nicht hinein.
+
+     WARUM ES DIESE ROUTE GIBT: `admin.html` hat die Mail bis hierher SELBST
+     nachgebaut, mit der Auflage im Kommentar, jede Aenderung an `mailRumpf`
+     nachzuziehen. Genau das ist beim Kopfstreifen vergessen worden - die
+     Vorschau zeigte eine Mail, die es so nicht mehr gab. Zwei Stellen fuer
+     dasselbe Aussehen halten nur so lange, wie jemand daran denkt; eine
+     Stelle haelt immer.
+
+     Nichts wird gesendet und nichts gespeichert, darum auch keine
+     Stundensperre. Sie steht trotzdem hinter `istAdmin`: das Aussehen einer
+     Rundmail geht niemanden etwas an, der keine schreiben darf. */
+  'POST /api/admin/rundmail/vorschau': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const geprueft = rundmailPruefen(daten);
+    if (geprueft.fehler) return fehler(request, geprueft.fehler);
+
+    return antwort(request, {
+      betreff: geprueft.betreff,
+      html: mailRumpf(rundmailHtml(geprueft)),
+      text: rundmailText(geprueft),
+    }, 200, KEIN_FREMDER_CACHE);
+  },
+
+  // -------------------------------------------------------------------------
   'POST /api/admin/rundmail/test': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);

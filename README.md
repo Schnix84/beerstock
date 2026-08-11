@@ -226,7 +226,7 @@ Sie stehen an **zwei** Stellen:
 
 | Wo | Was | Für wen |
 |---|---|---|
-| Türsteher, unter den drei Schritten: **▶ how to · ▶ wie das anfing** | **Film 0, „Mitmachen"** — der einzige, der von draußen spielt — und der **Ursprungsfilm** | wer noch nicht mitschreibt |
+| Türsteher, unter den drei Schritten: **▶ how to · ▶ Prequel** | **Film 0, „Mitmachen"** — der einzige, der von draußen spielt — und der **Ursprungsfilm** | wer noch nicht mitschreibt |
 | Kleine Zeile unter dem Anschreiben: **Tour** | der **Ursprungsfilm** zuoberst, darunter die **sieben** anderen, als Blatt mit Standbildern | wer angemeldet ist |
 
 Die Null ist bewusst nicht im Blatt: drinnen hat die Frage, wie man hereinkommt,
