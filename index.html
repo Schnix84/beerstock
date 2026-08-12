@@ -13935,6 +13935,43 @@
     wrappedAuf(jahr, true);
   }
 
+  /* Ein Film aus der Adresse: `?film=ursprung` schlägt ihn beim Aufbau gleich
+     auf. Gebraucht wird das von der Rundmail — ihr Knopf soll nicht die nackte
+     Datei im Bucket öffnen, sondern die Seite, auf der der Film zu Hause ist.
+
+     ALS SUCHPARAMETER UND NICHT ALS FRAGMENT. Das Fragment ist hier der Kanal
+     für Ausweise (`#anmelden=`, `#einladung=`, `#los=`) — es geht an keinen
+     Server und steht in keinem Protokoll, und genau deshalb gehört ein Film
+     nicht hinein: er ist kein Geheimnis, und er soll in einem Link stehen
+     dürfen, den man weitergibt.
+
+     Geprüft wie bei `?wrapped=`: `?film=irgendwas` öffnet keinen Spieler ohne
+     Quelle, sondern gar nichts. Und ein Film, der drinnen spielt, verlangt
+     einen Ausweis — gefragt wird `merke()` und nicht `drinnen()`, weil das
+     hier vor dem ersten Abruf läuft und `drinnen()` da noch nichts weiß.
+
+     Der Parameter wird danach aus der Adresse geräumt, sonst schlägt der Film
+     bei jedem Neuladen wieder auf — und ein Video, das man dreimal wegwischt,
+     ist eine Falle statt eines Angebots.
+
+     FÜR DEN GRUPPEN-UMBAU VORGEMERKT: sobald die Weiche nach `start.html`
+     steht, wirft sie jeden ohne oder mit mehreren Runden dorthin — mitsamt
+     dem gerade aufgeschlagenen Film, denn `location.replace` nimmt den
+     Suchteil nicht mit. Dort gehört dieselbe Ausnahme hin wie für die offene
+     Einladung (`einladungOffen`), oder `?film=` muss mitwandern. */
+  function filmAusAdresse() {
+    const p = new URLSearchParams(location.search);
+    const wunsch = p.get('film');
+    if (!wunsch) return;
+    p.delete('film');
+    history.replaceState(null, '',
+      location.pathname + (p.toString() ? '?' + p : '') + location.hash);
+    const f = FILME.find(x => x.datei === wunsch);
+    if (!f) return;
+    if (!f.tuer && !merke()) return;
+    schauAuf(f);
+  }
+
   /* Reihenfolge: erst den Link einloesen (der setzt das Token), dann wissen,
      wer man ist, dann zeichnen. Die beiden Wege aus dem Postfach hängen sich
      davor: sie lesen dasselbe Fragment, und `magicEinloesen` räumt es weg. */
@@ -14001,6 +14038,10 @@
     schild();
     eng.addEventListener('change', schild);
   }
+
+  /* Vor der Kette und nicht in ihr: der Film braucht keine Daten, und wer aus
+     einer Mail kommt, soll ihn sehen und nicht erst den Aufbau. */
+  filmAusAdresse();
 
   Promise.resolve()
     .then(() => merke() && !meinName && !brauchtNamen ? werBinIch() : null)
