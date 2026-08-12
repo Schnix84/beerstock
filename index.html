@@ -13968,7 +13968,16 @@
       location.pathname + (p.toString() ? '?' + p : '') + location.hash);
     const f = FILME.find(x => x.datei === wunsch);
     if (!f) return;
-    if (!f.tuer && !merke()) return;
+    const drin = !!merke();
+    if (!f.tuer && !drin) return;
+    /* Das Blatt DAHINTER aufschlagen, für Angemeldete: wer den Film zumacht,
+       steht dann in der Liste der anderen und nicht auf der Tafel. Der Film
+       ist ja aus der Tour heraus verschickt worden, und ein Rückweg, der
+       woanders endet, als man hergekommen ist, fühlt sich wie ein Verlust an.
+
+       Nur für Angemeldete, weil die Tour drinnen spielt — von draußen bleibt
+       hinter dem Film der Türsteher, und das ist dort der richtige Rückweg. */
+    if (drin && f.tour) rundgangAuf();
     schauAuf(f);
   }
 
