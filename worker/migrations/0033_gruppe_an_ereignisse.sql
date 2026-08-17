@@ -46,12 +46,21 @@
 -- hier mitgezogen. Auch das steht unten bei den Indizes.
 -- ===========================================================================
 
-/* HIER STAND `PRAGMA foreign_keys = OFF;`, WIE IN 0002, 0004, 0014 UND 0019 -
+/* KEIN SEMIKOLON IN EINEM BLOCKKOMMENTAR DIESER DATEI. Die D1-API zerlegt den
+   gesendeten Text am Semikolon, OHNE Blockkommentare zu beachten - der Rest des
+   Blocks kommt dann als eigenes "Statement" an, das keines ist, und die ganze
+   Migration scheitert mit `SQL code did not contain a statement [7500]`.
+   Miniflare tut das nicht: lokal laeuft dieselbe Datei anstandslos durch, und
+   der Fehler zeigt sich erst gegen die echte Datenbank. `--`-Zeilen sind
+   unbedenklich, die kennt der Zerleger. Drei Semikolen standen hier und haben
+   den Rollout am 2026-08-17 angehalten.
+
+   HIER STAND `PRAGMA foreign_keys = OFF`, WIE IN 0002, 0004, 0014 UND 0019 -
    UND ES HAETTE DIESE MIGRATION AN DER ECHTEN DATENBANK SCHEITERN LASSEN.
 
    Der Grund, warum es dort trug und hier nicht: keine der frueheren
    Migrationen hat je eine Tabelle getauscht, auf die zu diesem Zeitpunkt
-   schon ein Kind zeigte. 0004 baute `los` neu, bevor es `termine.los_id` gab;
+   schon ein Kind zeigte. 0004 baute `los` neu, bevor es `termine.los_id` gab -
    0019 baute `reaktionen` neu, also das KIND. `bewertungen` ist die erste
    Tabelle mit einem lebenden Verweis darauf: `kommentare.bewertung_id`, seit
    0007 und ohne ON DELETE.
@@ -158,7 +167,7 @@ ALTER TABLE bewertungen_neu RENAME TO bewertungen;
 
 /* Und die Sternzeilen wieder an ihre Bewertung. Das traegt nur, weil der
    INSERT oben die alten Ids mitgenommen hat - sonst haenge hier jede Karte am
-   falschen Menschen. Die Merktabelle faellt danach weg; sie hat genau so lange
+   falschen Menschen. Die Merktabelle faellt danach weg - sie hat genau so lange
    gelebt wie der Tausch. */
 UPDATE kommentare SET bewertung_id = (
     SELECT m.bewertung_id FROM kommentar_bewertung_merk m WHERE m.id = kommentare.id)
