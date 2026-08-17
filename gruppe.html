@@ -1609,6 +1609,15 @@
   }
 
   function ab2Schluessel(jahr, monat) { return jahr * 12 + (monat - 1); }
+  // Derselbe Schlüssel aus 'YYYY-MM', wie ihn `seit` liefert.
+  function ab2SchluesselAus(ym) {
+    const [j, m] = String(ym).split('-').map(Number);
+    return ab2Schluessel(j, m);
+  }
+  /* Der älteste Monat, den dieser Blätterer anbietet - Monat der Gründung, nie
+     später als der älteste Monat mit Inhalt. Er kommt mit JEDER Antwort und
+     wird nicht gespeichert: er gehört der Gruppe, nicht dem Gerät. */
+  let ab2Seit = null;
 
   async function abHolen() {
     ab2Sichtbarkeit();
@@ -1712,20 +1721,40 @@
 
   function ab2Zeichnen(d) {
     ab2Letzte = d;
-    $('ab2-titel').textContent = AB2_MONATE[d.monat] + ' ' + d.jahr + (d.vorschau ? ' (läuft noch)' : '');
-    const ziel = $('ab2-liste');
-    ziel.textContent = '';
-    if (!d.eintraege.length) {
-      ziel.appendChild(el('p', 'unter',
-        d.vorschau ? 'Diesen Monat ist noch nichts gebucht.' : 'In diesem Monat wurde nichts gebucht.'));
-    } else {
-      d.eintraege.forEach(e => ziel.appendChild(ab2Zeile(e)));
-    }
+    if (d.seit) ab2Seit = d.seit;
 
     const jetzt = new Date();
     const aktuell = ab2Schluessel(jetzt.getUTCFullYear(), jetzt.getUTCMonth() + 1);
     const dieser = ab2Schluessel(ab2Jahr, ab2Monat);
+
+    /* „(läuft noch)" hing bis 2026-08-17 an `d.vorschau`, und das war der
+       falsche Gradmesser: `vorschau` heißt „für diesen Monat gibt es noch
+       keine Abrechnungszeile", nicht „der Monat läuft". Über einem März, der
+       seit fünf Monaten vorbei ist, stand damit „März 2026 (läuft noch)".
+
+       Es ist eine Aussage über die UHR, also kommt sie von der Uhr. Der Satz
+       darunter („Dieser Monat ist vorbei und noch nicht abgerechnet") sagt das
+       Übrige und sagt es richtig. */
+    const laeuft = dieser === aktuell;
+    $('ab2-titel').textContent = AB2_MONATE[d.monat] + ' ' + d.jahr + (laeuft ? ' (läuft noch)' : '');
+
+    const ziel = $('ab2-liste');
+    ziel.textContent = '';
+    if (!d.eintraege.length) {
+      // Präsens nur im laufenden Monat - aus demselben Grund wie oben. Ein
+      // vergangener Monat, in dem nichts gebucht wurde, bekommt nichts mehr.
+      ziel.appendChild(el('p', 'unter',
+        laeuft ? 'Diesen Monat ist noch nichts gebucht.' : 'In diesem Monat wurde nichts gebucht.'));
+    } else {
+      d.eintraege.forEach(e => ziel.appendChild(ab2Zeile(e)));
+    }
+
     $('ab2-vor').disabled = dieser >= aktuell;
+    /* Und nach hinten ist bei der Gründung Schluss (`seit`, vom Worker). Vorher
+       blätterte man unbegrenzt zurück - bis in Monate, in denen es die Gruppe
+       nicht gab, mit leerer Liste und einem Knopf „abschließen" darunter.
+       Ohne `seit` (alte Antwort) bleibt es beim alten, offenen Verhalten. */
+    $('ab2-zurueck').disabled = !!ab2Seit && dieser <= ab2SchluesselAus(ab2Seit);
 
     // Abschliessbar ist ein VOLLSTAENDIG abgelaufener Monat ohne Abschluss -
     // derselbe Guard wie im Worker (`POST /api/abrechnung/abschluss`).
@@ -1766,6 +1795,9 @@
   }
 
   $('ab2-zurueck').addEventListener('click', () => {
+    // Wie beim Vorwärts-Knopf: ein gesperrter Knopf tut nichts, auch wenn die
+    // Tastatur oder ein schneller Doppeltipp ihn trotzdem erreicht.
+    if ($('ab2-zurueck').disabled) return;
     ab2Monat--; if (ab2Monat < 1) { ab2Monat = 12; ab2Jahr--; }
     ab2OffenAblehnen = null;
     ab2Laden().catch(e => sagt('ab2-sagt', e.message, true));

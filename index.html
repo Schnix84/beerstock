@@ -9001,7 +9001,7 @@
     ziel.textContent = '';
     if (!d.getraenke.length) {
       ziel.appendChild(el('div', 'leer-hinweis kr',
-        'Noch kein Getränk angelegt — das erledigt, wer die Gruppe führt.'));
+        'Noch kein Getränk angelegt — das erledigen Gruppenadmins.'));
     } else {
       d.getraenke.forEach(g => ziel.appendChild(kasseZeile(g, getippt.get(String(g.id)))));
       if (hatFokus) {
@@ -10468,9 +10468,18 @@
        Flasche wartet, steht am Rad selbst, samt der Frage an den Gezogenen.
        Der Hinweis war also dreimal dasselbe an vierter Stelle. */
 
-    /* Nur zwei Zeilen in der Hauptansicht — der Rest liegt in der Chronik.
-       Reicht das Kommende allein nicht, füllt das Gewesene die Lücke auf. */
-    const ANGEZEIGT = 2;
+    /* FÜNF ZEILEN, seit die Termine ein eigenes Blatt haben (Etappe 10).
+       Vorher waren es zwei, und das war richtig, solange alles auf einem Brett
+       stand: der Erste, das Rad, die Tafel und die Abende teilten eine
+       Bildschirmhöhe, und jede Terminzeile ging von den anderen ab. Auf der
+       eigenen Zunge steht nichts darüber und nichts darunter — dort ist Platz,
+       und zwei Zeilen ließen ihn ungenutzt.
+
+       Es bleibt eine Anzeigegrenze und keine Datengrenze: der Worker liefert
+       ohne `LIMIT` alles aus TERMINE_RUECKBLICK Tagen plus alles Künftige, und
+       der Rest liegt weiter in der Chronik. Reicht das Kommende allein nicht,
+       füllt das Gewesene die Lücke auf. */
+    const ANGEZEIGT = 5;
     const kommendGezeigt = kommend.slice(0, ANGEZEIGT);
     kommendGezeigt.forEach(t => ziel.appendChild(VARIANTE.termin(t)));
 

@@ -1,0 +1,54 @@
+-- ===========================================================================
+-- Schema 39: Die Auffanggruppe heisst Crew WAF.
+--
+-- 0032 hat sie als "Am Tresen" mit dem Slug `am-tresen` angelegt - das war der
+-- Arbeitstitel aus der Zeit, als es nur EINE Tafel gab und der Name in keiner
+-- Adresse vorkam. Der Betreiber hat sie inzwischen in "Crew WAF" umbenannt;
+-- der Slug blieb dabei stehen, denn `PATCH /api/gruppe` ruehrt ihn nicht an.
+--
+-- WARUM DER SLUG UEBERHAUPT MITWANDERT, obwohl er ein stabiler Griff sein
+-- soll. Er ist an genau drei Stellen sichtbar oder wirksam:
+--
+--   1. `index.js` sucht die Auffanggruppe fuers Kontor ueber ihn, wenn kein
+--      `?g=` mitkommt. Das ist der Grund, aus dem diese Datei ueberhaupt
+--      noetig ist: stuende dort weiter `am-tresen` und die Datenbank hiesse
+--      `crew-waf`, faende das Kontor beim ersten Aufruf keine Gruppe. Die
+--      Zeile dort wandert im selben Commit mit.
+--   2. Der Dateiname des Abrechnungs-CSV (`beerstock-<slug>-JJJJ-MM.csv`).
+--      Dort las man bis heute einen Namen, den es nicht mehr gibt.
+--   3. Nirgends sonst. In den Adressen der Seite steht die ZAHL (`?g=1`),
+--      nie der Slug - siehe die Begruendung in index.js bei `SPERRE_FREI`.
+--      Es gibt also keinen Link, der bricht, und keinen Bestand, der zeigt.
+--
+-- Der Name wandert mit, damit eine FRISCHE Datenbank denselben Stand bekommt
+-- wie die laufende. Ohne die Zeile hiesse die Auffanggruppe lokal weiter
+-- "Am Tresen" und drausssen "Crew WAF" - zwei Staende derselben Sache, und der
+-- naechste, der eine Probe gegen die Testinstanz schreibt, faellt darauf
+-- herein.
+--
+-- IDEMPOTENT UEBER DEN ALTEN SLUG: `WHERE slug = 'am-tresen'`. Ein zweiter
+-- Lauf findet nichts mehr vor. Und eine Instanz, in der jemand die Gruppe
+-- laengst von Hand umbenannt hat, wird nicht ueberschrieben.
+--
+-- KEIN SEMIKOLON IN EINEM BLOCKKOMMENTAR - die D1-API zerlegt den Text am
+-- Semikolon, ohne Blockkommentare zu beachten, und die Migration scheitert
+-- dann mit `SQL code did not contain a statement [7500]`. Lokal faellt das
+-- nicht auf, Miniflare zerlegt anders. Ausfuehrlich in 0033. Diese Datei
+-- kommt darum ganz ohne Blockkommentare aus.
+-- ===========================================================================
+
+UPDATE gruppen SET slug = 'crew-waf', name = 'Crew WAF' WHERE slug = 'am-tresen';
+
+-- ---------------------------------------------------------------------------
+-- Pruefsatz. Von Hand nachfahren, die Migration kann daran nicht scheitern:
+--
+--   Muss 1 ergeben:
+--     SELECT count(*) FROM gruppen WHERE slug = 'crew-waf'
+--
+--   Muss 0 ergeben:
+--     SELECT count(*) FROM gruppen WHERE slug = 'am-tresen'
+--
+--   Und die Zugehoerigkeiten haengen an der ID, nicht am Slug - sie koennen
+--   sich hierbei gar nicht aendern. Trotzdem einmal gegenzaehlen:
+--     SELECT count(*) FROM gruppen_mitglied
+-- ---------------------------------------------------------------------------

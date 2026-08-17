@@ -7283,6 +7283,40 @@ const ROUTEN = {
     const zahlwegeDa = !!(await env.DB.prepare(
       'SELECT 1 FROM zahlweg WHERE gruppe_id = ? LIMIT 1').bind(g.gruppe.id).first());
 
+    /* SEIT WANN es diesen Monatsblaetterer nach hinten gibt. Ohne diese Zahl
+       blaettert die Seite unbegrenzt zurueck - bis Dezember 2025 und weiter,
+       in Monate, in denen es die Gruppe nicht gab. Dort steht dann eine leere
+       Abrechnung samt Knopf "abschliessen", und ein Monatsabschluss ueber ein
+       Nichts, das nie zur Gruppe gehoerte, ist keine Buchhaltung.
+
+       DER BODEN IST DER MONAT DER GRUPPENGRUENDUNG - aber nie spaeter als der
+       aelteste Monat, in dem tatsaechlich etwas liegt. Der Zusatz ist kein
+       Misstrauen gegen `gruppen.erstellt`, sondern gegen dessen Bedeutung bei
+       der Auffanggruppe: die hat migrations/0032 angelegt, ihr `erstellt` ist
+       also der Tag des Rollouts und nicht der Tag, an dem die Runde anfing.
+       Ohne den Zusatz verschwaende ein Monat mit echten Buchungen hinter dem
+       Boden - Daten, die es gibt, waeren nicht mehr erreichbar.
+
+       Drei Quellen fuer "da liegt etwas", dieselben wie beim Monatswaehler der
+       Statistikseite: Buchungen, Geldstrafen und bereits abgeschlossene
+       Monate. Der letzte Zweig ist der wichtigste - ein abgeschlossener Monat
+       MUSS erreichbar bleiben, auch wenn seine Buchungen spaeter storniert
+       wurden und die beiden anderen Zweige nichts mehr finden. */
+    const seitZeile = await env.DB.prepare(`
+      SELECT min(m) AS seit FROM (
+        SELECT strftime('%Y-%m', erstellt) AS m FROM gruppen WHERE id = ?1
+        UNION ALL
+        SELECT min(strftime('%Y-%m', gebucht_am)) FROM buchung
+          WHERE gruppe_id = ?1 AND storniert_am IS NULL
+        UNION ALL
+        SELECT min(strftime('%Y-%m', verhaengt_am)) FROM strafe
+          WHERE gruppe_id = ?1 AND art = 'geld' AND status IN ('offen','abgerechnet')
+        UNION ALL
+        SELECT min(printf('%04d-%02d', jahr, monat)) FROM abrechnung WHERE gruppe_id = ?1
+      )
+    `).bind(g.gruppe.id).first();
+    const seit = (seitZeile || {}).seit || null;
+
     /* Die Strafen des Monats, Zeile fuer Zeile (Etappe 8). Sie stehen in
        BEIDEN Zweigen - Vorschau wie Abschluss -, weil sie zum Monat gehoeren
        und nicht zum Saldo: eine Tatstrafe kostet nichts und taucht in keiner
@@ -7306,6 +7340,8 @@ const ROUTEN = {
     if (!a) {
       return antwort(request, {
         jahr, monat, vorschau: true, status: 'offen', zahlwege_da: zahlwegeDa,
+        // Der Boden des Blaetterers - siehe oben bei `seit`.
+        seit,
         strafen: strafenRaus,
         eintraege: summen.map(r => ({
           user_id: r.user_id, name: r.name, biere: r.biere, cent: r.cent,
@@ -7325,6 +7361,9 @@ const ROUTEN = {
 
     return antwort(request, {
       jahr, monat, vorschau: false, status: 'abgeschlossen', zahlwege_da: zahlwegeDa,
+      // Auch hier - der Blaetterer braucht seinen Boden in JEDER Antwort, sonst
+      // verloere er ihn, sobald man auf einem abgeschlossenen Monat landet.
+      seit,
       strafen: strafenRaus,
       eintraege: results.map(r => ({
         id: r.id, user_id: r.user_id, name: r.name, biere: biereJe.get(r.user_id) ?? 0,
@@ -10898,11 +10937,15 @@ const ROUTEN = {
 
     /* Ohne `?g=` zeigt das Kontor die Auffanggruppe - beim ersten Aufruf
        kennt die Seite noch keine Wahl. Ueber den SLUG gesucht, nicht ueber
-       die Id 1: der Worker darf sich darauf nicht verlassen (migrations/0032). */
+       die Id 1: der Worker darf sich darauf nicht verlassen (migrations/0032).
+
+       DER SLUG HEISST SEIT 0039 `crew-waf`, vorher `am-tresen`. Die beiden
+       gehoeren zusammen ausgerollt: stuende hier der alte und in der Datenbank
+       der neue, faende das Kontor beim ersten Aufruf keine Gruppe. */
     const url = new URL(request.url);
     if (!url.searchParams.get('g')) {
       const heim = await env.DB.prepare(
-        "SELECT id FROM gruppen WHERE slug = 'am-tresen'").first();
+        "SELECT id FROM gruppen WHERE slug = 'crew-waf'").first();
       if (heim) {
         url.searchParams.set('g', String(heim.id));
         request = new Request(url, request);
