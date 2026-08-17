@@ -446,7 +446,8 @@ Die Mail ist zu langsam für das, was eine Frist hat: der Gezogene hat drei
 Stunden zum Antworten, ein Notruf gilt neunzig Minuten, und eine Mail liegt so
 lange im Postfach, wie es dem Postfach gefällt. Deshalb geht dasselbe
 **zusätzlich** als Push aufs Gerät — nie statt der Mail, und nur, wenn man den
-siebten Schalter im Deckel umlegt. Wer nichts einschaltet, merkt davon nichts.
+letzten Schalter unter *Post vom Wirt* umlegt. Wer nichts einschaltet, merkt
+davon nichts.
 
 Dafür ist die Tafel **installierbar**: `manifest.webmanifest`, `sw.js` und
 `icon.png` liegen als Geschwisterdateien neben `index.html`. Das ist die eine
@@ -477,11 +478,16 @@ gibt es in der installierten App ein Feld **„Link aus der Mail"** — Link
 gedrückt halten, kopieren, dort einsetzen. Antippen verbraucht ihn in Safari; er
 gilt einmal und fünfzehn Minuten. Die Anmelde-Mail sagt das auch.
 
-**Mein Deckel** (Flyout auf der Tafel) ist die Selbstverwaltung: Name ändern,
-Adresse wechseln, die sechs Mail-Schalter, der Push-Schalter, alle Geräte abmelden. Der Adresswechsel ist
+**Mein Deckel** (Flyout auf der Tafel) ist die Selbstverwaltung: Name und
+Geburtstag ändern, Adresse wechseln, alle Geräte abmelden, dazu je eine Zeile
+für Post, Hausanschluss und Runde. Der Adresswechsel ist
 zweistufig — der Link geht an die neue Adresse, die alte bekommt eine Warnung und
-gilt weiter, bis dort geklickt wurde. Wer die Rolle `admin` hat, findet ganz
-unten den Knopf **Mitgliederverwaltung** — der einzige Wegweiser ins Kontor.
+gilt weiter, bis dort geklickt wurde. **Die Mail-Schalter selbst liegen auf einem
+eigenen Bogen darüber** (*Post vom Wirt*, aus dem Deckel aufgeschlagen): es ist
+eine Liste, die mit jeder neuen Postart wächst, und im Deckel stand am Ende alles
+andere hinter ihr. Die Zeile dort sagt den Stand — wie viele von wie vielen.
+Wer die Rolle `admin` hat, findet ganz unten den Knopf **Administration** — der
+einzige Wegweiser ins Kontor.
 
 **Das Kontor** (`admin.html`) gehört der Rolle `admin`: sperren, entsperren,
 Rolle tauschen, entfernen, acht Grafiken, Rundmail, Protokoll. Gleiche Herkunft

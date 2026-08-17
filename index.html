@@ -1729,14 +1729,26 @@
   }
 
   /* --- Mein Deckel ---------------------------------------------------------
-     Die Selbstverwaltung: Name, Adresse, fünf Schalter, Geräte. Dasselbe
-     Blatt wie Flyout und Chronik, auf derselben Ebene wie die Chronik — von
-     hier aus schlägt man nichts weiter auf.
+     Die Selbstverwaltung: Name, Adresse, Geräte — und je eine Zeile für alles,
+     was einen eigenen Ort hat. Dasselbe Blatt wie Flyout und Chronik.
 
      Zeilenbau: links, was es ist, rechts, was man damit tut. Auf schmalen
      Geräten fällt die rechte Hälfte darunter, statt die Adresse zu quetschen.
+
+     EIN BLATT SCHLÄGT ER DOCH AUF, und das ist neu: die Postschalter. Hier
+     stand einmal, von hier aus gehe nichts weiter — es galt, solange es fünf
+     Schalter waren. Es wurden zehn, dazu der Push, und damit war der Deckel
+     zu drei Vierteln eine Ankreuzliste, durch die man scrollen musste, um an
+     Geräte, Hausanschluss und Runde zu kommen. Die Liste liegt jetzt in
+     einem eigenen Bogen darüber (`.postblatt`, z-index 39 gegen 38), und im
+     Deckel steht davon eine Zeile in der Form der drei anderen.
      --------------------------------------------------------------------- */
   .flyout.deckel { z-index: 38; }
+  /* Genau eine Stufe über dem Deckel und unter allem, was 40 trägt: die
+     Blätter dieser Gruppe (Kommentar, Notruf, Losmail) können mit dem Deckel
+     gar nicht gleichzeitig offen stehen, der Deckel selbst aber liegt
+     darunter und muss auch sichtbar darunter liegen. */
+  .flyout.postblatt { z-index: 39; }
   .dk-zeile {
     display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
     padding: 10px 0; border-bottom: 1px dashed #ffffff16;
@@ -1896,33 +1908,46 @@
     align-items: baseline; gap: 8px; margin-top: 18px;
     font-size: 11px; color: var(--kreide-weg);
   }
-  /* Die zweite Fußzeile, für die Anbindung von Home Assistant. WORTGLEICH dieselbe Form wie
-     die Gerätezeile darüber, nur mit kleinerem Abstand: es sind zwei Zeilen
-     über dasselbe Thema — welche Schlüssel gelten in meinem Namen. Ein eigener
-     Kasten mit eigener Überschrift hätte daraus zwei Themen gemacht, und das
-     zweite hätte niemand gefunden.
+  /* Die Fußzeilen sind EIN Block und nicht vier Absätze: Post, Geräte,
+     Hausanschluss und Runde stehen in derselben Form und beantworten dieselbe
+     Sorte Frage — was gilt gerade in meinem Namen, und wo stellt man es um.
+     Die erste trägt darum den vollen Abstand nach oben (er trennt sie von den
+     Eingabefeldern), alle folgenden die enge Fuge. Ein eigener Kasten mit
+     eigener Überschrift für eine davon hätte daraus zwei Themen gemacht, und
+     das zweite hätte niemand gefunden.
 
-     Zwei Tat-Wörter statt einem: „ansehen" führt auf die Seite mit der
-     Anleitung, „widerrufen" tut es hier auf der Stelle. Der kurze Weg ist da,
-     weil das der Griff ist, den man im Zweifel eilig braucht — wer die
-     Anbindung abschalten will, will nicht erst eine Anleitung lesen. */
-  .dk-haus { margin-top: 9px; }
+     HIER STANDEN ZWEI FAST GLEICHE REGELN (`.dk-haus`, `.dk-runde`), und mit
+     der Postzeile wäre eine dritte dazugekommen — dieselbe Zahl dreimal
+     hingeschrieben. Jetzt sagt eine Klasse, was gemeint ist: nicht „das ist
+     die Hauszeile", sondern „diese Zeile schließt an die darüber an". */
+  .dk-eng { margin-top: 9px; }
+  /* Zwei Tat-Wörter statt einem, an Haus und Runde: „ansehen" führt auf die
+     Seite mit der Anleitung, „widerrufen" tut es hier auf der Stelle. Der
+     kurze Weg ist da, weil das der Griff ist, den man im Zweifel eilig
+     braucht — wer die Anbindung abschalten will, will nicht erst eine
+     Anleitung lesen. */
   .dk-haus-tat { display: flex; gap: 11px; }
-  /* Dieselbe enge Fuge wie beim Hausanschluss darüber: Gerät, Haus und Runde
-     sind drei Zeilen desselben Blocks, nicht drei Absätze. */
-  .dk-runde { margin-top: 9px; }
 
   /* Der Weg ins Kontor steht UNTER der Gerätezeile und mit Abstand: „alle
-     abmelden" und „Mitgliederverwaltung" sind zwei sehr verschiedene Knöpfe,
+     abmelden" und „Administration" sind zwei sehr verschiedene Knöpfe,
      und nebeneinander vertippt man sich. Der Abstand ist größer als der der
      Fußzeile darüber, weil der Knopf hier das Blatt beendet. */
   /* --- Der Weg ins Kontor bleibt stehen ------------------------------------
-     ER HING AM SCROLLSTAND, und mehr Höhe half nicht. Gemessen: der Deckel ist
-     816 px hoch, der Knopf 45. Auf einem 812er Telefon bleiben nach dem
-     Streifen 772 px — 44 px des Knopfes liegen unter der Kante, er ist so gut
-     wie ganz weg. Selbst auf einem 844er fehlen 12. Es gibt keine Bildschirm-
-     höhe, ab der das Problem verschwindet: der Inhalt WÄCHST mit jeder neuen
-     Postart, die Bildschirme tun das nicht.
+     ER HING AM SCROLLSTAND, und mehr Höhe half nicht. Gemessen, als die
+     Postschalter noch im Deckel standen: der war 816 px hoch, der Knopf 45.
+     Auf einem 812er Telefon bleiben nach dem Streifen 772 px — 44 px des
+     Knopfes lagen unter der Kante, er war so gut wie ganz weg. Selbst auf
+     einem 844er fehlten 12.
+
+     SEIT DIE SCHALTER AUF EINEM EIGENEN BOGEN LIEGEN, ist der Deckel um ein
+     Vielfaches kürzer, und auf den meisten Geräten scrollt er gar nicht mehr.
+     Der klebende Knopf bleibt trotzdem: er kostet nichts, solange nichts
+     scrollt (ein `sticky` ohne Überlauf steht einfach da, wo es steht), und
+     die Fälle, in denen es doch scrollt, sind nicht weg — ein 667er Telefon
+     mit ausgefahrener Adressleiste und größerer Systemschrift reicht. Was
+     wegfällt, ist allein das alte Argument, der Inhalt wachse mit jeder neuen
+     Postart; das tut jetzt der andere Bogen, und der endet nicht mit einem
+     Knopf.
 
      Also klebt der Knopf am unteren Rand des Bogens, und der Rest scrollt
      dahinter.
@@ -4905,7 +4930,7 @@
        Adresse, an die geschrieben wird, was geschrieben werden darf, und auf
        wie vielen Geräten man angemeldet ist.
 
-       Ein Flyout statt einer eigenen Seite: vier Felder und fünf Schalter,
+       Ein Flyout statt einer eigenen Seite: drei Felder und vier Zeilen,
        dafür die Tafel zu verlassen wäre unverhältnismäßig.
        ================================================================ -->
   <div class="flyout deckel" id="deckel" hidden>
@@ -4974,36 +4999,22 @@
         <button class="knopf" type="submit">Link schicken</button>
       </form>
 
-      <div class="ko-titel">Post vom Wirt</div>
-      <p class="sagt" id="dk-stumm" hidden>
-        Du bekommst gerade gar nichts — du hast dich einmal ganz abgemeldet.
-        <button class="ko-tat" id="dk-laut" type="button">wieder anschalten</button>
-      </p>
-      <div id="dk-schalter"></div>
+      <!-- Post vom Wirt: eine Zeile, das Blatt dazu liegt woanders.
+           Hier standen die Schalter selbst — zehn Postarten, dazu der Push, in
+           einer Ankreuzliste unter einer Überschrift. Sie waren drei Viertel
+           des Deckels, und alles darunter (Geräte, Hausanschluss, Runde) lag
+           hinter einer Scrollstrecke, die mit jeder neuen Postart länger
+           wurde. Wer seine Adresse ändern wollte, blätterte durch die Frage,
+           was er erfahren will.
 
-      <!-- Push auf diesem Gerät. Ein siebter Schalter in derselben Form wie
-           die sechs darüber, und ausdrücklich KEIN eigener Kasten mit eigenem
-           Titel: die Frage „was will ich erfahren" ist oben beantwortet, hier
-           steht nur noch „auf welchem Weg" — und zwei Schalterreihen für
-           dieselbe Sache wären die sicherste Art, dass niemand die zweite
-           findet.
-
-           Er steht auf „aus", solange keiner läuft, und der Zustand kommt
-           nicht aus dem Speicher, sondern vom Browser selbst
-           (`pushManager.getSubscription()`): ein Abo lässt sich in den
-           Systemeinstellungen abstellen, ohne dass diese Seite je davon hört.
-
-           Der ganze Block bleibt weg, wenn der Worker kein Push kann
-           (`vapid: null`) — ein Schalter, der nichts tut, ist schlimmer als
-           keiner. Warum er auf dem iPhone erst nach dem Installieren
-           erscheint, steht dann in der Zeile darunter. -->
-      <div id="dk-push" hidden>
-        <label class="dk-schalter" id="dk-push-zeile">
-          <input type="checkbox" id="dk-push-box">
-          <span class="dk-kasten"></span>
-          <span class="dk-text">Zusätzlich sofort auf dieses Gerät</span>
-        </label>
-        <p class="dk-folge" id="dk-push-folge" hidden></p>
+           Jetzt sagt die Zeile den Stand — wie viele von wie vielen — und
+           führt auf den Bogen mit der Liste. Dieselbe Form wie die drei
+           Zeilen darunter, weil es dieselbe Sorte Auskunft ist. -->
+      <div class="dk-fuss" id="dk-post" hidden>
+        <span id="dk-post-was"></span>
+        <span class="dk-haus-tat">
+          <button class="ko-tat" id="dk-post-auf" type="button">einstellen</button>
+        </span>
       </div>
 
       <!-- Nur die Zahl und der eine Weg hinaus. Hier stand kurzzeitig eine
@@ -5012,7 +5023,7 @@
            Einlösen eines Links ein neues Token anlegt. Das erklärt die Zahl,
            macht aber aus einer Randnotiz das größte Feld des Blattes. Wer
            aufräumen will, meldet alle ab und kommt einmal neu. -->
-      <div class="dk-fuss">
+      <div class="dk-fuss dk-eng">
         <span id="dk-geraete"></span>
         <button class="ko-tat" id="dk-alle" type="button">alle abmelden</button>
       </div>
@@ -5027,7 +5038,7 @@
            der einzige Ort, an dem man von der Anbindung überhaupt erfährt: sie
            nur denen zu zeigen, die schon eine haben, hieße, sie nur denen zu
            zeigen, die sie nicht mehr suchen. -->
-      <div class="dk-fuss dk-haus">
+      <div class="dk-fuss dk-eng">
         <span id="dk-haus-was"></span>
         <span class="dk-haus-tat">
           <button class="ko-tat" id="dk-haus-auf" type="button">einrichten</button>
@@ -5049,7 +5060,7 @@
            der die Gruppe führt: `gruppe.html` zeigt einem gewöhnlichen Mitglied
            dieselben Angaben zum Lesen. Ein Knopf, der je nach Rolle da ist oder
            nicht, hätte einen zweiten Zustand für nichts. -->
-      <div class="dk-fuss dk-runde" id="dk-runde" hidden>
+      <div class="dk-fuss dk-eng" id="dk-runde" hidden>
         <span id="dk-runde-was"></span>
         <span class="dk-haus-tat">
           <button class="ko-tat" id="dk-runde-verwalten" type="button">verwalten</button>
@@ -5073,6 +5084,68 @@
       </button>
 
       <p class="sagt" id="dk-sagt" hidden></p>
+    </div>
+  </div>
+
+  <!-- ============ Post vom Wirt ========================================
+       Die Ankreuzliste, die bis eben im Deckel stand. Sie ist der einzige
+       Teil der Selbstverwaltung, der von selbst wächst: jede neue Postart im
+       Worker steht hier am nächsten Tag als Schalter. Ein Blatt, das mit dem
+       Datenbestand wächst, gehört nicht zwischen zwei Zeilen, die immer
+       gleich hoch bleiben.
+
+       AUFGESCHLAGEN WIRD ES NUR AUS DEM DECKEL, und der bleibt darunter
+       liegen. Es ist kein zweiter Weg zu denselben Schaltern, sondern der
+       einzige — wer es zumacht, steht wieder in seinem Deckel und sieht in
+       der Zeile, was er gerade eingestellt hat.
+       ================================================================ -->
+  <div class="flyout postblatt" id="postblatt" hidden>
+    <div class="fly-schirm" id="po-schirm"></div>
+    <div class="fly-blatt" role="dialog" aria-labelledby="po-titel" aria-modal="true">
+      <div class="fly-kopf">
+        <div>
+          <div class="fly-titel" id="po-titel">Post vom Wirt</div>
+        </div>
+        <button class="fly-zu" id="po-zu" type="button" aria-label="Schließen">×</button>
+      </div>
+
+      <p class="sagt" id="dk-stumm" hidden>
+        Du bekommst gerade gar nichts — du hast dich einmal ganz abgemeldet.
+        <button class="ko-tat" id="dk-laut" type="button">wieder anschalten</button>
+      </p>
+      <div id="dk-schalter"></div>
+
+      <!-- Push auf diesem Gerät. Ein Schalter in derselben Form wie die
+           darüber, und ausdrücklich KEIN eigener Kasten mit eigenem Titel:
+           die Frage „was will ich erfahren" ist oben beantwortet, hier steht
+           nur noch „auf welchem Weg" — und zwei Schalterreihen mit zwei
+           Überschriften wären die sicherste Art, dass niemand die zweite
+           findet. Dass die Liste jetzt ein eigenes Blatt hat, ändert daran
+           nichts: das Blatt trägt EINE Überschrift, und die gilt für beides.
+
+           Er steht auf „aus", solange keiner läuft, und der Zustand kommt
+           nicht aus dem Speicher, sondern vom Browser selbst
+           (`pushManager.getSubscription()`): ein Abo lässt sich in den
+           Systemeinstellungen abstellen, ohne dass diese Seite je davon hört.
+
+           Der ganze Block bleibt weg, wenn der Worker kein Push kann
+           (`vapid: null`) — ein Schalter, der nichts tut, ist schlimmer als
+           keiner. Warum er auf dem iPhone erst nach dem Installieren
+           erscheint, steht dann in der Zeile darunter. -->
+      <div id="dk-push" hidden>
+        <label class="dk-schalter" id="dk-push-zeile">
+          <input type="checkbox" id="dk-push-box">
+          <span class="dk-kasten"></span>
+          <span class="dk-text">Zusätzlich sofort auf dieses Gerät</span>
+        </label>
+        <p class="dk-folge" id="dk-push-folge" hidden></p>
+      </div>
+
+      <!-- Gemeldet wird HIER und nicht unten im Deckel: `#dk-sagt` liegt
+           unter diesem Blatt und wäre für jeden Schalterwurf eine Antwort im
+           Verborgenen. Welches von beiden `dkSagt` bedient, entscheidet es
+           selbst — siehe dort. -->
+      <p class="sagt" id="po-sagt" hidden></p>
     </div>
   </div>
 
@@ -13363,6 +13436,11 @@
   };
 
   let deckelOffen = false;
+  /* Steht der Postbogen über dem Deckel? Die Marke steht HIER OBEN und nicht
+     bei ihren beiden Funktionen weiter unten: `dkSagt` liest sie, und das tut
+     schon der erste Aufruf von `deckelAuf` — läge die Deklaration dazwischen,
+     fiele der in die zeitliche Totzone. */
+  let postOffen = false;
   let deckelStand = null;   // die letzte Antwort von /api/me
   /* Die Rückfrage am „widerrufen" der Home-Assistant-Anbindung. Steht hier oben und
      nicht beim Knopf, weil `deckelZeichnen()` sie beim Aufschlagen zurücksetzt
@@ -13457,8 +13535,17 @@
     ev.viewTransition.finished.then(abraeumen, abraeumen);
   });
 
+  /* Eine Meldezeile für zwei Blätter, und die Wahl trifft nicht der Aufrufer.
+     Steht die Post vorn, liegt `#dk-sagt` unter ihr — jede Antwort auf einen
+     Schalterwurf wäre dort eine Antwort im Verborgenen, und die Zeile stünde
+     hinterher noch da, wenn man das Blatt zumacht. Also schreibt es dorthin,
+     wo gerade jemand hinsieht, und räumt die andere Zeile weg. */
   function dkSagt(text, schlecht) {
-    const p = $('dk-sagt');
+    const oben = postOffen;
+    const p = $(oben ? 'po-sagt' : 'dk-sagt');
+    const andere = $(oben ? 'dk-sagt' : 'po-sagt');
+    andere.textContent = '';
+    andere.hidden = true;
     p.textContent = text;
     p.classList.toggle('schlecht', !!schlecht);
     p.hidden = !text;
@@ -13468,6 +13555,12 @@
     if (!drinnen()) return;
     deckelOffen = true;
     $('deckel').hidden = false;
+    /* Die Post bleibt zu, auch wenn sie beim Weggehen offen stand: der Weg
+       ins Kontor und zum Hausanschluss führt durch den Deckel zurück (siehe
+       `ausDemDeckel`), und wer von dort wiederkommt, will den Deckel sehen
+       und nicht das Blatt, das zufällig zuletzt darüber lag. Dieselbe
+       Rücksetzung wie beim Adressformular eine Zeile weiter. */
+    postZu();
     dkSagt('');
     $('dk-mail-form').hidden = true;
     await deckelLaden();
@@ -13476,6 +13569,35 @@
   function deckelZu() {
     deckelOffen = false;
     $('deckel').hidden = true;
+    // Was über ihm lag, geht mit: ein Blatt ohne den Deckel darunter hinge in
+    // der Luft, und sein × führte auf eine Tafel statt zurück.
+    postZu();
+  }
+
+  /* --- Post vom Wirt: der Bogen über dem Deckel -----------------------------
+     Aufgeschlagen wird nur aus dem Deckel heraus, und der bleibt liegen. Es
+     ist deshalb kein eigenes Laden: die Schalter stehen schon gezeichnet da
+     (`deckelZeichnen` baut sie mit dem Rest), das Blatt macht sie bloß
+     sichtbar.
+     ------------------------------------------------------------------------ */
+  function postAuf() {
+    postOffen = true;
+    $('postblatt').hidden = false;
+    dkSagt('');
+    /* Der Zustand des Push-Schalters kommt vom Browser und kann sich
+       geändert haben, seit der Deckel aufging — in den Systemeinstellungen,
+       in einem anderen Tab. Beim Aufschlagen also noch einmal nachsehen. */
+    pushLage();
+  }
+
+  function postZu() {
+    postOffen = false;
+    $('postblatt').hidden = true;
+    /* Die Meldung gehört dem Blatt, das sie ausgelöst hat, und geht mit ihm.
+       Ohne das stünde sie beim nächsten Aufschlagen wieder da — eine Antwort
+       auf eine Frage von vorgestern. */
+    $('po-sagt').textContent = '';
+    $('po-sagt').hidden = true;
   }
 
   async function deckelLaden() {
@@ -13510,16 +13632,17 @@
         : 'Dein Zugang ist gesperrt. Lesen geht weiter, schreiben nicht.';
     }
 
-    /* Der Hauptschalter schlägt jede Einzelwahl — also stehen die fünf zwar
-       weiter da (man soll sehen, was man gewählt hatte), aber ausgegraut und
-       nicht bedienbar. Sie erst einzuschalten, während gar nichts rausgeht,
-       wäre eine Handlung ohne Wirkung. */
+    /* Der Hauptschalter schlägt jede Einzelwahl — also stehen die Schalter
+       zwar weiter da (man soll sehen, was man gewählt hatte), aber ausgegraut
+       und nicht bedienbar. Sie erst einzuschalten, während gar nichts
+       rausgeht, wäre eine Handlung ohne Wirkung. */
     const stumm = !!d.mail_stumm;
     $('dk-stumm').hidden = !stumm;
 
     const ziel = $('dk-schalter');
     ziel.textContent = '';
-    Object.keys(d.mail || {}).forEach(art => {
+    const arten = Object.keys(d.mail || {});
+    arten.forEach(art => {
       const zeile = el('label', 'dk-schalter');
       if (stumm) zeile.setAttribute('aria-disabled', 'true');
       const box = el('input');
@@ -13536,6 +13659,22 @@
         ziel.appendChild(el('p', 'dk-folge', DECKEL_FOLGEN[art]));
       }
     });
+
+    /* Die Zeile, die im Deckel für die ganze Liste steht. Beide Zahlen kommen
+       aus DER ANTWORT und stehen nirgends fest — die Zahl der Postarten ist
+       keine Konstante: `einspruch` bekommt nur, wer eine Runde führt, und der
+       Worker schickt jedem genau seine. Eine hingeschriebene Zehn wäre für
+       die meisten schlicht falsch (und dieselbe Falle wie bei DECKEL_TEXTE
+       eine Seite weiter oben, die viermal unvollständig war).
+
+       Ist der Hauptschalter aus, sagt die Zeile das und sonst nichts: „0 von
+       9 an" wäre wahr und trotzdem die falsche Auskunft — es sind ja Haken
+       gesetzt, sie gelten nur gerade nicht. */
+    $('dk-post').hidden = false;
+    $('dk-post-was').textContent = stumm
+      ? 'Post vom Wirt · ganz abgemeldet'
+      : 'Post vom Wirt · ' + arten.filter(a => d.mail[a]).length
+        + ' von ' + arten.length + ' an';
 
     /* Nur die Zahl. Sie ist höher, als man Geräte benutzt hat — jedes
        Einlösen eines Magic Links legt ein neues Token an, auch im selben
@@ -13581,11 +13720,11 @@
 
     // Ohne `await`: der Zustand des Push-Schalters kommt vom Browser und
     // braucht einen Wimpernschlag. Das Blatt soll darauf nicht warten — es
-    // steht schon, und der siebte Schalter rückt gleich nach.
+    // steht schon, und der letzte Schalter rückt gleich nach.
     pushLage();
   }
 
-  /* Einzeln und sofort, ohne Speichern-Knopf: fünf Schalter mit
+  /* Einzeln und sofort, ohne Speichern-Knopf: ein Dutzend Schalter mit
      Bestätigung wären ein Formular zu viel. Fällt der Ruf durch, springt der
      Schalter zurück — sonst zeigt die Seite einen Stand, den der Worker nicht
      kennt, und das merkt niemand bis zur nächsten ausbleibenden Mail. */
@@ -13606,9 +13745,9 @@
   }
 
   /* --- Push auf dieses Gerät ------------------------------------------------
-     Der siebte Schalter im Deckel. Er beantwortet nicht, WAS jemand erfahren
-     will — das tun die sechs darüber, und sie gelten für beide Wege —, sondern
-     nur, ob dieses eine Gerät klopfen darf.
+     Der letzte Schalter auf dem Postbogen. Er beantwortet nicht, WAS jemand
+     erfahren will — das tun die darüber, und sie gelten für beide Wege —,
+     sondern nur, ob dieses eine Gerät klopfen darf.
 
      Ein Abo gehört dem BROWSER, nicht dieser Seite: es überlebt das Schließen
      des Tabs, es lässt sich in den Systemeinstellungen abstellen, und es kann
@@ -14130,14 +14269,21 @@
   $('dk-zu').addEventListener('click', deckelZu);
   $('dk-schirm').addEventListener('click', deckelZu);
 
+  /* Die Post. Ihr × und ihr Schirm nehmen NUR sie — darunter liegt der
+     Deckel, aus dem sie kam, und dorthin soll der Weg zurückführen. Dieselbe
+     Regel wie bei Lupe und GIF-Blatt über dem Kommentarblatt. */
+  $('dk-post-auf').addEventListener('click', postAuf);
+  $('po-zu').addEventListener('click', postZu);
+  $('po-schirm').addEventListener('click', postZu);
+
   // Die Schalterliste wird bei jeder Änderung neu gebaut — ein Zuhörer je
   // Kästchen ginge dabei verloren.
   $('dk-schalter').addEventListener('change', ev => {
     if (ev.target.dataset.art) deckelSchalten(ev.target);
   });
 
-  // Der siebte steht fest im Blatt und wird nicht neu gebaut — er darf seinen
-  // eigenen Zuhörer haben.
+  // Der Push-Schalter steht fest im Blatt und wird nicht neu gebaut — er darf
+  // seinen eigenen Zuhörer haben.
   $('dk-push-box').addEventListener('change', ev => pushSchalten(ev.target));
 
   $('dk-name-form').addEventListener('submit', async ev => {
@@ -14239,7 +14385,7 @@
       const d = await ruf('/api/einstellungen', { stumm: false });
       deckelStand = { ...deckelStand, mail: d.mail, mail_stumm: d.mail_stumm };
       deckelZeichnen();
-      dkSagt('Du bekommst wieder Post — nach deiner Auswahl unten.');
+      dkSagt('Du bekommst wieder Post — nach deiner Auswahl darüber.');
     } catch (e) {
       dkSagt(e.message, true);
     }
@@ -14889,6 +15035,8 @@
     // Das Anhang-Menü liegt im Blatt, also fällt es vor dem Blatt.
     if (!$('flyout').hidden && !$('fly-anhang').hidden) { anhangZu(); return; }
     if (!$('flyout').hidden) { flyZu(); return; }
+    // Die Post liegt über dem Deckel, also fällt sie vor ihm.
+    if (!$('postblatt').hidden) { postZu(); return; }
     if (!$('deckel').hidden) { deckelZu(); return; }
     if (!$('rundgang').hidden) { rundgangZu(); return; }
     if (!$('chronik').hidden) chronikZu();
