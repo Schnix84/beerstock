@@ -13262,18 +13262,34 @@
      siebte Art dazu, stünde sie hier sofort als Schalter, notfalls unter
      ihrem Schlüssel. Eine Seite, die eine Art verschweigt, wäre schlimmer
      als eine mit einer unschönen Zeile. */
+  /* DIE REIHENFOLGE IST DIE VON `MAIL_ARTEN` IM WORKER, nicht die hier — der
+     Deckel läuft über das, was die Antwort schickt. Diese Tabelle muss darum
+     nicht sortiert sein, aber sie muss VOLLSTÄNDIG sein.
+
+     UND GENAU DAS IST SIE VIERMAL NICHT GEWESEN. Erst `notruf`, dann mit dem
+     Gruppen-Umbau gleich drei auf einmal: `gruppe`, `strafe`, `einspruch`
+     standen als nackte Schlüssel zwischen ausformulierten Sätzen — „gruppe",
+     „strafe", „einspruch", klein geschrieben, wie durchgereichte Marken. Wer
+     im Worker eine Art zu `MAIL_ARTEN` hinzufügt, schreibt hier die Bedingung
+     dazu. Der Rückfall in `deckelZeichnen` fängt das Fehlen ab, damit die
+     Zeile nicht verschwindet; schön ist er nicht, und das ist Absicht. */
   const DECKEL_TEXTE = {
     gewonnen:       'wenn die Flasche auf mich zeigt',
+    // Nachrücken, beschiedener Antrag — alles, was einem Menschen ÜBER eine
+    // seiner Runden zu sagen ist, nicht was in ihr passiert.
+    gruppe:         'wenn sich an meiner Mitgliedschaft etwas tut',
     termin_neu:     'wenn ein Abend feststeht',
     termin_aendert: 'wenn ein Abend sich ändert',
     echo:           'wenn jemand mir antwortet',
     rundmail:       'gelegentliche Nachricht vom Wirt',
-    /* Kam mit dem Empfängerkreis dazu und stand hier noch nicht — im Deckel
-       las man deshalb den nackten Schlüssel „notruf" zwischen fünf ganzen
-       Sätzen. Der Rückfall in `deckelZeichnen` fängt das ab, gut aussehen tut
-       er nicht. */
     notruf:         'wenn jemand Bier oder Gesellschaft braucht',
     bestand_knapp:  'wenn ein Getränk den Mindestbestand unterschreitet',
+    // Beide Anlässe in einer Art (Entscheidung 56): verhängt und erlassen sind
+    // für den Betroffenen dieselbe Sache — was an seiner Strafe passiert.
+    strafe:         'wenn eine Strafe mich trifft oder erlassen wird',
+    // Kreis sind die Gruppenadmins, nicht die Runde: nur wer entscheiden kann,
+    // wird gerufen.
+    einspruch:      'wenn ein Vorschlag oder Einspruch auf mich wartet',
   };
   /* Die einzige Abwahl mit einer Folge, und die gehört im Klartext darunter —
      wer sie nicht kennt, wundert sich drei Stunden später über einen Abend,
