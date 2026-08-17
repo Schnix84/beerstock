@@ -1916,7 +1916,71 @@
      abmelden" und „Mitgliederverwaltung" sind zwei sehr verschiedene Knöpfe,
      und nebeneinander vertippt man sich. Der Abstand ist größer als der der
      Fußzeile darüber, weil der Knopf hier das Blatt beendet. */
-  .dk-kontor { margin-top: 16px; }
+  /* --- Der Weg ins Kontor bleibt stehen ------------------------------------
+     ER HING AM SCROLLSTAND, und mehr Höhe half nicht. Gemessen: der Deckel ist
+     816 px hoch, der Knopf 45. Auf einem 812er Telefon bleiben nach dem
+     Streifen 772 px — 44 px des Knopfes liegen unter der Kante, er ist so gut
+     wie ganz weg. Selbst auf einem 844er fehlen 12. Es gibt keine Bildschirm-
+     höhe, ab der das Problem verschwindet: der Inhalt WÄCHST mit jeder neuen
+     Postart, die Bildschirme tun das nicht.
+
+     Also klebt der Knopf am unteren Rand des Bogens, und der Rest scrollt
+     dahinter.
+
+     `bottom: 0` UND NICHT `-22px`. Der Versatz war der Versuch, die Polsterung
+     des Blatts aufzuheben, damit der Knopf bündig auf dessen Unterkante sitzt —
+     der Anker eines klebenden Elements misst aber gegen den SCROLLKASTEN, und
+     minus 22 hieß darum: zweiundzwanzig Pixel tiefer als sichtbar. Der Rahmen
+     lief unten aus dem Blatt heraus, und der Knopf sah genauso abgeschnitten
+     aus wie vorher, nur aus einem anderen Grund. Die Polsterung bleibt also
+     unter ihm stehen; sie ist der Rand, den ein Bogen unten ohnehin hat.
+
+     ER BRAUCHT EINEN GRUND, sonst liest man die Kästchen durch ihn hindurch:
+     `.knopf` füllt mit `#ffffff0d`, und das ist Absicht — die Füllung lebt vom
+     Schiefer darunter. Solange nichts scrollte, war der Schiefer das Blatt;
+     jetzt ist es die Liste.
+
+     HIER STAND EIN `::before` MIT `z-index: -1`, UND DAS WAR FALSCH. Innerhalb
+     eines Stapelkontexts kommt zuerst der eigene Hintergrund samt Rahmen und
+     DANN die Kinder mit negativem z-index — der Grund lag also ÜBER dem Knopf
+     und hat Rahmen und Füllung verschluckt. Übrig blieb die Schrift, frei auf
+     dem Schiefer; im Bild sah es aus, als sei der Knopf verschwunden.
+
+     Also zwei Lagen im Knopf selbst (die durchscheinende Füllung über einem
+     opaken Ton, `background` nimmt beides in einer Angabe), und die Pseudo-
+     elemente liegen NEBEN ihm statt hinter ihm: `::before` ist der Auslauf
+     darüber, `::after` der Streifen darunter. Beide greifen 16 px über die
+     Polsterung des Blatts hinaus, damit der Grund bis an die Kanten reicht und
+     nicht als Kästchen im Kästchen sitzt.
+
+     Der Verlauf des Blatts endet unten fast genau auf `--schiefer-t`, darum
+     dieser Ton und kein zweiter. Der Auslauf oben ist 18 px hoch: die Liste
+     soll unter dem Knopf verschwinden und nicht an einer harten Kante
+     abreißen.
+
+     NUR HIER UND NICHT AN `.fly-blatt`: der Deckel ist der einzige Bogen mit
+     einer Handlung ganz unten. Die anderen enden mit Inhalt, und ein klebender
+     Rand ohne etwas darin wäre ein Streifen für nichts. */
+  .dk-kontor {
+    margin-top: 16px;
+    position: sticky; bottom: 0; z-index: 1;
+  }
+  /* ZWEI KLASSEN IM WÄHLER, und das ist kein Zierat: `.knopf` steht rund 1400
+     Zeilen WEITER UNTEN in diesem Stylesheet und hat dieselbe Spezifität —
+     bei gleichem Gewicht gewinnt das spätere. Mit einfachem `.dk-kontor` blieb
+     die Füllung `#ffffff0d`, und die Liste scrollte lesbar durch den Knopf
+     hindurch. Beide Klassen zusammen wiegen schwerer und tragen. */
+  .knopf.dk-kontor { background: linear-gradient(#ffffff0d, #ffffff0d), var(--schiefer-t); }
+  .knopf.dk-kontor:hover { background: linear-gradient(#ffffff1a, #ffffff1a), var(--schiefer-t); }
+  .dk-kontor::before, .dk-kontor::after {
+    content: ''; position: absolute; left: -16px; right: -16px;
+    pointer-events: none;
+  }
+  .dk-kontor::before {
+    bottom: 100%; height: 18px;
+    background: linear-gradient(to top, var(--schiefer-t), transparent);
+  }
+  .dk-kontor::after { top: 100%; height: 22px; background: var(--schiefer-t); }
 
   /* --- Sterne und Flyout ---------------------------------------------------
      Ein Bauteil für beide Ziele: einen Nutzer bewertet man dauerhaft, einen
