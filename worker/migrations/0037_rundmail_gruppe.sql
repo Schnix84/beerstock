@@ -1,0 +1,21 @@
+-- ===========================================================================
+-- Schema 37: Rundmail für Gruppenadmins — eine Spalte.
+--
+-- Etappe 6 des Gruppen-Umbaus (siehe ideas/plan-gruppen.md §6, Entscheidung
+-- 35). Reiner ALTER TABLE ADD COLUMN wie schon 0032/0033 bei bestehenden
+-- Tabellen — kein Tabellentausch, `rundmail_geplant` ist eine schmale Tabelle
+-- ohne Fremdschlüssel-Ärger (siehe Nachgereicht Punkt 3 in plan-gruppen.md).
+--
+-- NULL = der Wirt schreibt an die ganze Instanz (Verhalten unveraendert). Ein
+-- Wert = ein Gruppenadmin schreibt an seine Gruppe. Dieselbe Bedeutung von
+-- NULL wie bei `admin_log.gruppe_id` (Entscheidung 4) — instanzweit ist die
+-- Abwesenheit einer Gruppe, keine eigene Gruppen-Id.
+--
+-- ON DELETE CASCADE wie an jeder anderen Stelle, die auf `gruppen(id)` zeigt:
+-- verschwindet eine Gruppe, verschwinden ihre noch nicht verschickten
+-- geplanten Rundmails mit. Eine bereits VERSENDETE Rundmail traegt die
+-- Gruppen-Zugehoerigkeit nur noch als Auskunft im Protokoll (`admin_log`),
+-- nicht mehr hier — diese Zeile bleibt ohnehin nur bis zum Versand stehen.
+-- ===========================================================================
+
+ALTER TABLE rundmail_geplant ADD COLUMN gruppe_id INTEGER REFERENCES gruppen(id) ON DELETE CASCADE;

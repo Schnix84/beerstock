@@ -180,7 +180,7 @@ Handy vierzig Pixel breit.
 
 Wer noch nicht mitschreibt, sieht ein Schaufenster: Siegerplatz, Glas und Ampel
 stehen offen da — wer gerade führt, mit wie viel und wie kalt. Die Liste darunter
-ist angeschrieben, aber nicht zu lesen. Das Rad und die Abende bleiben zu, das
+ist angeschrieben, aber nicht zu lesen. Das Rad und die Termine bleiben zu, das
 Blatt mit Sternen und Gesagtem erst recht. Am Fuß steht dafür der ganze Weg
 hinein, drei Zeilen lang, und das Adressfeld gleich darunter — ohne Knopf davor,
 denn wer erst fragen muss, ob er fragen darf, tippt seine Adresse nicht ein.
@@ -220,7 +220,7 @@ Drei Nähte bleiben offen, mit Absicht:
 Acht kurze Filme zeigen, was die Seite kann — hochkant, gedreht gegen die
 Testinstanz mit einer erfundenen Runde, zwischen 33 und 97 Sekunden lang. Dazu
 der **Ursprungsfilm**, der als einziger nichts erklärt, sondern erzählt, wie das
-alles angefangen hat (41 s).
+alles angefangen hat (45 s).
 
 Sie stehen an **zwei** Stellen:
 
@@ -280,6 +280,35 @@ damit sich per SQL beantworten lässt, welcher Zugang noch lebt.
 Gemeldete Werte sind **ungeprüft**. Die einzige Ausnahme trägt die Marke
 *gemessen*: dieser Bestand kommt aus einer Kühlschrank-Inventur in Home Assistant
 (Kassenbon × Foto × KI), die Temperatur von einem Sensor im Kühlschrank.
+
+### In welcher Runde
+
+Angemeldet zu sein heißt noch nicht, an einem Tisch zu sitzen. Eine **Runde** ist
+ein Freundeskreis, ein Büro, eine WG — sie hat ihr eigenes Rad, ihre eigenen
+Notrufe, Abende und Kommentare. Wer in dreien ist, kann an einem Tag dreimal
+gezogen werden.
+
+Drei Wege hinein, und einen davon gibt es nicht: eine Runde **gründen** (der
+Gründer führt sie), einen **Einladungslink** einlösen (der Link ist die Zusage,
+kein Bescheid nötig), oder bei einer **öffentlichen** Runde einen Antrag stellen,
+den ihr Verwalter beschiedet. Eine Runde, in die man einfach hineinspaziert, gibt
+es nicht — auch bei den öffentlichen nicht; öffentlich heißt nur, dass sie in der
+Suche auftaucht, mit Name, Beschreibung und Mitgliederzahl. Nie mit Namen, nie
+mit Beständen.
+
+`start.html` zeigt die eigenen Runden mit Kurzstand. **Wer nur in einer ist,
+sieht diese Seite nie** — dann führt der Weg direkt auf die Tafel, und alles
+fühlt sich an wie vorher. In „mein Deckel" steht, an welchem Tisch man gerade
+sitzt, samt den zwei Wegen weg von ihm.
+
+Der **Privatbestand** gehört dagegen weiter der *Person*: man meldet einmal, dass
+zwölf kalte im Kühlschrank stehen, und jede Runde, die eine Tafel führt, zeigt es
+ihren Mitgliedern. Daran ändert ein Beitritt nichts und ein Austritt auch nicht.
+
+Verliert eine Runde ihren letzten Verwalter, **rückt das dienstälteste Mitglied
+nach** — automatisch, mit Mail und Protokolleintrag. Niemand muss dafür den Wirt
+bitten. Und wer geht, nimmt seine Schulden nicht mit: die Mitgliedschaft endet,
+Buchungen und offene Beträge bleiben stehen.
 
 ### Selbst aus Home Assistant melden
 
@@ -484,8 +513,12 @@ Anbindung der Wohnung ab.
 
 ```
 index.html           eine einzelne, in sich geschlossene Seite ohne externe Ressourcen
+start.html           die Auswahl davor: eine Zeile je Runde, mit Kurzstand
+gruppe.html          die Verwaltung EINER Runde: Funktionen, Mitglieder, Anträge, Einladungen,
+                      Getränke, Preise, Wareneingang, Abrechnung, Zahlwege, Hausordnung
 statistik.html       die Statistiken: die Bilder zur Runde — für jeden Angemeldeten
 homeassistant.html   Schlüssel und Anleitung für den, der aus seiner Wohnung melden will
+impressum.html       Impressum und Datenschutzhinweis — ohne Anmeldung erreichbar
 admin.html           das Kontor: Nutzerverwaltung, Statistik, Rundmail — nur fuer Admins
 bilder.js            die Grafiken samt Tooltip; statistik.html und admin.html teilen sie
 sw.js                nimmt Push-Meldungen entgegen — sonst nichts, kein Cache
@@ -495,6 +528,8 @@ og.png               das Schild für WhatsApp & Co. (1200×630, siehe Kopf von i
 worker/              Cloudflare Worker + D1 + R2: Registrierung, Meldungen, Bestenliste
 worker/src/tafel.js  Durable Object: verteilt an alle offenen Seiten, was sich geändert hat
 worker/src/webpush.js  VAPID + RFC-8291-Verschlüsselung, purer WebCrypto
+worker/src/qr.js     vendorter QR-Encoder (Nayuki, MIT) — Provenienz und SHA-256 im Dateikopf
+worker/src/epc.js    der EPC-QR (Girocode) und die Aufbereitung der Zahlwege, eigener Code über qr.js
 worker/migrations/   das Schema, eine Datei je Schritt — die Reihenfolge ist die Geschichte
 ```
 
@@ -730,10 +765,13 @@ Statistik holen sich alles über REST nach.
 ```mermaid
 flowchart LR
     subgraph Browser["Browser — GitHub Pages, statisch"]
-        Tafel["index.html<br/>Tafel, öffentlich"]
+        Tafel["index.html<br/>Tafel EINER Runde"]
+        Start["start.html<br/>Auswahl der Runde"]
+        Gruppe["gruppe.html<br/>Verwaltung EINER Runde"]
         Kontor["admin.html<br/>Kontor, nur Admin"]
         Statistik["statistik.html<br/>Statistik"]
         Haus["homeassistant.html<br/>Schlüssel für Home Assistant"]
+        Impressum["impressum.html<br/>Impressum, ohne API"]
         Bilder["bilder.js<br/>Grafiken + Tooltip"]
         SW["sw.js<br/>nimmt Push entgegen"]
         Kontor -. "import" .-> Bilder
@@ -743,7 +781,7 @@ flowchart LR
 
     subgraph CF["Cloudflare"]
         Worker["Worker · src/index.js<br/>REST-API"]
-        DO["Durable Object Tafel<br/>src/tafel.js"]
+        DO["Durable Object Tafel<br/>src/tafel.js — eines JE RUNDE"]
         D1[("D1 · beerstock")]
         R2[("R2 · beerstock-bilder")]
     end
@@ -755,7 +793,9 @@ flowchart LR
     Web["verlinkte Seiten<br/>beliebige Adressen"]
     Push["Push-Dienst<br/>FCM · Apple · Mozilla"]
 
-    Tafel -- "REST + WebSocket /api/strom" --> Worker
+    Tafel -- "REST + WebSocket /api/strom?g=" --> Worker
+    Start -- "REST" --> Worker
+    Gruppe -- "REST" --> Worker
     Kontor -- "REST" --> Worker
     Statistik -- "REST" --> Worker
     Haus -- "REST" --> Worker
@@ -862,10 +902,197 @@ Drei Dinge, die dazugehören:
   trotzdem auf der Sekunde. Was im Schlaf des Geräts liegen bleibt, holen der
   Blick auf die Uhr beim Aufwachen und das 20-Sekunden-Netz nach.
 
+### Die Runde reist mit
+
+Seit Schema 32 gehört fast alles einer **Gruppe** — eine Runde, ein Büro, eine WG.
+Sie steht **nicht im Pfad**: `ROUTEN` im Worker ist eine flache Tabelle, die auf
+`METHODE /pfad` nachschlägt, und ein Präfix `/api/g/:slug/…` hätte jeden dieser
+Schlüssel und den Verteiler umgebaut. Stattdessen reist sie als Wert:
+
+| | wie |
+|---|---|
+| `GET` | Suchparameter `?g=<id>` |
+| `POST`, `PATCH` | Feld `gruppe` im JSON-Rumpf |
+
+Aufgelöst wird sie an **einer** Stelle (`inGruppe()`), und die prüft in dieser
+Reihenfolge: gibt es die Gruppe → bin ich Mitglied (oder Wirt) → ist die Funktion
+dort eingeschaltet. Fehlt die Angabe, antwortet die Route mit 400, bei einer
+fremden mit 403 — nie mit einer leeren Liste.
+
+Drei Routen kommen bewusst ohne sie aus und lösen selbst auf, weil ihr Aufrufer
+noch gar nicht drin ist: der Beitrittsantrag, das Einlösen eines Einladungslinks
+und die Leitung `/api/strom`.
+
+**Zwei Dinge gehören ausdrücklich keiner Gruppe:** `POST /api/report` (die
+Meldung gehört der *Person* — man meldet einmal, jede Runde zeigt die Meldungen
+ihrer Mitglieder, und damit bleibt auch die Home-Assistant-Seite unangetastet)
+und die Anmeldung.
+
+**Auf der Tafel zeigt sich das als Zungenreihe — in zwei Ebenen.** Oben stehen
+vier Bereiche:
+
+| Zunge | Was darunter liegt |
+|---|---|
+| **Privat** | der Erste samt Glas und Strichliste, „Bier · Grad · Stand", der Notruf, die Temperaturskala, das Rad und die Tafel samt Bierfeld — **ein** Stapel, alles gleichzeitig zu sehen |
+| **Termine** | die Abende und die Chronik |
+| **Verein** | Kasse und Hausordnung, und die bleiben **zwei eigene Zungen** in einer zweiten Reihe |
+| **Statistiken** | kein Blatt, sondern eine **Tür**: die Zunge führt geradewegs auf `statistik.html`. Sie steht da, wo die Liste steht — angemeldet und `statistik_an` |
+
+Der Unterschied ist Absicht: der Erste, der Notruf und das Rad gehören
+zusammengelesen, zwei Buchhaltungen mit je eigenem Monat dagegen wären
+untereinander ein Blatt, durch das man scrollt, statt zu wählen.
+
+Führt eine Runde weniger als zwei Bereiche, gibt es keine Reihe — das eine
+verbliebene Blatt steht einfach da; dasselbe gilt für die zweite Reihe für
+sich. **„Statistiken" zählt dabei mit, auch allein**: sie ist kein Blatt, unter
+denen man wählt, sondern eine Tür, und eine Tür ohne Griff ist keine. Welche Zunge gerade offen ist, merkt sich `index.html` je Runde für die
+laufende Sitzung, beide Ebenen getrennt. Ganz oben, **über** der Reihe und
+damit auf jedem Bereich sichtbar, bleibt nur die Schildzeile: Name des Hauses,
+Datum und der Live-Punkt — der sagt nicht, wie warm das Bier ist, sondern ob
+die Leitung steht.
+
+Der Weg zum eigenen Konto („Tour · mein Deckel · abmelden") hängt an keinem
+Blatt und bleibt immer erreichbar; das Bierfeld dagegen steht **fest an der
+Tafel** — gemeldet wird da, wo das Gemeldete hingehört, und ohne Tafel meldet
+in dieser Runde niemand. **Der Notruf sitzt rechts neben „Wo wird heute
+getrunken?"**, und die Zeile steht ausdrücklich außerhalb des Radblocks: der
+verschwindet an jedem Tag vor der ersten Drehung, der Knopf darf das nicht.
+
+**„Dein Jahr" steht auf der Statistikseite**, oben rechts auf einer Linie mit
+der Überschrift — am Rechner links neben dem Weg zurück, am Finger allein an
+der rechten Kante. Der Rückblick selbst wohnt weiter in `index.html` (dort
+stehen die Kacheln, und sie ein zweites Mal zu bauen hieße, sie beim nächsten
+Mal an einer Stelle zu ändern); der Knopf führt auf
+`./?wrapped=<jahr>&von=statistik&g=<runde>`, und `von` sagt dem × dort, wohin
+es zurückführt — ohne Angabe ins Kontor, mit `von=statistik` hierher. Der
+Dezember-Riegel ist mitgewandert: elf Monate im Jahr gibt es den Knopf nicht.
+
+In `gruppe.html` stellt der Verwalter die **sieben** Schalter unter
+„Funktionen"; abgeschaltet heißt ausgeblendet, nie gelöscht. Sechs davon
+stehen ab Werk an, `regeln_an` als einziger aus: eine leere Hausordnung hat
+nichts zu zeigen. Die Schalter wirken weiter **auf die einzelnen Bereiche**,
+nicht auf die Zungen — ein Blatt ist da, wenn irgendetwas darin da ist.
+
+**Die Kasse ist eine zweite, unabhängige Zahl neben der Tafel.** Wer kalt hat,
+meldet die Tafel (`tafel_an`) — das bleibt eine Sache der Person und ihres
+Kühlschranks. Wer bucht, senkt einen **Gruppenbestand** (`kasse_an`): eine
+Getränkeart mit historisiertem Preis (eine Buchung friert immer den zum
+Zeitpunkt geltenden Preis ein, eine spätere Preisänderung rührt sie nicht
+mehr an), eine Zeile je Buchung, eine Zeile je Lieferung oder Korrektur. Der
+Bestand ist überall dieselbe Summe, nie eine gepflegte Zahl. Unterschreitet
+er einen gesetzten Mindestbestand, geht **eine** Mail an alle, die die Runde
+führen — erst wenn er wieder darüber steigt, darf die nächste raus. Ein
+Kasten und eine Kühltruhe sind also zwei Bestände, die in derselben Gruppe
+nichts miteinander zu tun haben.
+
+**Am Monatsende wird aus den Buchungen eine Abrechnung.** Wer die Runde
+führt, schließt einen **in UTC bereits vollständig vergangenen** Kalendermonat
+ab — der laufende bleibt unantastbar, sonst fiele jede neue Buchung sofort in
+einen schon abgeschlossenen Zeitraum. Der Abschluss legt für jeden, der in
+diesem Monat gebucht hat, einen Saldo an (auch für den Wirt, der ohne eigene
+Mitgliedschaft gebucht hat, und auch für den, der die Runde inzwischen
+verlassen hat) und ist danach unveränderlich. Ein Saldo durchläuft eine
+Kette aus *offen → gemeldet → teilbezahlt/bezahlt*, mit *abgelehnt* als
+Rückweg — „habe bezahlt“ meldet der Schuldner, den Betrag bestätigt, wer die
+Runde führt, und jeder Wechsel steht im Protokoll. Wer eine bereits
+abgerechnete Buchung korrigieren muss, storniert nicht mehr: eine
+**Gegenbuchung** trägt den Ausgleich sichtbar in den laufenden Monat ein,
+mit einem Verweis auf die alte Zeile, und rührt den Bestand nicht an — das
+Getränk ist ja getrunken, nur der Betrag war falsch. Wer eine Runde verlässt,
+sieht seine offenen Beträge trotzdem weiter (`GET /api/salden`, ohne
+Rundenschranke) und kann sie weiter begleichen. Die eigentliche Zahlung
+wickelt BeerStock nicht ab — abgerechnet wird hier, bezahlt wird daneben,
+außerhalb der App.
+
+**Zu jedem offenen Betrag zeigt die Seite den passenden Weg dorthin.** Wer
+die Runde führt, hinterlegt in `gruppe.html` bis zu acht Zahlwege — PayPal
+(ein `paypal.me`-Link oder eine Kennung, mit Betrag als Deeplink), eine
+Überweisung (IBAN samt Kontoinhaber, per EPC-QR-Code alias Girocode), Wero
+(eine Handynummer oder Mailadresse zum Antippen, ohne vorausgefüllten
+Betrag — der Dienst kann das nicht) oder einen Freitext für Bar. Wer selbst
+einen offenen Betrag hat, sieht diese Wege direkt unter seiner Zeile in
+`index.html` und, wer die Runde inzwischen verlassen hat, unter seiner
+Ehemalige-Zeile in `start.html` — derselbe **Besitz**-Zugang wie bei
+`GET /api/salden`, kein `kasse_an` nötig. Der Girocode entsteht **im
+Worker** als eigene SVG-Route, trägt Betrag und einen automatisch erzeugten
+Verwendungszweck (`BeerStock <Runde> <Monat> <Name>`) und hält sich an die
+EPC069-12-Spezifikation: Version 002 (die `zahlweg`-Tabelle führt keine BIC),
+Fehlerkorrekturstufe M, höchstens 331 Byte Nutzlast. Ein Guthaben (ein
+Betrag ≤ 0, etwa nach einer übererfüllten Gegenbuchung) bekommt **keinen**
+Zahlungsvorschlag — dafür gibt es nichts zu überweisen.
+
+**Jede Runde schreibt ihre eigene Hausordnung** (`regeln_an`, ab Werk aus).
+Eine Regel ist ein Titel, ein Satz dazu und genau **eine** Strafe: Geld oder
+eine Auflage, nichts Drittes. „Wer als Letzter geht, macht das Licht aus —
+50 Cent." „Wer den Kasten leer stehen lässt, bringt den nächsten mit." Gepflegt
+wird sie in `gruppe.html`, gelesen auf der Tafel unter „Regeln" — von jedem
+Mitglied, samt Sündenregister und namentlich, wie die offenen Beträge.
+
+**Verhängt, wer die Runde führt**; jedes andere Mitglied darf *vorschlagen*,
+und daraus wird erst durch Annahme eine Strafe. Die verhängte Strafe friert
+Titel, Art und Betrag ein — dasselbe Muster wie der Preis in einer Buchung:
+eine spätere Änderung an der Regel rührt sie nicht mehr an. Eine Regel wird
+darum nie gelöscht, nur abgeschaltet; ihr Titel ist danach wieder frei.
+
+**Eine Geldstrafe ist keine Buchung.** Sie hat keine Menge, verbraucht nichts
+und taucht in keinem Getränkebild auf — sie fließt in denselben Saldo wie das
+Bier, als eigene Zeile. Einer schuldet einen Betrag, nicht zwei. Im Kassenstand
+steht sie als eigener Posten neben „getrunken", damit man weiterhin sieht,
+wovon die Runde lebt. Eine **Auflage** dagegen kostet nichts: der Betroffene
+meldet sie als erledigt, wer die Runde führt, bestätigt — dieselbe Kette wie
+beim Saldo, und sie läuft über den Monatswechsel hinweg weiter.
+
+**Widersprechen darf man einmal.** Eine bestrittene Strafe ist ausgesetzt: sie
+zählt in keiner Abrechnung mit, blockiert aber auch keinen Monatsabschluss —
+wird sie später gehalten, fällt sie in den Monat der Entscheidung. Nichts wird
+rückdatiert, alles rollt vorwärts, wie bei jeder Korrektur hier. Und eine schon
+abgerechnete Strafe lässt sich nicht mehr erlassen: dafür gibt es die
+**Gutschrift** im laufenden Monat, das Gegenstück zur Gegenbuchung. Jeder
+Wechsel steht im Protokoll (`strafe_log`) — an einer Strafe wird mehr
+diskutiert als an allem anderen, und das Protokoll ist die Antwort darauf.
+
 ### API
 
 | Route | Was |
 |---|---|
+| `GET /api/gruppen` 🔒 | meine Runden samt Kurzstand — was `start.html` zeigt: `kalt`, `rad`, `offen_cent` und, wer sie führt, die Zahl wartender Anträge. `kalt`/`rad` sind `null`, wenn die Runde keine Tafel bzw. kein Rad führt — das ist etwas anderes als 0 |
+| `POST /api/gruppen` 🔒 | `{name, beschreibung?, sichtbar?}` — gründen; der Gründer führt sie. Der Slug entsteht aus dem Namen und wandert beim Umbenennen **nicht** mit |
+| `GET /api/gruppe` 🔒 | `?g=` — Stammdaten, Schalterstellung, meine Rolle |
+| `PATCH /api/gruppe` 🔒 | Name, Beschreibung, Sichtbarkeit, Schalterleiste — nur wer sie führt |
+| `GET /api/gruppen/suche` 🔒 | `?q=` — **nur öffentliche** Runden, und von ihnen nur Name, Beschreibung, Mitgliederzahl. Nie Namen, nie Bestände |
+| `POST /api/gruppe/anfrage` 🔒 | `{gruppe}` — Beitritt beantragen. Nur bei öffentlichen; eine private antwortet wie eine, die es nicht gibt |
+| `GET /api/gruppe/anfragen` 🔒 | `?g=` — die offenen Anträge, nur für den, der die Runde führt |
+| `POST /api/gruppe/anfrage/bescheid` 🔒 | `{gruppe, anfrage, annehmen}` — annehmen oder ablehnen; beides bleibt als beschiedene Zeile stehen |
+| `POST /api/gruppe/einladung` 🔒 | `{gruppe, tage?, max_nutzung?}` → `{link, token}`. **Der Klartext steht nur in dieser einen Antwort**, gespeichert ist der Hash |
+| `GET /api/gruppe/einladungen` 🔒 | `?g=` — die Links ohne Klartext, mit Laufzeit, Nutzungen und `gueltig` |
+| `POST /api/gruppe/einladung/weg` 🔒 | `{gruppe, kennung}` — widerrufen, nicht gelöscht: der Admin soll sehen, dass es den Link gab |
+| `POST /api/gruppe/beitritt` 🔒 | `{token}` aus dem Einladungslink — ohne Bescheid, der Link *ist* die Zusage. Zweimal gerufen ist kein Fehler (und zählt auch nur einmal). Wer eine Runde **ohne Verwalter** betritt, führt sie |
+| `GET /api/gruppe/mitglieder` 🔒 | `?g=` — Liste samt Rollen; jedes Mitglied darf sie sehen |
+| `PATCH /api/gruppe/mitglied` 🔒 | `{gruppe, user, rolle}` oder `{gruppe, user, entfernen:true}`. Die Mitgliedschaft fällt, Buchungen und offene Beträge bleiben. War es der Letzte, schließt die Gruppe zu wie beim Austritt |
+| `POST /api/gruppe/austritt` 🔒 | `{gruppe}` — selbst gehen. Verliert die Runde damit ihren letzten Verwalter, **rückt das dienstälteste Mitglied nach**, erfährt es per Mail, und es steht im Protokoll. Geht der **Letzte**, schließt die Gruppe hinter ihm zu (`verwaist: true`): sie fällt aus der Suche, offene Anträge werden beschieden, die Geschichte bleibt stehen — zurück führt ein Einladungslink |
+| `GET /api/kasse` 🔒 | `?g=` — die eigenen (bzw. bei Anlegern **alle**, auch abgeschaltete) Getränke mit geltendem und angekündigtem Preis, Bestand, dazu `mein_monat`. Hängt am Schalter `kasse_an` |
+| `POST /api/kasse/buchung` 🔒 | `{gruppe, getraenk, menge?}` — ein Klick bucht eins; wer die Runde führt, darf mit `fuer_user` auch für jemand anderen buchen. Ohne gesetzten Preis 409 statt einer 0-Cent-Buchung |
+| `POST /api/kasse/storno` 🔒 | `{buchung}` — fünf Minuten Fenster für den Buchenden selbst, unbegrenzt für den, der die Runde führt. Storniert nie hart, `storniert_am`/`storniert_von` bleiben stehen |
+| `GET /api/kasse/historie` 🔒 | `?g=` — die eigenen Buchungen; wer die Runde führt, sieht alle |
+| `POST /api/getraenk` 🔒 | `{gruppe, aktion:'anlegen'\|'umbenennen'\|'aktivieren'\|'deaktivieren'\|'mindest', …}` — nur wer die Runde führt. Ein deaktiviertes Getränk bleibt in der Historie stehen, nur der Buchen-Knopf verschwindet |
+| `POST /api/preis` 🔒 | `{gruppe, getraenk, cent, gueltig_ab?}` setzt (Vorgabe *sofort*, ein Datum in der Zukunft wird angekündigt); `{aktion:'entfernen', id}` nimmt einen noch nicht wirksamen vorgemerkten Preis wieder weg. Ein bereits eingefrorener Preis in einer Buchung bleibt unangetastet |
+| `POST /api/bestand` 🔒 | `{gruppe, getraenk, art:'lieferung'\|'korrektur', menge, …}` — eine Lieferung braucht `einkauf_cent` (auch 0), eine Korrektur einen `grund`. Negativbestand geht durch, mit Warnung auf der Seite; unterschreitet er einen gesetzten Mindestbestand, geht **eine** Mail an alle, die die Runde führen |
+| `GET /api/abrechnung` 🔒 | `?g=&jahr=&monat=` (Vorgabe: laufender Monat) — noch nicht abgeschlossen → eine live gerechnete Vorschau (`vorschau: true`, nur Namen und Zahlen); abgeschlossen → die eingefrorenen Salden samt Status. Alles offen, wie die Tafel: jedes Mitglied sieht jeden |
+| `POST /api/abrechnung/abschluss` 🔒 | `{gruppe, jahr, monat}` — nur wer die Runde führt, und nur für einen in UTC bereits vollständig vergangenen Monat. Legt die Salden in einem Zug an; ein zweiter Abschluss desselben Monats → 409 |
+| `GET /api/abrechnung/csv` 🔒 | `?g=&jahr=&monat=` — CSV eines **abgeschlossenen** Monats (sonst 404), Semikolon getrennt, mit BOM für Excel |
+| `GET /api/salden` 🔒 | **ohne Rundenschranke** — meine offenen Beträge über *alle* Runden, auch aus verlassenen. Gefiltert über den offenen Rest, nicht über den Status |
+| `POST /api/saldo/meldung` | `{saldo, notiz?}` — „habe bezahlt"; funktioniert auch, wer die Runde längst verlassen hat |
+| `POST /api/saldo/bestaetigung` 🔒 | `{saldo, aktion:'bestaetigen'\|'ablehnen', cent?, notiz?}` — nur wer die Runde führt, **ohne** `kasse_an`-Schranke (ein abgeschalteter Schalter heißt „keine Kasse gerade", nicht „keine Zahlung annehmen"). Bestätigt einen Betrag (Rest → `teilbezahlt`/`bezahlt`), eine Ablehnung braucht einen Grund |
+| `POST /api/kasse/buchung` mit `gegen` 🔒 | `{gruppe, gegen:<buchung>}` — die Gegenbuchung: eine bereits abgerechnete Buchung lässt sich nicht mehr stornieren, stattdessen legt nur, wer die Runde führt, eine ausgleichende Buchung im laufenden Monat an. Rührt den Bestand **nicht** an — das Getränk ist getrunken, nur der Betrag war falsch |
+| `GET /api/zahlwege` 🔒 | `?saldo=` — **ohne Rundenschranke**, Besitz statt Mitgliedschaft (dieselbe Begründung wie bei `GET /api/salden`): Betrag, fertiger Verwendungszweck und die hinterlegten Wege samt fertigen Deeplinks. **Oder** `?g=` — mit `kasse_an`, ohne Betrag; für die Pflegeansicht in `gruppe.html` |
+| `POST /api/zahlwege` 🔒 | `{gruppe, wege:[{art,wert,inhaber?}]}` — nur wer die Runde führt; ersetzt die **ganze** Liste in einem Zug, die Reihenfolge im Feld ist die Reihenfolge auf der Seite. `art` ∈ `paypal`\|`bank`\|`wero`\|`bar`; bei `bank` wird die IBAN geprüft (Mod-97) und normalisiert, der Kontoinhaber ist Pflicht |
+| `GET /api/zahlung/qr.svg` 🔒 | `?saldo=&weg=` — der EPC-QR (Girocode) einer Überweisung als SVG, Query statt Pfadparameter (der Router kennt keine). 409, wenn der Saldo schon ausgeglichen ist |
+| `GET /api/hausordnung` 🔒 | `?g=&monat=` (Vorgabe: laufender Monat) — die geltenden Regeln, das Sündenregister des Monats (`strafen`) und was aus früheren Monaten noch aussteht (`offen_alt`). Wer die Runde führt, sieht auch die abgeschalteten Regeln. Hängt am Schalter `regeln_an` |
+| `POST /api/hausregel` 🔒 | `{gruppe, aktion:'anlegen'\|'aendern'\|'aus'\|'an', …}` — nur wer die Runde führt. Eine Regel trägt genau **eine** Strafe: `art:'geld'` mit `cent` oder `art:'tat'` mit `tat`. **Kein Löschen** — eine abgeschaltete Regel bleibt stehen, damit alte Strafen ihre Herkunft behalten; ihr Titel wird dabei wieder frei |
+| `POST /api/strafe` 🔒 | `{gruppe, user, regel}` aus einer Regel oder frei mit `{titel, art, cent\|tat}`, dazu `grund?`. Wer die Runde führt, **verhängt** (`offen`); jedes andere Mitglied **schlägt vor** (`vorgeschlagen`). Titel, Art und Betrag werden dabei eingefroren — eine spätere Preisänderung an der Regel rührt die Strafe nicht an. Eine Geldstrafe ohne Kasse → 400 mit Begründung. `{gruppe, gutschrift:<strafe>}` legt das Gegenstück zu einer schon abgerechneten Strafe im laufenden Monat an |
+| `POST /api/strafe/meldung` 🔒 | `{gruppe, strafe, notiz?}` — „habe ich erledigt", nur der Betroffene und nur bei einer Auflage. Eine Geldstrafe läuft über die Abrechnung |
+| `POST /api/strafe/einspruch` 🔒 | `{gruppe, strafe, grund}` — **einmal** je Strafe, nur der Betroffene. Eine bestrittene Strafe zählt in keiner Abrechnung mit und blockiert auch keinen Abschluss |
+| `POST /api/strafe/bescheid` 🔒 | `{gruppe, strafe, aktion, notiz?}` — nur wer die Runde führt. `erledigt`/`zurueck` für eine gemeldete Auflage, `erlassen` für eine verhängte Strafe (`offen`, `gemeldet`, `bestritten`), `annehmen`/`verwerfen` für einen Vorschlag, `halten` gegen einen Einspruch. Ein Vorschlag lässt sich **nicht** erlassen (409) — sein Ausgang heißt `verwerfen`, und nur der bleibt still: `erlassen` schickt dem Betroffenen Post, und der hat vom Vorschlag nie gehört. `annehmen` und `halten` setzen das Datum **auf heute** — die Strafe fällt in den Monat der Entscheidung, nicht in den des Vorschlags. Eine bereits abgerechnete Strafe lässt sich nicht mehr erlassen (409), dafür gibt es die Gutschrift |
 | `POST /api/anmelden` | `{email}` → schickt einen Magic Link |
 | `POST /api/magic` | `{token}` aus dem Link → Geräte-Token |
 | `POST /api/name` | Name für die Liste setzen |
@@ -883,7 +1110,7 @@ Drei Dinge, die dazugehören:
 | `POST /api/mail/stumm` | `{id, sig}` aus dem Ein-Klick-Abmeldelink — ohne Anmeldung, per HMAC |
 | `POST /api/drehen` | die Flasche drehen; ein zweiter Ruf liefert dasselbe Los. Hat heute jemand Geburtstag und noch keinen Abend, **gewinnt er** (siehe *Das Rad am Geburtstag*); steht sein Abend schon, antwortet die Route mit 409 und es gibt nur Ehrenrunden. Die laufen auf der Seite und rufen hier gar nicht an |
 | `POST /api/los/antwort` | `{antwort:'ja'\|'nein', grund?, beginnt_am?, endet_am?}` — nur der Gezogene, per Token **oder** mit `{los, t}` aus der Gewinner-Mail |
-| `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand; mit `{ort}` statt `gastgeber` einer auswärts |
+| `POST /api/termin` | `{gastgeber, beginnt_am, endet_am?, titel?}` → ein Abend von Hand; mit `{ort}` statt `gastgeber` einer auswärts. Der Gastgeber muss **in dieser Gruppe** sein — ein Name von außerhalb gilt wie ein erfundener |
 | `POST /api/termin/aendern` | verschieben, umbenennen, absagen; ohne `endet_am` wandert das Ende beim Verschieben mit |
 | `POST /api/bewerten` | `{ziel_art, ziel_id, sterne{}, text?, bild?, ohne_vorschau?}` — überschreibt |
 | `GET /api/bewertungen` 🔒 | `?ziel=user:5` — Schnitte, eigene Abgabe, Kommentarbaum |
@@ -905,17 +1132,17 @@ Drei Dinge, die dazugehören:
 | `GET /api/kachel` | `?z=&x=&y=` — Kartenkachel über den Worker statt direkt von OSM; sieben Tage im Cache, fremder Referer → 403 |
 | `GET /api/chronik` 🔒 | `?vor=…&vor_id=…&anzahl=…` — gewesene Abende, seitenweise |
 | `GET /api/leaderboard` | Rangliste, Bestmarke, 30 Tage Verlauf, Ziehung des Tages, laufende Notrufe — ohne Token nur der Siegerplatz |
-| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit. Stumme Tage stehen dort **nicht** in der Antwort — die schreibt erst die Zeichnung fort (siehe unten). Zwei Reihen folgen dem Fenster bewusst nicht: `wachstum` und `abende` sind Fragen an die ganze Geschichte der Runde. `vorrat` dagegen ist die einzige Reihe, die der Worker selbst über stumme Tage fortschreibt, weil eine Summe über alle Melder sich nachträglich nicht zeichnen lässt |
-| `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}` |
+| `GET /api/statistik` 🔒 | die Zahlenreihen der Runde für die Statistikseite; `?tage=30\|60\|90` fasst die Zeitreihen, die Ranglisten bleiben insgesamt. Bestand und Temperatur stehen je Tag und Melder mit der **letzten** Meldung des Tages drin, nicht mit dem Schnitt; bei der Temperatur fahren `tief`, `hoch` und die Zahl der Meldungen mit. Stumme Tage stehen dort **nicht** in der Antwort — die schreibt erst die Zeichnung fort (siehe unten). Zwei Reihen folgen dem Fenster bewusst nicht: `wachstum` und `abende` sind Fragen an die ganze Geschichte der Runde. `vorrat` dagegen ist die einzige Reihe, die der Worker selbst über stumme Tage fortschreibt, weil eine Summe über alle Melder sich nachträglich nicht zeichnen lässt. Steht `kasse_an`, kommt ein Schlüssel `kasse` dazu (Etappe 6): fünf Kassenbilder über einen Kalendermonat statt des Tage-Fensters, gewählt über `?monat=JJJJ-MM` (stiller Rückfall auf den laufenden Monat bei fehlendem oder unzulässigem Wert). Ohne `kasse_an` fehlt der Schlüssel `kasse` ganz — kein leeres Feld, keine leeren Bilder |
+| `GET /api/strom` | WebSocket; verteilt Marken wie `{"marken":["tafel","user:5"]}`. **`?g=` ist Pflicht** — der Verteiler hält seit Schema 32 eine Leitung je Runde, und was in der einen passiert, hören die anderen nicht. Weiterhin ohne Token: es reisen nur Marken, keine Daten |
 | `GET /api/admin/nutzer` 🔒 | die ganze Runde mit Adressen und Zahlen — nur Admin, sonst 403 |
 | `POST /api/admin/nutzer` 🔒 | `{id, aktion:'sperren'\|'entsperren'\|'rolle'\|'entfernen'\|'farbe'\|'stolz'\|'geburtstag', grund?, farbe?, geburtstag?}` — nur Admin. `farbe` ist der Platz in der Kreidereihe (0–6) oder `null` für „wieder nach Anmeldereihenfolge"; `stolz` ist ein Umschalter ohne Wert und wählt den Regenbogen als achte Farbe dazu oder ab — die Kreide daneben bleibt dabei stehen, sie ist die Farbe darunter. `geburtstag` nimmt `JJJJ-MM-TT`, `MM-TT` (Jahr freiwillig) oder `null` zum Löschen und prüft den Tag auch auf seine Gültigkeit im Monat. Diese drei sind auch mit sich selbst erlaubt |
 | `POST /api/admin/stolz` 🔒 | `{aktiv: bool}` — der Schalter über der Regenbogenvergabe. Gilt keinem Mitglied, deshalb eine eigene Route; „aus" behält den Kreis. `{weiter: true}` dreht den Kreis stattdessen um **einen Schritt** weiter (Schema 30), ohne auf die Tagesgrenze zu warten — gespeichert wird dabei kein Träger, nur eine Verschiebung auf den Wurf |
 | `GET /api/admin/statistik` 🔒 | dasselbe **plus Betrieb**: Mails je Art und je Tag, Anmeldungen, wer noch Post will, Seitenaufrufe insgesamt/je Tag/je Nutzer — nur Admin |
-| `POST /api/admin/rundmail` 🔒 | `{betreff, text, bild_url?, knopf_text?, knopf_link?}` sofort an alle, die sie wollen — nur Admin |
-| `POST /api/admin/rundmail/planen` 🔒 | dieselben Felder plus `{versand_am}` — vorgemerkt statt sofort verschickt, nur Admin |
-| `POST /api/admin/rundmail/test` 🔒 | dieselben Felder ohne `versand_am`, geht nur an die eigene Adresse — ohne Stundensperre, ohne Protokoll- oder Statistikeintrag |
-| `GET /api/admin/rundmail/geplant` 🔒 | die noch anstehenden und die fehlgeschlagenen geplanten Rundmails — nur Admin |
-| `POST /api/admin/rundmail/geplant/aendern` 🔒 | `{id, ...Felder}` ändert eine geplante Rundmail, `{id, verwerfen:true}` löscht sie — geht nur, solange sie noch `geplant` ist |
+| `POST /api/admin/rundmail` 🔒 | `{betreff, text, bild_url?, knopf_text?, knopf_link?, gruppe?}` sofort an alle, die sie wollen — Admin, oder mit `gruppe` ein Gruppenadmin an seine eigene Gruppe (Entscheidung 35, Etappe 6). Die Stundensperre trennt beide: die Rundmail des Wirts sperrt jede Gruppe mit, eine Gruppe sperrt nie den Wirt oder eine andere Gruppe |
+| `POST /api/admin/rundmail/planen` 🔒 | dieselben Felder plus `{versand_am}` — vorgemerkt statt sofort verschickt, dasselbe Wirt-oder-Gruppenadmin-Recht wie oben |
+| `POST /api/admin/rundmail/test` 🔒 | dieselben Felder ohne `versand_am`, geht nur an die eigene Adresse — ohne Stundensperre, ohne Protokoll- oder Statistikeintrag. **Nur der Wirt** — kein `gruppe`-Feld |
+| `GET /api/admin/rundmail/geplant` 🔒 | die noch anstehenden und die fehlgeschlagenen geplanten Rundmails — mit `?g=` die einer Gruppe (nur ihr Admin), ohne `?g=` die instanzweiten des Wirts. Nie beides gemischt |
+| `POST /api/admin/rundmail/geplant/aendern` 🔒 | `{id, ...Felder}` ändert eine geplante Rundmail, `{id, verwerfen:true}` löscht sie — geht nur, solange sie noch `geplant` ist. Das Recht hängt an der **Zeile selbst** (ihrer `gruppe_id`), nicht an einem mitgeschickten Feld — sonst könnte ein Gruppenadmin sich als Besitzer einer fremden Zeile ausgeben |
 | `GET /api/admin/protokoll` 🔒 | was passiert ist, aus drei Quellen zusammen (Verwaltung, Mail, Push). Blättert: `?limit=` (Vorgabe 20, höchstens 50) und `?vor=` mit der Marke `weiter` der vorigen Seite. `?quelle=admin\|mail\|push` siebt nach Weg, `?q=` nach Wort — gesucht wird in Name, Betroffenem, Art, Detail, Auslöser und Empfängern. Die mitgelieferten `zaehler` zählen über die **ganze** Geschichte und lassen `q` bewusst außen vor. Nur Admin |
 | `GET /api/health` | Bereitschaft: Datenbank, Mailversand, Bilderablage, Neu-Meldung, Verteiler, `ADMIN_MAIL`, `MAIL_GEHEIM`, `GIPHY_KEY`, `push` (beide VAPID-Hälften); dazu **zwei Stände**, die das Kontor unter der Ampel nebeneinanderstellt: `version`/`deployed_at` vom letzten Worker-Deploy und `seite_version`/`seite_deployed_at`/`seite_stand` vom letzten Commit auf `main` (bei GitHub erfragt, eine Viertelstunde gecacht) |
 

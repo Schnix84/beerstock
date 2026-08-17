@@ -119,8 +119,9 @@
     }
   ],
 
-  // Der Verteiler fuer die offenen Seiten (src/tafel.js). Eine einzige Instanz
-  // fuer alle, angesprochen ueber idFromName('tafel'). Sie speichert nichts -
+  // Der Verteiler fuer die offenen Seiten (src/tafel.js). EINE INSTANZ JE
+  // GRUPPE seit Schema 32, angesprochen ueber idFromName('gruppe:' + id);
+  // bis dahin war es eine einzige fuer alle. Sie speichert nichts -
   // `new_sqlite_classes` steht hier trotzdem, weil nur SQLite-gestuetzte
   // Klassen im kostenlosen Tarif laufen; die andere Sorte wird abgelehnt.
   "durable_objects": {

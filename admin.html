@@ -1451,6 +1451,9 @@
 
     <h2>Statistiken</h2>
     <div class="werkzeug">
+      <span class="reiter" id="stat-gruppe"></span>
+    </div>
+    <div class="werkzeug">
       <span class="reiter" id="zeitraum"></span>
     </div>
     <div id="bilder"></div>
@@ -2515,6 +2518,44 @@
     } catch { return STAT_TAGE[0]; }
   })();
 
+  /* Der Gruppenwähler (Entscheidung 25): der Betrieb bleibt instanzweit, die
+     elf Rundenbilder bekommen ihn. Keine Stellung „alle Gruppen" — eine
+     Summe über Gruppen zählt Menschen doppelt, die in mehreren sind.
+     `statGruppen` und `statGruppe` kommen aus der Antwort selbst: die Seite
+     kennt die Gruppen nicht, bevor sie einmal geladen hat. */
+  let statGruppen = [], statGruppe = null;
+
+  function statGruppeZeichnen() {
+    const ziel = $('stat-gruppe');
+    ziel.textContent = '';
+    if (statGruppen.length < 2) { ziel.hidden = true; return; }
+    ziel.hidden = false;
+    ziel.appendChild(el('span', 'wozu', 'Runde'));
+    statGruppen.forEach(g => {
+      const b = el('button', g.id === statGruppe ? 'an' : null, g.name);
+      b.type = 'button';
+      b.addEventListener('click', () => gruppeWechseln(g.id));
+      ziel.appendChild(b);
+    });
+  }
+
+  async function gruppeWechseln(id) {
+    if (id === statGruppe) return;
+    statGruppe = id;
+    statGruppeZeichnen();
+    const ziel = $('bilder');
+    ziel.style.opacity = '.35';
+    try {
+      const s = await ruf('/api/admin/statistik?tage=' + zeitraum + '&g=' + id);
+      statistik(s);
+      if (stand && mich) kopfZeichnen(stand.kopf, mich, letzteAmpel, s);
+    } catch (e) {
+      sagt('stat-sagt', 'Die Runde ließ sich nicht wechseln: ' + e.message, true);
+    } finally {
+      ziel.style.opacity = '';
+    }
+  }
+
   function zeitraumZeichnen() {
     const ziel = $('zeitraum');
     ziel.textContent = '';
@@ -2538,7 +2579,8 @@
     const ziel = $('bilder');
     ziel.style.opacity = '.35';
     try {
-      const s = await ruf('/api/admin/statistik?tage=' + t);
+      const s = await ruf('/api/admin/statistik?tage=' + t
+        + (statGruppe ? '&g=' + statGruppe : ''));
       statistik(s);
       // Der Kopf hängt mit dran: „+2 in 30 Tagen" unter der Melderzahl wäre
       // sonst der Satz zum vorigen Zeitraum.
@@ -2559,6 +2601,11 @@
 
   function statistik(s) {
     letzteStat = s;
+    // Welche Runde diese elf Bilder zeigen, und was sich sonst wählen ließe -
+    // die Antwort selbst ist die Quelle, die Seite rät nichts.
+    if (s.gruppe) statGruppe = s.gruppe.id;
+    if (s.gruppen) statGruppen = s.gruppen;
+    statGruppeZeichnen();
     zeitraumZeichnen();
     const ziel = $('bilder');
     ziel.textContent = '';
@@ -2692,6 +2739,16 @@
     // den Schalter über allen.
     stolz:       ['◠', ''],
     stolz_regel: ['◠', ''],
+    /* Die vier aus den Gruppen (Schema 32). Alle mit demselben Tisch-Zeichen,
+       weil sie dasselbe betreffen und im Protokoll ohnehin die Gruppe
+       danebensteht; nur das Entfernen bekommt wie sein instanzweiter Bruder
+       das Kreuz und den roten Ton. `nachgerueckt` ist die einzige Zeile hier,
+       hinter der KEIN Mensch steht — sie schreibt sich selbst, wenn eine
+       Runde ihren letzten Verwalter verliert. */
+    gruppe_geaendert: ['▭', ''],
+    gruppe_rolle:     ['⇅', ''],
+    gruppe_entfernt:  ['✕', 'rot'],
+    nachgerueckt:     ['↥', 'gruen'],
   };
 
   /* Das Protokoll führt seit dem Versandprotokoll drei Quellen, und `quelle`
@@ -2828,6 +2885,15 @@
        ist null, und die Route fällt für „wen" dann auf das Detail zurück.
        Ohne diese Zeile stünde dort „an (an)". */
     if (z.aktion === 'stolz_regel') return 'Vergabe ' + (z.detail || '');
+    /* Dasselbe noch einmal für die Runden (Schema 32): `gruppe_geaendert` gilt
+       keinem Menschen, `ziel_id` ist null, und das Detail IST der Name der
+       Runde — ohne diese Zeile stünde dort „Am Tresen (Am Tresen)". Beim
+       Nachrücken steht dagegen sehr wohl ein Mensch im Ziel, und daneben
+       gehört die Runde, in der er jetzt führt. */
+    if (z.aktion === 'gruppe_geaendert') return z.detail || '—';
+    if (z.aktion === 'nachgerueckt') {
+      return logName(z.wen) + (z.detail ? ' führt „' + z.detail + '"' : '');
+    }
     return logName(z.wen) + (z.detail && z.aktion !== 'entfernen' ? ' (' + z.detail + ')' : '');
   }
 

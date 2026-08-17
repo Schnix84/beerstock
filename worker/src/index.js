@@ -23,6 +23,11 @@ export { Tafel };
 // an EIN Abo. Wer wen bekommt, entscheidet `stosse()` weiter unten.
 import { pushSenden, pushBereit } from './webpush.js';
 
+// EPC-QR (Girocode) und die Aufbereitung der Zahlwege (Schema 36, Etappe 5).
+// `qr.js` ist die vendorte QR-Bibliothek, `epc.js` unser Code darueber -
+// siehe die Kommentare dort zur Lizenztrennung.
+import { epcNutzlast, qrSvg, wegeAufbereiten, ibanNormalisieren, ibanGueltig, zweckBauen, ZAHLWEG_ARTEN } from './epc.js';
+
 /* Nur die eigene Seite darf die API im Browser aufrufen. Der Kopf schuetzt
    nicht davor, dass jemand mit curl vorbeikommt - das tut kein CORS-Kopf -,
    aber er verhindert, dass eine fremde Seite den Browser eines Angemeldeten
@@ -354,6 +359,12 @@ const bierTag = () => new Date(Date.now() - LOS_GRENZE * 3600e3).toISOString().s
    einem lebhaften Abend zumuellt. Wer sie will, schaltet sie ein. */
 const MAIL_ARTEN = {
   gewonnen:       { vorgabe: true,  titel: 'Die Flasche zeigt auf mich' },
+  /* Alles, was einem MENSCHEN ueber eine seiner Gruppen zu sagen ist: dass er
+     nachgerueckt ist, dass sein Antrag beschieden wurde. Vorgabe an, weil es
+     jedesmal etwas ist, das er wissen MUSS, um handeln zu koennen - und
+     abwaehlbar wie jede Mail hier, sonst waere sie die erste, die man nicht
+     abbestellen kann. */
+  gruppe:         { vorgabe: true,  titel: 'Nachricht zu einer meiner Gruppen' },
   termin_neu:     { vorgabe: true,  titel: 'Ein Abend steht fest' },
   termin_aendert: { vorgabe: true,  titel: 'Ein Abend verschiebt sich oder fällt aus' },
   echo:           { vorgabe: false, titel: 'Antwort auf meinen Beitrag, Sterne für mich' },
@@ -361,6 +372,21 @@ const MAIL_ARTEN = {
   /* Abwaehlbar wie alles hier, aber mit Vorgabe AN: eine Not, von der niemand
      erfaehrt, ist keine gemeldet. Wer sie abstellt, tut das bewusst. */
   notruf:         { vorgabe: true,  titel: 'Jemand braucht Bier oder Gesellschaft' },
+  /* Nur an Gruppenadmins, hoechstens eine je Unterschreitung (Entscheidung 34,
+     Bezug `bestand:<getraenk_id>:<warn_lauf>`). Vorgabe an, wie `notruf` -
+     wer die Kasse fuehrt, soll das nicht verpassen, darf es aber abstellen. */
+  bestand_knapp:  { vorgabe: true,  titel: 'Ein Getränk unterschreitet den Mindestbestand' },
+  /* Der Empfaengerkreis ist genau EINE Person: der Betroffene (Entscheidung
+     56). Zwei Anlaesse teilen sich die Art - verhaengt und erlassen -, weil es
+     fuer den Empfaenger dieselbe Sache ist: was an seiner eigenen Strafe
+     passiert. Vorgabe an, wie `notruf` und `bestand_knapp`: eine Strafe, von
+     der der Bestrafte nichts erfaehrt, ist keine verhaengte. */
+  strafe:         { vorgabe: true,  titel: 'Eine Strafe für mich, oder ihr Erlass' },
+  /* Etappe 9. Kreis sind die GRUPPENADMINS, nicht die Gruppe - ein Mitglied
+     kann an einem Vorschlag oder einem Einspruch nichts entscheiden, es zu
+     benachrichtigen waere ein Alarm ohne Knopf davor (dieselbe Ueberlegung
+     wie bei `bestand_knapp`). */
+  einspruch:      { vorgabe: true,  titel: 'Ein Vorschlag oder Einspruch wartet auf mich' },
 };
 
 // Zwei Rollen, mehr nicht. Alles darueber waere Verwaltung von Verwaltung.
@@ -629,6 +655,54 @@ const RUNDMAIL_KNOPF_MAX   = 40;    // Zeichen auf dem Knopf
 const RUNDMAIL_LINK_MAX    = 500;   // Zeichen, Bild- und Knopf-Adresse
 const RUNDMAIL_VORAUS      = 90;    // Tage, so weit darf eine geplante Rundmail vorausliegen
 
+/* Die Gruppen (Schema 32). Der Name steht auf der Kachel in `start.html` und
+   in der Kopfzeile der Tafel - vierzig Zeichen sind dort die Grenze, ab der
+   er mitten im Wort bricht. Die Beschreibung sieht nur, wer sucht. */
+const GRUPPE_NAME_MAX = 40;
+const GRUPPE_TEXT_MAX = 200;
+/* Dieselbe Sorte Bremse wie TERMINE_PRO_TAG: gegen den, der aus Versehen
+   zwanzigmal drueckt, nicht gegen Missbrauch. Wer wirklich sechs Runden am
+   Tag gruendet, wartet bis morgen. */
+const GRUPPEN_PRO_TAG = 5;
+// So weit darf ein Einladungslink in die Zukunft laufen. NULL bleibt erlaubt
+// ("laeuft nie ab") - das ist die Ansage des Admins, nicht ein Versehen.
+const EINLADUNG_TAGE_MAX = 365;
+// Wieviele Treffer die Gruppensuche hoechstens zeigt.
+const SUCHE_MAX = 30;
+/* Die Schalterleiste, als Liste. Sie steht hier und nicht an der Route: die
+   Reihenfolge ist die, in der die Verwaltung sie zeigt, und eine zweite
+   Aufzaehlung im Frontend waere die eine, die beim siebten Schalter vergessen
+   wird. */
+const SCHALTER = ['tafel_an', 'rad_an', 'notruf_an', 'termine_an', 'kasse_an', 'statistik_an',
+                  'regeln_an'];
+
+/* Die Kasse (Schema 34, Etappe 3). */
+const GETRAENK_NAME_MAX = 40;
+const PREIS_CENT_MAX    = 5000;   // 50 Euro das Getraenk waere sicher ein Tippfehler
+const BUCHUNG_MENGE_MAX = 24;     // ein Kasten auf einen Schlag, mehr ist ein Tippfehler
+const STORNO_MINUTEN    = 5;      // fuer den Buchenden selbst (Entscheidung 15)
+const BESTAND_GRUND_MAX = 200;
+
+/* Die Abrechnung (Schema 35, Etappe 4). */
+const SALDO_NOTIZ_MAX = 200;
+
+/* Die Zahlwege (Schema 36, Etappe 5). `ZAHLWEG_ARTEN` kommt aus epc.js, EIN
+   Ort fuer die vier gueltigen Arten statt einer zweiten Kopie hier. */
+const ZAHLWEG_MAX = 8;        // vier Arten, aber mehrere IBANs/Adressen sind denkbar
+const ZAHLWEG_WERT_MAX = 200; // Freitext bei 'bar' ist das grosszuegigste Feld
+
+/* Die Hausordnung (Schema 38, Etappe 8). */
+const REGEL_TITEL_MAX = 60;   // steht als Zeile in der Zunge, laenger bricht sie um
+const REGEL_TEXT_MAX  = 400;  // der ausgeschriebene Satz darunter
+const REGEL_TAT_MAX   = 120;  // "bringt einen Kasten mit"
+const REGEL_MAX       = 40;   // Regeln je Gruppe - eine Hausordnung, kein Gesetzbuch
+const STRAFE_GRUND_MAX = 200; // wie BESTAND_GRUND_MAX, dieselbe Sorte Freitext
+/* Dieselbe Sorte Bremse wie PREIS_CENT_MAX: 100 Euro Strafe waere sicher ein
+   Tippfehler, und wer wirklich mehr will, verhaengt zweimal. Gilt in BEIDE
+   Richtungen - eine Gutschrift (Entscheidung 52) ist eine Strafe mit
+   negativem Betrag und darf genauso wenig entgleiten. */
+const STRAFE_CENT_MAX = 10000;
+
 // ---------------------------------------------------------------------------
 // Kleinkram
 // ---------------------------------------------------------------------------
@@ -639,7 +713,12 @@ function koepfe(request) {
     h['Access-Control-Allow-Origin'] = herkunft;
     // X-Tab ist die zufaellige Kennung des schreibenden Tabs, siehe `anstoss`.
     h['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Tab';
-    h['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
+    /* PATCH kam mit den Gruppen dazu (Schema 32): `PATCH /api/gruppe` und
+       `PATCH /api/gruppe/mitglied` sind Aenderungen an einem bestehenden Ding
+       und heissen deshalb so. Steht das Verb hier nicht, weist schon der
+       Vorabflug des Browsers ab - und der Fehler sieht auf der Seite aus wie
+       "kein Netz", nicht wie ein fehlender Kopf. */
+    h['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, OPTIONS';
     h['Access-Control-Max-Age'] = '86400';
   }
   return h;
@@ -659,13 +738,101 @@ const fehler = (request, text, status = 400) => antwort(request, { fehler: text 
    geschrieben hat, wartet nicht darauf, dass die anderen es erfahren. Und
    deshalb auch stumm im Fehlerfall: eine gescheiterte Meldung ist kein
    gescheiterter Schreibvorgang, die Seiten fassen spaetestens per Zeitgeber
-   nach. */
-function anstoss(request, env, ctx, ...marken) {
-  if (!ctx || !env.TAFEL) return;
-  const stub = env.TAFEL.get(env.TAFEL.idFromName('tafel'));
+   nach.
+
+   Vier Geschwister, kein einziges "an alle Gruppen des Schreibers" mehr
+   (das war `anstoss()`, bis Etappe 2 es ablöste - siehe Nachgereicht #1 aus
+   Etappe 1: wer in zwei Gruppen war, weckte mit jedem Schreiben auch die
+   Tafel der jeweils anderen). Jede Schreibroute kennt ihre Gruppe seit dieser
+   Etappe aus `inGruppe()`, direkt oder ueber ihr Ziel - und meldet gezielt. */
+
+/* An EINE bestimmte Gruppe. Der Normalfall: jede Schreibroute kennt ihre
+   Gruppe aus `inGruppe()`, direkt oder (bei Routen ohne eigenes Ziel im
+   Rumpf) ueber die Zeile, die sie gerade angefasst hat. */
+function anstossGruppe(gruppeId, request, env, ctx, ...marken) {
+  if (!ctx || !env.TAFEL || !gruppeId) return;
   const von = request.headers.get('X-Tab') || null;
-  ctx.waitUntil(stub.melden(marken, von)
-    .catch(e => console.error('anstoss:', e && e.stack || e)));
+  ctx.waitUntil(verteile(env, Promise.resolve([gruppeId]), marken, von));
+}
+
+/* Dieselbe Meldung, aber nur an die Gruppen DES SCHREIBERS, in denen ein
+   bestimmter Schalter an ist. Fuer die zwei Schreibrouten ohne eigenes Ziel -
+   der Name (`POST /api/name`) und die Bestandsmeldung (`POST /api/report`)
+   gehoeren der Person, nicht einer Gruppe (Entscheidung 2b), zeigen sich aber
+   nur in Gruppen, die `tafel_an` fuehren (siehe "Was die Schalterleiste nach
+   sich zieht" im Plan: `tafel_an` regelt, ob DIESE Gruppe die Meldungen ihrer
+   Mitglieder zeigt). */
+function anstossSchalter(schalterName, request, env, ctx, ...marken) {
+  if (!ctx || !env.TAFEL) return;
+  if (!SCHALTER.includes(schalterName)) {
+    throw new Error(`anstossSchalter: unbekannter Schalter '${schalterName}'`);
+  }
+  const von = request.headers.get('X-Tab') || null;
+  ctx.waitUntil(verteile(env, gruppenDesSchreibers(request, env, schalterName), marken, von));
+}
+
+/* Dieselbe Meldung, an ALLE Gruppen der Instanz - fuer `stolz_regel`
+   (`POST /api/admin/stolz`): der Schalter und der Kreis gelten der ganzen
+   Instanz (Entscheidung 25, Betrieb bleibt instanzweit), nicht den Gruppen
+   des handelnden Admins. */
+async function alleGruppen(env) {
+  if (!env.DB) return [];
+  const { results } = await env.DB.prepare('SELECT id FROM gruppen').all();
+  return results.map(z => z.id);
+}
+function anstossAlle(request, env, ctx, ...marken) {
+  if (!ctx || !env.TAFEL) return;
+  const von = request.headers.get('X-Tab') || null;
+  ctx.waitUntil(verteile(env, alleGruppen(env), marken, von));
+}
+
+/* WELCHE Leitungen eine Meldung erreicht - die eine Stelle, an der aus einer
+   Marke ein Empfaengerkreis wird.
+
+   Seit Schema 32 haelt das Durable Object nicht mehr EINE Tafel fuer alle,
+   sondern eine je Gruppe (`idFromName('gruppe:' + id)`). Damit muss jede
+   Meldung sagen, wohin sie gehoert - und weil die Seiten nach Gruppen
+   getrennt lauschen, ist eine Meldung an die falsche Adresse keine falsche
+   Meldung, sondern gar keine: sie kommt bei niemandem an.
+
+   Reihum und nicht parallel waere hier verkehrt: wer in drei Gruppen ist,
+   schriebe sonst drei Runden hintereinander. `allSettled`, weil eine Gruppe,
+   deren Objekt gerade nicht mag, die anderen nicht mitnehmen darf. */
+async function verteile(env, gruppenP, marken, von) {
+  try {
+    const gruppen = await gruppenP;
+    if (!gruppen || !gruppen.length) return;
+    await Promise.allSettled(gruppen.map(id =>
+      env.TAFEL.get(env.TAFEL.idFromName('gruppe:' + id)).melden(marken, von)));
+  } catch (e) {
+    console.error('anstoss:', e && e.stack || e);
+  }
+}
+
+/* Die Gruppen dessen, der gerade geschrieben hat - aufgeloest ueber sein
+   Geraete-Token, nicht ueber einen durchgereichten Nutzer. Seit Etappe 2 nur
+   noch fuer die zwei Schreibrouten OHNE eigenes Ziel (`POST /api/name`,
+   `POST /api/report`, ueber `anstossSchalter()`) - jede andere Schreibroute
+   kennt ihre Gruppe aus `inGruppe()` und meldet gezielt ueber
+   `anstossGruppe()`.
+
+   `schalter`, wenn gesetzt, siebt zusaetzlich auf Gruppen, die ihn fuehren.
+   Der Spaltenname wird interpoliert statt gebunden, das darf er nur, weil er
+   in `anstossSchalter()` gegen `SCHALTER` geprueft ist, BEVOR er hier
+   ankommt. */
+async function gruppenDesSchreibers(request, env, schalter = null) {
+  const kopf = request.headers.get('Authorization') || '';
+  const token = kopf.startsWith('Bearer ') ? kopf.slice(7).trim() : '';
+  if (!token || !env.DB) return [];
+  const filter = schalter ? ` AND g.${schalter} = 1` : '';
+  const { results } = await env.DB.prepare(`
+    SELECT m.gruppe_id AS id
+      FROM tokens t
+      JOIN gruppen_mitglied m ON m.user_id = t.user_id
+      JOIN gruppen g ON g.id = m.gruppe_id
+     WHERE t.token_hash = ?${filter}
+  `).bind(await hash(token)).all();
+  return results.map(z => z.id);
 }
 
 async function hash(text) {
@@ -685,7 +852,21 @@ async function json(request) {
    regelmaessig gueltige Adressen ab, und das merkt niemand rechtzeitig. */
 const istMail = s => /^[^\s@]+@[^\s@.]+\.[^\s@]{2,}$/.test(s) && s.length <= 120;
 
-const normMail = s => String(s || '').trim().toLowerCase();
+/* Entscheidung 44: `@googlemail.com` und `@gmail.com` sind DASSELBE Postfach -
+   Google liefert beides in dieselbe Inbox. Fuer den Worker waren es bis
+   Etappe 7 zwei Fremde, und genau daran hat sich am 11.08.2026 ein Melder ein
+   zweites Konto angelegt (PROJECT-MEMORY, Doppelkonto).
+
+   Die Faltung sitzt HIER und nicht an den Aufrufstellen: `normMail` wird an
+   vier Stellen benutzt (Anmelden, Magic, Adresswechsel, Admin-Abgleich), und
+   eine Faltung, die nur an dreien steht, ist schlimmer als gar keine.
+
+   Punkte im lokalen Teil werden NICHT gefaltet, obwohl Google auch die
+   ignoriert: `users.email` steht mit Punkt in der Datenbank, die Suche liefe
+   also am Bestand vorbei - es muessten die gespeicherten Adressen mitwandern.
+   Zu viel Umbau fuer zu wenig Gewinn. */
+const normMail = s => String(s || '').trim().toLowerCase()
+  .replace(/@googlemail\.com$/, '@gmail.com');
 
 /* Die Sperre, geworfen statt zurueckgegeben. Jede geschuetzte Route schreibt
    heute `if (!ich) return 401` - ein zweiter Rueckgabewert muesste in allen
@@ -774,6 +955,81 @@ async function nutzer(request, env) {
 
 const istAdmin = ich => ich && ich.rolle === 'admin' && !ich.gesperrt_am;
 
+/* Wer bin ich, in WELCHER Gruppe, und darf ich das hier?
+   Genau EINE Stelle - eine Route, die die Gruppe selbst aus der URL fischt,
+   vergisst irgendwann die Mitgliedschaftspruefung, und dann liest ein Fremder
+   eine fremde Tafel.
+
+   WIE DIE GRUPPE HEREINKOMMT: bei GET als `?g=<id>`, sonst als Feld `gruppe`
+   im Rumpf. NICHT im Pfad - `ROUTEN` ist eine flache Tabelle, die auf
+   `` `${method} ${pathname}` `` nachschlaegt, und dieselben Schluessel benutzt
+   `SPERRE_FREI`. Ein Praefix `/api/g/:slug/…` haette den Verteiler und alle
+   neunzig Schluessel umgebaut, fuer nichts als eine schoenere Adresse.
+
+   GEPRUEFT WIRD IN DIESER REIHENFOLGE, und die Reihenfolge ist die Auskunft:
+   erst "gibt es die Gruppe", dann "bin ich drin", dann "ist die Funktion an".
+   Ein Fremder soll an einer privaten Gruppe nicht ablesen koennen, welche
+   Funktionen sie fuehrt - deshalb kommt der Schalter zuletzt.
+
+   `schalter` ist der Spaltenname aus `gruppen` ('kasse_an', 'rad_an', …) oder
+   null, wenn die Route an keinem haengt.
+
+   RUECKGABE: `{ gruppe, rolle, mitglied }` oder eine FERTIGE Fehlerantwort.
+   Der Aufrufer schreibt darum immer:
+
+     const g = await inGruppe(request, env, ich, daten);
+     if (g instanceof Response) return g;
+
+   Ein zweiter Rueckgabewert waere hier dasselbe Loch wie bei `nutzer()`: eine
+   Stelle, die ihn nicht prueft, laesst jeden durch. */
+async function inGruppe(request, env, ich, daten, schalter = null) {
+  if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+  /* Gegen Tippfehler: `gruppe['temrine_an']` waere sonst still `undefined`
+     und damit fuer immer 403, ohne dass es je auffiele. */
+  if (schalter && !SCHALTER.includes(schalter)) {
+    throw new Error(`inGruppe: unbekannter Schalter '${schalter}'`);
+  }
+
+  const roh = request.method === 'GET'
+    ? new URL(request.url).searchParams.get('g')
+    : (daten && daten.gruppe);
+  const id = Number(roh);
+  if (!roh || !Number.isInteger(id) || id <= 0) {
+    return fehler(request, 'Welche Gruppe? (`g` bei GET, `gruppe` im Rumpf)');
+  }
+
+  const gruppe = await env.DB.prepare('SELECT * FROM gruppen WHERE id = ?').bind(id).first();
+  /* Dieselbe Antwort wie fuer "gibt es nicht" waere ehrlicher gewesen, aber
+     es GIBT sie ja - und wer eine Id durchprobiert, erfaehrt hier nur, dass
+     eine Zahl belegt ist. Namen, Bestaende und Mitglieder stehen erst hinter
+     der Mitgliedschaftspruefung. */
+  if (!gruppe) return fehler(request, 'Diese Gruppe gibt es nicht', 404);
+
+  const m = await env.DB.prepare(
+    'SELECT rolle FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+    .bind(id, ich.id).first();
+
+  /* Der Generaladmin kommt ueberall hinein, auch ohne Mitgliedschaft - er ist
+     der Wirt, ihm gehoert der Laden. Er zaehlt dabei als Gruppenadmin, aber
+     NICHT als Mitglied: `mitglied` bleibt falsch, damit ihn keine Route in
+     eine Mitgliederliste schreibt, in der er nicht steht. Was er dabei
+     AENDERT, steht wie jede Amtshandlung im `admin_log`, seit Schema 32 mit
+     der Gruppe daneben - gelesen wird ohne Eintrag, wie ueberall sonst. */
+  if (!m && !istAdmin(ich)) {
+    return fehler(request, 'Du bist nicht in dieser Gruppe', 403);
+  }
+
+  if (schalter && !gruppe[schalter]) {
+    return fehler(request, `Das ist in „${gruppe.name}" abgeschaltet`, 403);
+  }
+
+  return { gruppe, rolle: m ? m.rolle : 'admin', mitglied: !!m };
+}
+
+// Fuehrt DIESEN Tisch - nicht zu verwechseln mit `istAdmin`, dem der Laden
+// gehoert. Der Wirt bekommt aus `inGruppe()` ebenfalls 'admin'.
+const istGruppenAdmin = g => g && g.rolle === 'admin';
+
 /* Die Schalter eines Nutzers, aufgeloest: JSON-Spalte ueber die Vorgaben
    gelegt. Fehlende Schluessel gelten als Vorgabe, kaputtes JSON auch - eine
    halb gespeicherte Zeile darf niemanden aus dem Verteiler werfen. */
@@ -797,25 +1053,47 @@ function mailWahl(u) {
    Rad ein Feld, aus dem gar nicht gezogen wurde.
 
    Und darum steht die Sperre AUCH nur hier: wer gesperrt ist, faellt aus dem
-   Topf - aus dem gezeichneten wie aus dem gezogenen, in einem Zug. */
-const losFeldStmt = (env, traeger = null) => env.DB.prepare(`
-  SELECT u.id, u.name, u.quelle, r.biere, ${farbeSql('u', traeger)} AS farbe
-  FROM users u
-  JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j ON j.user_id = u.id
-  JOIN reports r ON r.id = j.id
-  WHERE u.name IS NOT NULL
+   Topf - aus dem gezeichneten wie aus dem gezogenen, in einem Zug.
+
+   `gruppeId` ist PFLICHT seit Etappe 2: der `JOIN gruppen_mitglied` steht in
+   BEIDEN Zweigen, sonst dreht eine Tafel-Gruppe weiter mit fremden Namen.
+   `tafelAn` entscheidet nur noch, WIE gezogen wird (Entscheidung 40): mit
+   Tafel bleibt der alte Bestandsfilter samt Sortierung nach Bestand, ohne
+   Tafel faellt beides weg - der Bestand ist dort unsichtbar, ein Filter
+   darauf waere ein Ausschluss ohne erkennbaren Grund. `LEFT JOIN reports`
+   plus `r.biere >= ?` im Tafel-Zweig verhaelt sich dabei wie der alte
+   `JOIN`: ein NULL faellt an der Bedingung genauso durch. */
+const losFeldStmt = (env, traeger, gruppeId, tafelAn) => env.DB.prepare(`
+  SELECT u.id, u.name, u.quelle, coalesce(r.biere, 0) AS biere, ${farbeSql('u', traeger)} AS farbe
+  FROM gruppen_mitglied m
+  JOIN users u ON u.id = m.user_id
+  LEFT JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j ON j.user_id = u.id
+  LEFT JOIN reports r ON r.id = j.id
+  WHERE m.gruppe_id = ?
+    AND u.name IS NOT NULL
     AND u.gesperrt_am IS NULL
     AND u.entfernt_am IS NULL
-    AND r.biere >= ?
-  ORDER BY r.biere DESC, u.name ASC
-`).bind(LOS_MIN);
+    ${tafelAn ? 'AND r.biere >= ?' : ''}
+  ORDER BY ${tafelAn ? 'r.biere DESC, ' : ''}u.name ASC
+`).bind(...(tafelAn ? [gruppeId, LOS_MIN] : [gruppeId]));
 
 /* ALLE Lose eines Tages, nicht nur das geltende - seit der Zusage kann es je
    Tag mehrere geben. `abgelaufen` rechnet die Frist gleich mit aus, damit
    Lesen und Schreiben dieselbe Grenze benutzen: der Verfall wird nur beim
-   Schreiben in die Datenbank eingetragen, gelten muss er sofort. */
-const losTagStmt = (env, tag) => env.DB.prepare(`
-  SELECT l.id, l.tag, l.user_id, l.biere, l.feld, l.gedreht_am,
+   Schreiben in die Datenbank eingetragen, gelten muss er sofort.
+
+   `gruppeId` seit Schema 33, und `null` heisst ausdruecklich "ueber alle
+   Gruppen": dabei bleiben die Leserouten (Bestenliste, Kachel), bis die
+   Schalterleiste ihnen ihre Gruppe gibt. Wer SCHREIBT, nennt sie schon jetzt -
+   sonst blockierte das Los der einen Gruppe die Ziehung aller anderen, und der
+   neue Index `los_gueltig(gruppe_id, tag)` liefe ins Leere.
+
+   Die Gruppe wird ZWEIMAL gebunden statt als ?3 nummeriert: SQLite vergibt
+   unnummerierten Platzhaltern "eins mehr als der groesste bisherige Index",
+   eine Mischung aus beiden Schreibweisen haette also stillschweigend zwei
+   Werte vertauscht. */
+const losTagStmt = (env, tag, gruppeId = null) => env.DB.prepare(`
+  SELECT l.id, l.tag, l.gruppe_id, l.user_id, l.biere, l.feld, l.gedreht_am,
          l.status, l.grund, l.entschieden_am,
          coalesce(u.name, 'Ehemaliger') AS gewinner,
          coalesce(g.name, 'Ehemaliger') AS von,
@@ -823,17 +1101,18 @@ const losTagStmt = (env, tag) => env.DB.prepare(`
   FROM los l
   JOIN users u ON u.id = l.user_id
   LEFT JOIN users g ON g.id = l.gedreht_von
-  WHERE l.tag = ?
+  WHERE l.tag = ? AND (? IS NULL OR l.gruppe_id = ?)
   ORDER BY l.id
-`).bind(`-${LOS_FRIST} hours`, tag);
+`).bind(`-${LOS_FRIST} hours`, tag, gruppeId, gruppeId);
 
 /* Der Verfall, festgeschrieben. Gehoert vor jede Schreibhandlung am Los und
    IN DENSELBEN batch: die Anweisungen laufen der Reihe nach in einer
    Transaktion, die Abfragen danach sehen das Ergebnis also schon. */
-const verfallStmt = (env, tag) => env.DB.prepare(`
+const verfallStmt = (env, tag, gruppeId = null) => env.DB.prepare(`
   UPDATE los SET status = 'verfallen', entschieden_am = datetime('now')
   WHERE tag = ? AND status = 'offen' AND gedreht_am < datetime('now', ?)
-`).bind(tag, `-${LOS_FRIST} hours`);
+    AND (? IS NULL OR gruppe_id = ?)
+`).bind(tag, `-${LOS_FRIST} hours`, gruppeId, gruppeId);
 
 /* Die Lage des Tages aus diesen Zeilen: was gilt, wer raus ist, wie gross der
    Topf mindestens sein muss. EINE Auswertung fuer Bestenliste, Ziehung und
@@ -856,16 +1135,21 @@ function tagesLage(zeilen) {
   };
 }
 
-const gewicht = biere => Math.min(biere, LOS_DECKEL);
+/* `tafelAn = true` bleibt die Vorgabe, damit ein Aufrufer, der das Argument
+   vergisst, das alte Verhalten bekommt und nicht eine stumme Gleichverteilung.
+   Ohne Tafel zaehlt jeder gleich (Entscheidung 40) - EIN Gewicht-Begriff mit
+   einem Schalter, nicht zwei Ziehwege, die auseinanderlaufen koennten (siehe
+   `losFeldStmt` und `losTopf`, die aus demselben Grund je EINE Abfrage sind). */
+const gewicht = (biere, tafelAn = true) => tafelAn ? Math.min(biere, LOS_DECKEL) : 1;
 
 /* Gewichtet gezogen, aus echtem Zufall statt aus Math.random - es geht um die
    Frage, wer heute den Abend ausrichtet, da ist ein vorhersagbarer Generator
    die falsche Zutat. */
-function ziehe(feld) {
-  const summe = feld.reduce((a, p) => a + gewicht(p.biere), 0);
+function ziehe(feld, tafelAn = true) {
+  const summe = feld.reduce((a, p) => a + gewicht(p.biere, tafelAn), 0);
   const wurf = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * summe;
   let r = wurf;
-  for (const p of feld) { r -= gewicht(p.biere); if (r < 0) return p; }
+  for (const p of feld) { r -= gewicht(p.biere, tafelAn); if (r < 0) return p; }
   return feld[feld.length - 1];
 }
 
@@ -890,9 +1174,14 @@ function ziehe(feld) {
    Die Ids kommen von `geburtstagsKinder`, dieselbe Liste, aus der `ehrenLage`
    ihre Ehrenrunde macht; die Route rechnet sie nicht ein zweites Mal aus. Ohne
    die Liste bleibt die Marke schlicht `false`, wie bei jedem alten Feld. */
-const losSegmente = (feld, kinder = []) => {
+/* `biere: null` statt `p.biere` ohne Tafel - eine 0 behauptete einen leeren
+   Bestand, den es in einer Gruppe ohne Tafel gar nicht gibt (dasselbe
+   Argument wie bei `offen_cent: null` in der Statistik). Der Bogen bleibt
+   trotzdem da, nur ohne Zahl: `gewicht` ist ueberall 1, also gleich lang. */
+const losSegmente = (feld, kinder = [], tafelAn = true) => {
   const feiern = new Set(kinder);
-  return feld.map(p => ({ name: p.name, gewicht: gewicht(p.biere), biere: p.biere,
+  return feld.map(p => ({ name: p.name, gewicht: gewicht(p.biere, tafelAn),
+                          biere: tafelAn ? p.biere : null,
                           gemessen: p.quelle === 'ha', farbe: p.farbe,
                           geburtstag: feiern.has(p.id) }));
 };
@@ -962,10 +1251,26 @@ function pruefeEnde(roh, beginn) {
   return { d };
 }
 
+/* Wann ein Preis zu gelten beginnt (Entscheidung 38). Leer heisst "sofort" -
+   der WORKER schreibt dann seine eigene Uhr, nicht eine leere Zeichenkette:
+   sonst stuende irgendeine Vorgabe neben echten Zeiten in einer Spalte, die
+   nur als Zeichenkette verglichen wird (`preis.gueltig_ab`, siehe
+   migrations/0034). Keine Obergrenze wie bei Terminen - ein weit
+   vorausgeplanter Preis ist keine Fehlbedienung, sondern der Sinn des
+   Feldes. */
+function pruefeGueltigAb(roh) {
+  if (roh == null || roh === '') return { d: new Date() };
+  const d = new Date(String(roh));
+  if (isNaN(d)) return { fehler: 'gueltig_ab: ISO-8601 in UTC, etwa 2026-09-01T00:00:00Z' };
+  return { d };
+}
+
 /* Kommende Termine plus ein Rueckblick: der letzte Abend soll noch dastehen,
    damit man ihn bewerten kann. Abgesagte bleiben in der Liste, sie tragen ihre
    Absage sichtbar - sonst verschwindet ein Abend, unter dem Kommentare stehen. */
-const termineStmt = (env, traeger = null) => env.DB.prepare(`
+/* `gruppeId` seit Etappe 2, `null` bedeutet "ueber alle Gruppen" - siehe
+   `losTagStmt`. Wer schreibt, kennt seine Gruppe schon aus `inGruppe()`. */
+const termineStmt = (env, traeger = null, gruppeId = null) => env.DB.prepare(`
   SELECT t.id, t.gastgeber_id, t.beginnt_am, t.endet_am, t.titel, t.los_id,
          t.abgesagt_am, t.erstellt_von, t.ort,
          coalesce(u.name, 'Ehemaliger') AS gastgeber,
@@ -975,9 +1280,9 @@ const termineStmt = (env, traeger = null) => env.DB.prepare(`
   FROM termine t
   JOIN users u ON u.id = t.gastgeber_id
   LEFT JOIN users e ON e.id = t.erstellt_von
-  WHERE t.beginnt_am > datetime('now', ?)
+  WHERE t.beginnt_am > datetime('now', ?) AND (? IS NULL OR t.gruppe_id = ?)
   ORDER BY t.beginnt_am
-`).bind(`-${TERMINE_RUECKBLICK} days`);
+`).bind(`-${TERMINE_RUECKBLICK} days`, gruppeId, gruppeId);
 
 /* `von` steht dabei, damit die Seite den Absagen-Knopf ohne Rueckfrage setzen
    kann: aendern darf Gastgeber ODER Eintragender, und die Seite soll nicht
@@ -1032,7 +1337,8 @@ const terminAntwort = (t, noten, wieViele) => ({
    nur fuer die Eingetragenen. Der Filter steht HIER und nicht in der Seite -
    was der Worker herausgibt, ist das Einzige, was zaehlt; ein Ausblenden im
    Browser waere ein Vorhang vor offenen Daten. */
-const notrufeStmt = (env, ichId, traeger = null) => env.DB.prepare(`
+// `gruppeId` seit Etappe 2, `null` bedeutet "ueber alle Gruppen" - siehe `losTagStmt`.
+const notrufeStmt = (env, ichId, traeger = null, gruppeId = null) => env.DB.prepare(`
   SELECT n.id, n.user_id, n.art, n.lat, n.lon, n.genau, n.erstellt, n.bis,
          n.live, n.standort_am, u.name, ${farbeSql('u', traeger)} AS farbe,
          (SELECT count(*) FROM notruf_kreis k WHERE k.notruf_id = n.id) AS kreis_gross,
@@ -1040,12 +1346,13 @@ const notrufeStmt = (env, ichId, traeger = null) => env.DB.prepare(`
   FROM notrufe n
   JOIN users u ON u.id = n.user_id
   WHERE n.weg_am IS NULL AND n.bis > datetime('now') AND u.name IS NOT NULL
+    AND (?2 IS NULL OR n.gruppe_id = ?2)
     AND (n.user_id = ?1
          OR NOT EXISTS (SELECT 1 FROM notruf_kreis k WHERE k.notruf_id = n.id)
          OR EXISTS (SELECT 1 FROM notruf_kreis k
                     WHERE k.notruf_id = n.id AND k.user_id = ?1))
   ORDER BY n.erstellt DESC
-`).bind(ichId);
+`).bind(ichId, gruppeId);
 
 /* `ichId` ist der BETRACHTER, nicht der Absender. Daran haengt genau eine
    Entscheidung: die Namensliste des Kreises (`kreis_ids`) bekommt nur, wer den
@@ -1109,13 +1416,20 @@ const mapsLink = (lat, lon) =>
    selbst zu rufen ist keine Auswahl, es ist ein Tippfehler.
 
    NACH NAMEN sortiert und nicht nach Bestand: das hier ist ein Adressbuch,
-   keine Bestenliste, und wer jemanden sucht, sucht ihn alphabetisch. */
-const kreisWaehlbarStmt = (env, ichId, traeger = null) => env.DB.prepare(`
-  SELECT id, name, ${farbeSql('users', traeger)} AS farbe FROM users
-  WHERE id <> ? AND name IS NOT NULL
-    AND gesperrt_am IS NULL AND entfernt_am IS NULL
-  ORDER BY name COLLATE NOCASE
-`).bind(ichId);
+   keine Bestenliste, und wer jemanden sucht, sucht ihn alphabetisch.
+
+   `gruppeId` seit Etappe 2, PFLICHT: ein Notruf gehoert einer Gruppe, sein
+   Empfaengerkreis darf nur aus DEREN Mitgliedern kommen - sonst waehlte
+   jemand einen Namen aus einer fremden Runde an, die von dem Notruf nie
+   erfaehrt. */
+const kreisWaehlbarStmt = (env, ichId, gruppeId, traeger = null) => env.DB.prepare(`
+  SELECT u.id, u.name, ${farbeSql('u', traeger)} AS farbe
+  FROM gruppen_mitglied m
+  JOIN users u ON u.id = m.user_id
+  WHERE m.gruppe_id = ? AND u.id <> ? AND u.name IS NOT NULL
+    AND u.gesperrt_am IS NULL AND u.entfernt_am IS NULL
+  ORDER BY u.name COLLATE NOCASE
+`).bind(gruppeId, ichId);
 
 /* Den gewuenschten Kreis aus dem Rumpf lesen. Gibt `{ fehler }` oder
    `{ ids }`, wobei `ids === null` "an alle" heisst.
@@ -1153,7 +1467,7 @@ const kreisWaehlbarStmt = (env, ichId, traeger = null) => env.DB.prepare(`
    sonst legte ein erfundener Wert Zeilen an, die auf niemanden zeigen, und
    der Absender saehe einen Kreis von vier, von denen drei nie existiert
    haben. */
-async function notrufKreis(daten, env, ichId, darfProbe = false) {
+async function notrufKreis(daten, env, ichId, gruppeId, darfProbe = false) {
   const roh = daten.kreis;
   if (roh === undefined || roh === null) return { ids: null };
   if (!Array.isArray(roh)) return { fehler: 'kreis: eine Liste von Ids oder null' };
@@ -1171,7 +1485,7 @@ async function notrufKreis(daten, env, ichId, darfProbe = false) {
     if (id !== ichId) gewuenscht.add(id);
   }
 
-  const waehlbar = await kreisWaehlbarStmt(env, ichId).all();
+  const waehlbar = await kreisWaehlbarStmt(env, ichId, gruppeId).all();
   const ids = waehlbar.results.filter(u => gewuenscht.has(u.id)).map(u => u.id);
   if (!ids.length) return { fehler: 'kreis: niemand davon ist wählbar' };
   return { ids };
@@ -1317,7 +1631,7 @@ function notrufKoordinaten(daten) {
    Argument mit Vorgabe und keine Pflicht: die Routen, die das Rad nur
    nebenher mitliefern, sollen es nicht holen muessen - ohne die Liste fehlt
    `ehre` schlicht, und die Seite zeichnet dann das gewoehnliche Rad. */
-function losAntwort(tag, lage, topf, termine = [], kinder = []) {
+function losAntwort(tag, lage, topf, termine = [], kinder = [], tafelAn = true) {
   const z = lage.gueltig;
   const ehre = ehrenLage(kinder, topf, termine, tag);
   const gemeinsam = {
@@ -1351,7 +1665,7 @@ function losAntwort(tag, lage, topf, termine = [], kinder = []) {
        kennt diese Antwort ja noch nicht. */
     const genug = topf.length >= lage.mindest && !(ehre && ehre.nur);
     return {
-      ...gemeinsam, gewinner: null, status: null, feld: losSegmente(topf, kinder),
+      ...gemeinsam, gewinner: null, status: null, feld: losSegmente(topf, kinder, tafelAn),
       // `offen` heisst seit jeher "es kann gedreht werden"; `darf_drehen` ist
       // derselbe Wert unter dem Namen, der ihn erklaert.
       offen: genug, darf_drehen: genug,
@@ -1362,11 +1676,20 @@ function losAntwort(tag, lage, topf, termine = [], kinder = []) {
   // Uhrzeit hinter den Namen: "Maike hat zugesagt - 19 Uhr".
   const t = termine.find(x => x.los_id === z.id) || null;
 
+  /* Aus dem EINGEFRORENEN Feld hergeleitet, nicht aus der heutigen
+     Schalterstellung: die Aussage "an diesem Abend zaehlte kein Bestand"
+     gehoert dem Abend, nicht der Gruppe von heute (dieselbe Begruendung wie
+     bei `farbe` und `geburtstag` oben an `losSegmente`). Ein altes Feld ohne
+     `biere`-Schluessel (vor Schema 28) ist `undefined`, nicht `null` - der
+     Test bleibt dort `false`, und `z.biere` reist unveraendert durch. */
+  const feld = JSON.parse(z.feld);
+  const biere = feld.length && feld.every(s => s.biere === null) ? null : z.biere;
+
   return {
     ...gemeinsam,
     gewinner: z.gewinner,
-    biere: z.biere,
-    feld: JSON.parse(z.feld),
+    biere,
+    feld,
     von: z.von,
     gedreht: utc(z.gedreht_am),
     termin_id: t ? t.id : null,
@@ -1381,6 +1704,383 @@ function losAntwort(tag, lage, topf, termine = [], kinder = []) {
       : null,
     offen: false, darf_drehen: false,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Kasse (Schema 34, Etappe 3)
+// ---------------------------------------------------------------------------
+
+/* Der geltende Preis: die juengste Zeile, deren `gueltig_ab` nicht in der
+   Zukunft liegt (Entscheidung 38). `id DESC` als zweiter Schluessel ist
+   Pflicht, nicht Zierrat - siehe migrations/0034. `null`, wenn fuer dieses
+   Getraenk noch nie ein Preis gesetzt wurde; das ist KEIN Fehlerfall im
+   Datenmodell, sondern der Normalzustand eines gerade erst angelegten
+   Getraenks, und die Buchungsroute weist ihn ausdruecklich ab statt mit
+   `cent = 0` durchzubuchen. */
+function geltenderPreis(env, getraenkId, zeitpunktDb) {
+  return env.DB.prepare(`
+    SELECT cent, gueltig_ab FROM preis
+     WHERE getraenk_id = ? AND gueltig_ab <= ?
+     ORDER BY gueltig_ab DESC, id DESC LIMIT 1
+  `).bind(getraenkId, zeitpunktDb).first();
+}
+
+/* Der Bestand ist die Summe seiner Ereigniszeilen - keine gepflegte Zahl,
+   dieselbe Bauweise wie `reports`. EIN Ort fuer diese Formel: `GET /api/kasse`,
+   die Mindestbestandspruefung und der Bestandsverlauf aus Etappe 6 muessen
+   dieselbe Summe lesen, sonst driften sie auseinander, und Drift heisst hier:
+   die Warnmail geht raus, waehrend die Seite noch genug zeigt. */
+function bestandStand(env, gruppeId, getraenkId) {
+  return env.DB.prepare(
+    'SELECT coalesce(sum(menge),0) AS n FROM bestand WHERE gruppe_id = ? AND getraenk_id = ?')
+    .bind(gruppeId, getraenkId).first().then(r => r.n);
+}
+
+/* Nach JEDER Bestandsaenderung aufzurufen - Buchung, Storno, Lieferung,
+   Korrektur, und wenn der Admin `mindest` erst gerade setzt (Entscheidung 34).
+   Unter der Schwelle: eine Mail, aber nur EINE je Unterschreitung - das
+   uebernimmt der partielle UNIQUE-Index `mail_einmal` ueber den Bezug
+   `bestand:<getraenk_id>:<warn_lauf>`, hier steht keine eigene Sperre.
+   Ueber der Schwelle: die laufende Nummer zaehlt hoch, aber nur EINMAL und
+   nur, wenn fuer den GERADE GUELTIGEN Bezug wirklich eine Mail rausging -
+   das bedingte UPDATE macht den Ruecksetzer unabhaengig von der Reihenfolge,
+   in der zwei gleichzeitige Aenderungen hier ankommen. Ohne eine tatsaechlich
+   verschickte Mail (kein AGENTMAIL_KEY, oder die Schwelle wurde nie
+   unterschritten) bleibt `warn_lauf` stehen - das ist richtig, es gibt dann
+   nichts zurueckzusetzen. */
+async function pruefeMindestbestand(env, ctx, gruppeId, getraenkId, stand) {
+  const d = await env.DB.prepare('SELECT name, mindest, warn_lauf FROM getraenk WHERE id = ?')
+    .bind(getraenkId).first();
+  if (!d || d.mindest == null) return;
+
+  if (stand < d.mindest) {
+    const g = await env.DB.prepare('SELECT name FROM gruppen WHERE id = ?').bind(gruppeId).first();
+    benachrichtige(env, ctx, 'bestand_knapp', gruppenAdminKreis(env, gruppeId), {
+      bezug: `bestand:${getraenkId}:${d.warn_lauf}`,
+      betreff: `${d.name} wird knapp — ${g.name}`,
+      text: `${d.name} steht bei ${stand}, die Schwelle liegt bei ${d.mindest}.\n\n`
+          + `Zeit für Nachschub: ${env.SEITE}`,
+      html: `<p>${nurText(d.name)} steht bei <strong>${stand}</strong>, die Schwelle liegt `
+          + `bei ${d.mindest}.</p>` + mailKnopf(env.SEITE, 'Zur Kasse'),
+    });
+    return;
+  }
+
+  /* Tabellenalias im UPDATE ist Pflicht: `mail_ausgang` traegt selbst ein
+     `id` - ohne `g.` waere die Unterabfrage gegen sich selbst mehrdeutig und
+     zaehlte bei jedem Mailversand irgendeines Getraenks hoch. */
+  await env.DB.prepare(`
+    UPDATE getraenk AS g SET warn_lauf = warn_lauf + 1
+     WHERE g.id = ? AND g.mindest IS NOT NULL AND EXISTS (
+       SELECT 1 FROM mail_ausgang m WHERE m.art = 'bestand_knapp'
+        AND m.bezug = 'bestand:' || g.id || ':' || g.warn_lauf)
+  `).bind(getraenkId).run();
+}
+
+/* Der Wirt greift durch, ohne Mitglied zu sein - das gehoert ins Protokoll,
+   wie bei `PATCH /api/gruppe` und dem Nachruecken (§4.4). Ein Gruppenadmin,
+   der seine eigene Kasse pflegt, tut nichts Protokollwuerdiges: es ist
+   seine. */
+function kasseAdminLog(env, ich, g, aktion, detail) {
+  if (g.mitglied) return;
+  return env.DB.prepare(`
+    INSERT INTO admin_log (admin_id, aktion, ziel_id, detail, gruppe_id)
+    VALUES (?, ?, NULL, ?, ?)
+  `).bind(ich.id, aktion, detail, g.gruppe.id).run();
+}
+
+// ---------------------------------------------------------------------------
+// Abrechnung (Schema 35, Etappe 4)
+// ---------------------------------------------------------------------------
+
+// 'YYYY-MM' - derselbe Schluessel wie `strftime('%Y-%m', gebucht_am)` in
+// `buchung`, EIN Ausdruck fuer Vorschau und Abschluss (siehe `SALDO_SUMMEN_SQL`
+// unten). Muss zu ihm passen wie ein Schluessel zum Schloss - kein eigenes
+// Datumsformat erfinden.
+const monatSchluessel = (jahr, monat) => `${jahr}-${String(monat).padStart(2, '0')}`;
+
+// Jahr und Monat als Ganzzahlen aus einer `gebucht_am`-Zeitangabe
+// ('YYYY-MM-DD HH:MM:SS') - fuer die Storno-/Gegenbuchungs-Guards, die
+// `abrechnungFuer()` mit den Feldern einer BUCHUNG statt eines gewaehlten
+// Monats aufrufen.
+const jahrMonatAus = zeit => [Number(zeit.slice(0, 4)), Number(zeit.slice(5, 7))];
+
+// Die `abrechnung`-Zeile eines Monats, oder `null`, wenn er noch offen ist -
+// "offen" ist die ABWESENHEIT der Zeile (siehe migrations/0035). `jahr`/
+// `monat` als getrennte Ganzzahlen, nicht als zusammengesetzter Schluessel -
+// `WHERE gruppe_id=? AND jahr=? AND monat=?` kann den UNIQUE-Index
+// `abrechnung_monat` nutzen, ein `printf()` auf jeder Zeile könnte es nicht.
+// Ruft diese Funktion mit einer `gebucht_am`-Zeitangabe auf, zerlegt der
+// Aufrufer sie selbst in `Number(zeit.slice(0,4))`/`Number(zeit.slice(5,7))`.
+function abrechnungFuer(env, gruppeId, jahr, monat) {
+  return env.DB.prepare(
+    'SELECT id, status FROM abrechnung WHERE gruppe_id = ? AND jahr = ? AND monat = ?')
+    .bind(gruppeId, jahr, monat).first();
+}
+
+/* Die Monatssummen je Mensch - EIN Ausdruck fuer Vorschau (`GET
+   /api/abrechnung`) und Abschluss (`POST /api/abrechnung/abschluss`), sonst
+   laufen sie auseinander wie beinahe `naechster_preis` in Etappe 3. Derselbe
+   `strftime`-Ausdruck wie `mein_monat` in `GET /api/kasse`. KEIN JOIN auf
+   `gruppen_mitglied` - der Wirt kann in einer Gruppe buchen, in der er kein
+   Mitglied ist (`inGruppe()` laesst ihn als Admin durch), und diese Buchung
+   braucht trotzdem ihren Saldo. `gebucht_am` wird nie gebunden - immer
+   Server-Jetzt, es gibt kein rueckdatiertes Buchen. `ehemalig` greift auf
+   `b.gruppe_id` zurueck, das die Query ohnehin schon bindet - kein zweiter
+   Parameter noetig. `ORDER BY u.name` gleich hier, nicht erst beim Aufrufer -
+   dieselbe Reihenfolge wie die eingefrorene Fassung nach dem Abschluss.
+
+   ZWEI QUELLEN SEIT ETAPPE 8 (Entscheidung 50): Getraenkebuchungen UND
+   Geldstrafen desselben Monats, in EINEN Saldo. Einer schuldet einen Betrag,
+   nicht zwei - und deshalb wird hier summiert und nicht an drei Aufrufstellen
+   nachtraeglich addiert. Genau diese Konstante ist in Etappe 4 entstanden,
+   weil zwei auseinandergelaufene Kopien derselben Abfrage der erste Blocker
+   jener Abnahme waren; Etappe 8 erweitert sie und legt keine zweite an.
+
+   Die Halbierung in `cent` und `strafe_cent`: der Saldo braucht die Summe,
+   die Anzeige braucht die Aufteilung ("davon 4,50 € Strafen"). `biere` bleibt
+   dabei sauber - eine Strafe traegt 0 Getraenke, drei Strafen sehen nicht aus
+   wie drei Bier.
+
+   ACHT PLATZHALTER STATT VIER... nein, VIER statt zwei, und sie sind
+   POSITIONSABHAENGIG: Gruppe und Monatsschluessel zweimal, erst fuer die
+   Buchungen, dann fuer die Strafen. Nummerierte Platzhalter (`?1`) waeren
+   lesbarer, gingen hier aber schief - `SALDO_INSERT_SQL` setzt EIN eigenes `?`
+   davor, und SQLite vergibt einem unnummerierten `?` den naechsten freien
+   Index; das eigene `?` bekaeme die 1 und kollidierte mit `?1` im Rumpf.
+
+   `s.status IN ('offen','abgerechnet')`: 'offen' ist die noch nicht
+   abgerechnete Strafe, 'abgerechnet' die schon eingeflossene. BEIDE zaehlen,
+   damit die Summe eines Monats dieselbe bleibt, egal ob er gerade
+   abgeschlossen wird oder es laengst ist - sonst schrumpfte das CSV eines
+   abgerechneten Monats gegenueber der Vorschau, die es erzeugt hat. 'erlassen'
+   faellt heraus, ebenso die drei Zustaende aus Etappe 9 (vorgeschlagen,
+   verworfen, bestritten): ein Vorschlag ist keine Strafe, und eine bestrittene
+   ist ausgesetzt, bis sie entschieden ist. */
+const SALDO_SUMMEN_SQL = `
+  SELECT q.user_id, u.name,
+         sum(q.biere) AS biere, sum(q.cent) AS cent, sum(q.strafe_cent) AS strafe_cent,
+         NOT EXISTS(SELECT 1 FROM gruppen_mitglied gm
+                     WHERE gm.gruppe_id = q.gruppe_id AND gm.user_id = q.user_id) AS ehemalig
+    FROM (
+      SELECT b.user_id, b.gruppe_id,
+             b.menge AS biere, b.menge * b.cent AS cent, 0 AS strafe_cent
+        FROM buchung b
+       WHERE b.gruppe_id = ? AND b.storniert_am IS NULL
+         AND strftime('%Y-%m', b.gebucht_am) = ?
+      UNION ALL
+      SELECT s.user_id, s.gruppe_id,
+             0 AS biere, s.cent AS cent, s.cent AS strafe_cent
+        FROM strafe s
+       WHERE s.gruppe_id = ? AND s.art = 'geld'
+         AND s.status IN ('offen','abgerechnet')
+         AND strftime('%Y-%m', s.verhaengt_am) = ?
+    ) q JOIN users u ON u.id = q.user_id
+   GROUP BY q.user_id
+   ORDER BY u.name
+`;
+
+/* Die Bindeliste zu `SALDO_SUMMEN_SQL` - vier Werte in genau dieser
+   Reihenfolge, an DREI Aufrufstellen dieselbe. Eine Funktion statt vierer
+   getippter Argumente, damit eine fuenfte Aufrufstelle sie nicht halb
+   hinschreibt. */
+const saldoSummenWerte = (gruppeId, key) => [gruppeId, key, gruppeId, key];
+
+// Der Monatsabschluss selbst - EIN Statement statt einer Schleife ueber
+// potenziell viele Mitglieder, kein Fenster zwischen Aggregieren und
+// Schreiben. `s.cent > 0`: Guthaben (0 oder negativ, eine Gegenbuchung hat
+// mehr ausgeglichen als gebucht wurde) gilt sofort als 'bezahlt', mit
+// `gezahlt_cent = 0` - die Spalte traegt nur von einem Admin bestaetigtes
+// Geld, kein Guthaben.
+const SALDO_INSERT_SQL = `
+  INSERT INTO saldo (abrechnung_id, user_id, betrag_cent, status)
+  SELECT ?, s.user_id, s.cent, CASE WHEN s.cent > 0 THEN 'offen' ELSE 'bezahlt' END
+    FROM (${SALDO_SUMMEN_SQL}) s
+`;
+
+/* Die Strafen EINES Monats, Zeile fuer Zeile - fuer die Anzeige und das CSV,
+   nicht fuer die Summe (die steckt schon in `SALDO_SUMMEN_SQL`). Anders als
+   dort stehen hier ALLE Arten und alle noch geltenden Zustaende drin: eine
+   Tatstrafe kostet kein Geld, gehoert aber sichtbar zum Monat, und wer sie
+   erledigt hat, will das sehen.
+
+   'erlassen' faellt heraus - eine erlassene Strafe ist keine mehr. Sie steht
+   weiter in `strafe_log`, wo die Frage "was ist damit passiert" hingehoert.
+   Seit Etappe 9 faellt 'verworfen' aus demselben Grund mit heraus: ein
+   abgelehnter Vorschlag war nie eine Strafe. */
+const STRAFEN_MONAT_SQL = `
+  SELECT s.id, s.user_id, u.name, s.titel, s.art, s.cent, s.tat, s.grund, s.status,
+         s.verhaengt_am, s.gemeldet_am, s.erledigt_am, s.bezug_strafe_id,
+         v.name AS von_name
+    FROM strafe s
+    JOIN users u ON u.id = s.user_id
+    LEFT JOIN users v ON v.id = s.verhaengt_von
+   WHERE s.gruppe_id = ? AND s.status NOT IN ('erlassen','verworfen')
+     AND strftime('%Y-%m', s.verhaengt_am) = ?
+   ORDER BY s.verhaengt_am DESC, s.id DESC
+`;
+
+/* Die eingefrorenen Salden EINES Abschlusses, samt `s.id` - ohne die geht
+   weder Melden noch Bestaetigen (Etappe-4-Abnahmefund: beide fehlten, weil
+   diese Abfrage einmal fuer `GET /api/abrechnung` und einmal fuer das CSV
+   geschrieben wurde, und `id` blieb an BEIDEN Stellen weg). EIN Ausdruck fuer
+   beide Aufrufer, wie `SALDO_SUMMEN_SQL` fuer die Vorschau. */
+const SALDO_ZEILEN_SQL = `
+  SELECT s.id, s.user_id, u.name, s.betrag_cent, s.gezahlt_cent, s.status, s.gemeldet_am, s.bestaetigt_am,
+         EXISTS(SELECT 1 FROM gruppen_mitglied m
+                 WHERE m.gruppe_id = ? AND m.user_id = s.user_id) AS drin
+    FROM saldo s JOIN users u ON u.id = s.user_id
+   WHERE s.abrechnung_id = ?
+   ORDER BY u.name
+`;
+
+// Cent als deutsche Kommazahl, fuer das CSV - dieselbe Schreibweise wie die
+// Beispielbetraege in der Statuskette (Plan §6: "5,00 € auf 12,50 €").
+const centStr = cent => (cent / 100).toFixed(2).replace('.', ',');
+
+// Ein CSV-Feld nach RFC 4180: gequotet, wenn es das Trennzeichen, ein
+// Anfuehrungszeichen oder einen Zeilenumbruch traegt; ein Anfuehrungszeichen
+// im Feld wird verdoppelt. `;` als Trennzeichen (nicht `,`) - die Betraege
+// tragen ein Dezimalkomma ("12,50"), das erzwingt das Semikolon.
+function csvFeld(wert) {
+  const s = String(wert ?? '');
+  return /[;"\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function csvZeile(felder) {
+  return felder.map(csvFeld).join(';') + '\r\n';
+}
+
+// ---------------------------------------------------------------------------
+// Hausordnung und Strafen (Schema 38, Etappe 8)
+// ---------------------------------------------------------------------------
+
+/* Jeder Statuswechsel einer Strafe, ohne Ausnahme - wortgleich zu
+   `saldo_log` (Entscheidung 22, jetzt 49/55). EINE Funktion statt vierer
+   getippter INSERTs: die Etappe-4-Lehre gilt hier genauso, nur dass es diesmal
+   nicht um eine Abfrage geht, sondern um eine Pflicht, die man an genau der
+   fuenften Stelle vergisst.
+
+   `admin_log` bekommt hiervon NICHTS ab - das traegt Instanz- und
+   Durchgriffshandlungen (Entscheidung 4), nicht den Alltag eines
+   Gruppenadmins in seiner eigenen Gruppe. Der Durchgriff des WIRTS steht
+   trotzdem dort, ueber `kasseAdminLog()`, wie ueberall sonst. */
+function strafeLog(env, strafeId, alt, neu, vonId, notiz = null) {
+  return env.DB.prepare(
+    'INSERT INTO strafe_log (strafe_id, alt, neu, von, notiz) VALUES (?, ?, ?, ?, ?)')
+    .bind(strafeId, alt, neu, vonId, notiz || null).run();
+}
+
+// Wie eine Strafe auf der Leitung aussieht - EINE Form fuer alle Routen, damit
+// `index.html` und `gruppe.html` nicht zwei verschiedene Zeilenformen bauen.
+const strafeRaus = s => ({
+  id: s.id, user_id: s.user_id, name: s.name, titel: s.titel, art: s.art,
+  cent: s.cent, tat: s.tat, grund: s.grund, status: s.status,
+  verhaengt_am: utc(s.verhaengt_am), von: s.von_name ?? null,
+  gutschrift_zu: s.bezug_strafe_id ?? null,
+});
+
+/* Post an den Betroffenen (Entscheidung 56). Der Kreis ist genau EINE Person -
+   ausgeschrieben, weil jede Mail seit Etappe 1 ihren Kreis nennen muss
+   (Nachgereicht #8) und `null` hier "an alle" hiesse.
+
+   `bezug` sperrt die Wiederholung ueber denselben partiellen Unique-Index
+   (`mail_einmal`), den schon die Mindestbestandsmail benutzt: ein zweiter Ruf
+   derselben Route - Doppelklick, Wiederholung nach Abbruch - schickt nicht
+   zweimal. Je Strafe und Anlass genau eine. */
+function strafeMail(env, ctx, { strafe, gruppeName, anlass }) {
+  const was = strafe.art === 'geld'
+    ? centStr(Math.abs(strafe.cent ?? 0)) + ' €'
+    : (strafe.tat || 'eine Auflage');
+  const kopf = anlass === 'erlassen'
+    ? `Erlassen: ${strafe.titel} — ${gruppeName}`
+    : `Strafe: ${strafe.titel} — ${gruppeName}`;
+  const satz = anlass === 'erlassen'
+    ? `Die Sache ist vom Tisch: „${strafe.titel}" (${was}) wurde erlassen.`
+    : `„${strafe.titel}" — ${was}.`
+      + (strafe.grund ? `\n\nGrund: ${strafe.grund}` : '')
+      + (strafe.art === 'geld'
+          ? '\n\nDer Betrag laeuft mit der naechsten Monatsabrechnung mit.'
+          : '\n\nWenn es erledigt ist, sag Bescheid.');
+
+  benachrichtige(env, ctx, 'strafe', [strafe.user_id], {
+    bezug: `strafe:${strafe.id}:${anlass}`,
+    betreff: kopf,
+    text: `${satz}\n\n${env.SEITE}`,
+    html: `<p>${nurText(satz).replace(/\n/g, '<br>')}</p>`
+        + mailKnopf(env.SEITE, 'Zur Hausordnung'),
+  });
+}
+
+/* Post an die Gruppenadmins (Etappe 9): ein Vorschlag oder ein Einspruch
+   wartet. Eigene Mailart, nicht `strafe` - die geht an den Betroffenen, diese
+   an die, die entscheiden muessen. Zwei verschiedene Kreise sind zwei
+   verschiedene Arten, sonst kann man nur beide zusammen abbestellen. */
+function einspruchMail(env, ctx, { strafe, gruppeId, gruppeName, anlass, von }) {
+  const was = anlass === 'vorschlag'
+    ? `${von} schlägt eine Strafe vor: „${strafe.titel}"`
+    : `${von} widerspricht der Strafe „${strafe.titel}"`;
+  benachrichtige(env, ctx, 'einspruch', gruppenAdminKreis(env, gruppeId), {
+    bezug: `strafe:${strafe.id}:${anlass}`,
+    betreff: `${anlass === 'vorschlag' ? 'Vorschlag' : 'Einspruch'} — ${gruppeName}`,
+    text: `${was}\n\nEntscheiden lässt sich das in der Gruppenverwaltung:\n${env.SEITE}`,
+    html: `<p>${nurText(was)}</p>` + mailKnopf(env.SEITE, 'Zur Gruppe'),
+  });
+}
+
+/* Die Grenzen eines Strafbetrags, an EINER Stelle - Verhaengen und Gutschrift
+   pruefen dasselbe. `erlaubtNegativ` nur fuer die Gutschrift (Entscheidung
+   52): eine verhaengte Strafe kostet, eine Gutschrift erstattet. */
+function strafeCentPruefen(roh, erlaubtNegativ = false) {
+  const cent = Number(roh);
+  if (!Number.isInteger(cent)) return { fehler: 'cent: eine ganze Zahl' };
+  if (!erlaubtNegativ && cent <= 0) return { fehler: 'cent: eine ganze Zahl größer 0' };
+  if (Math.abs(cent) > STRAFE_CENT_MAX) {
+    return { fehler: `cent: höchstens ${STRAFE_CENT_MAX} (${centStr(STRAFE_CENT_MAX)} €)` };
+  }
+  return { cent };
+}
+
+// ---------------------------------------------------------------------------
+// Zahlwege (Schema 36, Etappe 5)
+// ---------------------------------------------------------------------------
+
+/* Der Besitz-Zugang zu EINEM Saldo - das Gegenstueck zu `inGruppe()`, aber
+   OHNE Mitgliedschafts- oder Schalterpruefung (Opus-Konsultation vor der
+   Festlegung, 2026-08-11, dieselbe Begruendung wie bei `GET /api/salden` und
+   `POST /api/saldo/bestaetigung`: ein Ausgetretener hat keine
+   `gruppen_mitglied`-Zeile mehr und muss seine Schuld trotzdem begleichen
+   koennen, und ein abgeschaltetes `kasse_an` heisst "wir buchen gerade
+   nichts", nicht "eine bestehende Schuld ist unbezahlbar"). Der Besitzcheck
+   IST `id = ? AND user_id = ?`, dieselbe Antwort fuer "gibt es nicht" und
+   "nicht deiner".
+
+   `GET /api/zahlwege?saldo=` UND `GET /api/zahlung/qr.svg` rufen diese EINE
+   Funktion - der Guard auf "schon ausgeglichen" (Restschuld < 1 Cent) sitzt
+   hier zentral, nicht an beiden Routen getrennt, sonst verliert ihn eine der
+   beiden irgendwann (dieselbe Lehre wie bei `SALDO_ZEILEN_SQL`). Die
+   EPC-Obergrenze (999.999.999,99 EUR) gehoert NICHT hierher, sondern allein
+   in `GET /api/zahlung/qr.svg` - sie ist eine Eigenschaft des Girocodes,
+   kein allgemeiner Zahlwege-Guard, und wuerde hier einen absurd hohen (in
+   der Praxis nie erreichten) Saldo auch fuer PayPal/Wero/Bar sperren, die
+   diese Grenze gar nicht kennen. */
+async function saldoBesitz(request, env, ich, saldoId) {
+  if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+  if (!Number.isInteger(saldoId) || saldoId <= 0) return fehler(request, 'Welcher Saldo?');
+
+  const saldo = await env.DB.prepare(
+    'SELECT id, abrechnung_id, betrag_cent, gezahlt_cent FROM saldo WHERE id = ? AND user_id = ?')
+    .bind(saldoId, ich.id).first();
+  if (!saldo) return fehler(request, 'Diesen Saldo gibt es nicht', 404);
+
+  const abrechnung = await env.DB.prepare(
+    'SELECT gruppe_id, jahr, monat FROM abrechnung WHERE id = ?').bind(saldo.abrechnung_id).first();
+  const gruppe = await env.DB.prepare('SELECT id, name FROM gruppen WHERE id = ?')
+    .bind(abrechnung.gruppe_id).first();
+
+  const offenCent = saldo.betrag_cent - saldo.gezahlt_cent;
+  if (offenCent < 1) return fehler(request, 'Dieser Saldo ist bereits ausgeglichen', 409);
+
+  return { saldo, abrechnung, gruppe, offenCent };
 }
 
 // ---------------------------------------------------------------------------
@@ -1458,11 +2158,15 @@ const schnittAntwort = e =>
 
 /* Nur, was auf der Seite auch gezeigt wird: alle Nutzer und die Termine im
    Rueckblickfenster. Sonst waechst die Abfrage mit jedem je bewerteten Abend. */
-const bewertungenStmt = env => env.DB.prepare(`
+/* `gruppeId` ist hier PFLICHT, nicht optional: seit Entscheidung 17 ist ein
+   Schnitt einer je GRUPPE, ein ungefiltertes `bewertungen` mischte den vom
+   Tresen mit dem vom Buero. */
+const bewertungenStmt = (env, gruppeId) => env.DB.prepare(`
   SELECT ziel_art, ziel_id, sterne FROM bewertungen
-  WHERE ziel_art = 'user'
-     OR ziel_id IN (SELECT id FROM termine WHERE beginnt_am > datetime('now', ?))
-`).bind(`-${TERMINE_RUECKBLICK} days`);
+  WHERE gruppe_id = ?
+    AND (ziel_art = 'user'
+         OR ziel_id IN (SELECT id FROM termine WHERE beginnt_am > datetime('now', ?)))
+`).bind(gruppeId, `-${TERMINE_RUECKBLICK} days`);
 
 // ---------------------------------------------------------------------------
 // Kommentare
@@ -1864,12 +2568,18 @@ function vorschauHolen(request, env, ctx, kommentarId, text, ziel) {
          kam. Wer zweimal schnell hintereinander aendert, hat sonst zwei Abrufe
          unterwegs, und der langsamere haengt seine Karte unter den neuen Satz.
          `geloescht_am` faengt denselben Fall fuer die Loeschung. */
+      /* `RETURNING gruppe_id` statt `meta.changes`: die Meldung unten braucht
+         seit Schema 32 die Gruppe, und die steht am Kommentar selbst. Sie hier
+         mitzunehmen kostet nichts - eine zweite Abfrage danach waere eine
+         Runde zur Datenbank fuer eine Zahl, die gerade in der Hand lag. Kommt
+         keine Zeile zurueck, hat die WHERE-Klausel oben nicht getroffen. */
       const auf = await env.DB.prepare(`
         UPDATE kommentare SET vorschau_id = ?
         WHERE id = ? AND text = ? AND vorschau_id IS NULL AND geloescht_am IS NULL
-      `).bind(id, kommentarId, text).run();
-      if (!auf.meta.changes) return;
-      if (!env.TAFEL) return;
+        RETURNING gruppe_id
+      `).bind(id, kommentarId, text).first();
+      if (!auf) return;
+      if (!env.TAFEL || !auf.gruppe_id) return;
       /* `von` bleibt NULL - und das ist der eine Ruf im ganzen Worker, bei dem
          das so sein muss. Sonst reicht `anstoss()` die Tab-Kennung des
          Schreibers durch, und die Seite verwirft die eigene Meldung
@@ -1877,7 +2587,7 @@ function vorschauHolen(request, env, ctx, kommentarId, text, ziel) {
          Schreiber die Antwort seines POSTs schon hat. Hier hat er sie eben
          NICHT: die Karte entsteht lange nach der Antwort, und der Poster waere
          als einziger der, der sie nicht zu sehen bekommt. */
-      const stub = env.TAFEL.get(env.TAFEL.idFromName('tafel'));
+      const stub = env.TAFEL.get(env.TAFEL.idFromName('gruppe:' + auf.gruppe_id));
       await stub.melden([`${ziel.art}:${ziel.id}`], null);
     } catch (e) {
       console.log('vorschau:', e && e.message || e);
@@ -1912,15 +2622,22 @@ async function memeVorlagenRoh(env, ctx) {
   return memes;
 }
 
-/* Dass das Ziel existiert, prueft der Worker - einen Fremdschluessel kann es
-   auf ein polymorphes Paar nicht geben. Gibt den Fehlertext zurueck oder null. */
-async function zielFehlt(env, ziel) {
+/* Dass das Ziel existiert UND zur Gruppe gehoert, prueft der Worker - einen
+   Fremdschluessel kann es auf ein polymorphes Paar nicht geben. `gruppeId`
+   steht in der WHERE-Klausel, nicht in einer Pruefung danach (Nachgereicht #1
+   aus Etappe 1): ein Ziel einer fremden Gruppe soll sich hier genauso wenig
+   finden wie eines, das es nicht gibt - dieselbe Fehlermeldung, keine
+   zusaetzliche Auskunft. Gibt den Fehlertext zurueck oder null. */
+async function zielFehlt(env, ziel, gruppeId) {
   if (ziel.art === 'user') {
-    const u = await env.DB.prepare('SELECT 1 FROM users WHERE id = ? AND name IS NOT NULL')
-      .bind(ziel.id).first();
+    const u = await env.DB.prepare(`
+      SELECT 1 FROM users u JOIN gruppen_mitglied m ON m.user_id = u.id
+       WHERE u.id = ? AND u.name IS NOT NULL AND m.gruppe_id = ?
+    `).bind(ziel.id, gruppeId).first();
     return u ? null : 'Den gibt es nicht';
   }
-  const t = await env.DB.prepare('SELECT 1 FROM termine WHERE id = ?').bind(ziel.id).first();
+  const t = await env.DB.prepare('SELECT 1 FROM termine WHERE id = ? AND gruppe_id = ?')
+    .bind(ziel.id, gruppeId).first();
   return t ? null : 'Den Termin gibt es nicht';
 }
 
@@ -1932,7 +2649,16 @@ async function zielFehlt(env, ziel) {
    Seite zeigt auf Tippen, wer wie reagiert hat, und dafuer ist die Zahl allein
    zu wenig. Gezaehlt wird jetzt beim Zusammenstecken, und die eigene Reaktion
    faellt dabei ab: die dritte Abfrage (nur die eigenen) ist damit weg. */
-const baumStmts = (env, ziel, traeger = null) => [
+/* `gruppeId` PFLICHT seit Etappe 2 (Gegenlesen-Fund): bei `ziel_art='user'`
+   ist `ziel_id` die rohe, gruppenunabhaengige user_id - ohne diesen Filter
+   zeigte das Blatt eines Menschen denselben Kommentarfaden in JEDER Gruppe,
+   der man mit ihm gemeinsam angehoert, auch die, die "am Tresen" ueber ihn
+   gesagt wurden (Entscheidung 17: "was am Tresen gesagt wird, bleibt am
+   Tresen"). Bei `ziel_art='termin'` ist es eine zweite Absicherung: ein
+   Termin gehoert ohnehin nur einer Gruppe (Nachgereicht #1), aber zwei
+   Filter, die dasselbe zweimal sagen, sind hier billiger als einer, der es
+   nur einmal tut und beim naechsten Umbau vergessen wird. */
+const baumStmts = (env, ziel, gruppeId, traeger = null) => [
   /* `k.sterne` ist der Schnappschuss aus dem Moment des Absendens, kein Join
      auf `bewertungen` - die Zeile dort wird ueberschrieben, die Karte hier
      soll stehen bleiben (siehe 0009_sterne_am_kommentar.sql). */
@@ -1973,7 +2699,7 @@ const baumStmts = (env, ziel, traeger = null) => [
   env.DB.prepare(`
     WITH neueste AS (
       SELECT id, antwort_auf FROM kommentare
-      WHERE ziel_art = ? AND ziel_id = ?
+      WHERE gruppe_id = ? AND ziel_art = ? AND ziel_id = ?
       ORDER BY id DESC LIMIT ?
     ),
     noetig AS (
@@ -2003,17 +2729,17 @@ const baumStmts = (env, ziel, traeger = null) => [
     LEFT JOIN kommentare ak ON ak.id = k.an_id
     LEFT JOIN users au ON au.id = ak.autor_id
     LEFT JOIN vorschauen v ON v.id = k.vorschau_id
-    WHERE k.ziel_art = ? AND k.ziel_id = ?
+    WHERE k.gruppe_id = ? AND k.ziel_art = ? AND k.ziel_id = ?
     ORDER BY k.id DESC
-  `).bind(ziel.art, ziel.id, KOMMENTARE_ZIEL, ziel.art, ziel.id),
+  `).bind(gruppeId, ziel.art, ziel.id, KOMMENTARE_ZIEL, gruppeId, ziel.art, ziel.id),
   env.DB.prepare(`
     SELECT r.kommentar_id, r.art, r.autor_id, coalesce(u.name, 'Ehemaliger') AS autor
     FROM reaktionen r
     JOIN kommentare k ON k.id = r.kommentar_id
     JOIN users u ON u.id = r.autor_id
-    WHERE k.ziel_art = ? AND k.ziel_id = ?
+    WHERE k.gruppe_id = ? AND k.ziel_art = ? AND k.ziel_id = ?
     ORDER BY r.erstellt
-  `).bind(ziel.art, ziel.id),
+  `).bind(gruppeId, ziel.art, ziel.id),
 ];
 
 function baumBauen(zeilen, reaktionen, ichId, env) {
@@ -2158,14 +2884,18 @@ async function kommentarGrenze(env, ichId) {
 }
 
 /* Wie viele Kommentare an welchem Ziel haengen - fuer die Zaehler in der
-   Liste, damit ein "4,2 · 3" ohne den Detailabruf gezeichnet werden kann. */
-const kommentarZaehlerStmt = env => env.DB.prepare(`
+   Liste, damit ein "4,2 · 3" ohne den Detailabruf gezeichnet werden kann.
+   `gruppeId` PFLICHT (Gegenlesen-Fund): die Funktion nahm ihn nie als
+   Parameter an, der Aufrufer gab ihn trotzdem mit - JavaScript verwarf das
+   zweite Argument still, und die Zahl zaehlte ueber alle Gruppen eines
+   mehrfach Mitgliedes hinweg zusammen (Bruch von Entscheidung 17). */
+const kommentarZaehlerStmt = (env, gruppeId) => env.DB.prepare(`
   SELECT ziel_art, ziel_id, count(*) AS anzahl FROM kommentare
-  WHERE geloescht_am IS NULL
+  WHERE gruppe_id = ? AND geloescht_am IS NULL
     AND (ziel_art = 'user'
          OR ziel_id IN (SELECT id FROM termine WHERE beginnt_am > datetime('now', ?)))
   GROUP BY ziel_art, ziel_id
-`).bind(`-${TERMINE_RUECKBLICK} days`);
+`).bind(gruppeId, `-${TERMINE_RUECKBLICK} days`);
 
 // ---------------------------------------------------------------------------
 // Die Statistik der Runde
@@ -2194,29 +2924,94 @@ const statistikFenster = (request) => {
      eine Steigung, die es nie gab, weil dort nur der Blick fehlt. Genau
      BESTAND_VERFALL_TAGE weit zurueck und keinen Tag weiter: was aelter ist,
      gilt auch innerhalb des Fensters nicht mehr. */
+  /* `von`/`bis` sind KEIN zweiter Filter - gefiltert wird weiter mit
+     `fenster`. Sie sagen der Seite nur, wo die Achse anfangen und aufhoeren
+     soll. Ohne sie zeichnete "Meldungen je Tag, 90 Tage" eine Achse ueber
+     genau die Tage, an denen jemand gemeldet hat - bei einer Runde, deren
+     Geschichte 30 Tage zurueckreicht, sehen 60 und 90 Tage dann gleich aus,
+     und der Regler wirkt tot, obwohl er greift.
+
+     GERECHNET WIRD HIER UND NICHT AUF DER SEITE, damit es EINE Uhr bleibt:
+     `datetime('now', ?)` laeuft in SQLite in UTC, `Date` im Worker ebenso.
+     Die Seite rechnet in Ortszeit, und ein selbst gerechneter Fensterrand
+     laege dort je nach Zone einen Tag daneben - genau an der Kante, an der
+     man es fuer einen Fehler in den Daten hielte. */
+  const tagAb = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
   return {
     tage,
     fenster: `-${tage} days`,
     vorlauf: `-${tage + BESTAND_VERFALL_TAGE} days`,
+    von: tagAb(tage),
+    bis: tagAb(0),
   };
 };
 
-// Wie viele es sind. Die Admin-Route schneidet ihren eigenen Teil hinter
-// dieser Marke ab - eine Zahl von Hand waere beim naechsten Bild falsch.
-const STATISTIK_ABFRAGEN = 11;
+/* Derselbe Gedanke wie `statistikFenster`, aber fuer die Kassenbilder
+   (Entscheidung 28): sie laufen ueber Kalendermonate, nicht ueber ein
+   Tage-Fenster - ein eigener Zeitbegriff verdient einen eigenen Pruefer,
+   sonst verwechselt die naechste Aenderung die beiden Regler.
+
+   Faellt der Wunsch durch (kein `?monat=`, falsches Format, ein Monat in
+   der Zukunft), gilt derselbe Grundsatz wie oben: stiller Ruecksprung auf
+   den laufenden Monat in UTC, keine 400er. */
+const statistikMonat = (request) => {
+  const heute = new Date();
+  const jahrHeute = heute.getUTCFullYear(), monatHeute = heute.getUTCMonth() + 1;
+  /* Wie `von`/`bis` bei `statistikFenster`, nur fuer den Kalendermonat: der
+     Erste bis zum Letzten - im LAUFENDEN Monat aber nur bis heute. Ein Bild,
+     dessen Achse bis zum 31. reicht, waehrend der 16. ist, zeigt eine halbe
+     leere Zukunft und liesse den Verbrauch der zweiten Monatshaelfte wie einen
+     Einbruch aussehen. */
+  const kanten = (jahr, m) => {
+    const letzter = new Date(Date.UTC(jahr, m, 0)).getUTCDate();
+    const heutigerTag = heute.getUTCDate();
+    const bisTag = (jahr === jahrHeute && m === monatHeute) ? Math.min(letzter, heutigerTag) : letzter;
+    const mm = String(m).padStart(2, '0');
+    return { von: `${jahr}-${mm}-01`, bis: `${jahr}-${mm}-${String(bisTag).padStart(2, '0')}` };
+  };
+  const laufend = () => ({ monat: `${jahrHeute}-${String(monatHeute).padStart(2, '0')}`,
+                           jahr: jahrHeute, monatZahl: monatHeute, ...kanten(jahrHeute, monatHeute) });
+  const wunsch = new URL(request.url).searchParams.get('monat');
+  const passt = wunsch && /^\d{4}-(0[1-9]|1[0-2])$/.test(wunsch);
+  if (!passt) return laufend();
+  const [jahr, monatZahl] = wunsch.split('-').map(Number);
+  if (jahr > jahrHeute || (jahr === jahrHeute && monatZahl > monatHeute)) return laufend();
+  return { monat: wunsch, jahr, monatZahl, ...kanten(jahr, monatZahl) };
+};
 
 /* `traeger` ist die Id dessen, den der Regenbogen heute trifft, oder null
    (Schema 29). BEIDE Aufrufer geben ihn weiter - die Statistik der Runde und
    die des Wirts zeigen dieselben Bilder, und ein Melder, der hier bunt und
    dort gruen waere, machte aus zwei Ansichten zwei Wahrheiten. Ein Argument
-   ist es trotzdem, weil `farbeSql` es an anderer Stelle ohne braucht. */
-const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
+   ist es trotzdem, weil `farbeSql` es an anderer Stelle ohne braucht.
+
+   `gruppeId` seit Etappe 2, PFLICHT. Zwei Sorten Filter, je nachdem, ob eine
+   Tabelle eine `gruppe_id` fuehrt:
+     - `termine`, `los`, `kommentare`, `bewertungen` haben sie (Schema 33) -
+       direkter Filter auf der Tabelle selbst.
+     - `reports` hat sie NICHT (Entscheidung 2b, eine Meldung gehoert der
+       Person) und `users` sowieso nicht - dort filtert `JOIN gruppen_mitglied`
+       nach der HEUTIGEN Mitgliedschaft (Entscheidung 24). Das heisst
+       ausdruecklich: diese Bilder aendern sich rueckwirkend, wenn jemand
+       kommt oder geht - der einzige Ort im System, an dem eine Vergangenheit
+       nicht feststeht. `reaktionen` hat ebenfalls keine eigene `gruppe_id`
+       und haengt am `kommentar_id` - gefiltert wird ueber einen Join auf
+       `kommentare`.
+     - Abfrage 7 (Notrufe) ist ein Grenzfall: `notrufe` selbst hat seit
+       Schema 33 eine Gruppe, aber die Rangliste liest den DENORMALISIERTEN
+       Zaehler `users.notrufe_insgesamt` (Migration 0017), der ueber alle
+       Gruppen hinweg zaehlt - eine Aufteilung je Gruppe braeuchte eine eigene
+       Spalte oder Tabelle und damit eine Migration, die diese Etappe nicht
+       vorsieht. Gefiltert wird darum wie bei `reports`, ueber die heutige
+       Mitgliedschaft: die Zahl selbst bleibt instanzweit gezaehlt. */
+const statistikAbfragen = (env, fenster, vorlauf, gruppeId, traeger = null) => [
   // 1 — Meldungen je Tag. Flaechenkurve.
   env.DB.prepare(`
-    SELECT date(gemeldet_am) AS tag, count(*) AS n FROM reports
-    WHERE gemeldet_am > datetime('now', ?1)
+    SELECT date(r.gemeldet_am) AS tag, count(*) AS n
+    FROM reports r JOIN gruppen_mitglied m ON m.user_id = r.user_id
+    WHERE m.gruppe_id = ?2 AND r.gemeldet_am > datetime('now', ?1)
     GROUP BY tag ORDER BY tag
-  `).bind(fenster),
+  `).bind(fenster, gruppeId),
   /* 2 — Bestand UND Temperatur je Melder, beide aus derselben Zeile: der
      LETZTE Wert des Tages, nicht der Schnitt. Wer nachmittags nachlegt, soll
      abends seinen Bestand sehen und nicht die Mitte zwischen vorher und
@@ -2234,6 +3029,7 @@ const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
            j.tag, r.biere, r.temperatur, j.tief, j.hoch, j.n
     FROM reports r
     JOIN users u ON u.id = r.user_id
+    JOIN gruppen_mitglied gm ON gm.user_id = r.user_id AND gm.gruppe_id = ?2
     JOIN (
       SELECT user_id, date(gemeldet_am) AS tag, max(id) AS id,
              min(temperatur) AS tief, max(temperatur) AS hoch, count(*) AS n
@@ -2241,7 +3037,7 @@ const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
       GROUP BY user_id, date(gemeldet_am)
     ) j ON j.id = r.id
     ORDER BY r.user_id, j.tag
-  `).bind(fenster),
+  `).bind(fenster, gruppeId),
   // 3 — Wer war wie oft Gastgeber. Liegende Balken.
   // `ort IS NULL`: ein Abend auswaerts hat keinen Gastgeber (migrations/0024),
   // in der Spalte steht dort nur der, der ihn ausgemacht hat.
@@ -2249,11 +3045,12 @@ const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
     SELECT coalesce(u.name,'Ehemaliger') AS name, ${farbeSql('u', traeger)} AS farbe,
            count(*) AS n
     FROM termine t JOIN users u ON u.id = t.gastgeber_id
-    WHERE t.abgesagt_am IS NULL AND t.ort IS NULL
+    WHERE t.gruppe_id = ? AND t.abgesagt_am IS NULL AND t.ort IS NULL
     GROUP BY t.gastgeber_id ORDER BY n DESC
-  `),
+  `).bind(gruppeId),
   // 4 — Ausgang der Ziehungen. Gestapelter Balken.
-  env.DB.prepare('SELECT status, count(*) AS n FROM los GROUP BY status'),
+  env.DB.prepare('SELECT status, count(*) AS n FROM los WHERE gruppe_id = ? GROUP BY status')
+    .bind(gruppeId),
   // 4b — dasselbe je Melder: wer wurde wie oft gezogen, und was hat er daraus
   // gemacht. Der Balken daneben beantwortet nur den Anteil ueber alle; wer
   // dauernd zieht und dauernd absagt, faellt darin nicht auf.
@@ -2266,30 +3063,37 @@ const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
            ${farbeSql('u', traeger)} AS farbe,
            l.status, count(*) AS n
     FROM los l JOIN users u ON u.id = l.user_id
+    WHERE l.gruppe_id = ?
     GROUP BY l.user_id, l.status
-  `),
+  `).bind(gruppeId),
   /* 5 — Betrieb je Woche: Kommentare, Reaktionen, Sterne. Das Fenster steht
      in jedem der drei Zweige: eines aussen um die Vereinigung herum liesse
-     SQLite erst alle drei Tabellen vollstaendig lesen. */
+     SQLite erst alle drei Tabellen vollstaendig lesen. `reaktionen` traegt
+     keine eigene `gruppe_id` (haengt an `kommentar_id`) - der Filter laeuft
+     ueber einen Join auf `kommentare`. */
   env.DB.prepare(`
     SELECT woche, sum(k) AS kommentare, sum(r) AS reaktionen, sum(b) AS sterne FROM (
       SELECT strftime('%Y-%W', erstellt) AS woche, 1 AS k, 0 AS r, 0 AS b
-      FROM kommentare WHERE erstellt > datetime('now', ?1)
+      FROM kommentare WHERE gruppe_id = ?2 AND erstellt > datetime('now', ?1)
       UNION ALL
-      SELECT strftime('%Y-%W', erstellt), 0, 1, 0
-      FROM reaktionen WHERE erstellt > datetime('now', ?1)
+      SELECT strftime('%Y-%W', rk.erstellt), 0, 1, 0
+      FROM reaktionen rk JOIN kommentare k ON k.id = rk.kommentar_id
+      WHERE k.gruppe_id = ?2 AND rk.erstellt > datetime('now', ?1)
       UNION ALL
       SELECT strftime('%Y-%W', erstellt), 0, 0, 1
-      FROM bewertungen WHERE erstellt > datetime('now', ?1)
+      FROM bewertungen WHERE gruppe_id = ?2 AND erstellt > datetime('now', ?1)
     ) GROUP BY woche ORDER BY woche
-  `).bind(fenster),
+  `).bind(fenster, gruppeId),
   /* 6 — Anmeldungen je Tag, ueber die ganze Geschichte: "wie viele sind wir
      inzwischen" ist wie Gastgeber und Ziehungen oben eine Frage an die ganze
-     Runde, kein Fenster. Die Seite baut daraus eine Wachstumskurve. */
+     Runde, kein Fenster. Die Seite baut daraus eine Wachstumskurve.
+     `users` traegt keine `gruppe_id` - gefiltert wird ueber die heutige
+     Mitgliedschaft (Entscheidung 24), wie bei den Meldungen oben. */
   env.DB.prepare(`
-    SELECT date(erstellt) AS tag, count(*) AS n FROM users
-    WHERE entfernt_am IS NULL GROUP BY tag ORDER BY tag
-  `),
+    SELECT date(u.erstellt) AS tag, count(*) AS n
+    FROM users u JOIN gruppen_mitglied m ON m.user_id = u.id
+    WHERE m.gruppe_id = ? AND u.entfernt_am IS NULL GROUP BY tag ORDER BY tag
+  `).bind(gruppeId),
   /* 7 — Wer wie oft einen Notruf abgesetzt hat. Liegender Balken wie beim
      Gastgeber, aber aus dem Zaehler auf `users` (Migration 0017), nicht aus
      `notrufe` selbst: die Zeilen dort raeumt der Cron spaetestens einen Tag
@@ -2302,11 +3106,16 @@ const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
      Entscheidung gegen ein Notruf-Archiv - ein Zaehler, der nach dem Entfernen
      verschwindet, haeuft keine Spur an, die bleibt, wenn die Person es nicht
      mehr tut. Da Entfernen den Namen loescht, waere die Zeile ohnehin nur
-     ein "Ehemaliger" ohne erkennbaren Bezug - hier lieber ganz weg. */
+     ein "Ehemaliger" ohne erkennbaren Bezug - hier lieber ganz weg.
+
+     Der Zaehler selbst bleibt INSTANZWEIT (siehe die Begruendung am
+     Funktionskopf) - gefiltert wird nur, WER in der Liste steht. */
   env.DB.prepare(`
-    SELECT u.name, ${farbeSql('u', traeger)} AS farbe, u.notrufe_insgesamt AS n FROM users u
-    WHERE u.notrufe_insgesamt > 0 AND u.entfernt_am IS NULL ORDER BY n DESC
-  `),
+    SELECT u.name, ${farbeSql('u', traeger)} AS farbe, u.notrufe_insgesamt AS n
+    FROM users u JOIN gruppen_mitglied m ON m.user_id = u.id
+    WHERE m.gruppe_id = ? AND u.notrufe_insgesamt > 0 AND u.entfernt_am IS NULL
+    ORDER BY n DESC
+  `).bind(gruppeId),
   /* 8 — derselbe Betrieb, aber je MELDER statt je Woche. Das Wochenbild sagt,
      wie laut es war; dieses sagt, wer geredet hat. Bewusst dieselben drei
      Toepfe, dieselbe Zaehlweise und dieselbe UNION-Form wie in Abfrage 5 -
@@ -2325,17 +3134,18 @@ const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
            sum(k) AS kommentare, sum(r) AS reaktionen, sum(b) AS sterne
     FROM (
       SELECT autor_id, 1 AS k, 0 AS r, 0 AS b
-      FROM kommentare WHERE erstellt > datetime('now', ?1)
+      FROM kommentare WHERE gruppe_id = ?2 AND erstellt > datetime('now', ?1)
       UNION ALL
-      SELECT autor_id, 0, 1, 0
-      FROM reaktionen WHERE erstellt > datetime('now', ?1)
+      SELECT rk.autor_id, 0, 1, 0
+      FROM reaktionen rk JOIN kommentare k ON k.id = rk.kommentar_id
+      WHERE k.gruppe_id = ?2 AND rk.erstellt > datetime('now', ?1)
       UNION ALL
       SELECT autor_id, 0, 0, 1
-      FROM bewertungen WHERE erstellt > datetime('now', ?1)
+      FROM bewertungen WHERE gruppe_id = ?2 AND erstellt > datetime('now', ?1)
     ) x JOIN users u ON u.id = x.autor_id
     GROUP BY x.autor_id
     ORDER BY sum(k) + sum(r) + sum(b) DESC
-  `).bind(fenster),
+  `).bind(fenster, gruppeId),
   /* 9 — die Abende selbst, je Monat. Die Gastgeber-Rangliste beantwortet nur,
      BEI WEM man war, nie, wie oft die Runde ueberhaupt zusammenkommt.
 
@@ -2365,8 +3175,8 @@ const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
            sum(abgesagt_am IS     NULL AND ort IS     NULL) AS zuhause,
            sum(abgesagt_am IS     NULL AND ort IS NOT NULL) AS auswaerts,
            sum(abgesagt_am IS NOT NULL)                     AS abgesagt
-    FROM termine GROUP BY monat ORDER BY monat
-  `),
+    FROM termine WHERE gruppe_id = ? GROUP BY monat ORDER BY monat
+  `).bind(gruppeId),
   /* 10 — die SAAT fuer den Vorrat der Runde: je Melder der letzte Stand VOR
      dem Fenster. Ohne sie begaenne die Summenkurve bei null und stiege in der
      ersten Woche an, waehrend in Wahrheit nur nach und nach jeder einmal
@@ -2378,13 +3188,14 @@ const statistikAbfragen = (env, fenster, vorlauf, traeger = null) => [
   env.DB.prepare(`
     SELECT r.user_id, r.biere, date(r.gemeldet_am) AS tag
     FROM reports r
+    JOIN gruppen_mitglied gm ON gm.user_id = r.user_id AND gm.gruppe_id = ?3
     JOIN (
       SELECT user_id, max(id) AS id FROM reports
       WHERE gemeldet_am <= datetime('now', ?1)
         AND gemeldet_am >  datetime('now', ?2)
       GROUP BY user_id
     ) j ON j.id = r.id
-  `).bind(fenster, vorlauf),
+  `).bind(fenster, vorlauf, gruppeId),
 ];
 
 /* Der Vorrat der Runde: eine Zahl je Tag, die Summe der zuletzt gemeldeten
@@ -2512,6 +3323,270 @@ const statistikRunde = (ergebnis, tage) => {
     vorrat: vorratReihe(tage, saat.results, bestand.results),
     wachstum,
     notrufe: notrufe.results,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Die fünf Kassenbilder (Entscheidungen 26 und 32, Etappe 6)
+//
+// Eigene Funktion statt ein Anhang an `statistikAbfragen`: die Kassenbilder
+// laufen über Kalendermonate, nicht über das `?tage=`-Fenster (Entscheidung
+// 28), und sie laufen NUR, wenn `kasse_an` steht - ein bedingter Anhang
+// mitten im selben Array hätte den alten, gezählten Schnitt
+// (`STATISTIK_ABFRAGEN`) nur durch einen neuen ersetzt. Stattdessen haengt
+// die Route (`GET /api/statistik`) diese Abfragen HINTEN an denselben
+// `batch()` an - ein Rundflug bleibt es trotzdem - und liest sie über
+// `runde.length` aus, nicht über eine Zahl.
+// ---------------------------------------------------------------------------
+
+/* `buchung.gruppe_id` ist eine echte Spalte (Schema 34), kein Umweg über die
+   heutige Mitgliedschaft wie bei `reports` - ein Ausgetretener bleibt darum
+   in "Wer hat wieviel getrunken" stehen, genau wie schon bei "Gastgeber".
+   Gegenbuchungen (Entscheidung 31, `grund LIKE 'gegenbuchung:%'`) fliegen aus
+   BEIDEN Trink-Bildern raus: sie sind eine Korrektur der Rechnung, kein
+   Schluck. Im Kassenstand (Bild 5) zaehlen sie dagegen mit - dort ist Geld
+   gemeint, nicht Konsum. */
+const kasseAbfragen = (env, gruppeId, jahr, monatZahl, traeger = null) => {
+  const monat = `${jahr}-${String(monatZahl).padStart(2, '0')}`;
+  return [
+    // 1 — Wer hat wieviel getrunken. Liegende Balken wie beim Gastgeber.
+    env.DB.prepare(`
+      SELECT b.user_id, coalesce(u.name,'Ehemaliger') AS name,
+             ${farbeSql('u', traeger)} AS farbe, sum(b.menge) AS n
+      FROM buchung b JOIN users u ON u.id = b.user_id
+      WHERE b.gruppe_id = ?1 AND b.storniert_am IS NULL
+        AND (b.grund IS NULL OR b.grund NOT LIKE 'gegenbuchung:%')
+        AND strftime('%Y-%m', b.gebucht_am) = ?2
+      GROUP BY b.user_id ORDER BY n DESC
+    `).bind(gruppeId, monat),
+    // 2 — Verbrauch je Tag. Flächenkurve wie "Meldungen je Tag".
+    env.DB.prepare(`
+      SELECT date(b.gebucht_am) AS tag, sum(b.menge) AS n
+      FROM buchung b
+      WHERE b.gruppe_id = ?1 AND b.storniert_am IS NULL
+        AND (b.grund IS NULL OR b.grund NOT LIKE 'gegenbuchung:%')
+        AND strftime('%Y-%m', b.gebucht_am) = ?2
+      GROUP BY tag ORDER BY tag
+    `).bind(gruppeId, monat),
+    /* 3 — Bestandsverlauf, eine Linie je Getränkeart, Lieferungen als
+       Sprünge. `bestand.menge` ist bereits vorzeichenbehaftet (Schema 34:
+       "+ Lieferung/Storno, − Verbrauch/Schwund"), `sum(...) OVER (...)` ist
+       darum die ganze Rechnung.
+
+       DIE FENSTERFUNKTION LÄUFT ÜBER DIE UNGEFILTERTE GESCHICHTE, nicht nur
+       über den gewählten Monat - sonst begänne jede Kurve am Monatsersten
+       bei null, als wäre der Kühlraum leer gewesen. Dasselbe Prinzip wie der
+       `vorlauf` bei "Vorrat der Runde" oben, nur als Fensterfunktion statt
+       als eigene Saat-Abfrage: gerechnet wird über alles, gezeigt nur der
+       Monat - der äußere `WHERE`-Filter sitzt darum außen, nicht innen.
+
+       Der innere `j`-Join wählt je Getränk und Tag die LETZTE Zeile
+       (höchste `id`) - der Tagesstand, nicht jede einzelne Buchung als
+       eigener Punkt. Dieselbe Wahl wie bei "Bestand je Melder" (Abfrage 2
+       der elf), aus demselben Grund. */
+    env.DB.prepare(`
+      SELECT r.tag, r.getraenk_id, g.name, r.stand
+      FROM (
+        SELECT b.id, b.getraenk_id, date(b.erstellt) AS tag,
+               sum(b.menge) OVER (
+                 PARTITION BY b.getraenk_id ORDER BY b.erstellt, b.id
+               ) AS stand
+        FROM bestand b WHERE b.gruppe_id = ?1
+      ) r
+      JOIN (
+        SELECT getraenk_id, date(erstellt) AS tag, max(id) AS id
+        FROM bestand WHERE gruppe_id = ?1 GROUP BY getraenk_id, date(erstellt)
+      ) j ON j.id = r.id
+      JOIN getraenk g ON g.id = r.getraenk_id
+      WHERE strftime('%Y-%m', r.tag) = ?2
+      ORDER BY g.name, r.tag
+    `).bind(gruppeId, monat),
+    /* 4 — Offene Beträge je Mitglied, nach Status gefärbt. Nur echte Reste
+       (`betrag_cent - gezahlt_cent > 0`): ein längst bezahltes Mitglied hat
+       hier nichts zu suchen und soll nicht als Balken der Länge null
+       auftauchen. `jahr`/`monatZahl` statt der `monat`-Zeichenkette, weil
+       `abrechnung.jahr`/`.monat` echte INTEGER-Spalten sind (Schema 35). */
+    env.DB.prepare(`
+      SELECT s.user_id, coalesce(u.name,'Ehemaliger') AS name,
+             ${farbeSql('u', traeger)} AS farbe,
+             s.status, (s.betrag_cent - s.gezahlt_cent) AS offen
+      FROM saldo s
+      JOIN abrechnung a ON a.id = s.abrechnung_id
+      JOIN users u ON u.id = s.user_id
+      WHERE a.gruppe_id = ?1 AND a.jahr = ?2 AND a.monat = ?3
+        AND s.betrag_cent - s.gezahlt_cent > 0
+      ORDER BY offen DESC
+    `).bind(gruppeId, jahr, monatZahl),
+    /* 5 — Kassenstand: eingenommen (Buchungen, MIT Gegenbuchungen - hier ist
+       Geld gemeint, kein Schluck) und ausgegeben (Lieferungen). Der Saldo
+       wird daraus gerechnet, nicht gespeichert.
+
+       `menge * cent`, NICHT `cent` allein (Abnahmefund): `buchung.cent` ist
+       der eingefrorene EINZELPREIS (Schema 34), `SALDO_SUMMEN_SQL` rechnet
+       den Umsatz folgerichtig als `sum(menge * cent)`. Mit nacktem `cent`
+       zaehlten drei Flaschen als eine, UND eine Gegenbuchung (negatives
+       `menge`, aber positives `cent` - Entscheidung 31) erhoehte die
+       Einnahme, statt sie auszugleichen - genau das Gegenteil dessen, was
+       der Kommentar oben verspricht. */
+    env.DB.prepare(`
+      SELECT
+        (SELECT coalesce(sum(menge * cent),0) FROM buchung
+          WHERE gruppe_id = ?1 AND storniert_am IS NULL
+            AND strftime('%Y-%m', gebucht_am) = ?2) AS eingenommen,
+        (SELECT coalesce(sum(einkauf_cent),0) FROM bestand
+          WHERE gruppe_id = ?1 AND art = 'lieferung'
+            AND strftime('%Y-%m', erstellt) = ?2) AS ausgegeben,
+        -- Strafgeld als EIGENER Posten (Entscheidung 53) - nicht in
+        -- "eingenommen" verruehrt, sonst sieht eine Gruppe nicht mehr, wovon
+        -- sie lebt. OHNE Schalterpruefung, und das ist Absicht: regeln_an
+        -- blendet die Hausordnung aus, loescht aber nichts (Entscheidung 18).
+        -- Eine Gruppe, die die Regeln nachtraeglich abschaltet, hat das Geld
+        -- trotzdem eingenommen - es steht in echten Salden. Liesse man es hier
+        -- weg, ginge die Kasse nicht mehr auf, und das waere ein falscher
+        -- Stand, kein ausgeblendeter. Die ZEICHNUNG blendet den dritten Balken
+        -- bei strafgeld === 0 aus, und genau dann ist er auch nichts wert.
+        -- Dieselbe Statusliste wie SALDO_SUMMEN_SQL: 'offen' und 'abgerechnet'
+        -- sind das Geld, das gilt.
+        (SELECT coalesce(sum(cent),0) FROM strafe
+          WHERE gruppe_id = ?1 AND art = 'geld'
+            AND status IN ('offen','abgerechnet')
+            AND strftime('%Y-%m', verhaengt_am) = ?2) AS strafgeld
+    `).bind(gruppeId, monat),
+    /* 6 — SEIT WANN es hier ueberhaupt etwas zu sehen gibt. Kein Bild, sondern
+       der Boden fuer den Monatswaehler der Seite: der bot bis dahin stur die
+       letzten zwoelf Monate an, auch einer Runde, die es vor drei Monaten noch
+       gar nicht gab. Wer dort in den Februar sprang, bekam sechs leere Bilder
+       und keine Auskunft darueber, ob nichts da ist oder etwas fehlt.
+
+       Es ist bewusst nur ein BODEN und keine Liste der Monate mit Inhalt: ein
+       leerer Monat MITTEN in der Geschichte ist eine Antwort ("da war nichts
+       los") und gehoert in die Auswahl. Einer VOR dem ersten Eintrag ist keine.
+
+       Die drei Quellen sind genau die der fuenf Bilder darueber - Buchungen,
+       Lieferungen/Schwund und das Strafgeld im Kassenstand. `abrechnung` fehlt
+       absichtlich: eine Abrechnung entsteht aus Buchungen, sie kann nicht
+       aelter sein als die aelteste. Storniertes zaehlt NICHT (die Bilder
+       zeigen es auch nicht), `min()` ueber eine leere Menge ist NULL, und
+       `min()` ueber lauter NULL ist wieder NULL - eine Runde ohne jede
+       Buchung bekommt also `seit: null` und behaelt genau einen Monat zur
+       Wahl, den laufenden. */
+    env.DB.prepare(`
+      SELECT min(m) AS seit FROM (
+        SELECT min(strftime('%Y-%m', gebucht_am)) AS m FROM buchung
+          WHERE gruppe_id = ?1 AND storniert_am IS NULL
+        UNION ALL
+        SELECT min(strftime('%Y-%m', erstellt)) FROM bestand WHERE gruppe_id = ?1
+        UNION ALL
+        SELECT min(strftime('%Y-%m', verhaengt_am)) FROM strafe
+          WHERE gruppe_id = ?1 AND art = 'geld' AND status IN ('offen','abgerechnet')
+      )
+    `).bind(gruppeId),
+  ];
+};
+
+/* Das SECHSTE Kassenbild (Entscheidung 53) - und es haengt an `regeln_an`,
+   NICHT an `kasse_an`. Genau der Fall, fuer den Etappe 6 den gezaehlten
+   Schnitt durch `runde.length` ersetzt hat: die Zahl der Abfragen haengt
+   jetzt an ZWEI Schaltern, eine Position von Hand waere bei der ersten
+   Gruppe mit Regeln, aber ohne Kasse falsch.
+
+   GEZAEHLT WIRD DIE ANZAHL, NICHT DER BETRAG. Eine Gruppe mit `regeln_an = 1,
+   kasse_an = 0` hat nur Auflagen, und die tragen ueberhaupt keinen Cent - ein
+   Geldbild waere dort strukturell leer. Der Betrag reist als zweite Zahl mit
+   und steht in der Beschriftung.
+
+   DIE STATUSLISTE IST EINE EIGENE, und zwar mit Absicht (Abnahmefund Etappe 9:
+   hier stand einmal nur `<> 'erlassen'`, und damit trug jeder Vorschlag - auch
+   jeder abgelehnte - einen Balken gegen den Betroffenen). Sie ist um EINEN
+   Wert strenger als `STRAFEN_MONAT_SQL`: 'vorgeschlagen' faellt zusaetzlich
+   heraus. Grund ist die Bauart des Bildes - ein Balken ist eine Summe und kann
+   keinen Status nennen; in der LISTE steht neben dem Vorschlag das Wort
+   "vorgeschlagen", im Balken waere er von einer verhaengten Strafe nicht mehr
+   zu unterscheiden. 'bestritten' bleibt dagegen DRIN, wie in der Liste: die
+   Strafe wurde verhaengt, der Einspruch laeuft erst, und 'halten' setzt sie
+   ohne Umweg auf 'offen' zurueck. Die Geldliste (`SALDO_SUMMEN_SQL`) ist hier
+   die falsche Schablone - gezaehlt wird, was gilt, nicht was kostet. */
+const regelnAbfragen = (env, gruppeId, jahr, monatZahl, traeger = null) => {
+  const monat = `${jahr}-${String(monatZahl).padStart(2, '0')}`;
+  return [
+    env.DB.prepare(`
+      SELECT s.user_id, coalesce(u.name,'Ehemaliger') AS name,
+             ${farbeSql('u', traeger)} AS farbe,
+             count(*) AS n,
+             coalesce(sum(CASE WHEN s.art = 'geld' THEN s.cent ELSE 0 END),0) AS cent
+      FROM strafe s JOIN users u ON u.id = s.user_id
+      WHERE s.gruppe_id = ?1
+        AND s.status NOT IN ('erlassen','verworfen','vorgeschlagen')
+        AND strftime('%Y-%m', s.verhaengt_am) = ?2
+      GROUP BY s.user_id ORDER BY n DESC, cent DESC
+    `).bind(gruppeId, monat),
+    // Was gerade noch aussteht - monatsunabhaengig, wie die zweite Liste in
+    // `GET /api/hausordnung`: eine Auflage laeuft ueber den Monatswechsel
+    // hinweg weiter, kein Abschluss holt sie ab.
+    env.DB.prepare(`
+      SELECT count(*) AS n FROM strafe
+       WHERE gruppe_id = ? AND status IN ('offen','gemeldet') AND art = 'tat'
+    `).bind(gruppeId),
+    /* Der Boden fuer den Monatswaehler, wie bei den Kassenbildern - dieselbe
+       Statusliste wie im Bild darueber, damit der aelteste waehlbare Monat
+       auch wirklich einen Balken traegt. Eine Gruppe mit Regeln, aber ohne
+       Kasse hat sonst gar keinen Boden: die Seite nimmt den frueheren der
+       beiden, und einer von beiden kann fehlen. */
+    env.DB.prepare(`
+      SELECT min(strftime('%Y-%m', verhaengt_am)) AS seit FROM strafe
+       WHERE gruppe_id = ?
+         AND status NOT IN ('erlassen','verworfen','vorgeschlagen')
+    `).bind(gruppeId),
+  ];
+};
+
+const statistikRegeln = (ergebnis, monat) => {
+  const [jeMensch, offen, seit] = ergebnis;
+  return {
+    monat,
+    seit: (seit.results[0] || {}).seit || null,
+    strafen_je_mensch: jeMensch.results,
+    auflagen_offen: (offen.results[0] || { n: 0 }).n,
+  };
+};
+
+/* Aus den fünf Ergebnissen die Form, die gezeichnet wird - derselbe Zweck
+   wie `statistikRunde`, nur für den Kassen-Anhang. */
+const statistikKasse = (ergebnis, monat, von, bis) => {
+  const [getrunken, verbrauchJeTag, bestandsverlauf, offeneBetraege, stand, seit] = ergebnis;
+
+  const kurven = new Map();
+  for (const z of bestandsverlauf.results) {
+    if (!kurven.has(z.getraenk_id)) {
+      kurven.set(z.getraenk_id, { name: z.name, farbe: null, tage: [], werte: [] });
+    }
+    const k = kurven.get(z.getraenk_id);
+    k.tage.push(z.tag);
+    k.werte.push(z.stand);
+  }
+
+  const kassenstand = stand.results[0] || { eingenommen: 0, ausgegeben: 0, strafgeld: 0 };
+
+  return {
+    monat,
+    // Die Kanten der Achse fuer "Verbrauch je Tag" - der Erste des Monats bis
+    // zum Letzten, im laufenden Monat nur bis heute (siehe `statistikMonat`).
+    von, bis,
+    // Ab wann der Monatswaehler ueberhaupt etwas anzubieten hat, siehe
+    // Abfrage 6. `null` heisst: diese Runde hat noch nie etwas gebucht.
+    seit: (seit.results[0] || {}).seit || null,
+    getrunken: getrunken.results,
+    verbrauch_je_tag: verbrauchJeTag.results,
+    bestandsverlauf: [...kurven.values()],
+    offene_betraege: offeneBetraege.results,
+    kassenstand: {
+      eingenommen: kassenstand.eingenommen,
+      // Eigener Posten seit Etappe 8 (Entscheidung 53), und er zaehlt in den
+      // Saldo hinein - er ist echtes Geld, nur aus einer anderen Quelle.
+      strafgeld: kassenstand.strafgeld || 0,
+      ausgegeben: kassenstand.ausgegeben,
+      saldo: kassenstand.eingenommen + (kassenstand.strafgeld || 0) - kassenstand.ausgegeben,
+    },
   };
 };
 
@@ -2784,9 +3859,26 @@ async function schickeMail(env, empfaenger, betreff, text, html, anhaenge) {
 const nurText = s => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-async function schickeLink(env, empfaenger, link) {
+/* `neu` sagt, ob unter dieser Adresse noch KEIN Konto steht (Entscheidung 43).
+
+   Warum die Auskunft ausgerechnet hier faellt und nirgends sonst: die Antwort
+   von `POST /api/anmelden` ist fuer Neue und Wiederkehrende WORTGLEICH, und das
+   muss sie bleiben - alles andere waere Kontenaufzaehlung, jeder koennte mit
+   einer Adressliste durchprobieren, wer hier mitschreibt. Die Mail dagegen
+   liest nur, wer das Postfach hat. Sie ist der frueheste Ort, an dem "das wird
+   ein neues Konto" gesagt werden DARF.
+
+   Und gesagt werden muss es: am 11.08.2026 legte sich ein Melder ueber
+   `…@googlemail.com` unbemerkt ein zweites Konto an, lief beim eigenen Namen in
+   den 409 und blieb namenlos stehen. Die Faltung in `normMail` (44) verhindert
+   genau diesen Fall - dieser Satz hier faengt alle uebrigen. */
+async function schickeLink(env, empfaenger, link, neu = false) {
+  const kopf = neu
+    ? 'Noch kein Konto unter dieser Adresse - der Link legt eins an:'
+    : 'Hier entlang, dann bist du drin:';
+
   const text =
-`Hier entlang, dann bist du drin:
+`${kopf}
 
 ${link}
 
@@ -2815,7 +3907,7 @@ und in der App unten ins Feld "Link aus der Mail" einsetzen.`;
      Beides steht bewusst in beiden Fassungen der Mail, nicht nur im HTML. */
   const html =
 `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d2a24">
-  <p>Hier entlang, dann bist du drin:</p>
+  <p>${nurText(kopf)}</p>
   <p><a href="${link}" style="display:inline-block;background:#2f5d4a;color:#e3d8c1;
      padding:12px 22px;border-radius:3px;text-decoration:none;letter-spacing:.15em;
      text-transform:uppercase;font-size:13px">Anmelden</a></p>
@@ -2830,7 +3922,9 @@ und in der App unten ins Feld "Link aus der Mail" einsetzen.`;
 </div>`;
 
   await mitProtokoll(env, 'anmeldelink', () =>
-    schickeMail(env, empfaenger, 'Dein Link zu „Wer hat kalt“', text, html));
+    schickeMail(env, empfaenger,
+      neu ? 'Dein neues Konto bei „Wer hat kalt“' : 'Dein Link zu „Wer hat kalt“',
+      text, html));
 }
 
 /* Der Mailwechsel, beide Haelften. Der Link geht an die NEUE Adresse - erst
@@ -3115,6 +4209,37 @@ function icsAnhang(env, termin, abgesagt) {
   }];
 }
 
+/* WER GEHOERT ZU DIESEM TISCH - der Empfaengerkreis einer Gruppe (Schema 32).
+   Ein VERSPRECHEN, kein fertiger Wert: `benachrichtige()` und `stosse()` sind
+   ohne `await` aufzurufen (sie rufen selbst `ctx.waitUntil`, und das muss
+   stehen, bevor die Antwort hinausgeht). Sie loesen es drinnen auf.
+
+   WOFUER: bis hierher hiess `null` bei beiden "an die ganze Runde", und das
+   war richtig, solange es genau eine gab. Ab jetzt waere es ein Leck - der
+   Abend eines Bueros ginge an Leute, die von dem Buero nichts wissen sollen.
+   Wo ein Ereignis eine Gruppe hat, tritt dieser Kreis an die Stelle des `null`.
+
+   Was `null` weiterhin heisst und heissen soll: die Rundmail des Wirts. Sie
+   gehoert ihm und nicht einem Tisch. */
+function gruppenKreis(env, gruppeId) {
+  if (!gruppeId) return null;
+  return env.DB.prepare('SELECT user_id AS id FROM gruppen_mitglied WHERE gruppe_id = ?')
+    .bind(gruppeId).all().then(({ results }) => results.map(z => z.id));
+}
+
+/* Nur, wer DIESEN Tisch fuehrt - fuer die Mindestbestandsmail (Entscheidung
+   34): ein Mitglied kann nichts an der Lieferung aendern, es zu benachrichtigen
+   waere ein Alarm ohne Knopf davor. */
+function gruppenAdminKreis(env, gruppeId) {
+  if (!gruppeId) return null;
+  return env.DB.prepare(
+    "SELECT user_id AS id FROM gruppen_mitglied WHERE gruppe_id = ? AND rolle = 'admin'")
+    .bind(gruppeId).all().then(({ results }) => results.map(z => z.id));
+}
+
+/* Der Rumpf jeder Mail. Dieselbe Schrift und dieselben Farben wie beim Magic
+   Link - das Kontorbuch des Wirts, nicht die Tafel: eine Mail wird in einem
+   fremden Programm auf weissem Grund gelesen. */
 /* Der Kopf über jeder Mail: ein Streifen Schiefer mit Glas und Namen in
    Kreide. Als BILD, weil die Kreideschrift eine Systemschrift ist - im
    Mailprogramm des Empfängers gibt es sie nicht, und eine Kopfzeile, die bei
@@ -3167,10 +4292,18 @@ const mailKnopf = (link, wort) =>
    den Empfaenger ohnehin - ihre Signatur haengt an ihm. */
 function benachrichtige(env, ctx, art, empfaenger, opt) {
   if (!ctx || !env.AGENTMAIL_KEY) return;
-  if (empfaenger && !empfaenger.length) return;
+  if (Array.isArray(empfaenger) && !empfaenger.length) return;
   const { betreff, text, html, bezug = null, anhaenge = null, ausloeser = null } = opt;
 
   ctx.waitUntil((async () => {
+    /* Seit Schema 32 darf `empfaenger` auch ein VERSPRECHEN auf eine Liste
+       sein - die Mitglieder einer Gruppe stehen in der Datenbank und nicht in
+       der Hand des Aufrufers. Aufgeloest wird es hier drinnen und nicht davor:
+       `ctx.waitUntil` muss gerufen sein, BEVOR die Antwort hinausgeht, sonst
+       schneidet die Laufzeit den Rest ab. Ein `await` in der aufrufenden
+       Funktion haette genau das getan. */
+    empfaenger = await empfaenger;
+    if (empfaenger && !empfaenger.length) return;
     /* Die drei Bedingungen aus dem Plan, an einer Stelle: keine Adresse,
        gesperrt oder entfernt heisst kein Empfaenger - der HA-Dienstnutzer
        faellt damit von selbst aus jedem Kreis. `mail_stumm_am` schlaegt
@@ -3272,11 +4405,14 @@ function benachrichtige(env, ctx, art, empfaenger, opt) {
    Meldung auf dem Geraet, statt sich danebenzustellen. */
 function stosse(env, ctx, art, empfaenger, opt) {
   if (!ctx || !pushBereit(env)) return;
-  if (empfaenger && !empfaenger.length) return;
+  if (Array.isArray(empfaenger) && !empfaenger.length) return;
   const { titel, text, url = '.', tag = null, ttl = 86400, dringend = false,
           ausser = null, ausloeser = null } = opt;
 
   ctx.waitUntil((async () => {
+    // Auch hier darf ein Versprechen kommen - Begruendung bei `benachrichtige`.
+    empfaenger = await empfaenger;
+    if (empfaenger && !empfaenger.length) return;
     const wo = ['u.gesperrt_am IS NULL', 'u.entfernt_am IS NULL', 'u.mail_stumm_am IS NULL'];
     const werte = [];
     if (empfaenger) {
@@ -3432,7 +4568,15 @@ function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen
      den Absatz darueber). Ein Push traegt nichts; wer den Abend gerade selbst
      eingetragen hat, braucht darueber kein Klopfen an der Tuer. Genau
      deshalb kennt `stosse` ein `ausser` und `benachrichtige` keines mehr. */
-  stosse(env, ctx, 'termin_neu', null, {
+  /* DER KREIS IST DIE GRUPPE (Schema 32), nicht mehr die ganze Instanz. Ohne
+     das ginge der Abend eines Bueros an jeden Angemeldeten - auch an die, die
+     von dem Buero nichts wissen. `termin.gruppe_id` fehlt nur dort, wo ein
+     Aufrufer den Termin von Hand zusammensetzt; dann bleibt es beim alten
+     Verhalten, und das ist der richtige Rueckfall: lieber einer zu viel als
+     ein Gastgeber, der von seinem eigenen Abend nichts erfaehrt. */
+  const kreis = gruppenKreis(env, termin.gruppe_id);
+
+  stosse(env, ctx, 'termin_neu', kreis, {
     ausser: ausloeser,
     ausloeser,
     titel: 'Ein Abend steht fest',
@@ -3441,7 +4585,7 @@ function mailTerminNeu(env, ctx, termin, ausloeser, wieEntstanden = 'eingetragen
     tag: `termin-${termin.id}`,
   });
 
-  benachrichtige(env, ctx, 'termin_neu', null, {
+  benachrichtige(env, ctx, 'termin_neu', kreis, {
     bezug: `termin:${termin.id}`,
     ausloeser,
     anhaenge: icsAnhang(env, termin, false),
@@ -3507,7 +4651,10 @@ function mailTerminAendert(env, ctx, termin, ausloeser, was) {
      waeren drei Wahrheiten nebeneinander, von denen zwei falsch sind. Die
      Mail darf sich das nicht leisten (sie traegt jedes Mal einen neuen
      Kalendereintrag mit hoeherer SEQUENCE), das Klopfen schon. */
-  stosse(env, ctx, 'termin_aendert', null, {
+  // Der Kreis ist die Gruppe - Begruendung bei `mailTerminNeu`.
+  const kreis = gruppenKreis(env, termin.gruppe_id);
+
+  stosse(env, ctx, 'termin_aendert', kreis, {
     ausser: ausloeser,
     ausloeser,
     titel: wort,
@@ -3516,7 +4663,7 @@ function mailTerminAendert(env, ctx, termin, ausloeser, was) {
     tag: `termin-${termin.id}`,
   });
 
-  benachrichtige(env, ctx, 'termin_aendert', null, {
+  benachrichtige(env, ctx, 'termin_aendert', kreis, {
     /* Kein fester Bezug auf den Termin allein: ein Abend darf mehrfach
        verschoben werden, und jede Verschiebung ist eine eigene Nachricht.
        Der Zeitstempel im Bezug trennt sie - der doppelte Ruf innerhalb
@@ -3651,23 +4798,40 @@ const rundmailText = ({ text, bildUrl, knopfText, knopfLink }) => text
    dieselbe Funktion, damit die Stundensperre an einer einzigen Stelle greift,
    egal auf welchem Weg die Mail losgeht. Wirft bei Sperre einen Fehler mit
    `.sperre`, damit die Route daraus eine 429 macht und der Cron daraus ein
-   'fehlgeschlagen'. */
-async function rundmailAbschicken(env, ctx, adminId, geprueft) {
+   'fehlgeschlagen'.
+
+   `gruppeId` seit Etappe 6 (Entscheidung 35): `null` ist der Wirt an die
+   ganze Instanz (unveraendertes Verhalten), ein Wert ist ein Gruppenadmin an
+   seine Gruppe.
+
+   DIE SPERRE IST ABSICHTLICH ASYMMETRISCH. `gruppe_id IS NULL OR gruppe_id
+   IS ?2` heisst: die Rundmail des Wirts (immer `gruppe_id = NULL` im
+   Protokoll) sperrt JEDE Gruppe mit, weil sie deren Mitglieder auch erreicht
+   - aber die Rundmail EINER Gruppe sperrt nur sich selbst, nie den Wirt und
+   nie eine andere Gruppe. Eine Gruppe kann damit weder den Wirt noch eine
+   fremde Gruppe knebeln. */
+async function rundmailAbschicken(env, ctx, adminId, geprueft, gruppeId = null) {
   const letzte = await env.DB.prepare(`
     SELECT erstellt FROM admin_log WHERE aktion = 'rundmail'
-      AND erstellt > datetime('now', ?) LIMIT 1
-  `).bind(`-${RUNDMAIL_SPERRE} hours`).first();
+      AND (gruppe_id IS NULL OR gruppe_id IS ?2)
+      AND erstellt > datetime('now', ?1) LIMIT 1
+  `).bind(`-${RUNDMAIL_SPERRE} hours`, gruppeId).first();
   if (letzte) {
     const e = new Error('Die letzte Rundmail ist noch keine Stunde her');
     e.sperre = true;
     throw e;
   }
 
+  /* Zaehlung UND Versand muessen denselben Kreis sehen - sonst meldet die
+     Route "an 8 verschickt", waehrend `gruppenKreis()` unten nur 5 anschreibt.
+     Zwei getrennte Wege ueber dieselbe Menge waeren zwei Wahrheiten. */
+  const kreisWo = gruppeId
+    ? 'AND id IN (SELECT user_id FROM gruppen_mitglied WHERE gruppe_id = ?)' : '';
   const kreis = await env.DB.prepare(`
     SELECT id, mail_prefs FROM users
     WHERE email IS NOT NULL AND gesperrt_am IS NULL
-      AND entfernt_am IS NULL AND mail_stumm_am IS NULL
-  `).all();
+      AND entfernt_am IS NULL AND mail_stumm_am IS NULL ${kreisWo}
+  `).bind(...(gruppeId ? [gruppeId] : [])).all();
   const wieViele = kreis.results.filter(u => mailWahl(u).rundmail).length;
 
   /* KEIN PUSH. Bewusst die einzige der sechs Arten ohne Gegenstueck auf dem
@@ -3677,7 +4841,7 @@ async function rundmailAbschicken(env, ctx, adminId, geprueft) {
      Meldung, wegen der Leute Push abschalten - und mit ihr dann auch das Los
      und den Notruf. Der Schalter `rundmail` steht trotzdem weiter im Deckel;
      er gilt eben nur fuer die Mail. */
-  benachrichtige(env, ctx, 'rundmail', null, {
+  benachrichtige(env, ctx, 'rundmail', gruppeId ? gruppenKreis(env, gruppeId) : null, {
     ausloeser: adminId,
     betreff: geprueft.betreff,
     text: rundmailText(geprueft),
@@ -3685,8 +4849,8 @@ async function rundmailAbschicken(env, ctx, adminId, geprueft) {
   });
 
   await env.DB.prepare(
-    'INSERT INTO admin_log (admin_id, aktion, detail) VALUES (?, ?, ?)')
-    .bind(adminId, 'rundmail', geprueft.betreff.slice(0, 120)).run();
+    'INSERT INTO admin_log (admin_id, aktion, detail, gruppe_id) VALUES (?, ?, ?, ?)')
+    .bind(adminId, 'rundmail', geprueft.betreff.slice(0, 120), gruppeId).run();
 
   return wieViele;
 }
@@ -3707,6 +4871,35 @@ function pruefeVersand(roh) {
   return { d };
 }
 
+/* Das Recht, eine Rundmail zu schreiben (Entscheidung 35): der Wirt ohne
+   `gruppe` im Rumpf (instanzweit, unveraendertes Verhalten), oder ein
+   Gruppenadmin MIT `gruppe` (nur seine eigene). Eine gemeinsame Pruefung
+   fuer alle vier Routen - vier eigene Kopien liefen sonst irgendwann
+   auseinander, dieselbe Lehre wie bei den Statistik-Abfragen.
+
+   `inGruppe()` uebernimmt die Existenz- und Mitgliedschaftspruefung von
+   selbst; der Wirt bekommt darin `rolle: 'admin'` auch ohne Mitgliedschaft
+   (Zeile 988), `istGruppenAdmin()` laesst ihn also auch hier durch - er darf
+   sich selbst als Gruppenadmin ausgeben und gezielt an eine Gruppe schreiben,
+   das ist kein Umweg um irgendeine Schranke. */
+async function rundmailRecht(request, env, ich, daten) {
+  // `inGruppe()` selbst unterscheidet GET (`?g=`) und POST (`daten.gruppe`) -
+  // dieselbe Unterscheidung noetig, BEVOR feststeht, ob es ueberhaupt eine
+  // Gruppe gibt, sonst wirft ein Gruppenadmin ohne `gruppe` im Rumpf einen
+  // 400er statt der richtigen "Nicht dein Zimmer"-Antwort.
+  const hatGruppe = request.method === 'GET'
+    ? !!new URL(request.url).searchParams.get('g')
+    : !!(daten && daten.gruppe);
+  if (!hatGruppe) {
+    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+    return { gruppeId: null };
+  }
+  const g = await inGruppe(request, env, ich, daten);
+  if (g instanceof Response) return g;
+  if (!istGruppenAdmin(g)) return fehler(request, 'Nicht dein Zimmer', 403);
+  return { gruppeId: g.gruppe.id };
+}
+
 /* Die geplanten Rundmails - aufgerufen vom zehnminuetigen Cron, siehe
    `scheduled()` unten und den zweiten Eintrag in wrangler.jsonc. Keine
    Uhrzeit auf die Minute, aber nah genug fuer eine Ankuendigung. Jede
@@ -3725,7 +4918,7 @@ async function rundmailGeplantVersenden(env, ctx) {
       const wieViele = await rundmailAbschicken(env, ctx, m.admin_id, {
         betreff: m.betreff, text: m.text,
         bildUrl: m.bild_url, knopfText: m.knopf_text, knopfLink: m.knopf_link,
-      });
+      }, m.gruppe_id);
       await env.DB.prepare(`
         UPDATE rundmail_geplant
         SET status = 'versendet', versendet_am = datetime('now'), empfaenger = ?
@@ -3797,6 +4990,159 @@ async function seitenStand(env) {
     return { ...leer, stand: 'fehler: ' + warum };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Gruppen (Schema 32)
+// ---------------------------------------------------------------------------
+
+/* Aus dem Anzeigenamen die Adressform. Umlaute werden ausgeschrieben und
+   nicht weggeworfen - "Büro" wird `buero` und nicht `bro`. Alles andere faellt
+   auf Bindestriche zusammen.
+
+   Der Slug ist heute nur ein Merkmal, keine Adresse: der Router kennt keine
+   Pfadparameter, die Gruppe reist als `?g=<id>` (siehe `inGruppe`). Er steht
+   trotzdem im Schema, weil er die IDEMPOTENZ der Migration traegt ("gibt es
+   `am-tresen` schon?") und weil eine sprechende Adresse spaeter ohne
+   Datenwanderung nachrueckbar sein soll. */
+function slugAus(name) {
+  const grund = String(name).toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  // Ein Name ganz ohne lateinische Buchstaben ("🍺") ergaebe sonst den leeren
+  // Slug, und der ist als UNIQUE genau einmal zu haben.
+  return grund || 'gruppe';
+}
+
+/* Denselben Slug gibt es nur einmal. Statt am UNIQUE zu scheitern und den
+   Nutzer nach einem anderen Namen zu fragen (den er ja frei waehlen darf -
+   zwei Runden duerfen gleich heissen), zaehlt der Worker hoch. */
+async function slugFrei(env, name) {
+  const grund = slugAus(name);
+  for (let i = 0; i < 50; i++) {
+    const kandidat = i ? `${grund}-${i + 1}` : grund;
+    const schon = await env.DB.prepare('SELECT 1 AS da FROM gruppen WHERE slug = ?')
+      .bind(kandidat).first();
+    if (!schon) return kandidat;
+  }
+  // Fuenfzig gleichnamige Runden sind kein Anwendungsfall, sondern ein Skript.
+  return `${grund}-${wuerfel().slice(0, 8)}`;
+}
+
+/* DAS NACHRUECKEN (Entscheidung 30). Verliert eine Gruppe ihren letzten
+   Admin, wird das dienstaelteste verbliebene Mitglied ernannt - ohne Zutun
+   des Wirts, denn sonst waere eine verwaiste Gruppe bis zu seiner naechsten
+   Sitzung handlungsunfaehig.
+
+   AUFGERUFEN NACH JEDER Aenderung, die den letzten Admin kosten kann: nach
+   dem Austritt, nach dem Entfernen und nach dem Zurueckstufen. Eine Regel an
+   einer Stelle statt drei Sonderfaellen - die drei Wege unterscheiden sich
+   fuer die Gruppe in nichts, sie steht danach ohne Fuehrung da.
+
+   Tut nichts, wenn es noch einen Admin gibt oder die Gruppe leer ist. Eine
+   leere Gruppe wird ausdruecklich NICHT geloescht: an ihr haengen Lose,
+   Notrufe, Termine und Kommentare, und `ON DELETE CASCADE` naehme sie alle
+   mit. Sie bleibt stehen, unsichtbar fuer alle ausser dem Wirt. */
+async function nachruecken(env, ctx, gruppeId, ausloeserId = null) {
+  const nochWer = await env.DB.prepare(`
+    SELECT 1 AS da FROM gruppen_mitglied m JOIN users u ON u.id = m.user_id
+     WHERE m.gruppe_id = ? AND m.rolle = 'admin'
+       AND u.entfernt_am IS NULL AND u.gesperrt_am IS NULL
+     LIMIT 1
+  `).bind(gruppeId).first();
+  if (nochWer) return null;
+
+  /* Dienstalter, und bei gleichem Zeitstempel die kleinere Id. Die Migration
+     hat `beigetreten` aus `users.erstellt` gefuellt, damit hier nicht sieben
+     gleiche Sekunden gegeneinander stehen - bei zwei Beitritten im selben
+     Augenblick entscheidet trotzdem etwas Festes und nicht die Laune der
+     Abfrage. */
+  /* AUCH NICHT GESPERRT. Ein Gesperrter darf lesen, aber keinen einzigen
+     Nicht-GET schreiben (siehe `nutzer`) - er waere eine Fuehrung, die nichts
+     tun kann. Schlimmer: von da an gaebe es eine Zeile mit `rolle = 'admin'`,
+     und die Vorpruefung oben liesse das Nachruecken nie wieder anlaufen. Die
+     Migration traegt Gesperrte ausdruecklich in die Auffanggruppe ein, der
+     Fall ist also vom ersten Tag an moeglich. */
+  const naechster = await env.DB.prepare(`
+    SELECT m.user_id AS id, u.name
+      FROM gruppen_mitglied m JOIN users u ON u.id = m.user_id
+     WHERE m.gruppe_id = ? AND u.entfernt_am IS NULL AND u.gesperrt_am IS NULL
+     ORDER BY m.beigetreten ASC, m.user_id ASC LIMIT 1
+  `).bind(gruppeId).first();
+  if (!naechster) return null;
+
+  const g = await env.DB.prepare('SELECT id, name FROM gruppen WHERE id = ?')
+    .bind(gruppeId).first();
+
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE gruppen_mitglied SET rolle = 'admin' WHERE gruppe_id = ? AND user_id = ?")
+      .bind(gruppeId, naechster.id),
+    /* Ins Protokoll, mit der Gruppe daneben (Schema 32). `admin_id` ist hier
+       der Ausloeser und nicht der Handelnde - gehandelt hat niemand, das ist
+       ja der Punkt. Bei einem Austritt ist es der Ausgetretene, und genau so
+       liest sich die Zeile spaeter richtig. */
+    env.DB.prepare(`
+      INSERT INTO admin_log (admin_id, aktion, ziel_id, detail, gruppe_id)
+      VALUES (?, 'nachgerueckt', ?, ?, ?)
+    `).bind(ausloeserId || naechster.id, naechster.id,
+            g ? g.name : null, gruppeId),
+  ]);
+
+  benachrichtige(env, ctx, 'gruppe', [naechster.id], {
+    bezug: `nachgerueckt:${gruppeId}`,
+    betreff: `Du führst jetzt „${g ? g.name : 'die Gruppe'}"`,
+    text:
+`„${g ? g.name : 'Die Gruppe'}" hat keinen Verwalter mehr, und du bist am laengsten dabei.
+Damit fuehrst du sie ab jetzt: Mitglieder, Antraege und Einladungen liegen bei dir.
+
+${env.SEITE}`,
+    html: `<p>„${g ? g.name : 'Die Gruppe'}" hat keinen Verwalter mehr, und du bist am
+           l&auml;ngsten dabei. Damit f&uuml;hrst du sie ab jetzt: Mitglieder, Antr&auml;ge
+           und Einladungen liegen bei dir.</p>` + mailKnopf(env.SEITE || '#', 'Zur Gruppe'),
+  });
+
+  return naechster;
+}
+
+/* Und wenn gar niemand mehr da ist, schliesst die Gruppe hinter dem Letzten
+   zu. `nachruecken()` gibt in diesem Fall `null` zurueck wie in dem, in dem
+   noch ein Verwalter sitzt - die beiden sind von aussen nicht zu
+   unterscheiden, deshalb steht das hier und nicht dort.
+
+   NICHT GELOESCHT: an einer leeren Gruppe haengen Buchungen, Salden,
+   abgeschlossene Monate und Strafen. Ein `DELETE` risse sie alle mit, und
+   der Ausgetretene wollte nur gehen, nicht die Geschichte tilgen. Was
+   wirklich stoert, ist zweierlei, und genau das raeumt diese Funktion weg:
+   eine leere Runde stand bis Etappe 9 weiter in der Suche (mit
+   `mitglieder: 0`, und wer dort anklopfte, bekam nie eine Antwort), und die
+   offenen Antraege lagen fuer immer bei niemandem. Der Rueckweg bleibt der
+   Einladungslink - wer ihn einloest, fuehrt sie (siehe
+   `POST /api/gruppe/beitritt`). */
+async function verwaistSchliessen(env, gruppeId) {
+  const wer = await env.DB.prepare(
+    'SELECT 1 AS da FROM gruppen_mitglied WHERE gruppe_id = ? LIMIT 1').bind(gruppeId).first();
+  if (wer) return false;
+  await env.DB.batch([
+    env.DB.prepare("UPDATE gruppen SET sichtbar = 'privat' WHERE id = ?").bind(gruppeId),
+    env.DB.prepare(`
+      UPDATE gruppen_anfrage
+         SET status = 'abgelehnt', beschieden = datetime('now')
+       WHERE gruppe_id = ? AND status = 'offen'
+    `).bind(gruppeId),
+  ]);
+  return true;
+}
+
+/* Eine Gruppe, wie sie nach aussen aussieht. EINE Stelle, damit die
+   Schalterleiste nicht an der einen Route vollstaendig und an der anderen um
+   den siebten Schalter verkuerzt herauskommt. */
+const gruppeAntwort = (g, extra = {}) => ({
+  id: g.id, name: g.name, slug: g.slug, beschreibung: g.beschreibung || null,
+  sichtbar: g.sichtbar,
+  schalter: Object.fromEntries(SCHALTER.map(s => [s, !!g[s]])),
+  ...extra,
+});
 
 // ---------------------------------------------------------------------------
 // Routen
@@ -3880,7 +5226,29 @@ const ROUTEN = {
     }
     if (!env.TAFEL) return fehler(request, 'Verteiler nicht eingerichtet', 503);
 
-    return env.TAFEL.get(env.TAFEL.idFromName('tafel')).fetch(request);
+    /* EINE LEITUNG JE GRUPPE (Schema 32). Die Seite haengt sich an die Gruppe,
+       die sie gerade zeigt; beim Wechsel wird die Verbindung geschlossen und
+       neu geoeffnet - das ist ohnehin ein Seitenwechsel von `start.html` nach
+       `index.html` und kostet nichts.
+
+       Weiterhin OHNE Token, und weiterhin aus demselben Grund: es reisen nur
+       Marken, keine Daten. Wer sich an eine fremde Gruppe haengt, erfaehrt,
+       DASS dort etwas passiert ist - was, holt er ueber dieselben GET-Routen
+       wie sonst, und die pruefen die Mitgliedschaft.
+
+       DIE GRUPPE WIRD BEWUSST NICHT MEHR NACHGESCHLAGEN (Etappe 2). Bis
+       hierher lieferte eine bestehende Id 101 und eine freie 404 - zwei
+       Antworten, tokenlos erreichbar, aus denen ein Unangemeldeter Gruppen-
+       Ids abzaehlen konnte. Jetzt bekommt jede ganzzahlige Id eine Leitung,
+       ob es die Gruppe gibt oder nicht: eine erfundene Id haengt an einer
+       Tafel, die nie etwas sagt, weil `melden()` sie nie ruft - das sieht
+       von aussen genau wie eine kaputte Leitung aus, und das ist Absicht. */
+    const id = Number(new URL(request.url).searchParams.get('g'));
+    if (!Number.isInteger(id) || id <= 0) {
+      return fehler(request, 'Welche Gruppe? (`g` fehlt)');
+    }
+
+    return env.TAFEL.get(env.TAFEL.idFromName('gruppe:' + id)).fetch(request);
   },
 
   // -------------------------------------------------------------------------
@@ -3924,7 +5292,11 @@ const ROUTEN = {
 
     const link = `${env.SEITE}#anmelden=${token}`;
     try {
-      await schickeLink(env, email, link);
+      /* `bekannt` ist oben schon geholt (die Sperrpruefung braucht dieselbe
+         Zeile) - `null` heisst: unter dieser Adresse steht noch kein Konto.
+         Kein zweiter Treffer auf die Datenbank, und vor allem KEIN Unterschied
+         in der Antwort weiter unten (Entscheidung 43). */
+      await schickeLink(env, email, link, !bekannt);
     } catch (e) {
       console.error('Mailversand:', e.message);
       return fehler(request, 'Die Mail ging nicht raus. Das liegt an uns, nicht an dir.', 502);
@@ -4137,17 +5509,155 @@ const ROUTEN = {
         .bind(name, name.toLowerCase(), ich.id).run();
     } catch (e) {
       if (String(e.message || '').includes('UNIQUE')) {
-        return fehler(request, 'Den Namen gibt es schon - nimm einen anderen', 409);
+        /* Entscheidung 43: fuer einen NAMENLOSEN faellt hier die haeufigste
+           Erklaerung an - er hat sich unter einer zweiten Schreibweise seiner
+           eigenen Adresse ein zweites Konto geholt und lauft jetzt gegen den
+           eigenen Namen. Das Feld `ausweg` sagt der Seite, dass sie neben "nimm
+           einen anderen" auch "das war schon mein Konto" anbieten darf; wer
+           schon einen Namen hat, benennt sich nur um und braucht das nicht. */
+        return antwort(request, {
+          fehler: 'Den Namen gibt es schon - nimm einen anderen',
+          ...(ich.name ? {} : { ausweg: 'verwerfen' }),
+        }, 409);
       }
       throw e;
     }
     // Der Name steht in der Liste - ein Namenloser, der sich benennt, ist fuer
-    // die anderen eine neue Zeile.
-    anstoss(request, env, ctx, 'tafel');
+    // die anderen eine neue Zeile. Nur die Gruppen, die `tafel_an` fuehren,
+    // zeigen diese Liste ueberhaupt (Schema 32, siehe `anstossSchalter`).
+    anstossSchalter('tafel_an', request, env, ctx, 'tafel');
     // Und fuer den Gastgeber ein Neuer. Nur beim ERSTEN Namen: wer sich
     // spaeter umbenennt, hatte schon einen.
     if (!ich.name) meldeNeuenNutzer(env, ctx, { id: ich.id, name, email: ich.email });
     return antwort(request, { ok: true, name });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Die eigene, gerade entstandene Anmeldung wieder wegwerfen (Entscheidung 43,
+     Etappe 7).
+
+     WOZU. `POST /api/anmelden` sagt bewusst nicht, ob es die Adresse schon
+     gibt - das waere Kontenaufzaehlung. Wer sich also unter einer zweiten
+     Schreibweise seiner eigenen Adresse anmeldet, merkt es erst beim Namen:
+     dort steht dann "den gibt es schon", und zwar von seinem EIGENEN Konto.
+     Bis Etappe 7 stand er an dieser Stelle namenlos und ohne Ausweg (am
+     11.08.2026 genau so passiert, PROJECT-MEMORY/Doppelkonto). Diese Route ist
+     der Ausweg - und die Faltung in `normMail` (44) sorgt dafuer, dass er im
+     Googlemail-Fall gar nicht erst gebraucht wird.
+
+     WARUM HART GELOESCHT, anders als das weiche `entfernen` des Kontors: hier
+     gibt es nichts, was als "Ehemaliger" stehenbleiben muesste. Ein Konto ohne
+     Namen und ohne eine einzige Zeile irgendwo hat keine Vergangenheit, an der
+     jemand haengt - eine Grabsteinzeile in `users` waere schlicht Muell.
+
+     Die Bedingungen sind eng und werden EINZELN geprueft, nicht summarisch:
+     kein Name, keine Meldung, kein Kommentar, keine Bewertung, kein Los, kein
+     Termin, keine Buchung, keine Mitgliedschaft. Trifft irgendetwas davon zu,
+     ist es kein frisches Versehen mehr, sondern ein Konto - dann 409, und der
+     Weg dorthin ist das Kontor. */
+  'POST /api/konto/verwerfen': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (ich.name) {
+      return fehler(request, 'Dieses Konto hat schon einen Namen - es lässt sich nicht mehr verwerfen.', 409);
+    }
+
+    /* EIN Ruf statt acht. Jede Zeile ist ein `EXISTS`, und die Summe sagt
+       zugleich, ob und woran es haengt - das kostet nichts extra und macht die
+       Fehlermeldung ehrlich, statt "irgendwas" zu sagen. */
+    const hat = await env.DB.prepare(`
+      SELECT
+        EXISTS (SELECT 1 FROM reports            WHERE user_id      = ?1) AS meldung,
+        EXISTS (SELECT 1 FROM kommentare         WHERE autor_id     = ?1) AS kommentar,
+        EXISTS (SELECT 1 FROM bewertungen        WHERE autor_id     = ?1) AS bewertung,
+        EXISTS (SELECT 1 FROM los                WHERE user_id      = ?1) AS los,
+        EXISTS (SELECT 1 FROM termine            WHERE gastgeber_id = ?1
+                                                    OR erstellt_von = ?1) AS termin,
+        EXISTS (SELECT 1 FROM notrufe            WHERE user_id      = ?1) AS notruf,
+        EXISTS (SELECT 1 FROM buchung            WHERE user_id       = ?1
+                                                    OR gebucht_von   = ?1
+                                                    OR storniert_von = ?1) AS buchung,
+        -- verhaengt_von kann hier wirklich zuschlagen, user_id nicht:
+        -- beitreten geht nur mit Namen (POST /api/gruppe/beitritt und
+        -- .../anfrage weisen einen Namenlosen mit 409 ab), ein Namenloser ist
+        -- also nie Ziel einer Strafe - aber der WIRT greift ohne
+        -- Mitgliedschaft durch (inGruppe laesst ihn als Admin herein), und
+        -- users.rolle steht schon beim Einloesen des Magic Links, also vor
+        -- dem Namensschritt. Ein namenloser Wirt, der eine Strafe verhaengt
+        -- hat, hat etwas hinterlassen.
+        EXISTS (SELECT 1 FROM strafe             WHERE user_id       = ?1
+                                                    OR verhaengt_von = ?1
+                                                    OR erledigt_von  = ?1) AS strafe,
+        EXISTS (SELECT 1 FROM gruppen_mitglied   WHERE user_id      = ?1) AS mitglied,
+        -- DIESELBE BEGRUENDUNG WIE OBEN, fuer alles, was der WIRT ohne
+        -- Mitgliedschaft in einer Gruppe tun kann: Preise setzen, Wareneingang
+        -- buchen, eine Hausregel schreiben, einen Monat abschliessen, einen
+        -- Antrag bescheiden, einen Einladungslink ausstellen. Jedes davon
+        -- hinterlaesst eine Zeile mit einem Fremdschluessel OHNE ON DELETE
+        -- CASCADE - vor Etappe 7 gab es diese Tabellen noch nicht, seither
+        -- liefe das DELETE unten sonst in einen FK-Fehler und der Nutzer saehe
+        -- einen 500er statt eines Satzes.
+        --
+        -- Nicht in der Liste, weil ein Namenloser dort nicht hinkommt:
+        -- gruppen.erstellt_von (Gruenden verlangt einen Namen), saldo.user_id
+        -- und saldo.bestaetigt_von sowie strafe.user_id (alle drei setzen
+        -- Mitgliedschaft voraus, und die gibt es nur mit Namen).
+        EXISTS (SELECT 1 FROM preis              WHERE gesetzt_von       = ?1) AS preis,
+        EXISTS (SELECT 1 FROM bestand            WHERE erfasst_von       = ?1) AS bestand,
+        EXISTS (SELECT 1 FROM hausregel          WHERE erstellt_von      = ?1) AS regel,
+        EXISTS (SELECT 1 FROM abrechnung         WHERE abgeschlossen_von = ?1) AS abrechnung,
+        EXISTS (SELECT 1 FROM saldo_log          WHERE von               = ?1) AS saldo_log,
+        EXISTS (SELECT 1 FROM strafe_log         WHERE von               = ?1) AS strafe_log,
+        EXISTS (SELECT 1 FROM gruppen_anfrage    WHERE beschieden_von    = ?1) AS anfrage,
+        EXISTS (SELECT 1 FROM gruppen_einladung  WHERE erstellt_von      = ?1) AS einladung,
+        EXISTS (SELECT 1 FROM admin_log          WHERE admin_id          = ?1) AS protokoll
+    `).bind(ich.id).first();
+
+    const HAENGT = 'Dieses Konto hat schon etwas hinterlassen und lässt sich nicht mehr verwerfen.';
+    const besitz = Object.entries(hat).filter(([, v]) => v).map(([k]) => k);
+    if (besitz.length) return fehler(request, HAENGT, 409);
+
+    /* Die Tokens zuerst, dann die Zeile. Andersherum bliebe bei einem Abbruch
+       zwischen den beiden Anweisungen ein Token stehen, das auf niemanden mehr
+       zeigt - `nutzer()` liefert dann `null`, und der Nutzer haengt in einer
+       Anmeldung, die es nicht gibt. `batch` faehrt beides in einer
+       Transaktion, aber die Reihenfolge kostet nichts und ist die richtige.
+
+       `magic` wird NICHT geraeumt: die Zeilen haengen an der Adresse, nicht am
+       Konto, laufen nach fuenfzehn Minuten ohnehin ab, und wer sich gleich
+       danach richtig anmeldet, soll seinen frischen Link behalten. */
+    /* Das Netz unter der Liste darueber. Die Aufzaehlung ist die ehrliche
+       Auskunft, aber sie ist von Hand gepflegt - kommt eine Tabelle mit einem
+       Fremdschluessel auf `users(id)` dazu und niemand denkt an diese Stelle,
+       faellt der Nutzer sonst in einen 500er. Der Fehler ist derselbe Sachverhalt
+       wie oben, also bekommt er denselben Satz: von aussen sind die beiden Wege
+       nicht zu unterscheiden, und das sollen sie auch nicht sein. */
+    try {
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM tokens WHERE user_id = ?').bind(ich.id),
+        env.DB.prepare('DELETE FROM users WHERE id = ? AND name IS NULL').bind(ich.id),
+      ]);
+    } catch (e) {
+      /* Nachgemessen, damit das Muster keine Vermutung ist: D1 meldet hier
+         `D1_ERROR: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT (extended:
+         SQLITE_CONSTRAINT_FOREIGNKEY)`, und dieselbe Zeile noch einmal in
+         `cause`. Beide werden angesehen und beide Schreibweisen gesucht - die
+         Verpackung von D1 ist nichts, worauf man sich auf drei Jahre festlegen
+         sollte, und ein Muster, das eine Fassung spaeter danebengreift, faellt
+         genau in den 500er zurueck, den dieser Zweig abfangen soll. Alles
+         andere fliegt weiter: ein verschluckter Fehler waere schlimmer als
+         einer, den man sieht. */
+      const text = String(e && e.message) + ' ' + String(e && e.cause && e.cause.message);
+      if (/FOREIGN KEY|SQLITE_CONSTRAINT_FOREIGNKEY/i.test(text)) {
+        return fehler(request, HAENGT, 409);
+      }
+      throw e;
+    }
+
+    /* Kein `anstoss`: ein namenloses Konto stand auf keiner Tafel, also
+       aendert sein Verschwinden an keiner etwas. Und keine Mail - es gibt
+       niemanden mehr, an den sie gehen koennte. */
+    return antwort(request, { ok: true });
   },
 
   // -------------------------------------------------------------------------
@@ -4489,6 +5999,2463 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
+  // ===========================================================================
+  // Gruppen und Mitgliedschaft (§5.1). Die Gruppe reist als `?g=` bei GET und
+  // als Feld `gruppe` im Rumpf sonst - aufgeloest wird sie an genau einer
+  // Stelle, in `inGruppe()`.
+  // ===========================================================================
+
+  /* Meine Gruppen samt Kurzstand - das ist `start.html`. Vier Abfragen in
+     einem `batch` statt einer je Kachel: wer in fuenf Gruppen ist, soll nicht
+     fuenfzehn Runden zur Datenbank kosten.
+
+     WAS AUF DER KACHEL STEHT, haengt an der Schalterleiste: eine Gruppe ohne
+     Tafel hat keinen Kaltbestand, eine ohne Rad kein laufendes Los. Beides
+     kommt dann als `null` heraus und nicht als 0 - "null Bier" und "fuehren
+     wir nicht" sind zwei verschiedene Auskuenfte, und die Kachel zeichnet sie
+     verschieden. */
+  'GET /api/gruppen': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const tag = bierTag();
+    const meine = 'SELECT gruppe_id FROM gruppen_mitglied WHERE user_id = ?';
+    const [gruppen, kalt, raeder, antraege, salden] = await env.DB.batch([
+      env.DB.prepare(`
+        SELECT g.*, m.rolle AS meine_rolle, m.beigetreten,
+               (SELECT count(*) FROM gruppen_mitglied x JOIN users y ON y.id = x.user_id
+                 WHERE x.gruppe_id = g.id AND y.entfernt_am IS NULL) AS mitglieder
+          FROM gruppen_mitglied m JOIN gruppen g ON g.id = m.gruppe_id
+         WHERE m.user_id = ?
+         ORDER BY m.beigetreten ASC, g.id ASC
+      `).bind(ich.id),
+      /* Der Kaltbestand der Runde: die JUENGSTE Meldung je Mitglied, summiert.
+         Dieselbe Bauweise wie `losFeldStmt` - `reports` wird nie
+         ueberschrieben, der Stand ist die letzte Zeile. Und derselbe Filter:
+         wer keinen Namen hat, steht auf keiner Tafel. */
+      env.DB.prepare(`
+        SELECT m.gruppe_id AS id, sum(r.biere) AS kalt
+          FROM gruppen_mitglied m
+          JOIN users u ON u.id = m.user_id
+          JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j
+            ON j.user_id = m.user_id
+          JOIN reports r ON r.id = j.id
+         WHERE m.gruppe_id IN (${meine})
+           AND u.name IS NOT NULL AND u.entfernt_am IS NULL
+         GROUP BY m.gruppe_id
+      `).bind(ich.id),
+      /* Laeuft dort gerade ein Rad? Dieselbe Bedingung wie `tagesLage`: was
+         zugesagt ist gilt, was offen ist gilt, solange die Frist laeuft. */
+      env.DB.prepare(`
+        SELECT gruppe_id AS id, count(*) AS n FROM los
+         WHERE tag = ? AND gruppe_id IN (${meine})
+           AND (status = 'zugesagt'
+                OR (status = 'offen' AND gedreht_am >= datetime('now', ?)))
+         GROUP BY gruppe_id
+      `).bind(tag, ich.id, `-${LOS_FRIST} hours`),
+      // Wartende Antraege - die sieht nur, wer die Gruppe fuehrt.
+      env.DB.prepare(`
+        SELECT gruppe_id AS id, count(*) AS n FROM gruppen_anfrage
+         WHERE status = 'offen' AND gruppe_id IN (
+           SELECT gruppe_id FROM gruppen_mitglied WHERE user_id = ? AND rolle = 'admin')
+         GROUP BY gruppe_id
+      `).bind(ich.id),
+      /* Was ICH in dieser Gruppe noch schulde - ueber ALLE Monate, nicht nur
+         den laufenden. Zeigt nur, wer aktuell Mitglied ist; ein Ausgetretener
+         hat hier keine Kachel mehr, dafuer gibt es `GET /api/salden`
+         (Entscheidung 29). */
+      env.DB.prepare(`
+        SELECT a.gruppe_id AS id, coalesce(sum(s.betrag_cent - s.gezahlt_cent), 0) AS offen
+          FROM saldo s JOIN abrechnung a ON a.id = s.abrechnung_id
+         WHERE s.user_id = ? AND a.gruppe_id IN (${meine}) AND s.betrag_cent - s.gezahlt_cent > 0
+         GROUP BY a.gruppe_id
+      `).bind(ich.id, ich.id),
+    ]);
+
+    const proGruppe = (zeilen, feld) =>
+      Object.fromEntries(zeilen.results.map(z => [z.id, z[feld]]));
+    const kaltJe = proGruppe(kalt, 'kalt');
+    const radJe = proGruppe(raeder, 'n');
+    const antragJe = proGruppe(antraege, 'n');
+    const offenJe = proGruppe(salden, 'offen');
+
+    return antwort(request, {
+      gruppen: gruppen.results.map(g => gruppeAntwort(g, {
+        rolle: g.meine_rolle,
+        mitglieder: g.mitglieder,
+        kalt: g.tafel_an ? (kaltJe[g.id] || 0) : null,
+        rad: g.rad_an ? !!radJe[g.id] : null,
+        /* ANDERS als `kalt`/`rad`: NICHT auf `kasse_an` gated (Abnahmefund).
+           Ein abgeschalteter Schalter heisst "es wird gerade nichts
+           gebucht", nicht "eine bestehende Schuld ist unsichtbar" - dieselbe
+           Begründung wie bei `POST /api/saldo/bestaetigung`, die den
+           Schalter aus genau diesem Grund ebenfalls nicht prüft. */
+        offen_cent: offenJe[g.id] || 0,
+        antraege: g.meine_rolle === 'admin' ? (antragJe[g.id] || 0) : null,
+      })),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Eine Gruppe gruenden. Wer gruendet, fuehrt sie - jede andere Regelung
+     braeuchte einen zweiten Menschen, den es beim Gruenden noch nicht gibt. */
+  'POST /api/gruppen': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const name = String(daten.name ?? '').trim().replace(/\s+/g, ' ');
+    if (name.length < 2 || name.length > GRUPPE_NAME_MAX) {
+      return fehler(request, `Name: 2 bis ${GRUPPE_NAME_MAX} Zeichen`);
+    }
+    const text = String(daten.beschreibung ?? '').trim().replace(/\s+/g, ' ');
+    if (text.length > GRUPPE_TEXT_MAX) {
+      return fehler(request, `Die Beschreibung darf höchstens ${GRUPPE_TEXT_MAX} Zeichen haben`);
+    }
+    const sichtbar = daten.sichtbar === 'oeffentlich' ? 'oeffentlich' : 'privat';
+
+    const schon = await env.DB.prepare(`
+      SELECT count(*) AS n FROM gruppen
+       WHERE erstellt_von = ? AND erstellt > datetime('now','-1 day')
+    `).bind(ich.id).first();
+    if (schon.n >= GRUPPEN_PRO_TAG) {
+      return fehler(request, `Höchstens ${GRUPPEN_PRO_TAG} Gruppen am Tag`, 429);
+    }
+
+    const slug = await slugFrei(env, name);
+    const g = await env.DB.prepare(`
+      INSERT INTO gruppen (name, slug, beschreibung, sichtbar, erstellt_von)
+      VALUES (?, ?, ?, ?, ?)
+      RETURNING *
+    `).bind(name, slug, text || null, sichtbar, ich.id).first();
+
+    await env.DB.prepare(`
+      INSERT INTO gruppen_mitglied (gruppe_id, user_id, rolle) VALUES (?, ?, 'admin')
+    `).bind(g.id, ich.id).run();
+
+    /* KEIN `anstoss`: die neue Gruppe hat genau ein Mitglied, und das haelt
+       gerade die Antwort in der Hand. Es gibt keine zweite Leitung, der man
+       etwas melden koennte. */
+    /* `kalt`, `rad` und `offen_cent` fahren mit, obwohl sie bei einer frisch
+       gegruendeten Runde nichts zu sagen haben. Der Grund steht auf der
+       anderen Seite: `start.html` schiebt genau dieses Objekt in seine Reihe,
+       und ein FEHLENDES Feld liest sich dort als "fuehrt keine Tafel" bzw.
+       "dreht nicht" - also als das Gegenteil der eigenen Schalterstellung, bis
+       jemand neu laedt. Eine Antwort, die in die Reihe soll, hat auszusehen
+       wie eine Zeile der Reihe. */
+    return antwort(request, {
+      ok: true, gruppe: gruppeAntwort(g, {
+        rolle: 'admin', mitglieder: 1,
+        kalt: g.tafel_an ? 0 : null,
+        rad: g.rad_an ? false : null,
+        offen_cent: 0, // nicht `kasse_an`-gated, siehe GET /api/gruppen
+        antraege: 0,
+      }),
+    }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  // Stammdaten, Schalterstellung, meine Rolle. Die eine Route, die jede Seite
+  // beim Aufbau ruft, sobald sie weiss, welche Gruppe sie zeigt.
+  'GET /api/gruppe': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const g = await inGruppe(request, env, ich, null);
+    if (g instanceof Response) return g;
+
+    /* Entfernte zaehlen nicht mit - dieselbe Bedingung wie in
+       `GET /api/gruppe/mitglieder`. Zwei Zahlen fuer dieselbe Sache auf zwei
+       Seiten nebeneinander waeren die Sorte Widerspruch, die niemand meldet
+       und jeder bemerkt. */
+    const zahl = await env.DB.prepare(`
+      SELECT count(*) AS n FROM gruppen_mitglied m JOIN users u ON u.id = m.user_id
+       WHERE m.gruppe_id = ? AND u.entfernt_am IS NULL
+    `).bind(g.gruppe.id).first();
+
+    return antwort(request, gruppeAntwort(g.gruppe, {
+      rolle: g.rolle, mitglied: g.mitglied, mitglieder: zahl.n,
+    }));
+  },
+
+  // -------------------------------------------------------------------------
+  /* Aendern - Name, Beschreibung, Sichtbarkeit, Schalterleiste. Nur der
+     Gruppenadmin.
+
+     Die Schalter WIRKEN seit Etappe 2: die Leserouten fragen sie ab
+     (`inGruppe(…, schalter)`), und `gruppe.html` zeigt die Funktionen-Leiste
+     dem Gruppenadmin. Diese eine Route stand schon in Etappe 1 fertig - sie
+     schreiben und sie auswerten waren zwei verschiedene Schritte. */
+  'PATCH /api/gruppe': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten);
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const setzt = [], werte = [];
+    if (daten.name !== undefined) {
+      const name = String(daten.name ?? '').trim().replace(/\s+/g, ' ');
+      if (name.length < 2 || name.length > GRUPPE_NAME_MAX) {
+        return fehler(request, `Name: 2 bis ${GRUPPE_NAME_MAX} Zeichen`);
+      }
+      /* Der Slug wandert NICHT mit. Er ist beim Gruenden entstanden und
+         bleibt; wer ihn nachzoege, braeche jede Adresse, die jemand
+         weitergegeben hat - und eine Umbenennung ist genau der Moment, in dem
+         das passiert. */
+      setzt.push('name = ?'); werte.push(name);
+    }
+    if (daten.beschreibung !== undefined) {
+      const text = String(daten.beschreibung ?? '').trim().replace(/\s+/g, ' ');
+      if (text.length > GRUPPE_TEXT_MAX) {
+        return fehler(request, `Die Beschreibung darf höchstens ${GRUPPE_TEXT_MAX} Zeichen haben`);
+      }
+      setzt.push('beschreibung = ?'); werte.push(text || null);
+    }
+    if (daten.sichtbar !== undefined) {
+      if (daten.sichtbar !== 'privat' && daten.sichtbar !== 'oeffentlich') {
+        return fehler(request, "sichtbar: 'privat' oder 'oeffentlich'");
+      }
+      setzt.push('sichtbar = ?'); werte.push(daten.sichtbar);
+    }
+    for (const s of SCHALTER) {
+      if (daten[s] === undefined) continue;
+      if (typeof daten[s] !== 'boolean') return fehler(request, `${s}: true oder false`);
+      setzt.push(`${s} = ?`); werte.push(daten[s] ? 1 : 0);
+    }
+    if (!setzt.length) return fehler(request, 'Nichts zu ändern');
+
+    const neu = await env.DB.prepare(
+      `UPDATE gruppen SET ${setzt.join(', ')} WHERE id = ? RETURNING *`)
+      .bind(...werte, g.gruppe.id).first();
+
+    /* Der Wirt greift durch, ohne Mitglied zu sein - das gehoert ins
+       Protokoll. Ein Gruppenadmin, der seine eigene Gruppe aendert, tut
+       nichts Protokollwuerdiges: es ist seine. */
+    if (!g.mitglied) {
+      await env.DB.prepare(`
+        INSERT INTO admin_log (admin_id, aktion, ziel_id, detail, gruppe_id)
+        VALUES (?, 'gruppe_geaendert', NULL, ?, ?)
+      `).bind(ich.id, neu.name, neu.id).run();
+    }
+
+    // An die offenen Seiten DIESER Gruppe: der Name steht in ihrer Kopfzeile.
+    anstossGruppe(neu.id, request, env, ctx, 'tafel');
+    return antwort(request, { ok: true, gruppe: gruppeAntwort(neu, { rolle: g.rolle }) });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Die Gruppensuche. Zeigt NUR Name, Beschreibung und Mitgliederzahl - keine
+     Namen, keine Bestaende, kein Rad. Wer drin ist und was dort passiert, ist
+     Sache der Mitglieder; hier steht nur, dass es die Runde gibt.
+
+     Private Gruppen kommen gar nicht vor. Sie sind nicht "versteckt, aber
+     findbar", sie sind nicht da - der einzige Weg hinein ist ein Link, den
+     jemand geschickt hat. */
+  'GET /api/gruppen/suche': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const q = (new URL(request.url).searchParams.get('q') || '').trim().slice(0, 60);
+    const wie = `%${q.replace(/[%_]/g, ' ')}%`;
+
+    const { results } = await env.DB.prepare(`
+      SELECT g.id, g.name, g.beschreibung,
+             (SELECT count(*) FROM gruppen_mitglied m JOIN users x ON x.id = m.user_id
+               WHERE m.gruppe_id = g.id AND x.entfernt_am IS NULL) AS mitglieder,
+             EXISTS (SELECT 1 FROM gruppen_mitglied m
+                      WHERE m.gruppe_id = g.id AND m.user_id = ?) AS drin,
+             EXISTS (SELECT 1 FROM gruppen_anfrage a
+                      WHERE a.gruppe_id = g.id AND a.user_id = ? AND a.status = 'offen') AS beantragt
+        FROM gruppen g
+       WHERE g.sichtbar = 'oeffentlich'
+         AND (? = '' OR g.name LIKE ? OR coalesce(g.beschreibung,'') LIKE ?)
+       ORDER BY g.name
+       LIMIT ${SUCHE_MAX}
+    `).bind(ich.id, ich.id, q, wie, wie).all();
+
+    return antwort(request, {
+      treffer: results.map(g => ({
+        id: g.id, name: g.name, beschreibung: g.beschreibung || null,
+        mitglieder: g.mitglieder, drin: !!g.drin, beantragt: !!g.beantragt,
+      })),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Beitritt beantragen. AUSDRUECKLICH OHNE `inGruppe()` - wer beantragt, ist
+     ja gerade nicht drin, und die Funktion wuerde ihn mit 403 abweisen. Die
+     Gruppe wird hier von Hand aufgeloest, und zwar strenger: nur oeffentliche.
+     In eine private kommt man nur ueber einen Link. */
+  'POST /api/gruppe/anfrage': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const id = Number(daten.gruppe);
+    if (!Number.isInteger(id) || id <= 0) return fehler(request, 'Welche Gruppe?');
+
+    const g = await env.DB.prepare('SELECT id, name, sichtbar FROM gruppen WHERE id = ?')
+      .bind(id).first();
+    /* Eine private Gruppe antwortet hier wie eine, die es nicht gibt. Sonst
+       waere diese Route eine Auskunft darueber, welche Ids belegt sind. */
+    if (!g || g.sichtbar !== 'oeffentlich') {
+      return fehler(request, 'Diese Gruppe gibt es nicht', 404);
+    }
+
+    const drin = await env.DB.prepare(
+      'SELECT 1 AS da FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+      .bind(id, ich.id).first();
+    if (drin) return fehler(request, 'Du bist schon dabei', 409);
+
+    try {
+      await env.DB.prepare(
+        'INSERT INTO gruppen_anfrage (gruppe_id, user_id) VALUES (?, ?)')
+        .bind(id, ich.id).run();
+    } catch (e) {
+      /* Der partielle UNIQUE-Index laesst genau einen OFFENEN Antrag zu (siehe
+         migrations/0032). Ein zweiter ist kein Fehler des Nutzers, sondern
+         Ungeduld - und die Antwort sagt ihm, dass sein Antrag noch liegt. */
+      if (String(e.message || '').includes('UNIQUE')) {
+        return fehler(request, 'Dein Antrag liegt schon vor', 409);
+      }
+      throw e;
+    }
+    return antwort(request, { ok: true }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  // Die offenen Antraege. Nur fuer den, der die Gruppe fuehrt.
+  'GET /api/gruppe/anfragen': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const g = await inGruppe(request, env, ich, null);
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const { results } = await env.DB.prepare(`
+      SELECT a.id, a.gestellt, u.id AS user_id, coalesce(u.name, 'Ohne Namen') AS name
+        FROM gruppen_anfrage a JOIN users u ON u.id = a.user_id
+       WHERE a.gruppe_id = ? AND a.status = 'offen' AND u.entfernt_am IS NULL
+       ORDER BY a.gestellt
+    `).bind(g.gruppe.id).all();
+
+    return antwort(request, {
+      anfragen: results.map(a => ({
+        id: a.id, user_id: a.user_id, name: a.name, gestellt: utc(a.gestellt),
+      })),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  // Annehmen oder ablehnen. Beides landet in derselben Zeile - ein Antrag ist
+  // danach beschieden und nicht weg, sonst stellt derselbe Mensch ihn morgen
+  // wieder und niemand weiss, dass er schon einmal abgelehnt wurde.
+  'POST /api/gruppe/anfrage/bescheid': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten);
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const annehmen = daten.annehmen === true;
+    if (!annehmen && daten.annehmen !== false) {
+      return fehler(request, 'annehmen: true oder false');
+    }
+
+    /* Die Gruppe steht in der WHERE-Klausel, nicht nur die Antrags-Id: sonst
+       beschiede der Admin von Gruppe A mit einer erratenen Nummer den Antrag
+       an Gruppe B. */
+    const a = await env.DB.prepare(`
+      SELECT id, user_id FROM gruppen_anfrage
+       WHERE id = ? AND gruppe_id = ? AND status = 'offen'
+    `).bind(Number(daten.anfrage), g.gruppe.id).first();
+    if (!a) return fehler(request, 'Diesen Antrag gibt es nicht mehr', 404);
+
+    const schritte = [env.DB.prepare(`
+      UPDATE gruppen_anfrage
+         SET status = ?, beschieden = datetime('now'), beschieden_von = ?
+       WHERE id = ? AND status = 'offen'
+    `).bind(annehmen ? 'angenommen' : 'abgelehnt', ich.id, a.id)];
+    if (annehmen) {
+      // `OR IGNORE`: wer zwischendurch ueber einen Einladungslink hereinkam,
+      // ist schon Mitglied - dann ist der Antrag trotzdem beschieden.
+      schritte.push(env.DB.prepare(
+        'INSERT OR IGNORE INTO gruppen_mitglied (gruppe_id, user_id) VALUES (?, ?)')
+        .bind(g.gruppe.id, a.user_id));
+    }
+    await env.DB.batch(schritte);
+
+    benachrichtige(env, ctx, 'gruppe', [a.user_id], {
+      bezug: `anfrage:${a.id}`,
+      betreff: annehmen
+        ? `Du bist dabei: „${g.gruppe.name}"`
+        : `Dein Antrag an „${g.gruppe.name}"`,
+      text: annehmen
+        ? `Dein Antrag an „${g.gruppe.name}" ist angenommen — du bist dabei.\n\n${env.SEITE}`
+        : `Dein Antrag an „${g.gruppe.name}" wurde abgelehnt.`,
+      html: annehmen
+        ? `<p>Dein Antrag an „${g.gruppe.name}" ist angenommen &ndash; du bist dabei.</p>`
+          + mailKnopf(env.SEITE || '#', 'Zur Gruppe')
+        : `<p>Dein Antrag an „${g.gruppe.name}" wurde abgelehnt.</p>`,
+    });
+
+    // Ein neues Mitglied steht in der Liste - das sehen die offenen Seiten
+    // DIESER Gruppe, nicht die des Admins (er kann in mehreren sein).
+    if (annehmen) anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel');
+    return antwort(request, { ok: true, angenommen: annehmen });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Einen Einladungslink erzeugen. Wer ihn einloest, ist ohne Bescheid drin -
+     das ist der Unterschied zum Antrag: hier hat der Admin die Entscheidung
+     schon getroffen, als er den Link verschickt hat.
+
+     DER KLARTEXT STEHT GENAU EINMAL IN DIESER ANTWORT und danach nirgends
+     mehr - gespeichert ist nur sein Hash, wie beim Geraete-Token (0002) und
+     beim Hausanschluss (0027). Wer ihn verliert, macht einen neuen. */
+  'POST /api/gruppe/einladung': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten);
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    let tage = null;
+    if (daten.tage != null) {
+      tage = Number(daten.tage);
+      if (!Number.isInteger(tage) || tage < 1 || tage > EINLADUNG_TAGE_MAX) {
+        return fehler(request, `tage: 1 bis ${EINLADUNG_TAGE_MAX}, oder weglassen`);
+      }
+    }
+    let max = null;
+    if (daten.max_nutzung != null) {
+      max = Number(daten.max_nutzung);
+      if (!Number.isInteger(max) || max < 1 || max > 999) {
+        return fehler(request, 'max_nutzung: 1 bis 999, oder weglassen');
+      }
+    }
+
+    const token = wuerfel();
+    await env.DB.prepare(`
+      INSERT INTO gruppen_einladung (token_hash, gruppe_id, erstellt_von, laeuft_ab, max_nutzung)
+      VALUES (?, ?, ?, ${tage ? "datetime('now', ?)" : '?'}, ?)
+    `).bind(await hash(token), g.gruppe.id, ich.id,
+            tage ? `+${tage} days` : null, max).run();
+
+    return antwort(request, {
+      ok: true,
+      /* Fertig zusammengesetzt, damit die Verwaltung ihn nur noch kopieren
+         muss. Die Seite kennt ihre eigene Adresse zwar auch - aber der Link
+         wird verschickt, nicht geklickt, und ein `#` an der falschen Stelle
+         faellt beim Empfaenger auf, nicht beim Absender. */
+      link: `${env.SEITE || ''}#einladung=${token}`,
+      token,
+    }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Die bestehenden Links. OHNE Klartext - der ist weg. `kennung` ist der
+     Hash selbst: er laesst sich nicht zurueckrechnen, taugt also nicht zum
+     Beitreten, wohl aber zum Widerrufen. */
+  'GET /api/gruppe/einladungen': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const g = await inGruppe(request, env, ich, null);
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const { results } = await env.DB.prepare(`
+      SELECT e.token_hash, e.erstellt, e.laeuft_ab, e.max_nutzung, e.genutzt,
+             e.widerrufen_am, coalesce(u.name, 'Ehemaliger') AS von
+        FROM gruppen_einladung e LEFT JOIN users u ON u.id = e.erstellt_von
+       WHERE e.gruppe_id = ?
+       ORDER BY e.erstellt DESC
+    `).bind(g.gruppe.id).all();
+
+    return antwort(request, {
+      einladungen: results.map(e => ({
+        kennung: e.token_hash,
+        von: e.von,
+        erstellt: utc(e.erstellt),
+        laeuft_ab: e.laeuft_ab ? utc(e.laeuft_ab) : null,
+        max_nutzung: e.max_nutzung,
+        genutzt: e.genutzt,
+        widerrufen: !!e.widerrufen_am,
+        // Gerechnet und nicht gespeichert, wie der offene Restbetrag spaeter:
+        // ein Link ist gueltig, solange nichts dagegen spricht.
+        gueltig: !e.widerrufen_am
+          && (!e.laeuft_ab || e.laeuft_ab > new Date().toISOString().slice(0, 19).replace('T', ' '))
+          && (e.max_nutzung == null || e.genutzt < e.max_nutzung),
+      })),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Einen Link widerrufen. Eigene Route und kein Feld an der Anlege-Route -
+     dasselbe Muster wie `POST /api/ha/zugang/weg` (Schema 27): was etwas
+     zurueckzieht, soll nicht in derselben Route stehen wie das, was es
+     anlegt. Widerrufen statt geloescht, damit der Admin sieht, dass es den
+     Link gab. */
+  'POST /api/gruppe/einladung/weg': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten);
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const weg = await env.DB.prepare(`
+      UPDATE gruppen_einladung SET widerrufen_am = datetime('now')
+       WHERE token_hash = ? AND gruppe_id = ? AND widerrufen_am IS NULL
+    `).bind(String(daten.kennung || ''), g.gruppe.id).run();
+    if (!weg.meta.changes) return fehler(request, 'Diesen Link gibt es nicht mehr', 404);
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Einen Einladungslink einloesen. Ohne Bescheid, ohne Antrag - der Link IST
+     die Zusage.
+
+     Der zweite Ruf mit demselben Link ist kein Fehler: wer zweimal klickt,
+     ist einmal drin. `genutzt` zaehlt dabei nur, wenn wirklich jemand
+     dazugekommen ist, sonst braeuchte ein Doppelklick zwei von zehn
+     Nutzungen auf. */
+  'POST /api/gruppe/beitritt': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    if (!ich.name) return fehler(request, 'Erst einen Namen für die Liste wählen', 409);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const token = String(daten.token || '').trim();
+    if (!token) return fehler(request, 'Kein Einladungslink dabei');
+
+    const e = await env.DB.prepare(`
+      SELECT e.*, g.name, g.slug FROM gruppen_einladung e
+        JOIN gruppen g ON g.id = e.gruppe_id
+       WHERE e.token_hash = ?
+    `).bind(await hash(token)).first();
+    /* Ein Link, den es nicht gibt, und ein widerrufener antworten gleich.
+       Alles andere waere eine Auskunft an den, der Links durchprobiert. */
+    if (!e || e.widerrufen_am) return fehler(request, 'Dieser Link gilt nicht mehr', 403);
+    if (e.laeuft_ab) {
+      const abgelaufen = await env.DB.prepare(
+        "SELECT (? <= datetime('now')) AS weg").bind(e.laeuft_ab).first();
+      if (abgelaufen.weg) return fehler(request, 'Dieser Link ist abgelaufen', 403);
+    }
+
+    const drin = await env.DB.prepare(
+      'SELECT 1 AS da FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+      .bind(e.gruppe_id, ich.id).first();
+    if (drin) {
+      return antwort(request, { ok: true, schon: true, gruppe: { id: e.gruppe_id, name: e.name } });
+    }
+    if (e.max_nutzung != null && e.genutzt >= e.max_nutzung) {
+      return fehler(request, 'Dieser Link ist aufgebraucht', 403);
+    }
+
+    /* DER ZAEHLER IST DIE TUER, nicht nur die Strichliste. Er laeuft darum
+       ALLEIN und VOR dem Beitritt, und sein `RETURNING id` entscheidet, ob es
+       ueberhaupt weitergeht.
+
+       Vorher stand er als erstes Statement in demselben `batch` wie der
+       INSERT - bedingt zwar, aber der INSERT hing nicht an ihm (Abnahmefund
+       Etappe 9). Das `OR IGNORE` faengt nur den Primaerschluessel, also den
+       Doppeltipp DESSELBEN Menschen; zwei VERSCHIEDENE, die einen Link mit
+       `max_nutzung = 1` gleichzeitig einloesen, haben verschiedene
+       `user_id`, kollidieren also nirgends: beide kamen an der
+       `drin`-Pruefung vorbei, beim zweiten traf der UPDATE null Zeilen
+       (1 < 1 ist falsch), der INSERT lief trotzdem. Ergebnis: eine Nutzung
+       gezaehlt, zwei Leute drin. Die Hoechstzahl war gedeckelt, die
+       Mitgliedschaft nicht.
+
+       Die aeusseren Pruefungen auf `widerrufen_am` und `laeuft_ab` stehen hier
+       ein zweites Mal in der WHERE-Klausel, und das ist kein Doppel: dort oben
+       lasen sie den Stand VOR diesem Statement: wird der Link in der Zwischen-
+       zeit widerrufen, hielte ihn sonst nichts mehr auf.
+
+       Was der Zaehler NICHT mehr abfaengt: stirbt der Isolate zwischen diesem
+       UPDATE und dem `batch` darunter, ist eine Nutzung verbraucht, ohne dass
+       jemand hereinkam. Der Tausch ist bewusst - eine verlorene Nutzung ist
+       ein Link zu wenig, ein ungedeckelter Beitritt ist ein Mitglied zu viel,
+       und nur eines von beiden bricht ein Versprechen an den Admin.
+
+       `RETURNING token_hash`, nicht `RETURNING id`: `gruppen_einladung` hat
+       keine `id`, ihr Primaerschluessel IST der Hash. Der Griff daneben
+       kostete beim Bauen einen 500er auf jedem Beitritt.
+
+       `NOT EXISTS` steht weiterhin dabei, damit der Doppeltipp DESSELBEN
+       Menschen keine zweite Nutzung frisst: SQLite serialisiert die
+       Schreiber, der zweite Lauf sieht die Zeile des ersten also bereits.
+       Er faellt dann durch, und der Ausgang unten schickt ihn dahin, wo die
+       `drin`-Pruefung ihn hingeschickt haette. */
+    const platz = await env.DB.prepare(`
+      UPDATE gruppen_einladung SET genutzt = genutzt + 1
+       WHERE token_hash = ? AND widerrufen_am IS NULL
+         AND (laeuft_ab IS NULL OR laeuft_ab > datetime('now'))
+         AND (max_nutzung IS NULL OR genutzt < max_nutzung)
+         AND NOT EXISTS (SELECT 1 FROM gruppen_mitglied
+                          WHERE gruppe_id = ? AND user_id = ?)
+      RETURNING token_hash
+    `).bind(e.token_hash, e.gruppe_id, ich.id).first();
+
+    /* Kein Platz - vier Gruende, und sie antworten verschieden, weil sie
+       verschiedene Dinge bedeuten. Der erste ist gar kein Fehler: wer zweimal
+       getippt hat, ist einmal drin und bekommt dieselbe Antwort wie oben. */
+    if (!platz) {
+      const jetztDrin = await env.DB.prepare(
+        'SELECT 1 AS da FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+        .bind(e.gruppe_id, ich.id).first();
+      if (jetztDrin) {
+        return antwort(request, { ok: true, schon: true, gruppe: { id: e.gruppe_id, name: e.name } });
+      }
+      const jetzt = await env.DB.prepare(`
+        SELECT widerrufen_am,
+               (laeuft_ab IS NOT NULL AND laeuft_ab <= datetime('now')) AS weg
+          FROM gruppen_einladung WHERE token_hash = ?
+      `).bind(e.token_hash).first();
+      if (!jetzt || jetzt.widerrufen_am) return fehler(request, 'Dieser Link gilt nicht mehr', 403);
+      if (jetzt.weg) return fehler(request, 'Dieser Link ist abgelaufen', 403);
+      return fehler(request, 'Dieser Link ist aufgebraucht', 403);
+    }
+
+    await env.DB.batch([
+      /* Wer eine Runde OHNE Fuehrung betritt, fuehrt sie (Entscheidung 30:
+         "eine Gruppe ohne Fuehrung soll es keine Sekunde geben"). Der Fall
+         entsteht, wenn der Letzte gegangen ist und die Gruppe leer
+         zurueckgeblieben war - der Einladungslink ist dann ihr einziger
+         Rueckweg, und ein Mitglied ohne Rechte koennte dort nichts richten.
+
+         `OR IGNORE` bleibt stehen, obwohl der Zaehler oben den Doppeltipp
+         schon abfaengt: kommt hier doch einmal ein Primaerschluessel-Konflikt
+         an, rollt sonst der ganze `batch` zurueck und der Aufrufer sieht einen
+         500er, obwohl er drin ist. Das ist der teurere Ausgang. */
+      env.DB.prepare(`
+        INSERT OR IGNORE INTO gruppen_mitglied (gruppe_id, user_id, rolle)
+        VALUES (?1, ?2, (SELECT CASE WHEN EXISTS (
+                 SELECT 1 FROM gruppen_mitglied WHERE gruppe_id = ?1 AND rolle = 'admin'
+               ) THEN 'member' ELSE 'admin' END))
+      `).bind(e.gruppe_id, ich.id),
+      /* Ein offener Antrag desselben Menschen an dieselbe Gruppe ist damit
+         erledigt - sonst liegt er dem Admin noch im Kontor, obwohl der
+         Antragsteller laengst am Tisch sitzt. */
+      env.DB.prepare(`
+        UPDATE gruppen_anfrage SET status = 'angenommen', beschieden = datetime('now')
+         WHERE gruppe_id = ? AND user_id = ? AND status = 'offen'
+      `).bind(e.gruppe_id, ich.id),
+    ]);
+
+    anstossGruppe(e.gruppe_id, request, env, ctx, 'tafel');
+    return antwort(request, {
+      ok: true, schon: false, gruppe: { id: e.gruppe_id, name: e.name },
+    }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  // Die Mitglieder samt Rollen. Jedes Mitglied darf das sehen - wer am Tisch
+  // sitzt, weiss ohnehin, wer am Tisch sitzt.
+  'GET /api/gruppe/mitglieder': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const g = await inGruppe(request, env, ich, null);
+    if (g instanceof Response) return g;
+
+    const { results } = await env.DB.prepare(`
+      SELECT m.user_id AS id, m.rolle, m.beigetreten,
+             coalesce(u.name, 'Ohne Namen') AS name,
+             ${farbeSql('u')} AS farbe,
+             (u.gesperrt_am IS NOT NULL) AS gesperrt
+        FROM gruppen_mitglied m JOIN users u ON u.id = m.user_id
+       WHERE m.gruppe_id = ? AND u.entfernt_am IS NULL
+       -- Wer fuehrt, steht oben. NICHT nach rolle DESC: alphabetisch stuende
+       -- 'member' vor 'admin', und die Liste saehe zufaellig sortiert aus.
+       ORDER BY (m.rolle = 'admin') DESC, m.beigetreten ASC
+    `).bind(g.gruppe.id).all();
+
+    return antwort(request, {
+      mitglieder: results.map(m => ({
+        id: m.id, name: m.name, rolle: m.rolle, farbe: m.farbe,
+        gesperrt: !!m.gesperrt, beigetreten: utc(m.beigetreten),
+        ich: m.id === ich.id,
+      })),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Rolle aendern oder jemanden entfernen. Nur der Gruppenadmin.
+     BUCHUNGEN UND SALDEN BLEIBEN (Entscheidung 29) - hier faellt die
+     Mitgliedschaft, nichts sonst. Wer geht, nimmt seine Schulden nicht mit;
+     die Abrechnung fuehrt ihn danach als Ehemaligen. */
+  'PATCH /api/gruppe/mitglied': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten);
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const wen = Number(daten.user);
+    if (!Number.isInteger(wen) || wen <= 0) return fehler(request, 'Wen denn?');
+    const m = await env.DB.prepare(
+      'SELECT rolle FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+      .bind(g.gruppe.id, wen).first();
+    if (!m) return fehler(request, 'Der ist nicht in dieser Gruppe', 404);
+
+    const entfernen = daten.entfernen === true;
+    const rolle = daten.rolle;
+    if (!entfernen && rolle !== 'member' && rolle !== 'admin') {
+      return fehler(request, "rolle: 'member' oder 'admin' — oder entfernen: true");
+    }
+
+    if (entfernen) {
+      await env.DB.prepare('DELETE FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+        .bind(g.gruppe.id, wen).run();
+    } else {
+      await env.DB.prepare(
+        'UPDATE gruppen_mitglied SET rolle = ? WHERE gruppe_id = ? AND user_id = ?')
+        .bind(rolle, g.gruppe.id, wen).run();
+    }
+
+    if (!g.mitglied) {
+      await env.DB.prepare(`
+        INSERT INTO admin_log (admin_id, aktion, ziel_id, detail, gruppe_id)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(ich.id, entfernen ? 'gruppe_entfernt' : 'gruppe_rolle', wen,
+              entfernen ? g.gruppe.name : `${g.gruppe.name}: ${rolle}`, g.gruppe.id).run();
+    }
+
+    /* Und wenn das gerade den letzten Admin gekostet hat, rueckt jemand nach -
+       auch dann, wenn der Admin sich selbst zurueckgestuft hat. Eine Gruppe
+       ohne Fuehrung soll es keine Sekunde geben. */
+    const nach = await nachruecken(env, ctx, g.gruppe.id, ich.id);
+    // Der Wirt kann auch den Letzten hinausstellen - dann gilt dasselbe wie
+    // beim Austritt des Letzten.
+    const verwaist = entfernen ? await verwaistSchliessen(env, g.gruppe.id) : false;
+
+    /* Gemeldet wird der Stand DANACH, nicht der beabsichtigte. Sonst steht in
+       der Antwort "rolle: member" und daneben "nachgerueckt: derselbe Mensch" -
+       und der Einzige, der sich selbst zurueckgestuft hat, ist ja gerade als
+       dienstaeltestes Mitglied wieder aufgerueckt. Die Seite schriebe daraus
+       zwei Saetze, von denen der erste falsch ist. */
+    const jetzt = entfernen ? null : (await env.DB.prepare(
+      'SELECT rolle FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+      .bind(g.gruppe.id, wen).first())?.rolle ?? null;
+
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel');
+    return antwort(request, {
+      ok: true, entfernt: entfernen, rolle: jetzt, verwaist,
+      nachgerueckt: nach ? { id: nach.id, name: nach.name } : null,
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Selbst gehen. Braucht keine Rolle - jeder darf jederzeit aufstehen.
+     War es der letzte Admin, rueckt das dienstaelteste Mitglied nach
+     (Entscheidung 30), und das erfaehrt es per Mail. */
+  'POST /api/gruppe/austritt': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten);
+    if (g instanceof Response) return g;
+    /* Der Wirt kommt ueber `inGruppe()` auch in Gruppen hinein, in denen er
+       nicht sitzt - austreten kann er dort nicht, es gibt nichts zu loeschen.
+       Ohne diese Zeile bekaeme er ein `ok: true` fuer nichts. */
+    if (!g.mitglied) return fehler(request, 'Du bist gar nicht in dieser Gruppe', 409);
+
+    await env.DB.prepare('DELETE FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+      .bind(g.gruppe.id, ich.id).run();
+
+    const nach = await nachruecken(env, ctx, g.gruppe.id, ich.id);
+    const verwaist = await verwaistSchliessen(env, g.gruppe.id);
+
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel');
+    return antwort(request, {
+      ok: true, verwaist,
+      nachgerueckt: nach ? { id: nach.id, name: nach.name } : null,
+    });
+  },
+
+  // ===========================================================================
+  // Kasse (§5.2) - ab hier braucht jede Route zusaetzlich zur Mitgliedschaft
+  // den Schalter `kasse_an`.
+  // ===========================================================================
+
+  // -------------------------------------------------------------------------
+  /* Die Mitgliedersicht: aktive Getraenke mit geltendem und angekuendigtem
+     Preis (Entscheidung 38), Bestand, mein Monatsstand. Der Gruppenadmin
+     bekommt zusaetzlich die deaktivierten Getraenke und ihre Preishistorie -
+     EINE Antwortform statt einer eigenen Adminroute, dasselbe Prinzip wie
+     bei `GET /api/gruppe`. */
+  'GET /api/kasse': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const g = await inGruppe(request, env, ich, null, 'kasse_an');
+    if (g instanceof Response) return g;
+    const admin = istGruppenAdmin(g);
+    const jetzt = alsDbZeit(new Date());
+
+    const { results: getraenke } = await env.DB.prepare(`
+      SELECT gk.id, gk.name, gk.aktiv, gk.mindest,
+        (SELECT coalesce(sum(menge),0) FROM bestand
+          WHERE gruppe_id = ?2 AND getraenk_id = gk.id) AS bestand,
+        (SELECT cent FROM preis WHERE getraenk_id = gk.id AND gueltig_ab <= ?1
+           ORDER BY gueltig_ab DESC, id DESC LIMIT 1) AS preis_cent,
+        -- ', id DESC' ist hier PFLICHT, nicht Zierrat - dieselbe Falle wie bei
+        -- preis_lauf (siehe migrations/0034): zwei vorgemerkte Zeilen auf
+        -- dieselbe Sekunde sind sonst uneindeutig, und naechster_id unten
+        -- entfernte dann die falsche Zeile.
+        (SELECT cent FROM preis WHERE getraenk_id = gk.id AND gueltig_ab > ?1
+           ORDER BY gueltig_ab ASC, id DESC LIMIT 1) AS naechster_cent,
+        (SELECT gueltig_ab FROM preis WHERE getraenk_id = gk.id AND gueltig_ab > ?1
+           ORDER BY gueltig_ab ASC, id DESC LIMIT 1) AS naechster_ab,
+        (SELECT id FROM preis WHERE getraenk_id = gk.id AND gueltig_ab > ?1
+           ORDER BY gueltig_ab ASC, id DESC LIMIT 1) AS naechster_id
+        FROM getraenk gk
+       WHERE gk.gruppe_id = ?2${admin ? '' : ' AND gk.aktiv = 1'}
+       ORDER BY gk.aktiv DESC, gk.name
+    `).bind(jetzt, g.gruppe.id).all();
+
+    let historieJe = {};
+    if (admin && getraenke.length) {
+      const { results: h } = await env.DB.prepare(`
+        SELECT getraenk_id, cent, gueltig_ab FROM preis
+         WHERE getraenk_id IN (${getraenke.map(() => '?').join(',')})
+         ORDER BY getraenk_id, gueltig_ab DESC, id DESC
+      `).bind(...getraenke.map(d => d.id)).all();
+      for (const z of h) {
+        (historieJe[z.getraenk_id] ??= []).push({ cent: z.cent, gueltig_ab: utc(z.gueltig_ab) });
+      }
+    }
+
+    const monat = await env.DB.prepare(`
+      SELECT coalesce(sum(menge),0) AS biere, coalesce(sum(menge*cent),0) AS cent
+        FROM buchung
+       WHERE gruppe_id = ? AND user_id = ? AND storniert_am IS NULL
+         AND strftime('%Y-%m', gebucht_am) = strftime('%Y-%m', 'now')
+    `).bind(g.gruppe.id, ich.id).first();
+
+    return antwort(request, {
+      getraenke: getraenke.map(d => ({
+        id: d.id, name: d.name, aktiv: !!d.aktiv, mindest: d.mindest, bestand: d.bestand,
+        preis_cent: d.preis_cent ?? null,
+        naechster_preis: d.naechster_cent != null
+          ? { id: d.naechster_id, cent: d.naechster_cent, gueltig_ab: utc(d.naechster_ab) } : null,
+        ...(admin ? { historie: historieJe[d.id] || [] } : {}),
+      })),
+      mein_monat: { biere: monat.biere, cent: monat.cent },
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Buchen. Admin darf `fuer_user` mitgeben (§2.2) - fuer den, der kein
+     Handy dabei hat. */
+  'POST /api/kasse/buchung': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    /* Gegenbuchung (Entscheidung 31, Etappe 4): eine sichtbare Buchung im
+       laufenden Monat, die eine Buchung aus einem BEREITS ABGESCHLOSSENEN
+       Monat aufhebt - kein Storno, das aendert die alte Zeile nicht. Eigener,
+       fruehzeitig verlassener Zweig: die Gruppe kommt vom ORIGINAL, nie aus
+       dem Rumpf, nur der Gruppenadmin darf, und der Bestand bleibt
+       unangetastet - das Bier ist getrunken, nur der Betrag war falsch. */
+    if (daten.gegen !== undefined && daten.gegen !== null) {
+      const alteId = Number(daten.gegen);
+      if (!Number.isInteger(alteId) || alteId <= 0) return fehler(request, 'Welche Buchung wird gegengebucht?');
+
+      const b = await env.DB.prepare('SELECT * FROM buchung WHERE id = ?').bind(alteId).first();
+      if (!b) return fehler(request, 'Diese Buchung gibt es nicht', 404);
+
+      const g = await inGruppe(request, env, ich, { gruppe: b.gruppe_id }, 'kasse_an');
+      if (g instanceof Response) return g;
+      if (!istGruppenAdmin(g)) return fehler(request, 'Eine Gegenbuchung darf nur, wer die Gruppe führt', 403);
+      if (b.storniert_am) return fehler(request, 'Diese Buchung ist storniert, keine Gegenbuchung nötig', 409);
+
+      const abrechnung = await abrechnungFuer(env, b.gruppe_id, ...jahrMonatAus(b.gebucht_am));
+      if (!abrechnung) {
+        return fehler(request, 'Dieser Monat ist noch offen — hier gilt das Storno, nicht die Gegenbuchung', 409);
+      }
+
+      /* KEIN Mitgliedschaftscheck auf `b.user_id` - anders als beim normalen
+         Buchen fuer andere (unten): wer die Buchung trug, darf laengst
+         ausgetreten sein (Entscheidung 29), die Korrektur muss trotzdem
+         moeglich bleiben. `cent` kommt vom ORIGINAL, nicht aus
+         `geltenderPreis()` - eine spaetere Preisaenderung darf die
+         Gegenbuchung nicht verschieben, genau wie bei der Buchung selbst. */
+      let neu;
+      try {
+        neu = await env.DB.prepare(`
+          INSERT INTO buchung (gruppe_id, getraenk_id, user_id, menge, cent, gebucht_von, grund)
+          VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, gebucht_am
+        `).bind(b.gruppe_id, b.getraenk_id, b.user_id, -b.menge, b.cent, ich.id, `gegenbuchung:${b.id}`).first();
+      } catch (e) {
+        if (String(e.message || '').includes('UNIQUE')) {
+          return fehler(request, 'Für diese Buchung gibt es schon eine Gegenbuchung', 409);
+        }
+        throw e;
+      }
+
+      await kasseAdminLog(env, ich, g, 'gegenbuchung', `${b.id}:${-b.menge}`);
+      anstossGruppe(b.gruppe_id, request, env, ctx, 'kasse');
+      return antwort(request, {
+        ok: true, id: neu.id, gegen: b.id, cent: b.cent, menge: -b.menge,
+      }, 201);
+    }
+
+    const g = await inGruppe(request, env, ich, daten, 'kasse_an');
+    if (g instanceof Response) return g;
+
+    const getraenkId = Number(daten.getraenk);
+    if (!Number.isInteger(getraenkId) || getraenkId <= 0) return fehler(request, 'Welches Getränk?');
+
+    const menge = daten.menge === undefined ? 1 : Number(daten.menge);
+    if (!Number.isInteger(menge) || menge < 1 || menge > BUCHUNG_MENGE_MAX) {
+      return fehler(request, `Menge: 1 bis ${BUCHUNG_MENGE_MAX}`);
+    }
+
+    let fuerId = ich.id;
+    if (daten.fuer_user !== undefined && daten.fuer_user !== null) {
+      if (!istGruppenAdmin(g)) return fehler(request, 'Für andere buchen darf nur, wer die Gruppe führt', 403);
+      fuerId = Number(daten.fuer_user);
+      if (!Number.isInteger(fuerId) || fuerId <= 0) return fehler(request, 'Für wen?');
+      const mitglied = await env.DB.prepare(
+        'SELECT 1 AS da FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+        .bind(g.gruppe.id, fuerId).first();
+      if (!mitglied) return fehler(request, 'Diese Person ist nicht in der Gruppe', 404);
+    }
+
+    const d = await env.DB.prepare('SELECT id, name, aktiv FROM getraenk WHERE id = ? AND gruppe_id = ?')
+      .bind(getraenkId, g.gruppe.id).first();
+    if (!d) return fehler(request, 'Dieses Getränk gibt es hier nicht', 404);
+    if (!d.aktiv) return fehler(request, 'Dieses Getränk ist abgeschaltet', 409);
+
+    const jetzt = alsDbZeit(new Date());
+    const p = await geltenderPreis(env, getraenkId, jetzt);
+    // KEIN Durchbuchen mit `cent = 0` - eine 0-Cent-Buchung ist gratis Bier
+    // und nur noch per Gegenbuchung heilbar (Etappe 4).
+    if (!p) return fehler(request, 'Für dieses Getränk ist noch kein Preis gesetzt', 409);
+
+    const buchung = await env.DB.prepare(`
+      INSERT INTO buchung (gruppe_id, getraenk_id, user_id, menge, cent, gebucht_von)
+      VALUES (?, ?, ?, ?, ?, ?) RETURNING id, gebucht_am
+    `).bind(g.gruppe.id, getraenkId, fuerId, menge, p.cent, ich.id).first();
+
+    /* Zwei Zeilen, nicht ein Batch - `buchung` traegt `RETURNING id`, und
+       genau diese Id braucht die zweite Zeile. Das Fenster zwischen beiden
+       ist eine SQLite-Einzelanweisung breit; eine `bestand`-Zeile faellt nur
+       aus, wenn D1 selbst dazwischen ausfaellt, und dann ist die Buchung
+       ohnehin das kleinere Problem. */
+    await env.DB.prepare(`
+      INSERT INTO bestand (gruppe_id, getraenk_id, menge, art, buchung_id, erfasst_von)
+      VALUES (?, ?, ?, 'verbrauch', ?, ?)
+    `).bind(g.gruppe.id, getraenkId, -menge, buchung.id, ich.id).run();
+
+    const stand = await bestandStand(env, g.gruppe.id, getraenkId);
+    await pruefeMindestbestand(env, ctx, g.gruppe.id, getraenkId, stand);
+
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'kasse');
+    return antwort(request, {
+      ok: true, id: buchung.id, cent: p.cent, menge, bestand_danach: stand,
+    }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Stornieren. Fuenf Minuten fuer den Buchenden selbst, unbegrenzt fuer den
+     Gruppenadmin (Entscheidung 15) - aber nur, solange der Monat der Buchung
+     noch offen ist. Ist er abgeschlossen, gilt die Gegenbuchung
+     (`POST /api/kasse/buchung` mit `gegen`, Entscheidung 31) statt des
+     Stornos - ein Storno aendert die alte Zeile, eine abgeschlossene
+     Abrechnung darf sich aber nicht mehr aendern. */
+  'POST /api/kasse/storno': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const buchungId = Number(daten.buchung);
+    if (!Number.isInteger(buchungId) || buchungId <= 0) return fehler(request, 'Welche Buchung?');
+
+    const b = await env.DB.prepare('SELECT * FROM buchung WHERE id = ?').bind(buchungId).first();
+    if (!b) return fehler(request, 'Diese Buchung gibt es nicht', 404);
+
+    /* Die Gruppe kommt von der BUCHUNG, nicht vom Rumpf - wie bei Terminen
+       und Kommentaren seit Etappe 2 (Nachgereicht #1). Ein erratener Rumpf
+       darf keine fremde Buchung stornieren. */
+    const g = await inGruppe(request, env, ich, { gruppe: b.gruppe_id }, 'kasse_an');
+    if (g instanceof Response) return g;
+
+    const abrechnung = await abrechnungFuer(env, b.gruppe_id, ...jahrMonatAus(b.gebucht_am));
+    if (abrechnung) {
+      return fehler(request, 'Dieser Monat ist abgerechnet — eine Korrektur läuft als Gegenbuchung im laufenden Monat', 403);
+    }
+
+    const admin = istGruppenAdmin(g);
+    /* EIN Statement, serverseitige Uhr durchweg - kein `new Date(gebucht_am)`
+       in JS, das V8 als Ortszeit laese und das Fenster verschoebe. */
+    const r = await env.DB.prepare(`
+      UPDATE buchung SET storniert_am = datetime('now'), storniert_von = ?
+       WHERE id = ? AND storniert_am IS NULL
+         AND (? = 1 OR (user_id = ? AND gebucht_am >= datetime('now', ?)))
+       RETURNING getraenk_id, menge
+    `).bind(ich.id, buchungId, admin ? 1 : 0, ich.id, `-${STORNO_MINUTEN} minutes`).first();
+
+    if (!r) {
+      if (b.storniert_am) return fehler(request, 'Diese Buchung ist schon storniert', 409);
+      return fehler(request, 'Das Zeitfenster zum Stornieren ist vorbei', 403);
+    }
+
+    /* Der Bestand bekommt sein Bier zurueck - eine AUSGLEICHENDE Zeile, nie
+       die alte geloescht, sonst luegt der Bestandsverlauf aus Etappe 6
+       rueckwirkend. NICHT bei einer Gegenbuchung (`grund` beginnt mit
+       'gegenbuchung:', Entscheidung 31, Etappe 4): die hat nie eine
+       `verbrauch`-Zeile erzeugt (sie ruehrt den Bestand bewusst nicht an,
+       das Getraenk ist ja bereits getrunken), ein Ausgleich hier erfaende
+       ohne Grund Bier - Abnahmefund, live nachgestellt (Bestand fiel um die
+       gegengebuchte Menge, ohne dass etwas getrunken wurde). */
+    const istGegenbuchung = b.grund && b.grund.startsWith('gegenbuchung:');
+    if (!istGegenbuchung) {
+      await env.DB.prepare(`
+        INSERT INTO bestand (gruppe_id, getraenk_id, menge, art, grund, buchung_id, erfasst_von)
+        VALUES (?, ?, ?, 'korrektur', ?, ?, ?)
+      `).bind(b.gruppe_id, r.getraenk_id, r.menge, `storno:${buchungId}`, buchungId, ich.id).run();
+    }
+
+    const stand = await bestandStand(env, b.gruppe_id, r.getraenk_id);
+    await pruefeMindestbestand(env, ctx, b.gruppe_id, r.getraenk_id, stand);
+
+    anstossGruppe(b.gruppe_id, request, env, ctx, 'kasse');
+    return antwort(request, { ok: true, bestand_danach: stand });
+  },
+
+  // -------------------------------------------------------------------------
+  // Eigene Buchungen; der Gruppenadmin sieht alle.
+  'GET /api/kasse/historie': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const g = await inGruppe(request, env, ich, null, 'kasse_an');
+    if (g instanceof Response) return g;
+    const admin = istGruppenAdmin(g);
+
+    const { results } = await env.DB.prepare(`
+      SELECT b.id, b.getraenk_id, d.name AS getraenk, b.user_id, u.name AS wer,
+             b.menge, b.cent, b.gebucht_am, b.storniert_am
+        FROM buchung b JOIN getraenk d ON d.id = b.getraenk_id JOIN users u ON u.id = b.user_id
+       WHERE b.gruppe_id = ?${admin ? '' : ' AND b.user_id = ?'}
+       ORDER BY b.gebucht_am DESC LIMIT 200
+    `).bind(...(admin ? [g.gruppe.id] : [g.gruppe.id, ich.id])).all();
+
+    return antwort(request, {
+      buchungen: results.map(b => ({
+        id: b.id, getraenk_id: b.getraenk_id, getraenk: b.getraenk,
+        user_id: b.user_id, wer: b.wer, menge: b.menge, cent: b.cent,
+        gebucht_am: utc(b.gebucht_am),
+        storniert_am: b.storniert_am ? utc(b.storniert_am) : null,
+        stornierbar: !b.storniert_am && (admin || (b.user_id === ich.id
+          && Date.now() - new Date(utc(b.gebucht_am)).getTime() <= STORNO_MINUTEN * 60000)),
+      })),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Vier Handlungen, eine Route - wie `POST /api/admin/nutzer`: die
+     Adminpruefung existiert damit genau einmal. */
+  'POST /api/getraenk': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'kasse_an');
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const aktion = String(daten.aktion || '');
+    if (!['anlegen', 'umbenennen', 'aktivieren', 'deaktivieren', 'mindest'].includes(aktion)) {
+      return fehler(request, "aktion: 'anlegen', 'umbenennen', 'aktivieren', 'deaktivieren' oder 'mindest'");
+    }
+
+    if (aktion === 'anlegen') {
+      const name = String(daten.name ?? '').trim().replace(/\s+/g, ' ');
+      if (name.length < 1 || name.length > GETRAENK_NAME_MAX) {
+        return fehler(request, `Name: 1 bis ${GETRAENK_NAME_MAX} Zeichen`);
+      }
+      let zeile;
+      try {
+        zeile = await env.DB.prepare(
+          'INSERT INTO getraenk (gruppe_id, name) VALUES (?, ?) RETURNING id')
+          .bind(g.gruppe.id, name).first();
+      } catch (e) {
+        if (String(e.message || '').includes('UNIQUE')) {
+          return fehler(request, 'Ein aktives Getränk mit diesem Namen gibt es hier schon', 409);
+        }
+        throw e;
+      }
+      await kasseAdminLog(env, ich, g, 'getraenk_angelegt', name);
+      anstossGruppe(g.gruppe.id, request, env, ctx, 'kasse');
+      return antwort(request, { ok: true, id: zeile.id }, 201);
+    }
+
+    const d = await env.DB.prepare('SELECT id FROM getraenk WHERE id = ? AND gruppe_id = ?')
+      .bind(Number(daten.id), g.gruppe.id).first();
+    if (!d) return fehler(request, 'Dieses Getränk gibt es hier nicht', 404);
+
+    if (aktion === 'umbenennen') {
+      const name = String(daten.name ?? '').trim().replace(/\s+/g, ' ');
+      if (name.length < 1 || name.length > GETRAENK_NAME_MAX) {
+        return fehler(request, `Name: 1 bis ${GETRAENK_NAME_MAX} Zeichen`);
+      }
+      try {
+        await env.DB.prepare('UPDATE getraenk SET name = ? WHERE id = ?').bind(name, d.id).run();
+      } catch (e) {
+        if (String(e.message || '').includes('UNIQUE')) {
+          return fehler(request, 'Ein aktives Getränk mit diesem Namen gibt es hier schon', 409);
+        }
+        throw e;
+      }
+    } else if (aktion === 'aktivieren' || aktion === 'deaktivieren') {
+      try {
+        await env.DB.prepare('UPDATE getraenk SET aktiv = ? WHERE id = ?')
+          .bind(aktion === 'aktivieren' ? 1 : 0, d.id).run();
+      } catch (e) {
+        if (String(e.message || '').includes('UNIQUE')) {
+          return fehler(request, 'Ein aktives Getränk mit diesem Namen gibt es hier schon', 409);
+        }
+        throw e;
+      }
+    } else if (aktion === 'mindest') {
+      let mindest = null;
+      if (daten.mindest !== null && daten.mindest !== undefined && daten.mindest !== '') {
+        mindest = Number(daten.mindest);
+        if (!Number.isInteger(mindest) || mindest < 0) {
+          return fehler(request, 'mindest: ganze Zahl ab 0, oder leer für keine Warnung');
+        }
+      }
+      await env.DB.prepare('UPDATE getraenk SET mindest = ? WHERE id = ?').bind(mindest, d.id).run();
+      // Eine neu gesetzte Schwelle bekommt ihre eigene Pruefung - wer sie
+      // gerade erst eingetragen hat, soll nicht bis zur naechsten Buchung
+      // auf die erste Warnung warten.
+      const stand = await bestandStand(env, g.gruppe.id, d.id);
+      await pruefeMindestbestand(env, ctx, g.gruppe.id, d.id, stand);
+    }
+
+    await kasseAdminLog(env, ich, g, 'getraenk_' + aktion, String(daten.id));
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'kasse');
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Preis setzen oder einen noch nicht wirksamen vorgemerkten Preis wieder
+     entfernen (Entscheidung 38) - ein bereits eingefrorener Preis in einer
+     Buchung wird nie geloescht. */
+  'POST /api/preis': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'kasse_an');
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const aktion = String(daten.aktion || 'setzen');
+    if (!['setzen', 'entfernen'].includes(aktion)) {
+      return fehler(request, "aktion: 'setzen' oder 'entfernen'");
+    }
+
+    const d = await env.DB.prepare('SELECT id FROM getraenk WHERE id = ? AND gruppe_id = ?')
+      .bind(Number(daten.getraenk), g.gruppe.id).first();
+    if (!d) return fehler(request, 'Dieses Getränk gibt es hier nicht', 404);
+
+    if (aktion === 'entfernen') {
+      const p = Number(daten.id);
+      if (!Number.isInteger(p) || p <= 0) return fehler(request, 'Welcher Preis?');
+      const r = await env.DB.prepare(`
+        DELETE FROM preis WHERE id = ? AND getraenk_id = ? AND gueltig_ab > datetime('now')
+      `).bind(p, d.id).run();
+      if (!r.meta.changes) return fehler(request, 'Diesen vorgemerkten Preis gibt es nicht mehr', 404);
+      await kasseAdminLog(env, ich, g, 'preis_entfernt', String(p));
+      anstossGruppe(g.gruppe.id, request, env, ctx, 'kasse');
+      return antwort(request, { ok: true });
+    }
+
+    const cent = Number(daten.cent);
+    if (!Number.isInteger(cent) || cent < 0 || cent > PREIS_CENT_MAX) {
+      return fehler(request, `Preis: 0 bis ${PREIS_CENT_MAX} Cent`);
+    }
+    const p = pruefeGueltigAb(daten.gueltig_ab);
+    if (p.fehler) return fehler(request, p.fehler);
+
+    const zeile = await env.DB.prepare(`
+      INSERT INTO preis (getraenk_id, cent, gueltig_ab, gesetzt_von) VALUES (?, ?, ?, ?)
+      RETURNING id, gueltig_ab
+    `).bind(d.id, cent, alsDbZeit(p.d), ich.id).first();
+
+    await kasseAdminLog(env, ich, g, 'preis_gesetzt', d.id + ':' + cent);
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'kasse');
+    return antwort(request, { ok: true, id: zeile.id, gueltig_ab: utc(zeile.gueltig_ab) }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  // Lieferung oder Korrektur (Schwund, Bruch, Spende).
+  'POST /api/bestand': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'kasse_an');
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const art = String(daten.art || '');
+    if (!['lieferung', 'korrektur'].includes(art)) {
+      return fehler(request, "art: 'lieferung' oder 'korrektur'");
+    }
+
+    const d = await env.DB.prepare('SELECT id FROM getraenk WHERE id = ? AND gruppe_id = ?')
+      .bind(Number(daten.getraenk), g.gruppe.id).first();
+    if (!d) return fehler(request, 'Dieses Getränk gibt es hier nicht', 404);
+
+    const menge = Number(daten.menge);
+    if (!Number.isInteger(menge) || menge === 0) {
+      return fehler(request, 'menge: eine ganze Zahl ungleich 0');
+    }
+
+    let einkauf = null, grund = null;
+    if (art === 'lieferung') {
+      if (menge < 0) {
+        return fehler(request, 'Eine Lieferung senkt den Bestand nicht — dafür gibt es die Korrektur');
+      }
+      /* Pflicht, nicht freiwillig (Entscheidung 32): "jeder Einkauf muss
+         eingetragen werden, sonst luegt der Stand" - der Kassenstand aus
+         Etappe 6 kann eine hier fehlende Zahl nicht nachtraeglich
+         rekonstruieren, die Quittung ist dann weg. 0 ist ein gueltiger Wert
+         (eine geschenkte Lieferung), nur das Weglassen nicht. */
+      if (daten.einkauf_cent === undefined || daten.einkauf_cent === null || daten.einkauf_cent === '') {
+        return fehler(request, 'einkauf_cent: Pflichtfeld bei einer Lieferung, notfalls 0');
+      }
+      einkauf = Number(daten.einkauf_cent);
+      if (!Number.isInteger(einkauf) || einkauf < 0) return fehler(request, 'einkauf_cent: ganze Zahl ab 0');
+    } else {
+      grund = String(daten.grund ?? '').trim();
+      if (!grund) return fehler(request, 'Eine Korrektur braucht einen Grund');
+      if (grund.length > BESTAND_GRUND_MAX) return fehler(request, `Grund: höchstens ${BESTAND_GRUND_MAX} Zeichen`);
+    }
+
+    await env.DB.prepare(`
+      INSERT INTO bestand (gruppe_id, getraenk_id, menge, art, einkauf_cent, grund, erfasst_von)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(g.gruppe.id, d.id, menge, art, einkauf, grund, ich.id).run();
+
+    const stand = await bestandStand(env, g.gruppe.id, d.id);
+    await pruefeMindestbestand(env, ctx, g.gruppe.id, d.id, stand);
+
+    await kasseAdminLog(env, ich, g, 'bestand_' + art, d.id + ':' + menge);
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'kasse');
+    return antwort(request, { ok: true, bestand_danach: stand }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Ein Monat: wer, wieviel, welcher Status (Entscheidung 27: alles offen,
+     wie die Tafel). Noch nicht abgeschlossen -> eine live gerechnete
+     Vorschau (`vorschau: true`) ueber denselben `SALDO_SUMMEN_SQL` wie der
+     Abschluss selbst; abgeschlossen -> die eingefrorenen `saldo`-Zeilen. Die
+     Bierzahl kommt in BEIDEN Faellen aus `buchung`, nicht aus `saldo` (das
+     Schema fuehrt sie dort nicht) - fuer einen abgeschlossenen Monat ist das
+     sicher, weil Buchung UND Storno einen abgerechneten Monat ablehnen. */
+  'GET /api/abrechnung': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const g = await inGruppe(request, env, ich, null, 'kasse_an');
+    if (g instanceof Response) return g;
+
+    const url = new URL(request.url);
+    const jetzt = await env.DB.prepare("SELECT strftime('%Y','now') AS j, strftime('%m','now') AS m").first();
+    const jahr = url.searchParams.has('jahr') ? Number(url.searchParams.get('jahr')) : Number(jetzt.j);
+    const monat = url.searchParams.has('monat') ? Number(url.searchParams.get('monat')) : Number(jetzt.m);
+    if (!Number.isInteger(jahr) || jahr < 2000 || jahr > 2100
+      || !Number.isInteger(monat) || monat < 1 || monat > 12) {
+      return fehler(request, 'jahr/monat: ungültig');
+    }
+    const key = monatSchluessel(jahr, monat);
+
+    // Ob die Gruppe ueberhaupt einen Zahlweg hinterlegt hat - EIN Blick pro
+    // Aufruf, damit weder hier noch bei `GET /api/salden` ein Melden-/QR-Knopf
+    // fuer eine Gruppe erscheint, die gar keinen anbietet (die Etappe-4-Falle:
+    // ein Knopf, der ins Leere fuehrt, faellt beim eigenen curl-Testen nicht
+    // auf, weil dort die Id von Hand mitgegeben wird - hier ist es die
+    // Existenz eines Zahlwegs).
+    const zahlwegeDa = !!(await env.DB.prepare(
+      'SELECT 1 FROM zahlweg WHERE gruppe_id = ? LIMIT 1').bind(g.gruppe.id).first());
+
+    /* Die Strafen des Monats, Zeile fuer Zeile (Etappe 8). Sie stehen in
+       BEIDEN Zweigen - Vorschau wie Abschluss -, weil sie zum Monat gehoeren
+       und nicht zum Saldo: eine Tatstrafe kostet nichts und taucht in keiner
+       Saldozeile auf, gehoert aber sichtbar dazu. Nur wenn die Gruppe
+       ueberhaupt Regeln fuehrt: bei `regeln_an = 0` gibt es keinen leeren
+       Block, sondern gar keinen (Entscheidung 18). */
+    const strafen = g.gruppe.regeln_an
+      ? (await env.DB.prepare(STRAFEN_MONAT_SQL).bind(g.gruppe.id, key).all()).results
+      : [];
+    const strafenRaus = strafen.map(s => ({
+      id: s.id, user_id: s.user_id, name: s.name, titel: s.titel, art: s.art,
+      cent: s.cent, tat: s.tat, grund: s.grund, status: s.status,
+      verhaengt_am: utc(s.verhaengt_am), von: s.von_name,
+      gutschrift_zu: s.bezug_strafe_id,
+    }));
+
+    const a = await abrechnungFuer(env, g.gruppe.id, jahr, monat);
+    const { results: summen } = await env.DB.prepare(SALDO_SUMMEN_SQL)
+      .bind(...saldoSummenWerte(g.gruppe.id, key)).all();
+
+    if (!a) {
+      return antwort(request, {
+        jahr, monat, vorschau: true, status: 'offen', zahlwege_da: zahlwegeDa,
+        strafen: strafenRaus,
+        eintraege: summen.map(r => ({
+          user_id: r.user_id, name: r.name, biere: r.biere, cent: r.cent,
+          strafe_cent: r.strafe_cent, ehemalig: !!r.ehemalig,
+        })),
+      });
+    }
+
+    // Die Bierzahl kommt aus `buchung`, nicht aus `saldo` (das Schema
+    // fuehrt sie dort nicht) - fuer einen abgeschlossenen Monat ist das
+    // sicher, weil Buchung UND Storno einen abgerechneten Monat ablehnen.
+    // Dasselbe gilt seit Etappe 8 fuer den Strafenanteil.
+    const biereJe = new Map(summen.map(r => [r.user_id, r.biere]));
+    const strafeJe = new Map(summen.map(r => [r.user_id, r.strafe_cent]));
+
+    const { results } = await env.DB.prepare(SALDO_ZEILEN_SQL).bind(g.gruppe.id, a.id).all();
+
+    return antwort(request, {
+      jahr, monat, vorschau: false, status: 'abgeschlossen', zahlwege_da: zahlwegeDa,
+      strafen: strafenRaus,
+      eintraege: results.map(r => ({
+        id: r.id, user_id: r.user_id, name: r.name, biere: biereJe.get(r.user_id) ?? 0,
+        cent: r.betrag_cent, strafe_cent: strafeJe.get(r.user_id) ?? 0,
+        gezahlt_cent: r.gezahlt_cent, offen_cent: r.betrag_cent - r.gezahlt_cent,
+        status: r.status, gemeldet_am: r.gemeldet_am ? utc(r.gemeldet_am) : null,
+        bestaetigt_am: r.bestaetigt_am ? utc(r.bestaetigt_am) : null, ehemalig: !r.drin,
+      })),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Monat festschreiben. Nur ein in UTC VOLLSTAENDIG abgelaufener Monat darf
+     abgeschlossen werden - schloesse man den laufenden, faellt jede Buchung
+     danach (`gebucht_am` ist stets Server-Jetzt) sofort in einen bereits
+     abgeschlossenen Monat. Diese Regel haelt die Aggregation rennfrei: in
+     einen abgelaufenen Monat kann keine neue Buchung mehr fallen (siehe die
+     Guards in Buchung/Storno/Gegenbuchung oben). */
+  'POST /api/abrechnung/abschluss': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'kasse_an');
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const jahr = Number(daten.jahr);
+    const monat = Number(daten.monat);
+    if (!Number.isInteger(jahr) || jahr < 2000 || jahr > 2100
+      || !Number.isInteger(monat) || monat < 1 || monat > 12) {
+      return fehler(request, 'jahr/monat: ungültig');
+    }
+    const key = monatSchluessel(jahr, monat);
+
+    const jetzt = await env.DB.prepare("SELECT strftime('%Y-%m','now') AS m").first();
+    if (key >= jetzt.m) {
+      return fehler(request, 'Dieser Monat ist noch nicht vorbei (UTC) — Abschluss ab dem 1.', 409);
+    }
+
+    /* Die Zeile entsteht SOFORT als 'abgeschlossen', nie als 'offen' - der
+       UNIQUE-Index `abrechnung_monat` ist die ganze Sperre gegen einen
+       doppelten Abschluss (siehe migrations/0035). */
+    let a;
+    try {
+      a = await env.DB.prepare(`
+        INSERT INTO abrechnung (gruppe_id, jahr, monat, status, abgeschlossen_am, abgeschlossen_von)
+        VALUES (?, ?, ?, 'abgeschlossen', datetime('now'), ?) RETURNING id
+      `).bind(g.gruppe.id, jahr, monat, ich.id).first();
+    } catch (e) {
+      if (String(e.message || '').includes('UNIQUE')) {
+        return fehler(request, 'Dieser Monat ist schon abgerechnet', 409);
+      }
+      throw e;
+    }
+
+    await env.DB.prepare(SALDO_INSERT_SQL).bind(a.id, ...saldoSummenWerte(g.gruppe.id, key)).run();
+
+    /* Die Geldstrafen des Monats sind gerade in die Salden geflossen (Ent-
+       scheidung 50) - jetzt tragen sie es auch selbst. Damit ist "schon
+       abgerechnet" eine Tatsache und keine Rechnung ueber Daten: der Guard
+       gegen ein nachtraegliches Erlassen (52) fragt `abrechnung_id`, nicht
+       das Datum.
+
+       NACH dem Saldo-INSERT, nicht davor - `SALDO_SUMMEN_SQL` zaehlt zwar
+       'offen' UND 'abgerechnet' und waere gegen die Reihenfolge unempfindlich,
+       aber die zeitliche Ordnung soll die fachliche sein: erst fliesst das
+       Geld in den Saldo, dann ist die Strafe abgerechnet.
+
+       TATSTRAFEN BLEIBEN UNBERUEHRT. Sie kosten kein Geld, gehoeren in keinen
+       Saldo und laufen ueber den Monatswechsel hinweg weiter, bis sie erledigt
+       oder erlassen sind - `art = 'geld'` ist deshalb kein Beiwerk. */
+    await env.DB.prepare(`
+      UPDATE strafe SET status = 'abgerechnet', abrechnung_id = ?
+       WHERE gruppe_id = ? AND art = 'geld' AND status = 'offen'
+         AND strftime('%Y-%m', verhaengt_am) = ?
+    `).bind(a.id, g.gruppe.id, key).run();
+
+    await kasseAdminLog(env, ich, g, 'monat_abgeschlossen', key);
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'kasse');
+    return antwort(request, { ok: true, id: a.id }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  // CSV eines ABGESCHLOSSENEN Monats - eine Vorschau exportiert man nicht,
+  // ein Dokument, dem ein spaeterer Abschluss widersprechen kann, ist
+  // schlechter als keins.
+  'GET /api/abrechnung/csv': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const g = await inGruppe(request, env, ich, null, 'kasse_an');
+    if (g instanceof Response) return g;
+
+    const url = new URL(request.url);
+    const jahr = Number(url.searchParams.get('jahr'));
+    const monat = Number(url.searchParams.get('monat'));
+    if (!Number.isInteger(jahr) || !Number.isInteger(monat) || monat < 1 || monat > 12) {
+      return fehler(request, 'jahr/monat: ungültig');
+    }
+    const key = monatSchluessel(jahr, monat);
+    const a = await abrechnungFuer(env, g.gruppe.id, jahr, monat);
+    if (!a) return fehler(request, 'Dieser Monat ist noch nicht abgerechnet', 404);
+
+    const { results: summen } = await env.DB.prepare(SALDO_SUMMEN_SQL).bind(...saldoSummenWerte(g.gruppe.id, key)).all();
+    const biereJe = new Map(summen.map(r => [r.user_id, r.biere]));
+    const strafeJe = new Map(summen.map(r => [r.user_id, r.strafe_cent]));
+
+    const { results } = await env.DB.prepare(SALDO_ZEILEN_SQL).bind(g.gruppe.id, a.id).all();
+    const { results: strafen } = await env.DB.prepare(STRAFEN_MONAT_SQL)
+      .bind(g.gruppe.id, key).all();
+
+    // BOM: sonst zerlegt Excel die Umlaute. `;` als Trennzeichen: die
+    // Betraege tragen ein Dezimalkomma, das erzwingt das Semikolon.
+    let text = '\uFEFF';
+    text += csvZeile(['Name', 'Rolle', 'Biere', 'Betrag', 'davon Strafen', 'Gezahlt', 'Offen',
+                      'Status', 'Gemeldet am', 'Bestätigt am']);
+    let sBiere = 0, sBetrag = 0, sStrafe = 0, sGezahlt = 0, sOffen = 0;
+    for (const r of results) {
+      const biere = biereJe.get(r.user_id) ?? 0;
+      const strafeCent = strafeJe.get(r.user_id) ?? 0;
+      const offen = r.betrag_cent - r.gezahlt_cent;
+      sBiere += biere; sBetrag += r.betrag_cent; sStrafe += strafeCent;
+      sGezahlt += r.gezahlt_cent; sOffen += offen;
+      text += csvZeile([
+        r.name, r.drin ? 'Mitglied' : 'Ehemaliger', biere,
+        centStr(r.betrag_cent), centStr(strafeCent), centStr(r.gezahlt_cent), centStr(offen),
+        r.status, r.gemeldet_am ? utc(r.gemeldet_am) : '', r.bestaetigt_am ? utc(r.bestaetigt_am) : '',
+      ]);
+    }
+    text += csvZeile(['Summe', '', sBiere, centStr(sBetrag), centStr(sStrafe),
+                      centStr(sGezahlt), centStr(sOffen), '', '', '']);
+
+    /* Ein ZWEITER Block unter dem ersten, durch eine Leerzeile getrennt: die
+       einzelnen Strafen des Monats (Etappe 8). Nicht als weitere Spalten oben -
+       eine Strafe gehoert zu EINER Person, aber eine Person kann mehrere haben,
+       und Tatstrafen tragen ueberhaupt keinen Betrag. Zwei Bloecke mit je
+       eigener Kopfzeile lesen sich in jedem Tabellenprogramm; eine Spalte, die
+       je nach Zeile etwas anderes bedeutet, liest sich nirgends.
+
+       `titel` und `grund` sind Freitext und tragen regelmaessig Kommas und
+       Semikolons - `csvFeld()` quotet, das ist genau sein Zweck. */
+    if (strafen.length) {
+      text += '\r\n';
+      text += csvZeile(['Strafen']);
+      text += csvZeile(['Name', 'Regel', 'Art', 'Betrag', 'Auflage', 'Grund', 'Status',
+                        'Verhängt am', 'Verhängt von']);
+      for (const s of strafen) {
+        text += csvZeile([
+          s.name, s.titel, s.art === 'geld' ? 'Geld' : 'Tat',
+          s.art === 'geld' ? centStr(s.cent ?? 0) : '', s.tat || '', s.grund || '',
+          s.status, utc(s.verhaengt_am), s.von_name || '',
+        ]);
+      }
+    }
+
+    // `slugAus()` liefert garantiert `[a-z0-9-]{1,40}` - kein
+    // `filename*=UTF-8''`-Tanz noetig.
+    const dateiname = `beerstock-${g.gruppe.slug}-${jahr}-${String(monat).padStart(2, '0')}.csv`;
+    return new Response(text, {
+      headers: {
+        ...koepfe(request),
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${dateiname}"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Meine offenen Salden ueber ALLE Gruppen, auch verlassene (Entscheidung
+     29) - bewusst OHNE `inGruppe()`. Gefiltert wird ueber GELD
+     (`betrag_cent - gezahlt_cent > 0`), nicht ueber eine Statusliste: Status
+     und Betrag sind zwei Achsen (22, 23), eine aufgezaehlte Liste vergisst
+     irgendwann einen Zustand. Ein Guthaben (Rest negativ oder 0) faellt so
+     von selbst heraus, ohne dass irgendwo gekappt wird. */
+  'GET /api/salden': async (request, env) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+
+    const { results } = await env.DB.prepare(`
+      SELECT s.id, s.betrag_cent, s.gezahlt_cent, s.status, s.gemeldet_am,
+             a.jahr, a.monat, a.gruppe_id, gr.name AS gruppe,
+             EXISTS(SELECT 1 FROM gruppen_mitglied m
+                     WHERE m.gruppe_id = a.gruppe_id AND m.user_id = s.user_id) AS drin,
+             -- ob DIESE Gruppe ueberhaupt einen Zahlweg hinterlegt hat - ohne
+             -- diesen Blick wuerde die Seite einen Melden-/QR-Knopf fuer eine
+             -- Gruppe zeichnen, die gar keinen anbietet (Etappe-4-Falle).
+             EXISTS(SELECT 1 FROM zahlweg z WHERE z.gruppe_id = a.gruppe_id) AS zahlwege_da
+        FROM saldo s
+        JOIN abrechnung a ON a.id = s.abrechnung_id
+        JOIN gruppen gr   ON gr.id = a.gruppe_id
+       WHERE s.user_id = ? AND s.betrag_cent - s.gezahlt_cent > 0
+       ORDER BY a.jahr DESC, a.monat DESC
+    `).bind(ich.id).all();
+
+    return antwort(request, {
+      salden: results.map(r => ({
+        id: r.id, gruppe_id: r.gruppe_id, gruppe: r.gruppe, jahr: r.jahr, monat: r.monat,
+        cent: r.betrag_cent, gezahlt_cent: r.gezahlt_cent, offen_cent: r.betrag_cent - r.gezahlt_cent,
+        status: r.status, gemeldet_am: r.gemeldet_am ? utc(r.gemeldet_am) : null, ehemalig: !r.drin,
+        zahlwege_da: !!r.zahlwege_da,
+      })),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  // "Habe bezahlt" - fuer ein Mitglied UND einen Ausgetretenen (dessen
+  // `gruppen_mitglied`-Zeile ist schon weg). Der Besitzcheck IST
+  // `id = ? AND user_id = ?`, dieselbe Antwort fuer "gibt es nicht" und
+  // "nicht deiner", wie bei `inGruppe()`.
+  'POST /api/saldo/meldung': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const saldoId = Number(daten.saldo);
+    if (!Number.isInteger(saldoId) || saldoId <= 0) return fehler(request, 'Welcher Saldo?');
+
+    let notiz = null;
+    if (daten.notiz !== undefined && daten.notiz !== null) {
+      notiz = String(daten.notiz).trim() || null;
+      if (notiz && notiz.length > SALDO_NOTIZ_MAX) return fehler(request, `Notiz: höchstens ${SALDO_NOTIZ_MAX} Zeichen`);
+    }
+
+    const alt = await env.DB.prepare(
+      'SELECT id, abrechnung_id, status FROM saldo WHERE id = ? AND user_id = ?')
+      .bind(saldoId, ich.id).first();
+    if (!alt) return fehler(request, 'Diesen Saldo gibt es nicht', 404);
+
+    const r = await env.DB.prepare(`
+      UPDATE saldo SET status = 'gemeldet', gemeldet_am = datetime('now')
+       WHERE id = ? AND status IN ('offen','abgelehnt','teilbezahlt') AND betrag_cent - gezahlt_cent > 0
+       RETURNING id
+    `).bind(saldoId).first();
+    if (!r) return fehler(request, 'Dieser Saldo lässt sich gerade nicht melden', 409);
+
+    await env.DB.prepare(
+      'INSERT INTO saldo_log (saldo_id, alt, neu, von, notiz) VALUES (?, ?, ?, ?, ?)')
+      .bind(saldoId, alt.status, 'gemeldet', ich.id, notiz).run();
+
+    const a = await env.DB.prepare('SELECT gruppe_id FROM abrechnung WHERE id = ?').bind(alt.abrechnung_id).first();
+    anstossGruppe(a.gruppe_id, request, env, ctx, 'kasse');
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Betrag bestaetigen oder eine Meldung zurueckweisen. Die Gruppe kommt vom
+     SALDO, nicht vom Rumpf (Nachgereicht #1) - und bewusst OHNE
+     `kasse_an`-Schalter: ein abgeschaltetes `kasse_an` heisst "wir fuehren
+     gerade keine Kasse", nicht "niemand kann begleichen, was er schon
+     schuldet". */
+  'POST /api/saldo/bestaetigung': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    const saldoId = Number(daten.saldo);
+    if (!Number.isInteger(saldoId) || saldoId <= 0) return fehler(request, 'Welcher Saldo?');
+
+    const s = await env.DB.prepare(
+      'SELECT id, abrechnung_id, betrag_cent, gezahlt_cent, status FROM saldo WHERE id = ?')
+      .bind(saldoId).first();
+    if (!s) return fehler(request, 'Diesen Saldo gibt es nicht', 404);
+    const a = await env.DB.prepare('SELECT gruppe_id FROM abrechnung WHERE id = ?').bind(s.abrechnung_id).first();
+
+    const g = await inGruppe(request, env, ich, { gruppe: a.gruppe_id });
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const aktion = String(daten.aktion || 'bestaetigen');
+    if (!['bestaetigen', 'ablehnen'].includes(aktion)) {
+      return fehler(request, "aktion: 'bestaetigen' oder 'ablehnen'");
+    }
+
+    if (aktion === 'ablehnen') {
+      if (s.status !== 'gemeldet') return fehler(request, 'Nur eine gemeldete Zahlung lässt sich zurückweisen', 409);
+      const notiz = String(daten.notiz ?? '').trim();
+      if (!notiz) return fehler(request, 'Eine Ablehnung braucht einen Grund');
+      if (notiz.length > SALDO_NOTIZ_MAX) return fehler(request, `Notiz: höchstens ${SALDO_NOTIZ_MAX} Zeichen`);
+
+      // Optimistische Sperre: nur, wenn die Zeile noch im gelesenen Zustand
+      // ist - sonst haetten zwei gleichzeitige Klicks dieselbe Meldung
+      // zweimal verbucht.
+      const r = await env.DB.prepare(`
+        UPDATE saldo SET status = 'abgelehnt' WHERE id = ? AND status = ? AND gezahlt_cent = ? RETURNING id
+      `).bind(saldoId, s.status, s.gezahlt_cent).first();
+      if (!r) return fehler(request, 'Der Stand hat sich gerade geändert', 409);
+
+      await env.DB.prepare(
+        'INSERT INTO saldo_log (saldo_id, alt, neu, von, notiz) VALUES (?, ?, ?, ?, ?)')
+        .bind(saldoId, s.status, 'abgelehnt', ich.id, notiz).run();
+
+      await kasseAdminLog(env, ich, g, 'saldo_abgelehnt', String(saldoId));
+      anstossGruppe(a.gruppe_id, request, env, ctx, 'kasse');
+      return antwort(request, { ok: true });
+    }
+
+    // Barzahlung ohne vorherige Meldung ist ausdruecklich erlaubt (§2.6) -
+    // keine Statusvorbedingung ausser einem tatsaechlich offenen Rest.
+    const rest = s.betrag_cent - s.gezahlt_cent;
+    if (rest <= 0) return fehler(request, 'Dieser Saldo ist bereits ausgeglichen', 409);
+    const cent = Number(daten.cent);
+    if (!Number.isInteger(cent) || cent <= 0) return fehler(request, 'cent: ganze Zahl größer 0');
+    if (cent > rest) return fehler(request, `Höchstens ${rest} Cent sind noch offen`);
+
+    const gezahltDanach = s.gezahlt_cent + cent;
+    const statusDanach = gezahltDanach >= s.betrag_cent ? 'bezahlt' : 'teilbezahlt';
+    let notiz = null;
+    if (daten.notiz !== undefined && daten.notiz !== null) {
+      notiz = String(daten.notiz).trim() || null;
+      if (notiz && notiz.length > SALDO_NOTIZ_MAX) return fehler(request, `Notiz: höchstens ${SALDO_NOTIZ_MAX} Zeichen`);
+    }
+
+    const r = await env.DB.prepare(`
+      UPDATE saldo SET gezahlt_cent = ?, status = ?, bestaetigt_am = datetime('now'), bestaetigt_von = ?
+       WHERE id = ? AND status = ? AND gezahlt_cent = ? RETURNING id
+    `).bind(gezahltDanach, statusDanach, ich.id, saldoId, s.status, s.gezahlt_cent).first();
+    if (!r) return fehler(request, 'Der Stand hat sich gerade geändert', 409);
+
+    await env.DB.prepare(
+      'INSERT INTO saldo_log (saldo_id, alt, neu, cent, von, notiz) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(saldoId, s.status, statusDanach, cent, ich.id, notiz).run();
+
+    await kasseAdminLog(env, ich, g, 'saldo_bestaetigt', `${saldoId}:${cent}`);
+    anstossGruppe(a.gruppe_id, request, env, ctx, 'kasse');
+    return antwort(request, {
+      ok: true, gezahlt_cent: gezahltDanach, offen_cent: s.betrag_cent - gezahltDanach, status: statusDanach,
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  // Hausordnung und Strafen (Schema 38, Etappe 8) — Entscheidungen 45-56
+  // -------------------------------------------------------------------------
+
+  /* Die Hausordnung UND das Suendenregister in einem Ruf. Fuer jedes Mitglied,
+     namentlich (Entscheidung 54) - wie die offenen Betraege seit Entscheidung
+     27: die Strichliste am Tresen haengt auch fuer alle sichtbar da.
+
+     `?monat=YYYY-MM` waehlt den Monat der Liste, Vorgabe ist der laufende -
+     dieselbe Bauweise wie die Kassenbilder aus Etappe 6.
+
+     ZWEI LISTEN, und die zweite ist keine Doppelung: `strafen` ist der
+     gewaehlte Monat, `offen_alt` sind die noch nicht erledigten aus ANDEREN
+     Monaten. Eine Tatstrafe laeuft ueber den Monatswechsel hinweg weiter
+     (sie kostet kein Geld, also holt sie kein Abschluss ab) - ohne die zweite
+     Liste verschwaende sie am Monatsersten aus dem Blick, ohne erledigt zu
+     sein. */
+  'GET /api/hausordnung': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const g = await inGruppe(request, env, ich, null, 'regeln_an');
+    if (g instanceof Response) return g;
+
+    const url = new URL(request.url);
+    const jetzt = await env.DB.prepare("SELECT strftime('%Y-%m','now') AS m").first();
+    const monat = url.searchParams.get('monat') || jetzt.m;
+    if (!/^\d{4}-\d{2}$/.test(monat)) return fehler(request, 'monat: YYYY-MM');
+
+    /* Der Admin sieht auch die abgeschalteten Regeln - er muss sie wieder
+       einschalten koennen, und eine Regel, unter der schon jemand belangt
+       wurde, bleibt ohnehin fuer immer stehen (Entscheidung 47). Ein Mitglied
+       sieht nur, was gilt: eine Hausordnung mit durchgestrichenen Zeilen ist
+       keine. */
+    const nurAktiv = istGruppenAdmin(g) ? '' : ' AND aktiv = 1';
+    const { results: regeln } = await env.DB.prepare(`
+      SELECT id, titel, text, art, cent, tat, aktiv, reihenfolge
+        FROM hausregel WHERE gruppe_id = ?${nurAktiv}
+       ORDER BY aktiv DESC, reihenfolge, titel
+    `).bind(g.gruppe.id).all();
+
+    const { results: strafen } = await env.DB.prepare(STRAFEN_MONAT_SQL)
+      .bind(g.gruppe.id, monat).all();
+
+    const { results: altOffen } = await env.DB.prepare(`
+      SELECT s.id, s.user_id, u.name, s.titel, s.art, s.cent, s.tat, s.grund, s.status,
+             s.verhaengt_am, s.bezug_strafe_id, v.name AS von_name
+        FROM strafe s
+        JOIN users u ON u.id = s.user_id
+        LEFT JOIN users v ON v.id = s.verhaengt_von
+       WHERE s.gruppe_id = ? AND s.status IN ('offen','gemeldet','vorgeschlagen','bestritten')
+         AND strftime('%Y-%m', s.verhaengt_am) <> ?
+       ORDER BY s.verhaengt_am DESC, s.id DESC
+    `).bind(g.gruppe.id, monat).all();
+
+    /* Wer überhaupt in Frage kommt. Steht HIER und nicht in einer zweiten
+       Route: `index.html` kennt die Mitglieder sonst nur über `/api/stand`,
+       und das gibt es bei `tafel_an = 0` gar nicht - eine Kassen- und
+       Regelgruppe ohne Tafel könnte dann niemanden benennen. Namen sind in
+       dieser Gruppe ohnehin für alle sichtbar (Entscheidungen 27 und 54). */
+    const { results: leute } = await env.DB.prepare(`
+      SELECT u.id, u.name FROM gruppen_mitglied m JOIN users u ON u.id = m.user_id
+       WHERE m.gruppe_id = ? AND u.name IS NOT NULL AND u.entfernt_am IS NULL
+       ORDER BY u.name
+    `).bind(g.gruppe.id).all();
+
+    return antwort(request, {
+      monat,
+      mitglieder: leute,
+      /* Was DIESER Betrachter darf, damit die Seite keine zweite Rechtelogik
+         fuehrt (die zwei Fassungen liefen sonst auseinander wie beinahe
+         `naechster_preis`). `kasse_an` steht dabei, weil eine Geldstrafe ohne
+         Kasse nirgends landen koennte - die Seite blendet die Wahl dann aus,
+         statt in ein 400 zu laufen. */
+      darf_verhaengen: istGruppenAdmin(g),
+      /* Vorschlagen darf JEDES Mitglied (Etappe 9) - der Unterschied zum
+         Verhaengen ist nicht das Recht, sondern der Anfangszustand. Beide
+         Auskuenfte kommen von hier, damit die Seite keine zweite Rechtelogik
+         fuehrt: zwei Fassungen derselben Regel laufen auseinander. */
+      darf_vorschlagen: true,
+      geld_moeglich: !!g.gruppe.kasse_an,
+      regeln: regeln.map(r => ({
+        id: r.id, titel: r.titel, text: r.text, art: r.art,
+        cent: r.cent, tat: r.tat, aktiv: !!r.aktiv, reihenfolge: r.reihenfolge,
+      })),
+      strafen: strafen.map(strafeRaus),
+      offen_alt: altOffen.map(strafeRaus),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Eine Regel anlegen, aendern, ab- und wieder anschalten - EINE Route mit
+     Aktionsfeld, wie `POST /api/getraenk`.
+
+     KEIN DELETE, und das ist kein Versehen (Entscheidung 47): unter einer
+     Regel kann schon jemand belangt worden sein, und die Strafe zeigt auf sie.
+     Sie wird `aktiv = 0` und verschwindet aus der Hausordnung, bleibt aber als
+     Herkunft stehen. Der partielle Unique-Index (`WHERE aktiv = 1`) sorgt
+     dafuer, dass der Titel danach wieder frei ist. */
+  'POST /api/hausregel': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'regeln_an');
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const aktion = String(daten.aktion || 'anlegen');
+    if (!['anlegen', 'aendern', 'aus', 'an'].includes(aktion)) {
+      return fehler(request, "aktion: 'anlegen', 'aendern', 'aus' oder 'an'");
+    }
+
+    /* Titel, Art und Betrag/Auflage in einem Zug pruefen - dieselbe Pruefung
+       fuer Anlegen und Aendern, sonst laesst das eine durch, was das andere
+       ablehnt. Bei 'aendern' sind alle Felder freiwillig; was fehlt, bleibt. */
+    const felder = (basis) => {
+      const setzt = {};
+      if (daten.titel !== undefined || !basis) {
+        const titel = String(daten.titel ?? '').trim().replace(/\s+/g, ' ');
+        if (titel.length < 2 || titel.length > REGEL_TITEL_MAX) {
+          return { fehler: `Titel: 2 bis ${REGEL_TITEL_MAX} Zeichen` };
+        }
+        setzt.titel = titel;
+      }
+      if (daten.text !== undefined) {
+        const text = String(daten.text ?? '').trim();
+        if (text.length > REGEL_TEXT_MAX) return { fehler: `Text: höchstens ${REGEL_TEXT_MAX} Zeichen` };
+        setzt.text = text || null;
+      }
+      const art = daten.art !== undefined ? String(daten.art) : (basis ? basis.art : null);
+      if (!['geld', 'tat'].includes(art)) return { fehler: "art: 'geld' oder 'tat'" };
+      setzt.art = art;
+
+      if (art === 'geld') {
+        /* Eine Geldregel in einer Gruppe ohne Kasse waere eine Regel, die
+           niemand vollstrecken kann - die Strafe daraus haette keinen Saldo,
+           in den sie fliessen koennte. Lieber hier eine verstaendliche Absage
+           als spaeter eine unerklaerliche. */
+        if (!g.gruppe.kasse_an) {
+          return { fehler: 'Eine Geldstrafe braucht eine Kasse — schalte sie ein oder nimm eine Auflage' };
+        }
+        const roh = daten.cent !== undefined ? daten.cent : (basis ? basis.cent : undefined);
+        const p = strafeCentPruefen(roh);
+        if (p.fehler) return p;
+        setzt.cent = p.cent; setzt.tat = null;
+      } else {
+        const roh = daten.tat !== undefined ? daten.tat : (basis ? basis.tat : '');
+        const tat = String(roh ?? '').trim().replace(/\s+/g, ' ');
+        if (tat.length < 2 || tat.length > REGEL_TAT_MAX) {
+          return { fehler: `Auflage: 2 bis ${REGEL_TAT_MAX} Zeichen` };
+        }
+        setzt.tat = tat; setzt.cent = null;
+      }
+      if (daten.reihenfolge !== undefined) {
+        const n = Number(daten.reihenfolge);
+        if (!Number.isInteger(n) || n < 0 || n > 999) return { fehler: 'reihenfolge: 0 bis 999' };
+        setzt.reihenfolge = n;
+      }
+      return { setzt };
+    };
+
+    if (aktion === 'anlegen') {
+      const zahl = await env.DB.prepare(
+        'SELECT count(*) AS n FROM hausregel WHERE gruppe_id = ? AND aktiv = 1')
+        .bind(g.gruppe.id).first();
+      if (zahl.n >= REGEL_MAX) {
+        return fehler(request, `Höchstens ${REGEL_MAX} Regeln — eine Hausordnung, kein Gesetzbuch`, 409);
+      }
+      const f = felder(null);
+      if (f.fehler) return fehler(request, f.fehler);
+
+      let zeile;
+      try {
+        zeile = await env.DB.prepare(`
+          INSERT INTO hausregel (gruppe_id, titel, text, art, cent, tat, reihenfolge, erstellt_von)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+        `).bind(g.gruppe.id, f.setzt.titel, f.setzt.text ?? null, f.setzt.art,
+                f.setzt.cent ?? null, f.setzt.tat ?? null, f.setzt.reihenfolge ?? 0, ich.id).first();
+      } catch (e) {
+        if (String(e.message || '').includes('UNIQUE')) {
+          return fehler(request, 'Eine Regel mit diesem Titel gibt es schon', 409);
+        }
+        throw e;
+      }
+      await kasseAdminLog(env, ich, g, 'regel_angelegt', f.setzt.titel);
+      anstossGruppe(g.gruppe.id, request, env, ctx, 'regeln');
+      return antwort(request, { ok: true, id: zeile.id }, 201);
+    }
+
+    const r = await env.DB.prepare(
+      'SELECT * FROM hausregel WHERE id = ? AND gruppe_id = ?')
+      .bind(Number(daten.regel), g.gruppe.id).first();
+    // Fremde Regel-Id: dieselbe Antwort wie "gibt es nicht" - eine Regel aus
+    // einer anderen Gruppe ist fuer diese keine (Nachgereicht #1).
+    if (!r) return fehler(request, 'Diese Regel gibt es hier nicht', 404);
+
+    if (aktion === 'aus' || aktion === 'an') {
+      const neu = aktion === 'an' ? 1 : 0;
+      try {
+        await env.DB.prepare('UPDATE hausregel SET aktiv = ? WHERE id = ?').bind(neu, r.id).run();
+      } catch (e) {
+        // Beim Wieder-Anschalten kann der Titel inzwischen von einer neueren
+        // Regel belegt sein - der partielle Index greift genau dann.
+        if (String(e.message || '').includes('UNIQUE')) {
+          return fehler(request, 'Der Titel ist inzwischen von einer anderen Regel belegt', 409);
+        }
+        throw e;
+      }
+      await kasseAdminLog(env, ich, g, 'regel_' + aktion, r.titel);
+      anstossGruppe(g.gruppe.id, request, env, ctx, 'regeln');
+      return antwort(request, { ok: true, aktiv: !!neu });
+    }
+
+    const f = felder(r);
+    if (f.fehler) return fehler(request, f.fehler);
+    const spalten = Object.keys(f.setzt);
+    if (!spalten.length) return fehler(request, 'Nichts zu ändern');
+    try {
+      await env.DB.prepare(
+        `UPDATE hausregel SET ${spalten.map(s => `${s} = ?`).join(', ')} WHERE id = ?`)
+        .bind(...spalten.map(s => f.setzt[s]), r.id).run();
+    } catch (e) {
+      if (String(e.message || '').includes('UNIQUE')) {
+        return fehler(request, 'Eine Regel mit diesem Titel gibt es schon', 409);
+      }
+      throw e;
+    }
+    /* KEINE bestehende Strafe wird mitgezogen (Entscheidung 47). Sie hat
+       Titel, Art und Betrag beim Verhaengen eingefroren, genau wie
+       `buchung.cent` den Preis - eine Preisaenderung darf keine alte
+       Abrechnung verschieben, und eine Regelaenderung keine alte Strafe. */
+    await kasseAdminLog(env, ich, g, 'regel_geaendert', r.titel);
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'regeln');
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Verhaengen (Entscheidung 48: der Gruppenadmin, sonst niemand) - oder eine
+     GUTSCHRIFT auf eine schon abgerechnete Strafe (52).
+
+     DREI FREMDSCHLUESSEL kommen hier aus dem Rumpf, und jeder einzelne wird
+     gegen die Gruppe geprueft: `regel`, `user` und `gutschrift`. Das ist die
+     dichteste Haeufung im ganzen Umbau, und Nachgereicht #1 aus Etappe 1 ist
+     genau daran entstanden ("Kein Schreibpfad prueft, ob sein ZIEL zur Gruppe
+     gehoert") - eine fremde Id darf hier nicht mit 201 durchkommen und danach
+     die falsche `gruppe_id` tragen. */
+  'POST /api/strafe': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'regeln_an');
+    if (g instanceof Response) return g;
+
+    /* ZWEI AUSGAENGE SEIT ETAPPE 9. Der Gruppenadmin VERHAENGT (Entscheidung
+       48), ein Mitglied SCHLAEGT VOR - dieselbe Route, weil es dieselben
+       Felder sind und zwei Routen mit demselben Rumpf irgendwann
+       auseinanderlaufen. Der Unterschied steckt allein im Anfangszustand:
+       'offen' gegen 'vorgeschlagen'.
+
+       Ein Vorschlag zaehlt in keiner Abrechnung mit (`SALDO_SUMMEN_SQL` nimmt
+       nur 'offen' und 'abgerechnet') und schickt dem Betroffenen keine Mail -
+       er ist noch nichts, was ihn beträfe. */
+    const darfVerhaengen = istGruppenAdmin(g);
+
+    // --- Der Gutschrift-Zweig (52): keine neue Strafe, sondern das Gegenstueck
+    // zu einer bestehenden. Wie die Gegenbuchung aus Entscheidung 31 - der
+    // abgeschlossene Monat bleibt unangetastet, die Korrektur ist sichtbar und
+    // faellt in den laufenden.
+    if (daten.gutschrift !== undefined) {
+      // Eine Gutschrift ist eine Buchhaltungshandlung, kein Vorschlag - die
+      // bleibt beim Gruppenadmin.
+      if (!darfVerhaengen) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+      const alt = await env.DB.prepare(
+        'SELECT * FROM strafe WHERE id = ? AND gruppe_id = ?')
+        .bind(Number(daten.gutschrift), g.gruppe.id).first();
+      if (!alt) return fehler(request, 'Diese Strafe gibt es hier nicht', 404);
+      if (alt.art !== 'geld') {
+        return fehler(request, 'Nur eine Geldstrafe lässt sich gutschreiben — eine Auflage wird erlassen', 409);
+      }
+      if (alt.status !== 'abgerechnet') {
+        return fehler(request,
+          'Diese Strafe ist noch nicht abgerechnet — sie lässt sich schlicht erlassen', 409);
+      }
+      if (alt.bezug_strafe_id) {
+        return fehler(request, 'Eine Gutschrift lässt sich nicht noch einmal gutschreiben', 409);
+      }
+
+      let zeile;
+      try {
+        zeile = await env.DB.prepare(`
+          INSERT INTO strafe (gruppe_id, regel_id, user_id, titel, art, cent, grund,
+                              verhaengt_von, bezug_strafe_id)
+          VALUES (?, NULL, ?, ?, 'geld', ?, ?, ?, ?) RETURNING id
+        `).bind(g.gruppe.id, alt.user_id, 'Gutschrift: ' + alt.titel, -(alt.cent ?? 0),
+                String(daten.grund ?? '').trim().slice(0, STRAFE_GRUND_MAX) || null,
+                ich.id, alt.id).first();
+      } catch (e) {
+        // Der partielle Index `strafe_gutschrift` - ein Doppelklick schriebe
+        // sonst zwei und schriebe den Betrag zweimal gut.
+        if (String(e.message || '').includes('UNIQUE')) {
+          return fehler(request, 'Zu dieser Strafe gibt es schon eine Gutschrift', 409);
+        }
+        throw e;
+      }
+      await strafeLog(env, zeile.id, null, 'offen', ich.id, 'Gutschrift zu #' + alt.id);
+      await kasseAdminLog(env, ich, g, 'strafe_gutschrift', String(alt.id));
+      anstossGruppe(g.gruppe.id, request, env, ctx, 'regeln', 'kasse');
+      return antwort(request, { ok: true, id: zeile.id }, 201);
+    }
+
+    // --- Der Normalfall: verhaengen.
+    const zielId = Number(daten.user);
+    if (!Number.isInteger(zielId) || zielId <= 0) return fehler(request, 'Wen trifft es? (`user`)');
+    const ziel = await env.DB.prepare(`
+      SELECT u.id, u.name FROM gruppen_mitglied m JOIN users u ON u.id = m.user_id
+       WHERE m.gruppe_id = ? AND m.user_id = ? AND u.entfernt_am IS NULL
+    `).bind(g.gruppe.id, zielId).first();
+    // Nicht in dieser Gruppe heisst: geht diese Gruppe nichts an. Dieselbe
+    // Antwort fuer "gibt es nicht" und "ist nicht hier".
+    if (!ziel) return fehler(request, 'Diese Person ist nicht in dieser Gruppe', 403);
+
+    let titel, art, cent = null, tat = null, regelId = null;
+    if (daten.regel !== undefined && daten.regel !== null) {
+      const r = await env.DB.prepare(
+        'SELECT * FROM hausregel WHERE id = ? AND gruppe_id = ?')
+        .bind(Number(daten.regel), g.gruppe.id).first();
+      if (!r) return fehler(request, 'Diese Regel gibt es hier nicht', 404);
+      if (!r.aktiv) return fehler(request, 'Diese Regel gilt nicht mehr', 409);
+      /* HIER wird eingefroren (Entscheidung 47). Ab jetzt darf sich die Regel
+         aendern, so oft sie will - diese Strafe bleibt, was sie war. */
+      titel = r.titel; art = r.art; cent = r.cent; tat = r.tat; regelId = r.id;
+    } else {
+      /* Freie Strafe ohne Regel (Entscheidung 49) - sonst muesste der Admin
+         fuer jeden Einzelfall eine Regel erfinden, die danach in der
+         Hausordnung stehen bleibt.
+
+         NUR FUER DEN, DER DIE GRUPPE FUEHRT. Ein VORSCHLAG muss sich auf eine
+         geltende Regel berufen (Etappe 9): sonst duerfte jedes Mitglied
+         Titel, Art und Betrag frei erfinden - "Aisha, 99,99 Euro, weil" -,
+         und der Admin haette am Ende nur noch die Wahl, Unfug wegzuklicken.
+         Die Hausordnung ist der Rahmen, innerhalb dessen vorgeschlagen wird;
+         wer den Rahmen selbst setzen will, muss die Gruppe fuehren. */
+      if (!darfVerhaengen) {
+        return fehler(request,
+          'Ein Vorschlag braucht eine Regel — frei verhängen darf nur, wer die Gruppe führt', 403);
+      }
+      titel = String(daten.titel ?? '').trim().replace(/\s+/g, ' ');
+      if (titel.length < 2 || titel.length > REGEL_TITEL_MAX) {
+        return fehler(request, `Titel: 2 bis ${REGEL_TITEL_MAX} Zeichen`);
+      }
+      art = String(daten.art || '');
+      if (!['geld', 'tat'].includes(art)) return fehler(request, "art: 'geld' oder 'tat'");
+      if (art === 'geld') {
+        const p = strafeCentPruefen(daten.cent);
+        if (p.fehler) return fehler(request, p.fehler);
+        cent = p.cent;
+      } else {
+        tat = String(daten.tat ?? '').trim().replace(/\s+/g, ' ');
+        if (tat.length < 2 || tat.length > REGEL_TAT_MAX) {
+          return fehler(request, `Auflage: 2 bis ${REGEL_TAT_MAX} Zeichen`);
+        }
+      }
+    }
+
+    /* Eine Geldstrafe ohne Kasse haette keinen Saldo, in den sie fliessen
+       koennte - 400 MIT BEGRUENDUNG, nicht still verschluckt. `regeln_an` und
+       `kasse_an` sind unabhaengig (eine Gruppe darf Regeln ohne Kasse
+       fuehren), und dann gibt es eben nur Auflagen. */
+    if (art === 'geld' && !g.gruppe.kasse_an) {
+      return fehler(request, 'Ohne Kasse gibt es kein Strafgeld — schalte sie ein oder nimm eine Auflage');
+    }
+
+    const grund = String(daten.grund ?? '').trim();
+    if (grund.length > STRAFE_GRUND_MAX) {
+      return fehler(request, `Grund: höchstens ${STRAFE_GRUND_MAX} Zeichen`);
+    }
+
+    /* Sich selbst vorschlagen darf man - warum auch nicht, wer sich selbst
+       anzeigt, meint es ernst. Was NICHT geht: sich selbst eine Strafe
+       verhaengen und sie damit an der Entscheidung des Admins vorbeitragen;
+       das faellt aber schon durch `darfVerhaengen`. */
+    const stand = darfVerhaengen ? 'offen' : 'vorgeschlagen';
+
+    const zeile = await env.DB.prepare(`
+      INSERT INTO strafe (gruppe_id, regel_id, user_id, titel, art, cent, tat, grund,
+                          verhaengt_von, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, verhaengt_am
+    `).bind(g.gruppe.id, regelId, ziel.id, titel, art, cent, tat, grund || null,
+            ich.id, stand).first();
+
+    await strafeLog(env, zeile.id, null, stand, ich.id, grund || null);
+    if (stand === 'offen') {
+      strafeMail(env, ctx, {
+        strafe: { id: zeile.id, user_id: ziel.id, titel, art, cent, tat, grund },
+        gruppeName: g.gruppe.name, anlass: 'verhaengt',
+      });
+      await kasseAdminLog(env, ich, g, 'strafe_verhaengt', `${ziel.id}:${titel}`);
+    } else {
+      // Der Betroffene bekommt (noch) nichts: ein Vorschlag ist keine Strafe.
+      // Wer entscheiden muss, bekommt Post.
+      einspruchMail(env, ctx, {
+        strafe: { id: zeile.id, titel }, gruppeId: g.gruppe.id,
+        gruppeName: g.gruppe.name, anlass: 'vorschlag', von: ich.name || 'Jemand',
+      });
+    }
+    // 'kasse' MIT, wenn Geld im Spiel ist: die Abrechnungsansicht zeigt den
+    // Strafenblock und muesste sonst auf ihren Minutentakt warten. Ein
+    // Vorschlag steht dort noch nicht - er zaehlt nirgends mit.
+    anstossGruppe(g.gruppe.id, request, env, ctx,
+      ...(art === 'geld' && stand === 'offen' ? ['regeln', 'kasse'] : ['regeln']));
+    return antwort(request, { ok: true, id: zeile.id, status: stand }, 201);
+  },
+
+  // -------------------------------------------------------------------------
+  /* Einspruch (Etappe 9). Der Betroffene widerspricht EINMAL, der Admin
+     entscheidet.
+
+     WARUM NUR EINMAL, und wie das geprueft wird: eine gehaltene Strafe
+     (`bestritten` -> `offen`) stuende sonst wieder im Ausgangszustand, und
+     derselbe Einspruch liesse sich endlos wiederholen. Ein eigenes Flag
+     braucht es dafuer nicht - `strafe_log` traegt jeden Wechsel, und ein
+     bereits eingetragenes 'bestritten' IST die Auskunft. Kein
+     Schemazuwachs, keine zweite Wahrheit.
+
+     EINE BESTRITTENE GELDSTRAFE ZAEHLT IN KEINER ABRECHNUNG MIT
+     (`SALDO_SUMMEN_SQL` nimmt nur 'offen' und 'abgerechnet'). Sie blockiert
+     den Monatsabschluss auch nicht - sie rollt vorwaerts in den Monat, in dem
+     ueber sie entschieden wird (siehe `bescheid`/`halten`). Ein Abschluss, der
+     auf eine Entscheidung wartet, waere eine Gruppe, die ihr Admin im Urlaub
+     am Abrechnen hindert; das Vorwaertsrollen ist derselbe Weg, den
+     Entscheidung 31 fuer jede andere Korrektur schon geht. */
+  'POST /api/strafe/einspruch': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'regeln_an');
+    if (g instanceof Response) return g;
+
+    const s = await env.DB.prepare(
+      'SELECT * FROM strafe WHERE id = ? AND gruppe_id = ?')
+      .bind(Number(daten.strafe), g.gruppe.id).first();
+    if (!s) return fehler(request, 'Diese Strafe gibt es hier nicht', 404);
+    if (s.user_id !== ich.id) return fehler(request, 'Das ist nicht deine Strafe', 403);
+
+    const grund = String(daten.grund ?? '').trim();
+    if (!grund) return fehler(request, 'Ein Einspruch braucht eine Begründung');
+    if (grund.length > STRAFE_GRUND_MAX) {
+      return fehler(request, `Begründung: höchstens ${STRAFE_GRUND_MAX} Zeichen`);
+    }
+
+    const schon = await env.DB.prepare(
+      "SELECT 1 FROM strafe_log WHERE strafe_id = ? AND neu = 'bestritten' LIMIT 1")
+      .bind(s.id).first();
+    if (schon) return fehler(request, 'Gegen diese Strafe hast du schon einmal Einspruch erhoben', 409);
+
+    const r = await env.DB.prepare(`
+      UPDATE strafe SET status = 'bestritten' WHERE id = ? AND status = 'offen' RETURNING id
+    `).bind(s.id).first();
+    if (!r) {
+      return fehler(request, s.status === 'abgerechnet'
+        ? 'Diese Strafe ist schon abgerechnet — sprich mit dem, der die Gruppe führt'
+        : 'Gegen diese Strafe lässt sich gerade kein Einspruch erheben', 409);
+    }
+
+    await strafeLog(env, s.id, s.status, 'bestritten', ich.id, grund);
+    einspruchMail(env, ctx, {
+      strafe: { id: s.id, titel: s.titel }, gruppeId: g.gruppe.id,
+      gruppeName: g.gruppe.name, anlass: 'einspruch', von: ich.name || 'Jemand',
+    });
+    anstossGruppe(g.gruppe.id, request, env, ctx,
+      ...(s.art === 'geld' ? ['regeln', 'kasse'] : ['regeln']));
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* „Habe ich erledigt" - nur der Betroffene, nur bei einer Auflage
+     (Entscheidung 55). Dieselbe Kette wie beim Saldo: der Betroffene meldet,
+     der Admin bestaetigt.
+
+     Geprueft wird gegen `strafe.user_id`, NICHT gegen die Rolle - wie bei
+     `POST /api/saldo/meldung`. Eine Geldstrafe kennt kein "erledigt": sie
+     wandert in die Abrechnung, und bezahlt wird ueber `saldo`. Zwei
+     Buchhaltungen fuer dasselbe Geld gibt es nicht. */
+  'POST /api/strafe/meldung': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'regeln_an');
+    if (g instanceof Response) return g;
+
+    const s = await env.DB.prepare(
+      'SELECT * FROM strafe WHERE id = ? AND gruppe_id = ?')
+      .bind(Number(daten.strafe), g.gruppe.id).first();
+    if (!s) return fehler(request, 'Diese Strafe gibt es hier nicht', 404);
+    if (s.user_id !== ich.id) return fehler(request, 'Das ist nicht deine Strafe', 403);
+    if (s.art === 'geld') {
+      return fehler(request, 'Eine Geldstrafe läuft über die Abrechnung, nicht über eine Meldung');
+    }
+
+    // Optimistische Sperre wie beim Saldo: nur aus dem gelesenen Zustand
+    // heraus, sonst verbuchen zwei gleichzeitige Klicks dasselbe zweimal.
+    const r = await env.DB.prepare(`
+      UPDATE strafe SET status = 'gemeldet', gemeldet_am = datetime('now')
+       WHERE id = ? AND status = 'offen' RETURNING id
+    `).bind(s.id).first();
+    if (!r) return fehler(request, 'Diese Strafe lässt sich gerade nicht melden', 409);
+
+    await strafeLog(env, s.id, s.status, 'gemeldet', ich.id,
+      String(daten.notiz ?? '').trim().slice(0, STRAFE_GRUND_MAX) || null);
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'regeln');
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Der Bescheid des Gruppenadmins: erledigt, zurueckgewiesen oder erlassen.
+     Jeder Wechsel landet in `strafe_log` (Entscheidung 49) - eine Strafe ist
+     der Ort, an dem am meisten diskutiert wird, und das Protokoll ist die
+     Antwort darauf. */
+  'POST /api/strafe/bescheid': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'regeln_an');
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const s = await env.DB.prepare(
+      'SELECT * FROM strafe WHERE id = ? AND gruppe_id = ?')
+      .bind(Number(daten.strafe), g.gruppe.id).first();
+    if (!s) return fehler(request, 'Diese Strafe gibt es hier nicht', 404);
+
+    const aktion = String(daten.aktion || '');
+    if (!['erledigt', 'zurueck', 'erlassen', 'annehmen', 'verwerfen', 'halten'].includes(aktion)) {
+      return fehler(request,
+        "aktion: 'erledigt', 'zurueck', 'erlassen', 'annehmen', 'verwerfen' oder 'halten'");
+    }
+    let notiz = String(daten.notiz ?? '').trim();
+    if (notiz.length > STRAFE_GRUND_MAX) {
+      return fehler(request, `Notiz: höchstens ${STRAFE_GRUND_MAX} Zeichen`);
+    }
+
+    /* --- Etappe 9: über einen Vorschlag oder einen Einspruch entscheiden ----
+       'annehmen' und 'halten' setzen `verhaengt_am` NEU, und das ist der Kern
+       der Sache: dieses Feld bestimmt den Abrechnungsmonat (Entscheidung 51).
+       Ein Vorschlag vom 28. Juli, der am 3. August angenommen wird, ist eine
+       Strafe des AUGUST - der Juli kann längst abgeschlossen sein, und eine
+       Strafe, die in einen geschlossenen Monat fiele, landete in keinem Saldo
+       und wäre stillschweigend verschenkt.
+
+       Dasselbe beim gehaltenen Einspruch. Es ist derselbe Weg, den
+       Entscheidung 31 für jede Korrektur geht: nichts wird rückdatiert, alles
+       rollt vorwärts. Das alte Datum steht in `strafe_log`. */
+    if (aktion === 'annehmen' || aktion === 'verwerfen') {
+      if (s.status !== 'vorgeschlagen') {
+        return fehler(request, 'Das ist kein offener Vorschlag mehr', 409);
+      }
+      const neu = aktion === 'annehmen' ? 'offen' : 'verworfen';
+      const r = await env.DB.prepare(`
+        UPDATE strafe
+           SET status = ?,
+               verhaengt_am = CASE WHEN ? = 'offen' THEN datetime('now') ELSE verhaengt_am END,
+               verhaengt_von = CASE WHEN ? = 'offen' THEN ? ELSE verhaengt_von END
+         WHERE id = ? AND status = 'vorgeschlagen' RETURNING id
+      `).bind(neu, neu, neu, ich.id, s.id).first();
+      if (!r) return fehler(request, 'Der Stand hat sich gerade geändert', 409);
+
+      await strafeLog(env, s.id, s.status, neu, ich.id, notiz || null);
+      // Erst jetzt erfährt der Betroffene davon - vorher war es nur ein
+      // Vorschlag, und ein Vorschlag ist keine Strafe.
+      if (neu === 'offen') {
+        strafeMail(env, ctx, {
+          strafe: { id: s.id, user_id: s.user_id, titel: s.titel, art: s.art, cent: s.cent,
+                    tat: s.tat, grund: s.grund },
+          gruppeName: g.gruppe.name, anlass: 'verhaengt',
+        });
+      }
+      await kasseAdminLog(env, ich, g, 'strafe_' + aktion, String(s.id));
+      anstossGruppe(g.gruppe.id, request, env, ctx,
+        ...(s.art === 'geld' ? ['regeln', 'kasse'] : ['regeln']));
+      return antwort(request, { ok: true });
+    }
+
+    if (aktion === 'halten') {
+      if (s.status !== 'bestritten') {
+        return fehler(request, 'Gegen diese Strafe läuft gerade kein Einspruch', 409);
+      }
+      const r = await env.DB.prepare(`
+        UPDATE strafe SET status = 'offen', verhaengt_am = datetime('now')
+         WHERE id = ? AND status = 'bestritten' RETURNING id
+      `).bind(s.id).first();
+      if (!r) return fehler(request, 'Der Stand hat sich gerade geändert', 409);
+
+      await strafeLog(env, s.id, s.status, 'offen', ich.id, notiz || null);
+      await kasseAdminLog(env, ich, g, 'strafe_gehalten', String(s.id));
+      anstossGruppe(g.gruppe.id, request, env, ctx,
+        ...(s.art === 'geld' ? ['regeln', 'kasse'] : ['regeln']));
+      return antwort(request, { ok: true });
+    }
+
+    if (aktion === 'erledigt' || aktion === 'zurueck') {
+      if (s.art !== 'tat') {
+        return fehler(request, 'Das gilt nur für eine Auflage — eine Geldstrafe läuft über die Abrechnung', 400);
+      }
+      if (aktion === 'zurueck') {
+        if (s.status !== 'gemeldet') {
+          return fehler(request, 'Nur eine gemeldete Auflage lässt sich zurückweisen', 409);
+        }
+        if (!notiz) return fehler(request, 'Eine Zurückweisung braucht einen Grund');
+        const r = await env.DB.prepare(`
+          UPDATE strafe SET status = 'offen', gemeldet_am = NULL
+           WHERE id = ? AND status = 'gemeldet' RETURNING id
+        `).bind(s.id).first();
+        if (!r) return fehler(request, 'Der Stand hat sich gerade geändert', 409);
+        await strafeLog(env, s.id, s.status, 'offen', ich.id, notiz);
+      } else {
+        const r = await env.DB.prepare(`
+          UPDATE strafe SET status = 'erledigt', erledigt_am = datetime('now'), erledigt_von = ?
+           WHERE id = ? AND status IN ('offen','gemeldet') RETURNING id
+        `).bind(ich.id, s.id).first();
+        if (!r) return fehler(request, 'Diese Auflage ist schon vom Tisch', 409);
+        await strafeLog(env, s.id, s.status, 'erledigt', ich.id, notiz || null);
+      }
+      await kasseAdminLog(env, ich, g, 'strafe_' + aktion, String(s.id));
+      anstossGruppe(g.gruppe.id, request, env, ctx, 'regeln');
+      return antwort(request, { ok: true });
+    }
+
+    /* Erlassen. Der eine Fall, in dem es NICHT geht: die Geldstrafe ist schon
+       abgerechnet (Entscheidung 52). Ein abgeschlossener Monat bleibt
+       unangetastet - sonst stimmte eine verschickte Abrechnung nicht mehr mit
+       dem ueberein, was die Seite zeigt. Der Weg ist dann die Gutschrift im
+       laufenden Monat, und die Fehlermeldung sagt das auch. */
+    if (s.status === 'abgerechnet') {
+      return fehler(request,
+        'Diese Strafe ist schon abgerechnet — der Weg ist eine Gutschrift im laufenden Monat', 409);
+    }
+    /* Erlassen kann man nur, was noch gilt. 'bestritten' gehört ausdrücklich
+       dazu (Etappe 9): dem Einspruch stattzugeben IST ein Erlass, und einen
+       zweiten Ausgang dafür zu erfinden hieße, dieselbe Sache zweimal zu
+       nennen. Was nicht mehr gilt - erledigt, erlassen, verworfen -, lässt
+       sich nicht noch einmal erlassen; ohne diese Zeile setzte ein zweiter
+       Klick den Status stumpf auf denselben Wert und schriebe eine
+       Protokollzeile, die nichts bedeutet.
+
+       'vorgeschlagen' gehört NICHT dazu (Abnahmefund Etappe 9): ein Vorschlag
+       ist noch keine Strafe, sein Ausgang heißt 'verwerfen'. Stand er hier
+       mit drin, ging gleich darunter unbesehen die Erlass-Mail an den
+       Betroffenen — und die wäre die erste Nachricht, die er zu der Sache
+       überhaupt bekäme, denn `POST /api/strafe` schweigt beim Vorschlag mit
+       Absicht. Eine Mail „die Sache ist vom Tisch" über eine Sache, von der
+       er nie gehört hat. Die Meldung nennt darum den Weg, wie es diese Route
+       auch beim abgerechneten Fall darüber tut. */
+    if (s.status === 'vorgeschlagen') {
+      return fehler(request,
+        'Das ist noch ein Vorschlag — nimm ihn an oder verwirf ihn', 409);
+    }
+    if (!['offen', 'gemeldet', 'bestritten'].includes(s.status)) {
+      return fehler(request, 'Diese Strafe ist schon vom Tisch', 409);
+    }
+    const r = await env.DB.prepare(`
+      UPDATE strafe SET status = 'erlassen' WHERE id = ? AND status = ? RETURNING id
+    `).bind(s.id, s.status).first();
+    if (!r) return fehler(request, 'Der Stand hat sich gerade geändert', 409);
+
+    await strafeLog(env, s.id, s.status, 'erlassen', ich.id, notiz || null);
+    strafeMail(env, ctx, {
+      strafe: { id: s.id, user_id: s.user_id, titel: s.titel, art: s.art, cent: s.cent, tat: s.tat },
+      gruppeName: g.gruppe.name, anlass: 'erlassen',
+    });
+    await kasseAdminLog(env, ich, g, 'strafe_erlassen', String(s.id));
+    anstossGruppe(g.gruppe.id, request, env, ctx, ...(s.art === 'geld' ? ['regeln', 'kasse'] : ['regeln']));
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Zwei Pfade, die sich gegenseitig ausschliessen (Opus-Konsultation vor der
+     Festlegung, 2026-08-11 - der Plan nannte nur `?g=` und liesse einen
+     Ausgetretenen damit ohne Zahlwege da stehen, obwohl `qr.svg` ihm schon
+     einen QR-Code ausstellt):
+
+     `?saldo=` - Besitz ueber `saldoBesitz()`, KEIN `inGruppe()`, KEIN
+     `kasse_an` - fuer `index.html` (aktives Mitglied) UND `start.html`
+     (Ausgetretener). Liefert Betrag und fertigen Verwendungszweck mit.
+
+     `?g=` - Mitgliedschaft mit `kasse_an`, wie urspruenglich im Plan - nur
+     noch fuer die Pflegeansicht in `gruppe.html`. Ohne Saldo im Kontext bleibt
+     `offen_cent`/`zweck` `null`, PayPal-Links tragen keinen Betrag, und `bank`
+     traegt keinen `qr`-Pfad (der braucht einen echten Saldo). */
+  'GET /api/zahlwege': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const url = new URL(request.url);
+    const saldoRoh = url.searchParams.get('saldo');
+
+    if (saldoRoh !== null) {
+      const b = await saldoBesitz(request, env, ich, Number(saldoRoh));
+      if (b instanceof Response) return b;
+
+      const { results } = await env.DB.prepare(
+        'SELECT id, art, wert, inhaber FROM zahlweg WHERE gruppe_id = ? ORDER BY reihenfolge, id')
+        .bind(b.gruppe.id).all();
+      const zweck = zweckBauen(b.gruppe.name, monatSchluessel(b.abrechnung.jahr, b.abrechnung.monat), ich.name);
+
+      return antwort(request, {
+        gruppe_id: b.gruppe.id, gruppe: b.gruppe.name, offen_cent: b.offenCent, zweck,
+        wege: wegeAufbereiten(results, { offenCent: b.offenCent, saldoId: b.saldo.id }),
+      });
+    }
+
+    const g = await inGruppe(request, env, ich, null, 'kasse_an');
+    if (g instanceof Response) return g;
+
+    const { results } = await env.DB.prepare(
+      'SELECT id, art, wert, inhaber FROM zahlweg WHERE gruppe_id = ? ORDER BY reihenfolge, id')
+      .bind(g.gruppe.id).all();
+
+    return antwort(request, {
+      gruppe_id: g.gruppe.id, gruppe: g.gruppe.name, offen_cent: null, zweck: null,
+      wege: wegeAufbereiten(results, {}),
+    });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Pflege, ausschliesslich Gruppenadmin. Vollersetzung der Liste in EINEM
+     `batch` - die Reihenfolge ist eine Eigenschaft der LISTE (Entscheidung:
+     `reihenfolge` steht am Index im Rumpf), kein Attribut einer einzelnen
+     Zeile, ein Teil-Update haette diese Beziehung nirgends festhalten
+     koennen. */
+  'POST /api/zahlwege': async (request, env, ctx) => {
+    const ich = await nutzer(request, env);
+    const daten = await json(request);
+    if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const g = await inGruppe(request, env, ich, daten, 'kasse_an');
+    if (g instanceof Response) return g;
+    if (!istGruppenAdmin(g)) return fehler(request, 'Das darf nur, wer die Gruppe führt', 403);
+
+    const roh = Array.isArray(daten.wege) ? daten.wege : null;
+    if (!roh) return fehler(request, 'wege: Liste erwartet');
+    if (roh.length > ZAHLWEG_MAX) return fehler(request, `Höchstens ${ZAHLWEG_MAX} Zahlwege`);
+
+    const zeilen = [];
+    for (const [i, w] of roh.entries()) {
+      const art = String(w && w.art || '');
+      if (!ZAHLWEG_ARTEN.includes(art)) return fehler(request, `Zahlweg ${i + 1}: unbekannte Art`);
+      const wert = String(w && w.wert || '').trim();
+      if (!wert) return fehler(request, `Zahlweg ${i + 1}: Wert fehlt`);
+      if (wert.length > ZAHLWEG_WERT_MAX) return fehler(request, `Zahlweg ${i + 1}: zu lang`);
+
+      let wertFertig = wert, inhaber = null;
+      if (art === 'bank') {
+        wertFertig = ibanNormalisieren(wert);
+        if (!ibanGueltig(wertFertig)) return fehler(request, `Zahlweg ${i + 1}: IBAN ungültig`);
+        inhaber = String(w && w.inhaber || '').trim();
+        if (!inhaber) return fehler(request, `Zahlweg ${i + 1}: Kontoinhaber fehlt`);
+        if (inhaber.length > 70) return fehler(request, `Zahlweg ${i + 1}: Kontoinhaber höchstens 70 Zeichen`);
+      }
+      zeilen.push({ art, wert: wertFertig, inhaber, reihenfolge: i });
+    }
+
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM zahlweg WHERE gruppe_id = ?').bind(g.gruppe.id),
+      ...zeilen.map(z => env.DB.prepare(
+        'INSERT INTO zahlweg (gruppe_id, art, wert, inhaber, reihenfolge) VALUES (?, ?, ?, ?, ?)')
+        .bind(g.gruppe.id, z.art, z.wert, z.inhaber, z.reihenfolge)),
+    ]);
+
+    await kasseAdminLog(env, ich, g, 'zahlwege_gesetzt', String(zeilen.length));
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'kasse');
+    return antwort(request, { ok: true });
+  },
+
+  // -------------------------------------------------------------------------
+  /* Der EPC-QR (Girocode) als SVG - Query statt Pfadparameter, der Router
+     kennt keine (§3). `saldoBesitz()` traegt die Besitz- und "schon
+     ausgeglichen"-Pruefung; hier bleibt die Frage, ob der GEWAEHLTE Zahlweg
+     wirklich zur Gruppe DIESES Saldos gehoert und eine Bank-Zeile ist - ein
+     QR fuer PayPal/Wero/Bar ergibt keinen Sinn - UND die EPC-Obergrenze
+     (999.999.999,99 EUR): eine Eigenschaft des Girocodes, nicht der
+     Zahlwege im Allgemeinen, darum hier und nicht in `saldoBesitz()`. */
+  'GET /api/zahlung/qr.svg': async (request, env) => {
+    const ich = await nutzer(request, env);
+    const url = new URL(request.url);
+    const saldoRoh = Number(url.searchParams.get('saldo'));
+    const b = await saldoBesitz(request, env, ich, saldoRoh);
+    if (b instanceof Response) return b;
+    if (b.offenCent > 99999999999) return fehler(request, 'Dieser Betrag ist für einen Girocode zu groß');
+
+    const wegRoh = Number(url.searchParams.get('weg'));
+    if (!Number.isInteger(wegRoh) || wegRoh <= 0) return fehler(request, 'Welcher Zahlweg?');
+
+    const z = await env.DB.prepare(
+      "SELECT id, wert, inhaber FROM zahlweg WHERE id = ? AND gruppe_id = ? AND art = 'bank'")
+      .bind(wegRoh, b.gruppe.id).first();
+    if (!z) return fehler(request, 'Diesen Zahlweg gibt es hier nicht', 404);
+
+    const zweck = zweckBauen(b.gruppe.name, monatSchluessel(b.abrechnung.jahr, b.abrechnung.monat), ich.name);
+    const nutzlast = epcNutzlast({ inhaber: z.inhaber, iban: z.wert, centBetrag: b.offenCent, zweck });
+    const svg = qrSvg(nutzlast);
+
+    return new Response(svg, {
+      headers: { ...koepfe(request), 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  },
+
+  // -------------------------------------------------------------------------
   'POST /api/report': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
@@ -4530,8 +8497,10 @@ const ROUTEN = {
 
     /* Auch die Meldung aus Home Assistant landet hier - die schickt kein
        X-Tab, ihr Anstoss geht also an wirklich alle. Genau richtig: dort sitzt
-       niemand vor der Seite, der die Antwort schon gesehen haette. */
-    anstoss(request, env, ctx, 'tafel');
+       niemand vor der Seite, der die Antwort schon gesehen haette. Und nur an
+       die Gruppen, die `tafel_an` fuehren - eine Meldung gehoert der Person
+       (2b), sichtbar wird sie nur dort, wo eine Tafel sie zeigt. */
+    anstossSchalter('tafel_an', request, env, ctx, 'tafel');
     return antwort(request, { ok: true, name: ich.name, biere, rang: rang.rang }, 201);
   },
 
@@ -4558,6 +8527,10 @@ const ROUTEN = {
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
+    // An WELCHEM Tisch wird gerufen (Schema 33), und ist der Notruf dort an.
+    const g = await inGruppe(request, env, ich, daten, 'notruf_an');
+    if (g instanceof Response) return g;
+
     const art = String(daten.art || '');
     if (!NOTRUF_ARTEN.has(art)) return fehler(request, "art: 'bier', 'kamerad' oder 'alles'");
 
@@ -4572,7 +8545,7 @@ const ROUTEN = {
        Nur der eigene Name darin ist die Probe (siehe `notrufKreis`): sie legt
        dieselbe Zeile an wie jeder andere Notruf und laeuft dieselben neunzig
        Minuten - sie schweigt nur nach aussen und zaehlt nicht mit. */
-    const kreis = await notrufKreis(daten, env, ich.id, istAdmin(ich));
+    const kreis = await notrufKreis(daten, env, ich.id, g.gruppe.id, istAdmin(ich));
     if (kreis.fehler) return fehler(request, kreis.fehler);
 
     /* Ob der Standort mitwandern soll. Fehlt das Feld, ist es ein einmaliger
@@ -4593,10 +8566,10 @@ const ROUTEN = {
         WHERE user_id = ? AND weg_am IS NULL
       `).bind(ich.id),
       env.DB.prepare(`
-        INSERT INTO notrufe (user_id, art, lat, lon, genau, bis, live)
-        VALUES (?, ?, ?, ?, ?, datetime('now', ?), ?)
+        INSERT INTO notrufe (user_id, gruppe_id, art, lat, lon, genau, bis, live)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now', ?), ?)
         RETURNING id, erstellt, bis, live, standort_am
-      `).bind(ich.id, art, lat, lon, genau, `+${NOTRUF_MINUTEN} minutes`, live),
+      `).bind(ich.id, g.gruppe.id, art, lat, lon, genau, `+${NOTRUF_MINUTEN} minutes`, live),
       // Der Zaehler fuer die Statistik - siehe Migration 0017, warum nicht
       // aus `notrufe` selbst gezaehlt wird. Nur beim ABSETZEN, nicht beim
       // Standort-Nachtrag: der ersetzt keinen Notruf, er ergaenzt einen.
@@ -4620,6 +8593,9 @@ const ROUTEN = {
        besser als einer, der niemanden erreicht. */
     if (kreis.ids) await kreisSetzen(env, zeile.id, kreis.ids);
 
+    // An welchen Tisch der Ruf geht - siehe unten bei `anWen`.
+    const welcheGruppe = g.gruppe.id;
+
     /* Die Post. Ein Notruf MELDET nur, er liefert nichts mit - also gilt die
        alte Regel und der Ausloeser bleibt draussen (siehe `benachrichtige`).
        Der Kartenlink steht in der Mail selbst: wer sie im Bett liest, soll
@@ -4633,13 +8609,20 @@ const ROUTEN = {
        heraus (das taete `ausser`, und das setzt der Notruf nicht). Ein Klopfen
        am eigenen Geraet ist kein Test des Notrufs, sondern nur laut. */
     if (!kreis.probe) {
-      const anWen = kreis.ids ?? (await env.DB.prepare(
-        'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
-        .bind(ich.id).all()).results.map(r => r.id);
+      /* "Ohne Kreis an alle" heisst seit Schema 32: an alle DIESER GRUPPE.
+         Vorher war das dasselbe, weil es nur eine gab; jetzt waere es ein
+         Notruf aus einem Buero an Leute, die von dem Buero nichts wissen. Der
+         ausdruecklich gewaehlte Kreis (`kreis.ids`) bleibt unangetastet - wen
+         jemand von Hand anwaehlt, waehlt er. */
+      const anWen = kreis.ids ?? (await env.DB.prepare(`
+        SELECT m.user_id AS id FROM gruppen_mitglied m
+          JOIN users u ON u.id = m.user_id
+         WHERE m.gruppe_id = ? AND m.user_id <> ? AND u.name IS NOT NULL
+      `).bind(welcheGruppe, ich.id).all()).results.map(r => r.id);
       notrufPost(env, ctx, ich, zeile.id, art, lat, lon, anWen, zeile.bis, !!zeile.live);
     }
 
-    anstoss(request, env, ctx, 'tafel');
+    anstossGruppe(welcheGruppe, request, env, ctx, 'tafel');
     return antwort(request, {
       ok: true,
       notruf: notrufAntwort({
@@ -4680,7 +8663,7 @@ const ROUTEN = {
     const zeile = await env.DB.prepare(`
       UPDATE notrufe SET lat = ?, lon = ?, genau = ?, standort_am = datetime('now')
       WHERE user_id = ? AND weg_am IS NULL AND bis > datetime('now')
-      RETURNING id, art, erstellt, bis, live, standort_am
+      RETURNING id, gruppe_id, art, erstellt, bis, live, standort_am
     `).bind(lat, lon, genau, ich.id).first();
     if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
 
@@ -4693,8 +8676,14 @@ const ROUTEN = {
 
        NUR HIER. Alles andere am Notruf (absetzen, zuruecknehmen, Regler,
        Kreis) meldet weiter 'tafel': das passiert einmal je Notruf, und dort
-       aendert sich mehr als eine Nadel. */
-    anstoss(request, env, ctx, 'notruf');
+       aendert sich mehr als eine Nadel.
+
+       Die Gruppe kommt von der ZEILE, nicht aus dem Rumpf - derselbe Grund
+       wie bei `/api/notruf/kreis` weiter unten. Kein `notruf_an`-Schalter
+       hier: ein Live-Standort, der schon laeuft, soll weiterlaufen duerfen,
+       auch wenn die Gruppe den Schalter inzwischen umgelegt hat - abgeschaltet
+       wird ausgeblendet, nicht mitten in der Bewegung gekappt (Entscheidung 18). */
+    anstossGruppe(zeile.gruppe_id, request, env, ctx, 'notruf');
     return antwort(request, {
       ok: true,
       notruf: notrufAntwort(
@@ -4721,7 +8710,9 @@ const ROUTEN = {
        allen Stellen die teuerste. */
     const [ich, traeger] = await Promise.all([nutzer(request, env), stolzTraeger(env)]);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    const notrufe = await notrufeStmt(env, ich.id, traeger).all();
+    const g = await inGruppe(request, env, ich, null, 'notruf_an');
+    if (g instanceof Response) return g;
+    const notrufe = await notrufeStmt(env, ich.id, traeger, g.gruppe.id).all();
     return antwort(request, {
       notrufe: notrufe.results.map(n => notrufAntwort(n, ich.id)),
     }, 200, KEIN_NOTRUF_CACHE);
@@ -4747,12 +8738,13 @@ const ROUTEN = {
     const zeile = await env.DB.prepare(`
       UPDATE notrufe SET live = ?
       WHERE user_id = ? AND weg_am IS NULL AND bis > datetime('now')
-      RETURNING id, art, lat, lon, genau, erstellt, bis, live, standort_am
+      RETURNING id, gruppe_id, art, lat, lon, genau, erstellt, bis, live, standort_am
     `).bind(daten.live ? 1 : 0, ich.id).first();
     if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
 
     const kreis = await kreisLesen(env, zeile.id);
-    anstoss(request, env, ctx, 'tafel');
+    // Die Gruppe kommt von der ZEILE - siehe die Begruendung an /notruf/standort.
+    anstossGruppe(zeile.gruppe_id, request, env, ctx, 'tafel');
     return antwort(request, {
       ok: true,
       notruf: notrufAntwort({ ...zeile, ...kreis, name: ich.name, user_id: ich.id }, ich.id),
@@ -4782,15 +8774,22 @@ const ROUTEN = {
 
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
-    const kreis = await notrufKreis(daten, env, ich.id, istAdmin(ich));
-    if (kreis.fehler) return fehler(request, kreis.fehler);
 
     const zeile = await env.DB.prepare(`
-      SELECT id, art, lat, lon, genau, erstellt, bis, live, standort_am
+      SELECT id, gruppe_id, art, lat, lon, genau, erstellt, bis, live, standort_am
       FROM notrufe
       WHERE user_id = ? AND weg_am IS NULL AND bis > datetime('now')
     `).bind(ich.id).first();
     if (!zeile) return fehler(request, 'Du hast gerade keinen laufenden Notruf', 409);
+
+    /* Die Gruppe kommt vom laufenden NOTRUF, nicht aus dem Rumpf: der Ruf
+       gehoert dem Tisch, an dem er abgesetzt wurde, und ein nachtraeglich
+       mitgeschicktes Feld duerfte ihn nicht auf einen anderen umhaengen. Und
+       aus demselben Grund steht `notrufKreis` erst JETZT: der waehlbare Kreis
+       ist der DIESER Gruppe, nicht irgendeiner. */
+    const welcheGruppe = zeile.gruppe_id;
+    const kreis = await notrufKreis(daten, env, ich.id, welcheGruppe, istAdmin(ich));
+    if (kreis.fehler) return fehler(request, kreis.fehler);
 
     await kreisSetzen(env, zeile.id, kreis.ids);
 
@@ -4803,13 +8802,20 @@ const ROUTEN = {
        Probe zurueckzieht, hat die Runde dabei schon erreicht; die Post von
        vorhin bleibt draussen, die Karte nimmt der Kreiswechsel weg. */
     if (!kreis.probe) {
-      const anWen = kreis.ids ?? (await env.DB.prepare(
-        'SELECT id FROM users WHERE id <> ? AND name IS NOT NULL')
-        .bind(ich.id).all()).results.map(r => r.id);
+      /* "Ohne Kreis an alle" heisst seit Schema 32: an alle DIESER GRUPPE.
+         Vorher war das dasselbe, weil es nur eine gab; jetzt waere es ein
+         Notruf aus einem Buero an Leute, die von dem Buero nichts wissen. Der
+         ausdruecklich gewaehlte Kreis (`kreis.ids`) bleibt unangetastet - wen
+         jemand von Hand anwaehlt, waehlt er. */
+      const anWen = kreis.ids ?? (await env.DB.prepare(`
+        SELECT m.user_id AS id FROM gruppen_mitglied m
+          JOIN users u ON u.id = m.user_id
+         WHERE m.gruppe_id = ? AND m.user_id <> ? AND u.name IS NOT NULL
+      `).bind(welcheGruppe, ich.id).all()).results.map(r => r.id);
       notrufPost(env, ctx, ich, zeile.id, zeile.art, zeile.lat, zeile.lon, anWen, zeile.bis, !!zeile.live);
     }
 
-    anstoss(request, env, ctx, 'tafel');
+    anstossGruppe(welcheGruppe, request, env, ctx, 'tafel');
     return antwort(request, {
       ok: true,
       notruf: notrufAntwort({
@@ -4829,7 +8835,9 @@ const ROUTEN = {
   'GET /api/kreis': async (request, env) => {
     const [ich, traeger] = await Promise.all([nutzer(request, env), stolzTraeger(env)]);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    const leute = await kreisWaehlbarStmt(env, ich.id, traeger).all();
+    const g = await inGruppe(request, env, ich, null, 'notruf_an');
+    if (g instanceof Response) return g;
+    const leute = await kreisWaehlbarStmt(env, ich.id, g.gruppe.id, traeger).all();
     /* `probe` ist die eigene Id, und nur der Wirt bekommt sie - er darf sich
        selbst waehlen und damit den Notruf in der laufenden Anlage ausprobieren
        (siehe `notrufKreis`). Sie steht NEBEN der Liste und nicht darin: `leute`
@@ -4850,13 +8858,15 @@ const ROUTEN = {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
+    // Die Gruppe kommt von der ZEILE - siehe die Begruendung an /notruf/standort.
     const weg = await env.DB.prepare(`
       UPDATE notrufe SET weg_am = datetime('now')
       WHERE user_id = ? AND weg_am IS NULL
-    `).bind(ich.id).run();
+      RETURNING gruppe_id
+    `).bind(ich.id).first();
 
-    if (weg.meta.changes) anstoss(request, env, ctx, 'tafel');
-    return antwort(request, { ok: true, weg: weg.meta.changes });
+    if (weg) anstossGruppe(weg.gruppe_id, request, env, ctx, 'tafel');
+    return antwort(request, { ok: true, weg: weg ? 1 : 0 });
   },
 
   // -------------------------------------------------------------------------
@@ -4867,6 +8877,15 @@ const ROUTEN = {
   'POST /api/drehen': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const daten = await json(request);
+
+    // An welchem Tisch wird gedreht (Schema 33), und ist das Rad dort an.
+    const g = await inGruppe(request, env, ich, daten, 'rad_an');
+    if (g instanceof Response) return g;
+    /* `tafel_an` und `rad_an` sind entkoppelt (Entscheidung 40): mit Tafel
+       zieht das Rad gewichtet nach Bestand wie bisher, ohne Tafel
+       gleichverteilt - siehe `gewicht()`, `losFeldStmt()`. */
+    const tafelAn = !!g.gruppe.tafel_an;
 
     const tag = bierTag();
     /* Wen der Regenbogen heute trifft, muss VOR dem Feld feststehen: seine
@@ -4880,8 +8899,9 @@ const ROUTEN = {
        Stunden nicht geantwortet hat, gibt den Tag hier frei - und die beiden
        Abfragen dahinter sehen das bereits. */
     const [verfallen, tagRoh, feld, termine] = await env.DB.batch([
-      verfallStmt(env, tag), losTagStmt(env, tag), losFeldStmt(env, traeger),
-      termineStmt(env, traeger),
+      verfallStmt(env, tag, g.gruppe.id), losTagStmt(env, tag, g.gruppe.id),
+      losFeldStmt(env, traeger, g.gruppe.id, tafelAn),
+      termineStmt(env, traeger, g.gruppe.id),
     ]);
     const lage = tagesLage(tagRoh.results);
     const topf = losTopf(feld.results, lage);
@@ -4893,9 +8913,9 @@ const ROUTEN = {
       /* Hier hat zwar niemand gezogen, aber der Verfallslauf oben kann etwas
          umgeschrieben haben - dann steht bei den anderen noch ein Los, das es
          nicht mehr gibt. Ohne diese Aenderung schweigt die Leitung. */
-      if (verfallen.meta.changes) anstoss(request, env, ctx, 'tafel');
+      if (verfallen.meta.changes) anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel');
       return antwort(request,
-        { ...losAntwort(tag, lage, topf, termine.results, kinder), schon: true });
+        { ...losAntwort(tag, lage, topf, termine.results, kinder, tafelAn), schon: true });
     }
     /* Steht der Abend des Geburtstagskindes schon, faellt die Ziehung heute
        aus (siehe `ehrenLage`). Die Seite ruft hier dann gar nicht mehr an -
@@ -4909,8 +8929,11 @@ const ROUTEN = {
     if (topf.length < lage.mindest) {
       return fehler(request, lage.raus.length
         ? 'Heute hat abgesagt, wer da war.'
-        : `Zu wenig gemeldet — die Flasche braucht mindestens ${lage.mindest}, ` +
-          'die heute etwas Kaltes haben.', 409);
+        : tafelAn
+          ? `Zu wenig gemeldet — die Flasche braucht mindestens ${lage.mindest}, ` +
+            'die heute etwas Kaltes haben.'
+          : `Zu wenige in der Runde — die Flasche braucht mindestens ${lage.mindest}.`,
+        409);
     }
 
     /* DIE EINE GEZINKTE ZIEHUNG. Hat heute jemand Geburtstag und noch keinen
@@ -4923,20 +8946,27 @@ const ROUTEN = {
        der Ziehung eingefroren und ist der Beleg des Abends - stuende dort nur
        das Geburtstagskind, zeigte ein Rad von morgen ein Rad mit einem
        einzigen Bogen, und niemand saehe mehr, gegen wen es gewonnen hat. */
-    const gewinner = ziehe(ehre ? topf.filter(p => ehre.fuer.includes(p.name)) : topf);
+    const gewinner = ziehe(ehre ? topf.filter(p => ehre.fuer.includes(p.name)) : topf, tafelAn);
     /* Das Rennen zweier gleichzeitiger Dreher entscheidet der partielle
        Unique-Index `los_gueltig`: wer nicht geschrieben hat, liest gleich
        darauf das fremde Ergebnis und zeigt es an. Kein Sperren, keine
        Transaktion ueber zwei Anfragen. Die WHERE-Klausel muss wortwoertlich
-       der Index-Bedingung entsprechen, sonst findet SQLite den Index nicht. */
+       der Index-Bedingung entsprechen, sonst findet SQLite den Index nicht.
+
+       `gewinner.biere` bindet immer eine Zahl (0 oder mehr) - die Spalte ist
+       NOT NULL, und `losFeldStmt` liefert seit Etappe 2 auch ohne Tafel ein
+       `coalesce(r.biere, 0)`. Dass es ohne Tafel nirgends ANGEZEIGT wird,
+       entscheidet `losSegmente` mit `tafelAn`, nicht diese Zeile. */
     const gesetzt = await env.DB.prepare(`
-      INSERT INTO los (tag, user_id, biere, feld, gedreht_von) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(tag) WHERE status IN ('offen','zugesagt') DO NOTHING
-    `).bind(tag, gewinner.id, gewinner.biere,
-            JSON.stringify(losSegmente(topf, kinder)), ich.id).run();
+      INSERT INTO los (tag, gruppe_id, user_id, biere, feld, gedreht_von)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(gruppe_id, tag) WHERE status IN ('offen','zugesagt') DO NOTHING
+    `).bind(tag, g.gruppe.id, gewinner.id, gewinner.biere,
+            JSON.stringify(losSegmente(topf, kinder, tafelAn)), ich.id).run();
 
     const [tagRoh2, feld2, termine2] = await env.DB.batch([
-      losTagStmt(env, tag), losFeldStmt(env, traeger), termineStmt(env, traeger),
+      losTagStmt(env, tag, g.gruppe.id), losFeldStmt(env, traeger, g.gruppe.id, tafelAn),
+      termineStmt(env, traeger, g.gruppe.id),
     ]);
     const lage2 = tagesLage(tagRoh2.results);
     const selbst = gesetzt.meta.changes === 1;
@@ -4951,9 +8981,9 @@ const ROUTEN = {
        Ziehung kennen die uebrigen Seiten ja auch noch nicht, wenn sein eigener
        Anstoss unterwegs verlorenging. Zweimal dieselbe Marke kostet die
        Empfaenger nichts - sie laden und vergleichen. */
-    anstoss(request, env, ctx, 'tafel');
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel');
     return antwort(request, {
-      ...losAntwort(tag, lage2, losTopf(feld2.results, lage2), termine2.results, kinder),
+      ...losAntwort(tag, lage2, losTopf(feld2.results, lage2), termine2.results, kinder, tafelAn),
       schon: !selbst,
     }, selbst ? 201 : 200);
   },
@@ -5030,7 +9060,31 @@ const ROUTEN = {
       ende   = alsDbZeit(e.d);
     }
 
-    const [, tagRoh] = await env.DB.batch([verfallStmt(env, tag), losTagStmt(env, tag)]);
+    /* WELCHES RAD (Schema 33). Seit jede Gruppe taeglich ihr eigenes dreht,
+       gibt es an einem Tag mehrere geltende Lose - "das Los von heute" ist
+       keine eindeutige Auskunft mehr.
+
+       Zwei Wege herein, zwei Quellen fuer die Gruppe, und KEINE davon ist der
+       Rumpf allein: aus der Seite kommt sie als `gruppe` (dann steht sie da
+       und ist durch die Mitgliedschaft gedeckt), aus der Mail kommt sie ueber
+       die Los-Id, denn die traegt der signierte Link ohnehin. Ein
+       Unangemeldeter soll die Gruppe nicht selbst benennen duerfen - er
+       benennt das Los, und das Los sagt, wohin es gehoert. */
+    let welche = null;
+    if (daten.los != null) {
+      const l = await env.DB.prepare('SELECT gruppe_id FROM los WHERE id = ?')
+        .bind(Number(daten.los)).first();
+      welche = l ? l.gruppe_id : null;
+    }
+    if (welche == null && daten.gruppe != null) {
+      const g = await inGruppe(request, env, ich, daten);
+      if (g instanceof Response) return g;
+      welche = g.gruppe.id;
+    }
+
+    const [, tagRoh] = await env.DB.batch([
+      verfallStmt(env, tag, welche), losTagStmt(env, tag, welche),
+    ]);
     const lage = tagesLage(tagRoh.results);
     const z = lage.gueltig;
 
@@ -5060,12 +9114,18 @@ const ROUTEN = {
        einem wiederholten Ruf steht `termine.los_id UNIQUE`. */
     let neuerTermin = null;
     if (ja) {
+      /* Die Gruppe kommt vom LOS, nicht aus dem Rumpf (Schema 33). Diese Route
+         ist die eine, die auch ohne Anmeldung erreichbar ist - aus der
+         Gewinner-Mail heraus, ueber die Signatur -, und ein Rumpffeld, das ein
+         Unangemeldeter setzt, waere die falsche Quelle fuer eine
+         Gruppenzugehoerigkeit. Der Abend gehoert dem Tisch, an dem gedreht
+         wurde. */
       neuerTermin = await env.DB.prepare(`
-        INSERT INTO termine (gastgeber_id, beginnt_am, endet_am, los_id, erstellt_von)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO termine (gastgeber_id, gruppe_id, beginnt_am, endet_am, los_id, erstellt_von)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(los_id) DO NOTHING
         RETURNING id
-      `).bind(ich.id, beginn, ende, z.id, ich.id).first();
+      `).bind(ich.id, z.gruppe_id, beginn, ende, z.id, ich.id).first();
     }
 
     /* Erst die Zusage macht aus der Ziehung einen Abend - also geht die
@@ -5075,23 +9135,38 @@ const ROUTEN = {
     if (neuerTermin) {
       mailTerminNeu(env, ctx, {
         id: neuerTermin.id, beginnt_am: beginn, endet_am: ende,
+        // Die Gruppe des Loses - sie entscheidet, WER von dem Abend erfaehrt.
+        gruppe_id: z.gruppe_id,
         gastgeber: ich.name, titel: null, fassung: 0,
       }, ich.id, 'zugesagt');
     }
 
+    // Nur fuer die Ziehungswege (Entscheidung 40) - `z` traegt selbst kein
+    // `tafel_an`, das Los kennt nur seine Gruppe, nicht ihre Schalterleiste.
+    const gruppeZeile = await env.DB.prepare('SELECT tafel_an FROM gruppen WHERE id = ?')
+      .bind(z.gruppe_id).first();
+    const tafelAn = !!(gruppeZeile && gruppeZeile.tafel_an);
+
     const traeger = await stolzTraeger(env);
     const kinderP = geburtstagsKinder(env);
     const [tagRoh2, feld, termine] = await env.DB.batch([
-      losTagStmt(env, tag), losFeldStmt(env, traeger), termineStmt(env, traeger),
+      // Dieselbe Gruppe wie oben - sonst antwortet die Seite mit dem Rad
+      // einer anderen Runde auf die eigene Zusage.
+      losTagStmt(env, tag, z.gruppe_id), losFeldStmt(env, traeger, z.gruppe_id, tafelAn),
+      termineStmt(env, traeger, z.gruppe_id),
     ]);
     const lage2 = tagesLage(tagRoh2.results);
-    // Zusage wie Absage aendern Rad, Liste und Termine auf einen Schlag.
-    anstoss(request, env, ctx, 'tafel');
+    /* Zusage wie Absage aendern Rad, Liste und Termine auf einen Schlag.
+       AUSDRUECKLICH mit der Gruppe des Loses statt ueber den Schreibenden:
+       wer aus der Mail heraus antwortet, traegt kein Geraete-Token bei sich,
+       und `anstoss()` faende darum keine einzige Gruppe. Die Meldung ginge
+       still ins Leere, und die Tafel bliebe stehen, bis der Zeitgeber greift. */
+    anstossGruppe(z.gruppe_id, request, env, ctx, 'tafel');
     /* Die Terminliste faehrt mit: sonst muesste die Seite gleich darauf die
        Bestenliste nachladen, nur damit der eben angelegte Abend dasteht. */
     return antwort(request, {
       ...losAntwort(tag, lage2, losTopf(feld.results, lage2), termine.results,
-                    await kinderP),
+                    await kinderP, tafelAn),
       termine: termine.results.map(t => terminAntwort(t)),
     });
   },
@@ -5107,6 +9182,10 @@ const ROUTEN = {
 
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+
+    // An welchem Tisch (Schema 33), und sind Termine dort an.
+    const g = await inGruppe(request, env, ich, daten, 'termine_an');
+    if (g instanceof Response) return g;
 
     const p = pruefeBeginn(daten.beginnt_am);
     if (p.fehler) return fehler(request, p.fehler);
@@ -5127,10 +9206,21 @@ const ROUTEN = {
       return fehler(request, `Der Ort darf höchstens ${TERMIN_TITEL_MAX} Zeichen haben`);
     }
 
-    // Der Gastgeber kommt als Name aus der Liste - Ids stehen nirgends auf der Seite.
+    /* Der Gastgeber kommt als Name aus der Liste - Ids stehen nirgends auf der
+       Seite. NUR AUS DIESER GRUPPE: Namen sind instanzweit eindeutig, ohne den
+       `gruppen_mitglied`-Filter traegt ein Tippfehler einen Fremden auf die
+       Tafel, der davon nie erfaehrt und ihn auch nicht wieder loeschen kann
+       (`POST /api/termin/aendern` liest die Gruppe aus der Zeile, `inGruppe()`
+       weist ihn mit 403 ab). Dieselbe Klammer wie `zielFehlt()` und
+       `kreisWaehlbarStmt` - die Gruppe steht in der WHERE-Klausel, nicht in
+       einer Pruefung danach. */
     const wer = ort ? '' : String(daten.gastgeber ?? '').trim().toLowerCase();
     const gast = wer
-      ? await env.DB.prepare('SELECT id, name FROM users WHERE name_klein = ?').bind(wer).first()
+      ? await env.DB.prepare(`
+          SELECT u.id, u.name FROM users u
+            JOIN gruppen_mitglied m ON m.user_id = u.id
+           WHERE u.name_klein = ? AND m.gruppe_id = ? AND u.entfernt_am IS NULL
+        `).bind(wer, g.gruppe.id).first()
       /* Auswaerts gibt es keinen Gastgeber. Die Spalte ist NOT NULL und traegt
          dann den, der den Abend ausgemacht hat - dasselbe wie `erstellt_von`. */
       : ort ? { id: ich.id, name: ich.name } : null;
@@ -5147,18 +9237,20 @@ const ROUTEN = {
     }
 
     const neu = await env.DB.prepare(`
-      INSERT INTO termine (gastgeber_id, beginnt_am, endet_am, titel, ort, erstellt_von)
-      VALUES (?, ?, ?, ?, ?, ?) RETURNING id
-    `).bind(gast.id, alsDbZeit(p.d), alsDbZeit(e.d), titel || null, ort || null, ich.id).first();
+      INSERT INTO termine (gastgeber_id, gruppe_id, beginnt_am, endet_am, titel, ort, erstellt_von)
+      VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
+    `).bind(gast.id, g.gruppe.id, alsDbZeit(p.d), alsDbZeit(e.d),
+            titel || null, ort || null, ich.id).first();
 
     mailTerminNeu(env, ctx, {
       id: neu.id, beginnt_am: alsDbZeit(p.d), endet_am: alsDbZeit(e.d),
+      gruppe_id: g.gruppe.id,
       gastgeber: ort ? null : gast.name, ort: ort || null,
       titel: titel || null, fassung: 0,
     }, ich.id, 'eingetragen');
 
-    const alle = await termineStmt(env, await stolzTraeger(env)).all();
-    anstoss(request, env, ctx, 'tafel');
+    const alle = await termineStmt(env, await stolzTraeger(env), g.gruppe.id).all();
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel');
     return antwort(request, {
       ok: true, id: neu.id, gastgeber: ort ? null : gast.name, ort: ort || null,
       termine: alle.results.map(t => terminAntwort(t)),
@@ -5178,7 +9270,8 @@ const ROUTEN = {
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
     const t = await env.DB.prepare(`
-      SELECT t.id, t.gastgeber_id, t.erstellt_von, t.los_id, t.beginnt_am, t.endet_am,
+      SELECT t.id, t.gastgeber_id, t.gruppe_id, t.erstellt_von, t.los_id,
+             t.beginnt_am, t.endet_am,
              -- Der Ort MUSS mit heraus: auswaerts steht in gastgeber_id der
              -- Eintragende, und terminWo() haelt den Namen nur dann aus den
              -- Mails heraus, wenn es den Ort ueberhaupt zu sehen bekommt.
@@ -5188,6 +9281,10 @@ const ROUTEN = {
       FROM termine t JOIN users u ON u.id = t.gastgeber_id WHERE t.id = ?
     `).bind(Number(daten.id)).first();
     if (!t) return fehler(request, 'Den Termin gibt es nicht', 404);
+    // Die Gruppe kommt vom TERMIN, nicht aus dem Rumpf - er gehoert dem Tisch,
+    // an dem er eingetragen wurde (Nachgereicht #1 aus Etappe 1).
+    const g = await inGruppe(request, env, ich, { gruppe: t.gruppe_id }, 'termine_an');
+    if (g instanceof Response) return g;
     if (t.gastgeber_id !== ich.id && t.erstellt_von !== ich.id) {
       return fehler(request, 'Ändern darf nur der Gastgeber oder wer ihn eingetragen hat', 403);
     }
@@ -5216,8 +9313,8 @@ const ROUTEN = {
       }
       await env.DB.batch(schritte);
       mailTerminAendert(env, ctx, { ...t, fassung: t.fassung + 1 }, ich.id, 'abgesagt');
-      const alle = await termineStmt(env, await stolzTraeger(env)).all();
-      anstoss(request, env, ctx, 'tafel');
+      const alle = await termineStmt(env, await stolzTraeger(env), t.gruppe_id).all();
+      anstossGruppe(t.gruppe_id, request, env, ctx, 'tafel');
       return antwort(request, {
         ok: true, abgesagt: true,
         // Hing eine Zusage daran, ist der Tag jetzt wieder frei - die Seite
@@ -5296,8 +9393,8 @@ const ROUTEN = {
       }, ich.id, verschoben ? 'verschoben' : 'umbenannt');
     }
 
-    const alle = await termineStmt(env, await stolzTraeger(env)).all();
-    anstoss(request, env, ctx, 'tafel');
+    const alle = await termineStmt(env, await stolzTraeger(env), t.gruppe_id).all();
+    anstossGruppe(t.gruppe_id, request, env, ctx, 'tafel');
     return antwort(request, { ok: true, termine: alle.results.map(t => terminAntwort(t)) });
   },
 
@@ -5314,8 +9411,23 @@ const ROUTEN = {
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
+    /* An welchem Tisch (Schema 33). Hier haengt mehr daran als eine Spalte:
+       ein Mensch hat kuenftig EINEN SCHNITT JE GRUPPE - was am Tresen ueber
+       ihn gesagt wird, bleibt am Tresen. Deshalb traegt die Gruppe unten auch
+       den UPSERT-Konflikt und die Ruecknahme. */
+    const g = await inGruppe(request, env, ich, daten);
+    if (g instanceof Response) return g;
+
     const ziel = zielAus(`${daten.ziel_art}:${daten.ziel_id}`);
     if (!ziel) return fehler(request, "ziel_art: 'user' oder 'termin', ziel_id: eine Zahl");
+
+    /* Der Schalter haengt am ZIEL, nicht an einer festen Spalte: ein Mensch
+       gehoert zur Tafel, ein Abend zu den Terminen. Kein zweiter DB-Griff -
+       `g.gruppe` traegt die ganze Schalterleiste schon aus `inGruppe()`. */
+    const bewertSchalter = ziel.art === 'termin' ? 'termine_an' : 'tafel_an';
+    if (!g.gruppe[bewertSchalter]) {
+      return fehler(request, `Das ist in „${g.gruppe.name}" abgeschaltet`, 403);
+    }
 
     const s = pruefeSterne(ziel.art, daten.sterne);
     if (s.fehler) return fehler(request, s.fehler);
@@ -5350,15 +9462,24 @@ const ROUTEN = {
       if (String(daten.text ?? '').trim() || daten.bild) {
         return fehler(request, 'Ohne Sterne gehört der Text an die Kommentarroute');
       }
+      /* Die Gruppe steht in BEIDEN Anweisungen: eine Ruecknahme am Tresen darf
+         die Note im Buero nicht mitnehmen. Ohne sie loeschte dieselbe Zeile
+         Code beide - und der Betroffene saehe nur, dass eine Bewertung
+         verschwunden ist, die er gar nicht angefasst hat. */
       const [, weg] = await env.DB.batch([
         env.DB.prepare(`
           UPDATE kommentare SET bewertung_id = NULL WHERE bewertung_id IN (
-            SELECT id FROM bewertungen WHERE autor_id = ? AND ziel_art = ? AND ziel_id = ?)
-        `).bind(ich.id, ziel.art, ziel.id),
-        env.DB.prepare('DELETE FROM bewertungen WHERE autor_id = ? AND ziel_art = ? AND ziel_id = ?')
-          .bind(ich.id, ziel.art, ziel.id),
+            SELECT id FROM bewertungen
+             WHERE autor_id = ? AND gruppe_id = ? AND ziel_art = ? AND ziel_id = ?)
+        `).bind(ich.id, g.gruppe.id, ziel.art, ziel.id),
+        env.DB.prepare(`
+          DELETE FROM bewertungen
+           WHERE autor_id = ? AND gruppe_id = ? AND ziel_art = ? AND ziel_id = ?
+        `).bind(ich.id, g.gruppe.id, ziel.art, ziel.id),
       ]);
-      if (weg.meta.changes) anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
+      if (weg.meta.changes) {
+        anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
+      }
       return antwort(request, { ok: true, sterne: null });
     }
 
@@ -5378,8 +9499,14 @@ const ROUTEN = {
 
     if (ziel.art === 'user') {
       if (ziel.id === ich.id) return fehler(request, 'Sich selbst bewerten gilt nicht', 403);
-      const wer = await env.DB.prepare('SELECT 1 FROM users WHERE id = ? AND name IS NOT NULL')
-        .bind(ziel.id).first();
+      /* Nicht nur "gibt es", sondern "ist am selben Tisch" (Nachgereicht #1
+         aus Etappe 1): sonst liesse sich am Tresen ein Schnitt fuer jemanden
+         anlegen, der dort nie war. */
+      const wer = await env.DB.prepare(`
+        SELECT 1 FROM users u
+          JOIN gruppen_mitglied m ON m.user_id = u.id
+         WHERE u.id = ? AND u.name IS NOT NULL AND m.gruppe_id = ?
+      `).bind(ziel.id, g.gruppe.id).first();
       if (!wer) return fehler(request, 'Den gibt es nicht', 404);
       bewerteter = ziel.id;
     } else {
@@ -5401,10 +9528,14 @@ const ROUTEN = {
          Warum das hier steht und nicht oben bei der Ruecknahme: zurueckgeben
          darf man immer. Sonst haenge eine Note, die vor dieser Regel entstand,
          fuer immer fest. */
+      /* `gruppe_id = ?` gehoert in die WHERE-Klausel, nicht in eine Pruefung
+         danach (Nachgereicht #1 aus Etappe 1): ein Termin einer fremden
+         Gruppe soll sich hier genauso wenig finden wie einer, den es nicht
+         gibt - dieselbe Fehlermeldung, keine zusaetzliche Auskunft. */
       const t = await env.DB.prepare(`
         SELECT abgesagt_am, gastgeber_id, ort, (beginnt_am <= datetime('now')) AS gewesen
-        FROM termine WHERE id = ?
-      `).bind(ziel.id).first();
+        FROM termine WHERE id = ? AND gruppe_id = ?
+      `).bind(ziel.id, g.gruppe.id).first();
       if (!t) return fehler(request, 'Den Termin gibt es nicht', 404);
       if (t.abgesagt_am) return fehler(request, 'Der Abend ist abgesagt worden', 409);
       if (!t.gewesen) return fehler(request, 'Der Abend hat noch nicht angefangen', 409);
@@ -5425,9 +9556,9 @@ const ROUTEN = {
        will; es ist immer dieselbe Zeile. */
     const letzte = await env.DB.prepare(`
       SELECT 1 FROM bewertungen
-      WHERE autor_id = ? AND NOT (ziel_art = ? AND ziel_id = ?)
+      WHERE autor_id = ? AND NOT (gruppe_id = ? AND ziel_art = ? AND ziel_id = ?)
         AND coalesce(geaendert, erstellt) > datetime('now', ?) LIMIT 1
-    `).bind(ich.id, ziel.art, ziel.id, `-${BEWERTSPERRE} seconds`).first();
+    `).bind(ich.id, g.gruppe.id, ziel.art, ziel.id, `-${BEWERTSPERRE} seconds`).first();
     if (letzte) return fehler(request, 'Zu schnell — kurz durchatmen', 429);
 
     /* Steht ein Text oder ein Foto daneben, entsteht gleich ein Kommentar -
@@ -5444,12 +9575,17 @@ const ROUTEN = {
       if (grenze) return fehler(request, grenze.fehler, grenze.status);
     }
 
+    /* Die Spaltenliste im ON CONFLICT muss WORTWOERTLICH der UNIQUE-Klausel
+       aus migrations/0033 entsprechen (autor_id, gruppe_id, ziel_art, ziel_id),
+       sonst findet SQLite den Konflikt nicht und der UPSERT wird zu einem
+       zweiten INSERT, der am UNIQUE stirbt. */
     const b = await env.DB.prepare(`
-      INSERT INTO bewertungen (autor_id, ziel_art, ziel_id, sterne) VALUES (?, ?, ?, ?)
-      ON CONFLICT(autor_id, ziel_art, ziel_id)
+      INSERT INTO bewertungen (autor_id, gruppe_id, ziel_art, ziel_id, sterne)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(autor_id, gruppe_id, ziel_art, ziel_id)
         DO UPDATE SET sterne = excluded.sterne, geaendert = datetime('now')
       RETURNING id
-    `).bind(ich.id, ziel.art, ziel.id, JSON.stringify(s.sterne)).first();
+    `).bind(ich.id, g.gruppe.id, ziel.art, ziel.id, JSON.stringify(s.sterne)).first();
 
     /* Ein Text daneben wird ein eigener Wurzelkommentar, verbunden ueber
        `bewertung_id`. Zwei Zeilen, weil ein Kommentar eine eigene Adresse
@@ -5462,9 +9598,10 @@ const ROUTEN = {
        nie gehoert hat. */
     if (text || bi.key) {
       const neu = await env.DB.prepare(`
-        INSERT INTO kommentare (ziel_art, ziel_id, autor_id, bewertung_id, text, bild_key, sterne)
-        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
-      `).bind(ziel.art, ziel.id, ich.id, b.id, text, bi.key, JSON.stringify(s.sterne)).first();
+        INSERT INTO kommentare (ziel_art, ziel_id, gruppe_id, autor_id, bewertung_id, text, bild_key, sterne)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+      `).bind(ziel.art, ziel.id, g.gruppe.id, ich.id, b.id, text, bi.key,
+              JSON.stringify(s.sterne)).first();
       // Auch hier, nicht nur an /api/kommentar: "5 Sterne und ein Link dazu"
       // kommt als EINE Anfrage genau hier an - samt dem "x" am Schreibfeld.
       if (!daten.ohne_vorschau) vorschauHolen(request, env, ctx, neu.id, text, ziel);
@@ -5483,7 +9620,7 @@ const ROUTEN = {
 
     /* Zwei Marken: der Schnitt steht auch in der Liste bzw. am Termin, der
        Thread selbst ist das Ziel. Wer beides offen hat, laedt beides. */
-    anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
     return antwort(request, { ok: true, sterne: s.sterne });
   },
 
@@ -5818,8 +9955,20 @@ const ROUTEN = {
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
 
+    // An welchem Tisch (Schema 33) - auch am Menschen, nicht nur am Abend:
+    // was am Tresen ueber jemanden gesagt wird, bleibt am Tresen.
+    const g = await inGruppe(request, env, ich, daten);
+    if (g instanceof Response) return g;
+
     const ziel = zielAus(`${daten.ziel_art}:${daten.ziel_id}`);
     if (!ziel) return fehler(request, "ziel_art: 'user' oder 'termin', ziel_id: eine Zahl");
+
+    /* Der Schalter haengt am ZIEL, nicht an einer festen Spalte - siehe
+       /api/bewerten. Kein zweiter DB-Griff, `g.gruppe` traegt die Leiste. */
+    const kommentarSchalter = ziel.art === 'termin' ? 'termine_an' : 'tafel_an';
+    if (!g.gruppe[kommentarSchalter]) {
+      return fehler(request, `Das ist in „${g.gruppe.name}" abgeschaltet`, 403);
+    }
 
     /* Ein Foto allein ist ein gueltiger Kommentar - "so sah es aus" braucht
        keinen Satz dazu. Leer bleiben duerfen aber nicht beide. */
@@ -5832,7 +9981,7 @@ const ROUTEN = {
       return fehler(request, `Höchstens ${KOMMENTAR_MAX} Zeichen`);
     }
 
-    const fehlt = await zielFehlt(env, ziel);
+    const fehlt = await zielFehlt(env, ziel, g.gruppe.id);
     if (fehlt) return fehler(request, fehlt, 404);
 
     /* Genau eine Antwortebene: zeigt `antwort_auf` auf eine Antwort, haengt
@@ -5863,9 +10012,9 @@ const ROUTEN = {
     if (grenze) return fehler(request, grenze.fehler, grenze.status);
 
     const neu = await env.DB.prepare(`
-      INSERT INTO kommentare (ziel_art, ziel_id, autor_id, antwort_auf, an_id, text, bild_key)
-      VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
-    `).bind(ziel.art, ziel.id, ich.id, wurzel, anId, text, b.key).first();
+      INSERT INTO kommentare (ziel_art, ziel_id, gruppe_id, autor_id, antwort_auf, an_id, text, bild_key)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+    `).bind(ziel.art, ziel.id, g.gruppe.id, ich.id, wurzel, anId, text, b.key).first();
 
     if (angesprochen && angesprochen !== ich.id) {
       mailEcho(env, ctx, angesprochen, ich.name, {
@@ -5885,7 +10034,7 @@ const ROUTEN = {
     if (!daten.ohne_vorschau) vorschauHolen(request, env, ctx, neu.id, text, ziel);
 
     // 'tafel' wegen des Zaehlers an der Zeile, das Ziel wegen des Threads.
-    anstoss(request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
+    anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel', `${ziel.art}:${ziel.id}`);
     return antwort(request, { ok: true, id: neu.id, antwort_auf: wurzel }, 201);
   },
 
@@ -5903,11 +10052,16 @@ const ROUTEN = {
     // ziel_art/ziel_id stehen hier nur fuer den Anstoss mit dabei - die Seite
     // bekommt sie nicht, sie kennt ihr Ziel selbst.
     const k = await env.DB.prepare(
-      'SELECT id, autor_id, geloescht_am, bild_key, ziel_art, ziel_id FROM kommentare WHERE id = ?')
+      'SELECT id, autor_id, gruppe_id, geloescht_am, bild_key, ziel_art, ziel_id FROM kommentare WHERE id = ?')
       .bind(Number(daten.id)).first();
     if (!k) return fehler(request, 'Den Kommentar gibt es nicht', 404);
     if (k.autor_id !== ich.id) return fehler(request, 'Das ist nicht deiner', 403);
     if (k.geloescht_am) return fehler(request, 'Der ist schon gelöscht', 409);
+
+    // Die Gruppe kommt vom KOMMENTAR, nicht aus dem Rumpf - siehe /api/termin/aendern.
+    const g = await inGruppe(request, env, ich, { gruppe: k.gruppe_id },
+      k.ziel_art === 'termin' ? 'termine_an' : 'tafel_an');
+    if (g instanceof Response) return g;
 
     if (daten.loeschen) {
       /* Das Objekt zuerst, die Zeile danach. Gelaengen sie in der anderen
@@ -5932,7 +10086,7 @@ const ROUTEN = {
         WHERE id = ?
       `).bind(k.id).run();
       // Ein geloeschter Kommentar zaehlt nicht mehr mit - also auch 'tafel'.
-      anstoss(request, env, ctx, 'tafel', `${k.ziel_art}:${k.ziel_id}`);
+      anstossGruppe(g.gruppe.id, request, env, ctx, 'tafel', `${k.ziel_art}:${k.ziel_id}`);
       return antwort(request, { ok: true, geloescht: true });
     }
 
@@ -5958,7 +10112,7 @@ const ROUTEN = {
       vorschauHolen(request, env, ctx, k.id, text, { art: k.ziel_art, id: k.ziel_id });
     }
     // Nur der Thread: an der Zahl der Kommentare aendert ein neuer Text nichts.
-    anstoss(request, env, ctx, `${k.ziel_art}:${k.ziel_id}`);
+    anstossGruppe(g.gruppe.id, request, env, ctx, `${k.ziel_art}:${k.ziel_id}`);
     return antwort(request, { ok: true });
   },
 
@@ -5983,10 +10137,16 @@ const ROUTEN = {
     const id = Number(daten.kommentar_id);
     // ziel_art/ziel_id nur fuer den Anstoss, siehe /api/kommentar/aendern.
     const k = await env.DB.prepare(
-      'SELECT id, geloescht_am, ziel_art, ziel_id FROM kommentare WHERE id = ?')
+      'SELECT id, gruppe_id, geloescht_am, ziel_art, ziel_id FROM kommentare WHERE id = ?')
       .bind(id).first();
     if (!k) return fehler(request, 'Den Kommentar gibt es nicht', 404);
     if (k.geloescht_am) return fehler(request, 'Der ist gelöscht', 409);
+
+    // Die Gruppe kommt vom KOMMENTAR - ohne diese Pruefung koennte heute
+    // jeder Angemeldete auf eine fremde Karte reagieren (Nachgereicht #1).
+    const g = await inGruppe(request, env, ich, { gruppe: k.gruppe_id },
+      k.ziel_art === 'termin' ? 'termine_an' : 'tafel_an');
+    if (g instanceof Response) return g;
 
     /* Erst einfuegen, dann - wenn es die Zeile schon gab - loeschen. Die
        Reihenfolge ist der ganze Punkt: andersherum loeschen zwei gleichzeitige
@@ -6021,7 +10181,7 @@ const ROUTEN = {
     /* Nur das Ziel: Reaktionen zaehlen nicht in die Liste. Der Daumen ist die
        kleinste Handlung auf der ganzen Seite - und die, bei der das
        Nacheinander am meisten stoert. */
-    anstoss(request, env, ctx, `${k.ziel_art}:${k.ziel_id}`);
+    anstossGruppe(g.gruppe.id, request, env, ctx, `${k.ziel_art}:${k.ziel_id}`);
     return antwort(request, { art, anzahl: namen.length, meins, namen });
   },
 
@@ -6041,6 +10201,20 @@ const ROUTEN = {
        403: es fehlt der Ausweis, nicht das Recht. */
     if (!ich) return fehler(request, 'Dafür muss man mitschreiben', 401);
 
+    /* WELCHE GRUPPE (Schema 33) - und hier ist es keine Feinheit, sondern der
+       Unterschied zwischen Lesen und Ueberschreiben. Seit dem Tabellentausch
+       gibt es je Gruppe eine eigene Bewertung desselben Menschen. Ohne diese
+       Schranke liefert `meins` unten IRGENDEINE davon, die Seite legt sie ins
+       Sterneblatt, und der naechste Tipp schickt sie mit der Gruppe des
+       BLATTES zurueck - der UPSERT trifft dann die Zeile der anderen Gruppe
+       und ueberschreibt sie. Ein Leseweg, der Daten zerstoert.
+
+       Der Schalter haengt am ZIEL, nicht an einer festen Spalte - dieselbe
+       Regel wie bei /api/kommentar und /api/bewerten. */
+    const bewertungenSchalter = ziel.art === 'termin' ? 'termine_an' : 'tafel_an';
+    const g = await inGruppe(request, env, ich, null, bewertungenSchalter);
+    if (g instanceof Response) return g;
+
     const ichId = ich.id;
     /* Wen der Regenbogen heute traegt, entscheidet hier ueber zwei Dinge: den
        Namen ueber dem Blatt und jeden Autor im Faden darunter. Beides muss
@@ -6048,11 +10222,16 @@ const ROUTEN = {
        Blattes und in seinem eigenen Kommentar zwei Zeilen tiefer nicht mehr. */
     const traeger = await stolzTraeger(env);
     const stmts = [
-      env.DB.prepare('SELECT ziel_art, ziel_id, sterne FROM bewertungen WHERE ziel_art = ? AND ziel_id = ?')
-        .bind(ziel.art, ziel.id),
-      env.DB.prepare('SELECT sterne FROM bewertungen WHERE autor_id = ? AND ziel_art = ? AND ziel_id = ?')
-        .bind(ichId, ziel.art, ziel.id),
-      ...baumStmts(env, ziel, traeger),
+      /* `gruppe_id` PFLICHT (Gegenlesen-Fund): ohne sie zeigte der Schnitt
+         eines Menschen die Sterne aus JEDER Gruppe zusammengerechnet, statt
+         "ein Schnitt je Gruppe" (Entscheidung 17). */
+      env.DB.prepare(
+        'SELECT ziel_art, ziel_id, sterne FROM bewertungen WHERE gruppe_id = ? AND ziel_art = ? AND ziel_id = ?')
+        .bind(g.gruppe.id, ziel.art, ziel.id),
+      env.DB.prepare(
+        'SELECT sterne FROM bewertungen WHERE autor_id = ? AND gruppe_id = ? AND ziel_art = ? AND ziel_id = ?')
+        .bind(ichId, g.gruppe.id, ziel.art, ziel.id),
+      ...baumStmts(env, ziel, g.gruppe.id, traeger),
     ];
     /* Bei einem Abend haengt das Bewerten an seinem Zustand - dieselbe Regel
        wie in POST /api/bewerten, nur andersherum gelesen: die Seite soll das
@@ -6061,10 +10240,13 @@ const ROUTEN = {
        der abgesagte, unter dem noch Kommentare stehen. Reitet im selben batch
        mit - ein eigener Ruf waere eine Runde fuer eine Zeile. */
     if (ziel.art === 'termin') {
+      // `gruppe_id` PFLICHT (Gegenlesen-Fund): sonst liesse sich Ort und
+      // Gastgeber eines beliebigen Termins einer fremden Gruppe erfragen,
+      // wenn die Termin-Id erraten oder durchprobiert wird.
       stmts.push(env.DB.prepare(`
         SELECT abgesagt_am, gastgeber_id, ort, (beginnt_am <= datetime('now')) AS gewesen
-        FROM termine WHERE id = ?
-      `).bind(ziel.id));
+        FROM termine WHERE id = ? AND gruppe_id = ?
+      `).bind(ziel.id, g.gruppe.id));
     } else if (ziel.art === 'user') {
       /* Nur fuer den Namen ueber dem Blatt - der IST hier der Mensch, und ein
          Mensch traegt auf jedem Blatt dieselbe Farbe. Eine eigene Zeile im
@@ -6156,9 +10338,10 @@ const ROUTEN = {
      hier steht, wer wann bei wem war, ueber Jahre. */
   'GET /api/chronik': async (request, env) => {
     // Wie bei den Bewertungen: das Archiv ist nichts fuer Vorbeikommende.
-    if (!await nutzer(request, env)) {
-      return fehler(request, 'Dafür muss man mitschreiben', 401);
-    }
+    const ich = await nutzer(request, env);
+    if (!ich) return fehler(request, 'Dafür muss man mitschreiben', 401);
+    const g = await inGruppe(request, env, ich, null, 'termine_an');
+    if (g instanceof Response) return g;
 
     const url = new URL(request.url);
     const gewuenscht = Number(url.searchParams.get('anzahl'));
@@ -6191,11 +10374,11 @@ const ROUTEN = {
       FROM termine t
       JOIN users u ON u.id = t.gastgeber_id
       LEFT JOIN users e ON e.id = t.erstellt_von
-      WHERE t.beginnt_am <= datetime('now')
+      WHERE t.beginnt_am <= datetime('now') AND t.gruppe_id = ?
         AND (? = '' OR t.beginnt_am < ? OR (t.beginnt_am = ? AND t.id < ?))
       ORDER BY t.beginnt_am DESC, t.id DESC
       LIMIT ?
-    `).bind(zeiger, zeiger, zeiger, zeigerId, anzahl + 1).all();
+    `).bind(g.gruppe.id, zeiger, zeiger, zeiger, zeigerId, anzahl + 1).all();
 
     const mehr = zeilen.results.length > anzahl;
     const seite = mehr ? zeilen.results.slice(0, anzahl) : zeilen.results;
@@ -6211,13 +10394,14 @@ const ROUTEN = {
       const [bew, kom] = await env.DB.batch([
         env.DB.prepare(`
           SELECT ziel_art, ziel_id, sterne FROM bewertungen
-          WHERE ziel_art = 'termin' AND ziel_id IN (${platz})
-        `).bind(...ids),
+          WHERE gruppe_id = ? AND ziel_art = 'termin' AND ziel_id IN (${platz})
+        `).bind(g.gruppe.id, ...ids),
         env.DB.prepare(`
           SELECT ziel_art, ziel_id, count(*) AS anzahl FROM kommentare
-          WHERE geloescht_am IS NULL AND ziel_art = 'termin' AND ziel_id IN (${platz})
+          WHERE gruppe_id = ? AND geloescht_am IS NULL AND ziel_art = 'termin'
+            AND ziel_id IN (${platz})
           GROUP BY ziel_art, ziel_id
-        `).bind(...ids),
+        `).bind(g.gruppe.id, ...ids),
       ]);
       noten = schnitte(bew.results);
       wieViele = new Map(kom.results.map(z => [z.ziel_art + ':' + z.ziel_id, z.anzahl]));
@@ -6380,6 +10564,14 @@ const ROUTEN = {
     if (!ziel) return fehler(request, 'Den gibt es nicht', 404);
     if (ziel.entfernt_am) return fehler(request, 'Der ist schon entfernt', 409);
 
+    /* Vor jeder Handlung geholt, nicht danach: 'entfernen' loescht die
+       Mitgliedschaft selbst (siehe unten), und ein Anstoss NACH dem Loeschen
+       faende keine Gruppe mehr - dessen Tafeln muessten aber gerade DANN
+       erfahren, dass er raus ist. Dieselbe Liste traegt unten das Nachruecken. */
+    const zielGruppen = (await env.DB.prepare(
+      'SELECT gruppe_id AS id FROM gruppen_mitglied WHERE user_id = ?')
+      .bind(ziel.id).all()).results.map(z => z.id);
+
     // --- Die drei Schutzregeln, vor jeder Handlung ---------------------------
     /* Die eigene Farbe ist ausdruecklich erlaubt. Die Selbstregel darunter
        schuetzt davor, sich das Kontor zuzuschliessen - eine Kreide kann das
@@ -6520,6 +10712,8 @@ const ROUTEN = {
          Der Name wandert ins Protokoll, bevor er verschwindet: sonst stuende
          im Kontor "entfernt: (null)". */
       detail = ziel.name || ziel.email || null;
+      // Wo er ueberall drin war, steht schon in `zielGruppen` (vor jeder
+      // Handlung geholt) - und genau dort muss gleich jemand nachruecken.
       await env.DB.batch([
         env.DB.prepare(`
           UPDATE users SET entfernt_am = datetime('now'),
@@ -6532,7 +10726,23 @@ const ROUTEN = {
         // geklopft wird, waere die haesslichste Art, das Wort "entfernt" zu
         // widerlegen.
         env.DB.prepare('DELETE FROM push_abos WHERE user_id = ?').bind(ziel.id),
+        /* UND AUS ALLEN RUNDEN (Schema 32). Eine Mitgliedschaft ist kein
+           Beitrag, der als "Ehemaliger" stehenbleiben soll - sie ist eine
+           Aussage ueber die Gegenwart, und der Entfernte ist nicht mehr da.
+           Bliebe die Zeile, haette das drei Folgen auf einmal: die
+           Mitgliederzahl auf der Kachel zaehlte ihn weiter mit (und
+           widerspraeche der Liste daneben, die Entfernte ausblendet), eine
+           oeffentliche Runde bliese damit die einzige Zahl auf, die ein
+           Fremder von ihr sieht - und war er Gruppenadmin, faende
+           `nachruecken()` fuer immer seine Geisterzeile und liesse die Runde
+           ohne handlungsfaehige Fuehrung zurueck. */
+        env.DB.prepare('DELETE FROM gruppen_mitglied WHERE user_id = ?').bind(ziel.id),
+        env.DB.prepare('DELETE FROM push_stumm WHERE user_id = ?').bind(ziel.id),
       ]);
+      /* Und fuer jede Runde, die er gefuehrt hat, rueckt jemand nach. NACH dem
+         Loeschen und einzeln, weil `nachruecken` seine eigene Pruefung fuehrt
+         und dabei schreibt; die Liste wird darum VORHER geholt. */
+      for (const id of zielGruppen) await nachruecken(env, ctx, id, ich.id);
     }
 
     await env.DB.prepare(
@@ -6543,8 +10753,11 @@ const ROUTEN = {
        faellt aus dem Topf, der andere aus der Liste. Farbe und Regenbogenkreis
        aendern sie auch, nur milder - da faellt niemand heraus, es sieht bloss
        anders aus. Ohne Anstoss sehen die offenen Seiten den alten Stand bis
-       zum naechsten Nachfassen. */
-    anstoss(request, env, ctx, 'tafel');
+       zum naechsten Nachfassen.
+
+       Geweckt werden SEINE Tafeln (`zielGruppen`), nicht die des handelnden
+       Admins - siehe die Begruendung oben an `zielGruppen`. */
+    for (const gid of zielGruppen) anstossGruppe(gid, request, env, ctx, 'tafel');
     return antwort(request, { ok: true, aktion, id: ziel.id }, 200, KEIN_FREMDER_CACHE);
   },
 
@@ -6579,7 +10792,7 @@ const ROUTEN = {
           'INSERT INTO admin_log (admin_id, aktion, ziel_id, detail) VALUES (?, ?, ?, ?)')
           .bind(ich.id, 'stolz_regel', null, 'weitergedreht'),
       ]);
-      anstoss(request, env, ctx, 'tafel');
+      anstossAlle(request, env, ctx, 'tafel');
       return antwort(request, { ok: true, weiter: true, traeger: await stolzTraeger(env) },
         200, KEIN_FREMDER_CACHE);
     }
@@ -6599,7 +10812,7 @@ const ROUTEN = {
     ]);
 
     // Die Tafel faerbt sich damit um - sofort, nicht beim naechsten Nachfassen.
-    anstoss(request, env, ctx, 'tafel');
+    anstossAlle(request, env, ctx, 'tafel');
     return antwort(request, { ok: true, aktiv: !!aktiv }, 200, KEIN_FREMDER_CACHE);
   },
 
@@ -6627,16 +10840,45 @@ const ROUTEN = {
      Bilder schon vorher ("Meldungen je Tag, 60 Tage").
 
      Der Wert kommt aus einer Liste erlaubter Zahlen und wird zusaetzlich
-     gebunden statt eingesetzt: er landet in `datetime('now', ?)`. */
+     gebunden statt eingesetzt: er landet in `datetime('now', ?)`.
+
+     Die fuenf Kassenbilder haengen NUR hier, nicht in `/api/admin/statistik`
+     - das Kontor bekommt Ranglisten der RUNDE ueber den Gruppenwaehler, aber
+     ist die Verwaltung der Instanz, keine Kassenansicht (siehe `gruppe.html`
+     dafuer). `?monat=` waehlt den Kalendermonat (Entscheidung 28), unabhaengig
+     vom `?tage=`-Fenster der elf. Ohne `kasse_an` fehlt der Schluessel
+     `kasse` in der Antwort komplett - die Seite prueft `if (s.kasse)` und
+     zeichnet sonst nichts, statt eine leere Reihe leerer Bilder zu zeigen. */
   'GET /api/statistik': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
+    const g = await inGruppe(request, env, ich, null, 'statistik_an');
+    if (g instanceof Response) return g;
 
-    const { tage, fenster, vorlauf } = statistikFenster(request);
+    const { tage, fenster, vorlauf, von, bis } = statistikFenster(request);
+    const { monat, jahr, monatZahl, von: mVon, bis: mBis } = statistikMonat(request);
     const traeger = await stolzTraeger(env);
-    const ergebnis = await env.DB.batch(statistikAbfragen(env, fenster, vorlauf, traeger));
+    const runde = statistikAbfragen(env, fenster, vorlauf, g.gruppe.id, traeger);
+    const kasse = g.gruppe.kasse_an
+      ? kasseAbfragen(env, g.gruppe.id, jahr, monatZahl, traeger) : [];
+    /* DREI Bloecke seit Etappe 8, jeder an seinem eigenen Schalter - und
+       darum wird ueber `length` geschnitten und nie ueber eine getippte
+       Position. Eine Gruppe mit Regeln, aber ohne Kasse liest den dritten
+       Block dort, wo bei einer anderen der zweite steht. */
+    const regeln = g.gruppe.regeln_an
+      ? regelnAbfragen(env, g.gruppe.id, jahr, monatZahl, traeger) : [];
+    const ergebnis = await env.DB.batch([...runde, ...kasse, ...regeln]);
+    const nachRunde = runde.length;
+    const nachKasse = nachRunde + kasse.length;
     return antwort(request, {
-      tage, ...statistikRunde(ergebnis, tage),
+      /* `von`/`bis` sind die Kanten der Achse, nicht des Filters (siehe
+         `statistikFenster`). Sie stehen neben `tage`, weil sie dasselbe sagen -
+         nur in Tagen statt in einer Zahl. */
+      tage, von, bis, ...statistikRunde(ergebnis.slice(0, nachRunde), tage),
+      kasse: kasse.length
+        ? statistikKasse(ergebnis.slice(nachRunde, nachKasse), monat, mVon, mBis) : undefined,
+      regeln: regeln.length
+        ? statistikRegeln(ergebnis.slice(nachKasse, nachKasse + regeln.length), monat) : undefined,
       // Damit der Holzrahmen dieser Seite weiss, ob er heute bemalt ist -
       // dieselbe Auskunft wie in `/api/me`, nur ohne eine zweite Runde.
       stolz_heute: traeger === ich.id,
@@ -6644,10 +10886,30 @@ const ROUTEN = {
   },
 
   // -------------------------------------------------------------------------
+  /* `statistik_an` prueft diese Route NICHT - der Wirt fuehrt Aufsicht ueber
+     die ganze Instanz (Entscheidung 25) und soll eine Runde nicht deshalb
+     nicht mehr einsehen koennen, weil ihr Admin den Einstieg fuer sich
+     abgeschaltet hat. `inGruppe()` prueft trotzdem, dass die Gruppe existiert -
+     der Wirt kommt ueberall hinein, auch ohne Mitgliedschaft. */
   'GET /api/admin/statistik': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
     if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+
+    /* Ohne `?g=` zeigt das Kontor die Auffanggruppe - beim ersten Aufruf
+       kennt die Seite noch keine Wahl. Ueber den SLUG gesucht, nicht ueber
+       die Id 1: der Worker darf sich darauf nicht verlassen (migrations/0032). */
+    const url = new URL(request.url);
+    if (!url.searchParams.get('g')) {
+      const heim = await env.DB.prepare(
+        "SELECT id FROM gruppen WHERE slug = 'am-tresen'").first();
+      if (heim) {
+        url.searchParams.set('g', String(heim.id));
+        request = new Request(url, request);
+      }
+    }
+    const g = await inGruppe(request, env, ich, null);
+    if (g instanceof Response) return g;
 
     const { tage, fenster, vorlauf } = statistikFenster(request);
     /* Auch hier der Regenbogen: wer ihn heute traegt, traegt ihn auf JEDEM
@@ -6656,9 +10918,14 @@ const ROUTEN = {
     const traeger = await stolzTraeger(env);
 
     /* Alles in EINEM batch, die Runde und der Betrieb zusammen: zwei Batches
-       waeren zwei Rundfluege zur Datenbank fuer eine einzige Seitenansicht. */
+       waeren zwei Rundfluege zur Datenbank fuer eine einzige Seitenansicht.
+       `runde.length` statt einer von Hand gezaehlten Zahl (vormals
+       `STATISTIK_ABFRAGEN`) - der Schnitt haengt jetzt an der Laenge des
+       Arrays, nicht an einer Ziffer, die beim naechsten Bild in
+       `statistikAbfragen` sonst falsch waere. */
+    const runde = statistikAbfragen(env, fenster, vorlauf, g.gruppe.id, traeger);
     const ergebnis = await env.DB.batch([
-      ...statistikAbfragen(env, fenster, vorlauf, traeger),
+      ...runde,
       /* 7 — Mails je Art, Fehler daneben. AUS ZWEI TOEPFEN seit 0025:
          `mail_ausgang` fuehrt die Meldungen des Verteilers (eine Zeile je
          Empfaenger, darum `count(*)`), `versand_ausgang` die fuenf, die daran
@@ -6731,10 +10998,14 @@ const ROUTEN = {
         GROUP BY z.user_id ORDER BY n DESC
       `),
       env.DB.prepare('SELECT count(*) AS n FROM zugriffe'),
+      // Fuer den Gruppenwaehler im Kontor (Entscheidung 25): ALLE Gruppen,
+      // nicht nur die, in denen der Wirt selbst Mitglied ist.
+      env.DB.prepare('SELECT id, name FROM gruppen ORDER BY name COLLATE NOCASE'),
     ]);
 
     const [mails, mailsJeTag, pushs, postwillig,
-           aufrufeJeNutzerTag, aufrufeJeNutzer, aufrufeInsgesamt] = ergebnis.slice(STATISTIK_ABFRAGEN);
+           aufrufeJeNutzerTag, aufrufeJeNutzer, aufrufeInsgesamt, alleGruppenZeilen] =
+      ergebnis.slice(runde.length);
 
     /* Die Saeule je Tag, aus den flachen Zeilen gebaut: eine Gruppe je Tag,
        ein Feld je Nutzer darin. Die Reihenfolge der Reihen folgt der
@@ -6755,6 +11026,10 @@ const ROUTEN = {
       // Der Zeitraum geht mit zurueck: die Seite beschriftet die Bilder
       // damit, und sie soll dafuer nicht raten muessen, was sie gefragt hat.
       tage,
+      // Welche Runde diese elf Bilder zeigen, und was sich sonst waehlen
+      // liesse - der Gruppenwaehler im Kontor (Entscheidung 25).
+      gruppe: { id: g.gruppe.id, name: g.gruppe.name },
+      gruppen: alleGruppenZeilen.results,
       ...statistikRunde(ergebnis, tage),
       mails: mails.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
       mails_je_tag: mailsJeTag.results,
@@ -7227,16 +11502,17 @@ const ROUTEN = {
   'POST /api/admin/rundmail': async (request, env, ctx) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
     if (!env.AGENTMAIL_KEY) return fehler(request, 'Mailversand ist nicht eingerichtet', 503);
 
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const recht = await rundmailRecht(request, env, ich, daten);
+    if (recht instanceof Response) return recht;
     const geprueft = rundmailPruefen(daten);
     if (geprueft.fehler) return fehler(request, geprueft.fehler);
 
     try {
-      const wieViele = await rundmailAbschicken(env, ctx, ich.id, geprueft);
+      const wieViele = await rundmailAbschicken(env, ctx, ich.id, geprueft, recht.gruppeId);
       return antwort(request, { ok: true, empfaenger: wieViele }, 200, KEIN_FREMDER_CACHE);
     } catch (e) {
       if (e.sperre) return fehler(request, e.message, 429);
@@ -7326,11 +11602,12 @@ const ROUTEN = {
   'POST /api/admin/rundmail/planen': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
     if (!env.AGENTMAIL_KEY) return fehler(request, 'Mailversand ist nicht eingerichtet', 503);
 
     const daten = await json(request);
     if (!daten) return fehler(request, 'Kein JSON im Rumpf');
+    const recht = await rundmailRecht(request, env, ich, daten);
+    if (recht instanceof Response) return recht;
     const geprueft = rundmailPruefen(daten);
     if (geprueft.fehler) return fehler(request, geprueft.fehler);
     const p = pruefeVersand(daten.versand_am);
@@ -7338,10 +11615,10 @@ const ROUTEN = {
 
     const zeile = await env.DB.prepare(`
       INSERT INTO rundmail_geplant
-        (admin_id, betreff, text, bild_url, knopf_text, knopf_link, versand_am)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+        (admin_id, gruppe_id, betreff, text, bild_url, knopf_text, knopf_link, versand_am)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING id
-    `).bind(ich.id, geprueft.betreff, geprueft.text, geprueft.bildUrl,
+    `).bind(ich.id, recht.gruppeId, geprueft.betreff, geprueft.text, geprueft.bildUrl,
             geprueft.knopfText, geprueft.knopfLink, alsDbZeit(p.d)).first();
 
     return antwort(request, { ok: true, id: zeile.id }, 200, KEIN_FREMDER_CACHE);
@@ -7351,17 +11628,22 @@ const ROUTEN = {
   'GET /api/admin/rundmail/geplant': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
+    const recht = await rundmailRecht(request, env, ich, null);
+    if (recht instanceof Response) return recht;
 
-    // 'fehlgeschlagen' steht mit da, sonst verschwindet eine Rundmail, deren
-    // Versand scheiterte (etwa an der Stundensperre), spurlos aus der Liste.
+    /* `gruppe_id IS ?` statt `= ?`: bei `recht.gruppeId === null` (der Wirt)
+       wird daraus `gruppe_id IS NULL` und die Liste bleibt seine eigene -
+       ein Gruppenadmin sieht so nur seine Gruppe, der Wirt nur die Post der
+       Instanz, nie beides vermischt. 'fehlgeschlagen' steht mit da, sonst
+       verschwindet eine Rundmail, deren Versand scheiterte (etwa an der
+       Stundensperre), spurlos aus der Liste. */
     const zeilen = await env.DB.prepare(`
       SELECT id, betreff, text, bild_url, knopf_text, knopf_link,
              versand_am, status, fehler, empfaenger, erstellt
       FROM rundmail_geplant
-      WHERE status IN ('geplant', 'fehlgeschlagen')
+      WHERE status IN ('geplant', 'fehlgeschlagen') AND gruppe_id IS ?
       ORDER BY versand_am
-    `).all();
+    `).bind(recht.gruppeId).all();
 
     return antwort(request, {
       zeilen: zeilen.results.map(z => ({
@@ -7376,18 +11658,32 @@ const ROUTEN = {
   // -------------------------------------------------------------------------
   /* Aendern oder verwerfen - eine Route fuer beides, wie bei
      '/api/kommentar/aendern'. Geht nur, solange die Rundmail noch 'geplant'
-     ist: einmal rausgegangen oder fehlgeschlagen ruehrt niemand mehr dran. */
+     ist: einmal rausgegangen oder fehlgeschlagen ruehrt niemand mehr dran.
+
+     DIE BESITZPRUEFUNG HAENGT AN DER ZEILE, NICHT AM RUMPF (Abnahmefund vor
+     dem Bau, siehe Opus-Konsultation): ein Gruppenadmin koennte sonst ein
+     fremdes `gruppe`-Feld im Rumpf faelschen und die geplante Rundmail des
+     Wirts oder einer anderen Gruppe abbestellen. Erst die Zeile lesen, dann
+     GEGEN IHRE eigene `gruppe_id` pruefen, wer da darf. */
   'POST /api/admin/rundmail/geplant/aendern': async (request, env) => {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
-    if (!istAdmin(ich)) return fehler(request, 'Nicht dein Zimmer', 403);
 
     const daten = await json(request);
     if (!daten || !daten.id) return fehler(request, 'Ohne id kein Ziel');
 
     const zeile = await env.DB.prepare(
-      'SELECT status FROM rundmail_geplant WHERE id = ?').bind(daten.id).first();
+      'SELECT status, gruppe_id FROM rundmail_geplant WHERE id = ?').bind(daten.id).first();
     if (!zeile) return fehler(request, 'Die gibt es nicht (mehr)', 404);
+
+    if (zeile.gruppe_id) {
+      const g = await inGruppe(request, env, ich, { gruppe: zeile.gruppe_id });
+      if (g instanceof Response) return g;
+      if (!istGruppenAdmin(g)) return fehler(request, 'Nicht dein Zimmer', 403);
+    } else if (!istAdmin(ich)) {
+      return fehler(request, 'Nicht dein Zimmer', 403);
+    }
+
     if (zeile.status !== 'geplant') {
       return fehler(request,
         'Die ist schon dran oder weg — daran lässt sich nichts mehr ändern', 409);
@@ -7705,6 +12001,15 @@ const ROUTEN = {
       }, 200, KEIN_FREMDER_CACHE);
     }
 
+    /* An welcher Gruppe die Seite gerade steht - ohne Schalter, denn diese
+       Route buendelt VIER Funktionen mit VIER verschiedenen Schaltern
+       (Bestenliste/`tafel_an`, Rad/`rad_an`, Termine/`termine_an`,
+       Notrufe/`notruf_an`). Jede davon blendet weiter unten fuer sich aus -
+       ein einzelner Schalter fuer die ganze Route waere zu grob. */
+    const g = await inGruppe(request, env, ich, null);
+    if (g instanceof Response) return g;
+    const { tafel_an: tafelAn, rad_an: radAn, termine_an: termineAn, notruf_an: notrufAn } = g.gruppe;
+
     const tag = bierTag();
     /* Wen der Regenbogen heute trifft (Schema 29). Die Abfrage steht hier
        oben, weil ihr Ergebnis in den TEXT der Abfragen darunter geht - ein
@@ -7721,7 +12026,13 @@ const ROUTEN = {
       /* Gesperrte bleiben in der Liste stehen - das ist Historie, und ein
          Name, der ueber Nacht verschwindet, sieht nach Datenverlust aus. Sie
          tragen nur eine stille Marke und fallen aus dem Topf (losFeldStmt).
-         Entfernte fallen von selbst heraus: ihr Name ist dann NULL. */
+         Entfernte fallen von selbst heraus: ihr Name ist dann NULL.
+
+         `JOIN gruppen_mitglied` seit Etappe 2 - vorher zeigte die Bestenliste
+         jeden Melder der Instanz, nicht nur die dieser Gruppe. Die Antwort
+         laesst die Zeilen bei `tafel_an = 0` unten einfach weg, statt hier
+         schon zu sparen - dieselbe Abfrage fuer beide Faelle, ein Schalter,
+         der umspringt, aendert daran nur die Sichtbarkeit, nichts Zweites. */
       env.DB.prepare(`
         SELECT u.id, u.name, u.quelle, u.gesperrt_am, r.biere, r.temperatur, r.gemeldet_am,
                /* Die Tafel kennt sonst keine Melderfarben - sie schreibt in
@@ -7732,13 +12043,14 @@ const ROUTEN = {
                   in einem Template-Literal, und einer davon macht daraus zwei
                   Zeichenketten und aus dem Bau einen Syntaxfehler. */
                ${farbeSql('u', traeger)} AS farbe
-        FROM users u
+        FROM gruppen_mitglied m
+        JOIN users u ON u.id = m.user_id
         JOIN (SELECT user_id, max(id) AS id FROM reports GROUP BY user_id) j
           ON j.user_id = u.id
         JOIN reports r ON r.id = j.id
-        WHERE u.name IS NOT NULL
+        WHERE m.gruppe_id = ? AND u.name IS NOT NULL
         ORDER BY r.biere DESC, r.gemeldet_am ASC
-      `),
+      `).bind(g.gruppe.id),
       env.DB.prepare('SELECT user_id, max(biere) AS best FROM reports GROUP BY user_id'),
       // Ein Wert je Tag und Nutzer: der letzte des Tages.
       env.DB.prepare(`
@@ -7754,15 +12066,17 @@ const ROUTEN = {
       /* Bewusst OHNE Verfallslauf: das hier ist eine gecachte Leseroute, die
          soll nichts schreiben. `losTagStmt` rechnet die Frist ohnehin mit aus,
          eingetragen wird sie beim naechsten Dreh. */
-      losTagStmt(env, tag),
-      losFeldStmt(env, traeger),
-      termineStmt(env, traeger),
-      bewertungenStmt(env),
-      kommentarZaehlerStmt(env),
+      losTagStmt(env, tag, g.gruppe.id),
+      losFeldStmt(env, traeger, g.gruppe.id, tafelAn),
+      termineStmt(env, traeger, g.gruppe.id),
+      bewertungenStmt(env, g.gruppe.id),
+      kommentarZaehlerStmt(env, g.gruppe.id),
       /* Wie viele Abende die Chronik ueberhaupt herzugeben hat. Nur die Zahl,
          und nur, damit die Seite weiss, ob der Knopf dahin einen Sinn ergibt -
          ohne sie stuende er auch an einer Tafel, hinter der nichts liegt. */
-      env.DB.prepare("SELECT count(*) AS n FROM termine WHERE beginnt_am <= datetime('now')"),
+      env.DB.prepare(
+        "SELECT count(*) AS n FROM termine WHERE beginnt_am <= datetime('now') AND gruppe_id = ?")
+        .bind(g.gruppe.id),
       /* Die Notrufe reiten hier mit statt auf einer eigenen Route - dieselbe
          Ueberlegung wie beim Rest: eine Runde weniger, und die Marke 'tafel'
          holt sie ohne eine zweite Sorte Anstoss mit nach. Dass sie NUR in
@@ -7770,7 +12084,7 @@ const ROUTEN = {
          Vorbeikommende oben enthaelt keine Zeile davon, und das ist keine
          Sparsamkeit, sondern die Bedingung. Ein Ort geht niemanden etwas an,
          der kein Token hat. */
-      notrufeStmt(env, ich.id, traeger),
+      notrufeStmt(env, ich.id, traeger, g.gruppe.id),
     ]);
 
     const bestmarke = new Map(best.results.map(r => [r.user_id, r.best]));
@@ -7791,7 +12105,10 @@ const ROUTEN = {
        da, ohne dass in der Schleife ein `includes` sitzt. */
     const geburtstage = new Set(await kinderP);
 
-    const feld = stand.results.map(r => ({
+    /* `tafel_an` blendet HIER aus, nicht in der Abfrage oben - dieselbe
+       Regel wie ueberall in der Schalterleiste (18): der Schalter aendert
+       die Sichtbarkeit, nicht die Datenlage. */
+    const feld = tafelAn ? stand.results.map(r => ({
       // Die Id, damit die Seite eine Bewertung adressieren kann. Ohne Token
       // faengt niemand etwas damit an.
       id: r.id,
@@ -7815,7 +12132,7 @@ const ROUTEN = {
       geburtstag: geburtstage.has(r.id),
       best: bestmarke.get(r.id) ?? r.biere,
       verlauf: kurve.get(r.id) || [r.biere],
-    }));
+    })) : [];
 
     /* Eine halbe Minute Cache: die Seite wird oefter geladen als gemeldet. Das
        gilt auch fuer das Rad - wer selbst dreht, sieht es sofort aus der
@@ -7823,11 +12140,18 @@ const ROUTEN = {
     const lage = tagesLage(los.results);
     return antwort(request, {
       feld,
-      los: losAntwort(tag, lage, losTopf(losFeld.results, lage), termine.results,
-                      [...geburtstage]),
-      termine: termine.results.map(t => terminAntwort(t, noten, wieViele)),
-      chronik: chronik.results[0].n,
-      notrufe: notrufe.results.map(n => notrufAntwort(n, ich.id)),
+      /* `rad_an` blendet das ganze Rad aus - `null` wie ueberall sonst
+         ("kein Rad, keine Mail, keine HA-Meldung", Entscheidung 6).
+         `tafelAn` reist mit hinein: mit Tafel gewichtet nach Bestand,
+         ohne Tafel gleichverteilt (Entscheidung 40). Die Liste der Termine
+         geht unveraendert mit hinein, auch bei `termine_an = 0` - eine
+         Zusage braucht ihren Termin, um "19 Uhr bei Basti" zu sagen, ob die
+         Termine-Zunge selbst gerade zu sehen ist oder nicht. */
+      los: radAn ? losAntwort(tag, lage, losTopf(losFeld.results, lage), termine.results,
+                      [...geburtstage], tafelAn) : null,
+      termine: termineAn ? termine.results.map(t => terminAntwort(t, noten, wieViele)) : [],
+      chronik: termineAn ? chronik.results[0].n : 0,
+      notrufe: notrufAn ? notrufe.results.map(n => notrufAntwort(n, ich.id)) : [],
     }, 200, KEIN_FREMDER_CACHE);
   },
 };

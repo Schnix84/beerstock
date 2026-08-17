@@ -31,6 +31,9 @@
     --kreide-weg:  #93a09a;
     --gelb:        #e8c766;
     --rot:         #d9705f;
+    /* Nur für den Punkt im Schild. Wortgleich zu `index.html` und
+       `admin.html` — die grüne Kreide bedeutet überall dasselbe. */
+    --gruen:       #7fc08c;
     --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
   }
 
@@ -319,6 +322,96 @@
   .tafel > * { position: relative; z-index: 1; }
   .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
 
+  /* --- Das Schild ----------------------------------------------------------
+     WORTGLEICH von `index.html` — dort steht das Original samt der langen
+     Begründung (warum Schriftgrad UND Laufweite mitskalieren, warum
+     `white-space: nowrap` in beiden Hälften steht und der Umbruch trotzdem
+     dazwischen fällt, warum der reservierte Platz am Wort rechtsbündig liegt).
+
+     Es steht hier, weil diese Seite seit den Zungen kein Anhängsel der Tafel
+     mehr ist, sondern eines ihrer Blätter: der Name des Hauses und der Tag
+     gehören über jedes davon. Und weil die Reihe darunter nun einen Kopf
+     braucht — vier Pillen als oberste Zeile im Brett sahen aus, als fehlte
+     etwas darüber.
+
+     DER PUNKT SAGT HIER ETWAS ANDERES ALS DRÜBEN, und das ist der eine Punkt,
+     an dem diese Kopie nicht wortgleich ist: die Tafel hängt an einer
+     WebSocket, diese Seite nicht. Was er hier meint, steht im Skript bei
+     `stromStand()`. Die FORM ist dieselbe, weil die Sorte Auskunft dieselbe
+     ist — „kommen die Zahlen an, die hier stehen?". */
+  .schild-zeile {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: 2px clamp(6px, 2vw, 10px);
+    margin-bottom: clamp(10px, 3vw, 16px);
+  }
+  .schild {
+    font-family: var(--hand); font-size: clamp(11px, 3.1vw, 13px);
+    letter-spacing: clamp(.12em, .5vw, .22em);
+    text-transform: uppercase; color: var(--kreide-matt); opacity: .85;
+    transform: rotate(-.4deg); white-space: nowrap;
+  }
+  .schild-rechts {
+    display: flex; align-items: baseline; gap: clamp(6px, 2.4vw, 9px);
+    margin-left: auto;
+    font-family: var(--hand); font-size: clamp(10.5px, 2.9vw, 12px);
+    color: var(--kreide-weg); white-space: nowrap;
+  }
+  .puls-punkt {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--gruen); box-shadow: 0 0 7px #7fc08c88;
+    animation: atmen 2.6s ease-in-out infinite; vertical-align: 1px; margin-right: 4px;
+  }
+  .strom-sucht { color: var(--rot); }
+  .strom-sucht .puls-punkt {
+    background: var(--rot); box-shadow: 0 0 7px #d9705f88;
+  }
+  .schild-strom {
+    display: inline-block; text-align: right; min-width: clamp(38px, 12vw, 46px);
+  }
+  /* `atmen` steht weiter unten beim Skelett, EINMAL für beide - dieselben
+     Werte, und zwei Kopien liefen früher oder später auseinander. Der Takt
+     unterscheidet sie (2,6 s hier, 1,8 s dort), nicht die Kurve. */
+  @media (prefers-reduced-motion: reduce) { .puls-punkt { animation: none; } }
+
+  /* --- Die Zungenreihe -----------------------------------------------------
+     WORTGLEICH von `index.html` — dort steht das Original samt Begründung
+     (die Kreide-Pille des Kontors, die knapperen Maße seit vier Zungen, das
+     `flex-wrap` gegen eine Zunge, die nur am Rechner erreichbar wäre).
+
+     Sie steht hier, weil „Statistiken" drüben eine Zunge ist wie „Privat"
+     oder „Termine" — nur mit einer eigenen Datei dahinter. Eine Reihe, die
+     beim Anklicken einer ihrer Zungen verschwindet, wäre keine Reihe; man
+     käme aus den Bildern nur über einen Rückweg heraus statt über die Wahl
+     des nächsten Bereichs. Welche Blätter es gibt, sagt der Zettel, den die
+     Tafel hinterlegt (`beerstock-zungen-<gruppe>`).
+
+     `hidden` heißt hier: kein Zettel da (Lesezeichen geradewegs hierher,
+     anderes Fenster). Dann bleibt der Pfeil oben rechts der Weg hinaus.
+
+     DER EINE UNTERSCHIED zum Original ist der Abstand NACH UNTEN: drüben sind
+     es 4 px, weil darunter das gewählte Blatt beginnt und dessen erster Block
+     seinen eigenen Rand mitbringt. Hier steht darunter die Überschrift
+     „Statistiken", und die klebte mit 4 px an den Pillen. Also derselbe Wert
+     wie oben — die Reihe sitzt dann mittig zwischen Schild und Überschrift,
+     statt der einen zu gehören.
+
+     Nach oben ist er wortgleich und kollabiert wie drüben mit dem Rand des
+     Schilds darüber; ist die Reihe verborgen, trägt das Schild den Abstand
+     zur Überschrift allein. */
+  .zunge-reihe {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+    margin: clamp(14px, 3.6vw, 20px) 0 clamp(14px, 3.6vw, 20px);
+  }
+  .zunge-reihe button {
+    border: 1px solid #ffffff33; border-radius: 999px; background: #ffffff0d;
+    color: var(--kreide-weg); font: inherit; font-size: 13px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .zunge-reihe button:hover { background: #ffffff1a; }
+  .zunge-reihe button[aria-selected="true"] {
+    color: var(--gelb); border-color: #e8c76688; background: #e8c76614;
+  }
+
   /* --- Der Weg zurück ------------------------------------------------------
      Er hing eine Zeit lang als hölzerne Registerzunge über dem Brett, wie im
      Kontor. Das Holz war dort aber der Rahmen einer Seite, die es nicht gibt:
@@ -350,7 +443,11 @@
     display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
     margin-bottom: 18px;
   }
-  .kopfzeile .zur-tafel {
+  /* Beide Pillen rechts, „Dein Jahr" zuerst: `margin-left: auto` am ERSTEN
+     der beiden schiebt die Lücke davor, die zweite hängt sich an. Am Finger
+     fällt `.zur-tafel` weg (der Griff oben führt hinaus) - dann steht „Dein
+     Jahr" allein rechts, ohne dass hier etwas nachzuziehen wäre. */
+  .kopfzeile .jahr-knopf, .kopfzeile .zur-tafel {
     margin-left: auto;
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 40px; padding: 4px 10px;
@@ -359,9 +456,15 @@
     background: #ffffff0a; color: var(--kreide-weg);
     transition: background .15s, border-color .15s, color .15s;
   }
-  .kopfzeile .zur-tafel:hover {
+  .kopfzeile .jahr-knopf:hover, .kopfzeile .zur-tafel:hover {
     background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
   }
+  /* Die zweite Pille steht direkt an der ersten, nicht noch einmal eine
+     Lücke weiter - `gap` der Zeile trägt den Abstand schon. */
+  .kopfzeile .jahr-knopf + .zur-tafel { margin-left: 0; }
+  /* Sie trägt einen Namen und keinen Pfeil, also etwas mehr Luft und die
+     Kreidefarbe des Hauses - sie ist ein Weg hinein, kein Weg hinaus. */
+  .kopfzeile .jahr-knopf { min-width: 0; padding: 4px 12px; color: var(--gelb); border-color: #e8c76655; }
 
   /* --- Der Griff: am Finger wischt man hinaus ------------------------------
      Am Zeigergerät führt die Pille hinaus. Am Finger tut es der Balken oben:
@@ -405,6 +508,8 @@
 
   @media (hover: none), (pointer: coarse) {
     .kopfzeile .zur-tafel { display: none; }
+    /* Ohne den Nachbarn übernimmt „Dein Jahr" dessen Platz an der rechten
+       Kante - `margin-left: auto` steht ohnehin schon daran. */
     .raus-griff { display: block; }
     /* Der Griff bringt seine eigene Polsterung mit. Ohne das stünde er 20 px
        unter der Oberkante, und ein Balken mitten im Blatt ist kein Rand. */
@@ -492,9 +597,63 @@
     text-shadow: 0 0 .6px currentColor, 0 0 .6px currentColor;
   }
 
+  /* Der Monatswähler für die Kassenbilder (Etappe 6, Entscheidung 28) — EIN
+     `<select>` statt drei Knöpfen wie beim Zeitraum, bewusst: zwei Reihen aus
+     Knöpfen nebeneinander sähen wie eine einzige, verwirrte Reihe aus, ein
+     Dropdown ist auf den ersten Blick eine andere Art Regler. */
+  .monatswahl select {
+    font: inherit; font-size: 12px; cursor: pointer;
+    border: 1px solid #ffffff40; border-radius: 999px; padding: 4px 10px;
+    background: #ffffff0a; color: var(--kreide);
+  }
+
   /* Das Raster gehört der Seite, alles im Bild bringt `bilder.js` mit. */
   .bilder { display: grid; gap: 14px; grid-template-columns: 1fr; }
   @media (min-width: 680px) { .bilder { grid-template-columns: 1fr 1fr; } }
+
+  /* --- Der Monatswähler steht bei dem, was er bewegt ------------------------
+     ER STAND OBEN NEBEN DEM ZEITRAUM, und das war der Fehler. Die Seite trägt
+     achtzehn Bilder in DREI Familien mit drei verschiedenen Uhren: zwölf
+     folgen dem Tage-Fenster oder gar nichts, sechs folgen dem Kalendermonat
+     (Entscheidung 28). Die sechs stehen ganz unten. Zwei Regler nebeneinander
+     am Kopf der Seite sehen aus, als gälten beide für alles darunter — und
+     wer den Monat wechselt, sieht in den Bildern vor sich genau nichts
+     passieren, weil das, was sich ändert, zehn Bildschirme tiefer liegt.
+
+     Zweimal gemeldet, beide Male als „der Monat hat keine Wirkung". Er hatte
+     welche, nur nicht im Blickfeld. Ein Regler gehört an das, was er bewegt.
+
+     `grid-column: 1 / -1` — ab 680 px ist `.bilder` zweispaltig, und ein
+     loser Regler darin bekäme sonst eine eigene Zelle neben einem fremden
+     Bild. Dieselbe Falle wie beim Satz unter dem Sündenregister, und dort
+     steht sie auch im Kommentar.
+
+     Der Strich darüber ist eine TRENNUNG und keine Verzierung: ab hier gilt
+     eine andere Uhr. Die Luft davor ist größer als der Rasterabstand, damit
+     der Wähler zum Folgenden gehört und nicht zum Bild darüber. */
+  .bilder > .monatswahl {
+    grid-column: 1 / -1;
+    margin: 18px 0 0; padding-top: 18px;
+    border-top: 1px solid #ffffff1f;
+  }
+  /* Steht er ganz oben (eine Gruppe ohne die zwölf Rundenbilder gibt es nicht,
+     aber die Reihenfolge ist Sache des Skripts), fällt der Strich weg - ein
+     Trennstrich ohne etwas darüber trennt nichts. */
+  .bilder > .monatswahl:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+  /* Das Kassenstand-Bild ist kein Diagramm - drei Zahlen im selben `.bild`-
+     Rahmen wie jedes andere, damit es nicht wie ein Fremdkörper wirkt. */
+  .ks-reihe {
+    display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 4px; font-size: 13px;
+  }
+  .ks-reihe b { font-family: var(--bild-hand); font-size: 18px; font-weight: normal; }
+
+  /* Ein Satz UNTER einem Bild, innerhalb seines Rahmens. Nicht daneben: das
+     Raster ist ab 680 px zweispaltig, ein loser Absatz bekäme dort eine Zelle
+     neben einem fremden Bild. */
+  .bild-note {
+    margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--kreide-weg);
+  }
 
   .sagt {
     margin: 16px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 13px;
@@ -541,15 +700,56 @@
          oberen Rand gehört; warum es ihn gibt, steht bei `.raus-griff`. -->
     <button class="raus-griff" type="button" aria-label="zurück zur Tafel"></button>
 
+    <!-- Das Schild, wortgleich von der Tafel: der Name des Hauses und der Tag.
+         Der Punkt dazwischen sagt hier, ob der letzte Abruf durchkam — die
+         Tafel meint damit ihre Leitung, diese Seite hat keine. Angeschrieben
+         steht der Startwert „sucht": solange nichts abgerufen wurde, ist das
+         die Wahrheit. Siehe `stromStand()`. -->
+    <div class="schild-zeile">
+      <div class="schild kr">Wer hat kalt</div>
+      <div class="schild-rechts kr">
+        <span class="schild-strom strom-sucht" id="schild-strom">
+          <span class="puls-punkt" aria-hidden="true"></span
+          ><span id="schild-strom-wort">sucht</span></span>
+        <span class="schild-punkt" id="schild-punkt" aria-hidden="true"
+              style="opacity:.45">·</span>
+        <span id="schild-datum"></span>
+      </div>
+    </div>
+
+    <!-- Dieselbe Reihe wie auf der Tafel, mit „Statistiken" als der
+         aufgeschlagenen Zunge. Gebaut von `zungenZeichnen()` weiter unten aus
+         dem Zettel, den `index.html` hinterlegt hat; ohne Zettel bleibt sie
+         `hidden` und der Pfeil in der Kopfzeile führt hinaus. -->
+    <div class="zunge-reihe" id="zunge-reihe" role="tablist" aria-label="Bereiche" hidden></div>
+
     <div class="kopfzeile">
       <h1 class="kr">Statistiken</h1>
+      <!-- „Dein Jahr" stand bis Etappe 10 auf der Tafel, in der Zeile
+           „Verlauf". Die Zeile gibt es nicht mehr - die Tafel führt jetzt
+           geradewegs hierher -, also steht der Rückblick da, wo die anderen
+           Bilder auch stehen: oben rechts, auf einer Linie mit der
+           Überschrift, am Rechner links neben dem Weg zurück.
+
+           Der Rückblick selbst bleibt in `index.html` (die Kacheln stehen
+           dort, und sie ein zweites Mal zu bauen hieße, sie beim nächsten Mal
+           an einer Stelle zu ändern). `von=statistik` sagt dem × dort, dass
+           es hierher zurückführt und nicht ins Kontor. -->
+      <a class="jahr-knopf" id="wrapped-auf" href="#" hidden>Dein Jahr</a>
       <a class="zur-tafel" href="./" aria-label="zurück zur Tafel">←</a>
     </div>
 
     <div class="reiter" id="zeitraum" hidden></div>
 
     <div class="skelett" id="skelett"><div></div><div></div><div></div><div></div></div>
-    <div class="bilder" id="bilder"></div>
+    <!-- Der Monatswähler steht IM Bilderraster und nicht mehr hier oben neben
+         dem Zeitraum — er wird von `zeichnen()` vor das erste Monatsbild
+         gehängt. Warum, steht am Stil `.bilder > .monatswahl`. Er lebt darum
+         von Anfang an hier drin und wird beim Neuzeichnen ausdrücklich
+         verschont (siehe `bilderLeeren`). -->
+    <div class="bilder" id="bilder">
+      <div class="reiter monatswahl" id="monatswahl" hidden></div>
+    </div>
 
     <div class="tuer" id="tuer" hidden>
       <h2 class="kr">Nur für die Runde</h2>
@@ -575,6 +775,109 @@
     : 'https://beerstock-api.mc-schneider84.workers.dev';
   const SPEICHER = 'beerstock-token';
 
+  /* Welche Gruppe, steht in der Adresse (Schema 32/33) - derselbe Griff wie
+     in `gruppe.html`. Der Worker prüft die Zahl selbst und antwortet auf
+     Unsinn mit einem Satz für Menschen; hier steht sie nur, um sie an jede
+     Anfrage und den Rückweg zu hängen. */
+  const G = Number(new URLSearchParams(location.search).get('g'));
+  // Der Rückweg nimmt die Gruppe mit - sonst landet man auf der Tafel in der
+  // Auffanggruppe, egal von welcher Runde aus man kam.
+  if (G > 0) document.querySelector('.zur-tafel').href = './?g=' + G;
+
+  /* --- Die Zungenreihe -----------------------------------------------------
+     „Statistiken" ist drüben eine Zunge unter vieren; sie soll darum auch hier
+     eine bleiben, statt beim Anklicken die ganze Reihe mitzunehmen. Die
+     anderen Zungen führen zurück auf die Tafel und schlagen dort ihr Blatt
+     auf - über DENSELBEN Merker, den `zungeWaehlen()` drüben schreibt
+     (`beerstock-zunge-<gruppe>`). Kein neuer Parameter in der Adresse und
+     keine neue Route: die Tafel liest ihn beim Aufbau ohnehin, weil `zungeAktiv`
+     bei jedem frischen Laden `null` ist.
+
+     Der Zettel mit den verfügbaren Blättern kommt ebenfalls von drüben
+     (`zungenHinterlegen()`, dort steht die Begründung für `localStorage`). Er
+     ist die einzige Quelle - diese Seite kennt die Schalter der Gruppe nicht,
+     und sie nachzuladen hieße, die Reihe erst nach der Antwort einzublenden
+     und den Inhalt darunter herunterzurucken.
+
+     Ohne Zettel keine Reihe: dann hat man die Tafel dieser Gruppe noch nie
+     gesehen, und der Pfeil in der Kopfzeile bleibt der Weg hinaus. Steht
+     die Reihe, geht der Pfeil - zwei Wege nebeneinander, von denen einer
+     dasselbe tut, sind einer zu viel. Der Griff am Finger bleibt in BEIDEN
+     Fällen: er ist eine Geste und kein zweiter sichtbarer Knopf, und an ihm
+     hängt die Überblendung hinüber. */
+  {
+    const reihe = document.getElementById('zunge-reihe');
+    let blaetter = [];
+    try {
+      blaetter = JSON.parse(localStorage.getItem('beerstock-zungen-' + G) || '[]');
+    } catch {}
+    if (Array.isArray(blaetter) && blaetter.length) {
+      blaetter.forEach(z => {
+        if (!z || !z.id || !z.wort) return;
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = z.wort;
+        b.setAttribute('role', 'tab');
+        b.setAttribute('aria-selected', 'false');
+        b.addEventListener('click', () => {
+          try { sessionStorage.setItem('beerstock-zunge-' + G, z.id); } catch {}
+          location.href = './?g=' + G;
+        });
+        reihe.appendChild(b);
+      });
+      /* Die eigene Zunge zuletzt und an derselben Stelle wie drüben - dort
+         steht „Statistiken" hinter den Blättern. Ein Knopf und kein Text,
+         damit die Reihe eine Reihe bleibt; er führt nirgendwohin, weil man
+         schon da ist. */
+      const hier = document.createElement('button');
+      hier.type = 'button';
+      hier.textContent = 'Statistiken';
+      hier.setAttribute('role', 'tab');
+      hier.setAttribute('aria-selected', 'true');
+      reihe.appendChild(hier);
+      reihe.hidden = false;
+      document.querySelector('.zur-tafel').remove();
+    }
+  }
+
+  /* Der Tag im Schild. WORTGLEICH von `index.html` — dort steht die
+     Begründung: warum der Punkt hinter dem Wochentag wegfällt („Sa · 8." statt
+     „Sa., 8."), und warum der Monat unter etwa 380 px kurz wird (er ist das
+     längste Stück der Zeile, und „10. Aug." ist ohnehin die Form der Termine).
+
+     Als Medienabfrage MIT Zuhörer und nicht als einmalige Messung: wer sein
+     Telefon dreht, wechselt die Breite, ohne die Seite neu zu laden. */
+  {
+    const eng = matchMedia('(max-width: 380px)');
+    const schild = () => {
+      const heute = new Date();
+      document.getElementById('schild-datum').textContent =
+        heute.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '') +
+        ' · ' + heute.toLocaleDateString('de-DE',
+          { day: 'numeric', month: eng.matches ? 'short' : 'long' });
+    };
+    schild();
+    eng.addEventListener('change', schild);
+  }
+
+  /* Ab 1. Dezember, und nur für Angemeldete - die Route hinter dem Rückblick
+     antwortet ohne Token mit 401 (er ist nichts fürs Schaufenster), ein Knopf
+     ins Leere wäre schlechter als gar keiner. Lokale Zeit: das ist die
+     Kalenderfrage des Menschen davor, nicht des Servers. Derselbe Riegel wie
+     vorher auf der Tafel, nur an seinem neuen Platz. */
+  {
+    const jetzt = new Date();
+    const knopf = document.getElementById('wrapped-auf');
+    knopf.href = './?wrapped=' + jetzt.getFullYear() + '&von=statistik' + (G > 0 ? '&g=' + G : '');
+    // Der Griff auf den Speicher im `try` wie überall hier: in einem Fenster
+    // ohne Ablage wirft er, und ein geworfener Fehler im Aufbau nähme die
+    // ganze Seite mit - wegen eines Knopfes, den es elf Monate lang gar nicht
+    // gibt.
+    let angemeldet = false;
+    try { angemeldet = !!localStorage.getItem(SPEICHER); } catch {}
+    knopf.hidden = !angemeldet || jetzt.getMonth() !== 11;
+  }
+
   const $ = id => document.getElementById(id);
   const el = (tag, klasse, text) => {
     const n = document.createElement(tag);
@@ -597,14 +900,60 @@
     return new Date(Date.UTC(+j, +m - 1, 1)).toLocaleDateString('de-DE',
       { month: 'short', year: '2-digit', timeZone: 'UTC' });
   };
+  // Wortgleich zu `index.html`/`gruppe.html` - dieselbe Rundung, derselbe
+  // Bindestrich-freie Aufbau, dieselbe Stelle für das Zeichen.
+  const euro = cent => (cent / 100).toLocaleString('de-DE',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+
+  /* --- Der Punkt im Schild --------------------------------------------------
+     DIESELBE FORM WIE AUF DER TAFEL, EINE ANDERE AUSSAGE — und der Unterschied
+     gehört aufgeschrieben, weil das Wort dasselbe ist.
+
+     Drüben hängt der Punkt an einer WebSocket: „live" heißt dort, die Leitung
+     steht und die Zahlen kommen von selbst herein. Diese Seite hat keine
+     Leitung. Sie holt ihre Zahlen einmal und dann bei jedem Wechsel von
+     Zeitraum oder Monat, und mehr braucht sie auch nicht — ein Balkendiagramm,
+     das sich unter dem Finger neu zeichnet, während man einen Wert liest, wäre
+     schlechter als eines, das steht.
+
+     Hier heißt „live" darum: DER LETZTE ABRUF KAM DURCH, was auf dem Schirm
+     steht, ist das, was der Worker gerade gesagt hat. „sucht" heißt: er kam
+     nicht durch, und das, was unten steht, ist von vorhin oder gar nichts.
+     Die Sorte Auskunft ist dieselbe — „stimmt, was hier steht?" —, und darum
+     ist es dieselbe Form und nicht eine zweite, die man erst lernen muss.
+
+     Angeschrieben steht „sucht", nicht „live": vor dem ersten Abruf ist noch
+     nichts durchgekommen. Wer es andersherum vorbelegt, zeigt einen Ruhezustand
+     als Erfolg an.
+
+     Hinter der Tür sagt der Punkt gar nichts mehr (siehe `zeigeTuer`): ein
+     401 ist keine gerissene Leitung, sondern eine Antwort. */
+  function stromStand(an) {
+    $('schild-strom').className = 'schild-strom strom-' + (an ? 'live' : 'sucht');
+    $('schild-strom-wort').textContent = an ? 'live' : 'sucht';
+  }
 
   async function ruf(pfad) {
     const t = merke();
-    const r = await fetch(API + pfad, {
-      headers: t ? { Authorization: 'Bearer ' + t } : {},
-      cache: 'no-store',
-    });
+    // `g=` fährt in JEDER Anfrage mit, dieselbe Regel wie `ruf()` in
+    // `index.html` — hier von Hand, weil es hier nur zwei Aufrufstellen gibt.
+    const mitGruppe = pfad + (pfad.includes('?') ? '&' : '?') + 'g=' + G;
+    let r;
+    try {
+      r = await fetch(API + mitGruppe, {
+        headers: t ? { Authorization: 'Bearer ' + t } : {},
+        cache: 'no-store',
+      });
+    } catch (e) {
+      // Gar keine Antwort - das ist der Fall, für den der rote Punkt da ist.
+      stromStand(false);
+      throw e;
+    }
     const d = await r.json().catch(() => ({}));
+    /* VOR dem Wurf, nicht danach: ein 500er ist auch eine Antwort, aber keine,
+       aus der Bilder werden. Bei 401/403 blendet die Tür den Punkt gleich
+       darauf ganz aus, dort zählt der rote Zwischenstand nicht. */
+    stromStand(r.ok);
     if (!r.ok) throw Object.assign(new Error(d.fehler || 'Das ging nicht'), { status: r.status });
     return d;
   }
@@ -716,6 +1065,28 @@
     } catch { return STAT_TAGE[0]; }
   })();
 
+  /* --- Der Monat, für die fünf Kassenbilder (Etappe 6, Entscheidung 28) ----
+     Ein eigener Speicherschlüssel, ausdrücklich NICHT `ZEITRAUM_SPEICHER`:
+     die Kassenbilder laufen über Kalendermonate, nicht über das Tage-Fenster,
+     und ein gemeinsamer Schlüssel würde die beiden Regler koppeln, wo sie es
+     nicht sind. `monat` bleibt `null`, solange weder ein gespeicherter noch
+     ein vom Worker bestätigter Wert vorliegt — die Gruppe könnte `kasse_an`
+     abgeschaltet haben, dann gibt es gar keinen Monat zu zeigen. */
+  const MONAT_SPEICHER = 'beerstock-kontor-monat';
+  /* Der älteste Monat, in dem diese Runde überhaupt etwas hat. Kommt mit jeder
+     Antwort (`kasse.seit` / `regeln.seit`) und wird NICHT gespeichert: er
+     gehört der Gruppe und nicht dem Gerät, und ein Wert aus einer anderen
+     Runde wäre hier schlicht falsch. Bis zur ersten Antwort `null` — dann
+     steht nur der laufende Monat zur Wahl, und mehr weiß die Seite auch
+     wirklich nicht. */
+  let monatSeit = null;
+  let monat = (() => {
+    try {
+      const g = localStorage.getItem(MONAT_SPEICHER);
+      return /^\d{4}-(0[1-9]|1[0-2])$/.test(g) ? g : null;
+    } catch { return null; }
+  })();
+
   function zeitraumZeichnen() {
     const ziel = $('zeitraum');
     ziel.hidden = false;
@@ -729,6 +1100,70 @@
     });
   }
 
+  /* Die Monate von `bis` ('YYYY-MM') zurück bis einschließlich `von`, neuester
+     zuerst - für die Auswahlliste im Monatswähler.
+
+     HIER STANDEN EINMAL FEST ZWÖLF, ohne Rücksicht darauf, ob es sie gab. Eine
+     Runde, die im März angefangen hat, bot im August trotzdem den September
+     davor an, und wer dort hinsprang, bekam sechs leere Bilder - ununter-
+     scheidbar von einem Fehler. Der Boden kommt jetzt vom Worker (`seit`, aus
+     den Buchungen, Lieferungen und Strafen der Gruppe selbst).
+
+     KEINE Obergrenze mehr: eine Runde mit drei Jahren Geschichte soll auch drei
+     Jahre zurückblättern können. Was die Liste begrenzt, ist die Geschichte und
+     nicht eine Zahl, die jemand einmal für lang genug hielt.
+
+     Ein leerer Monat MITTEN in der Liste bleibt drin - „da war nichts los" ist
+     eine Antwort. `von` fehlt oder liegt in der Zukunft: dann bleibt genau der
+     laufende Monat übrig. */
+  function monateListe(von, bis) {
+    const liste = [];
+    let [j, m] = bis.split('-').map(Number);
+    // Deckel gegen eine kaputte Antwort: ohne ihn liefe die Schleife bei einem
+    // unsinnigen `von` (etwa '0001-01') bis in die Zehntausende.
+    for (let i = 0; i < 600; i++) {
+      const s = `${j}-${String(m).padStart(2, '0')}`;
+      liste.push(s);
+      if (!von || s <= von) break;
+      m -= 1; if (m === 0) { m = 12; j -= 1; }
+    }
+    return liste;
+  }
+
+  const heutigerMonat = () => {
+    const d = new Date();
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+  };
+
+  function monatswahlZeichnen() {
+    const ziel = $('monatswahl');
+    if (!monat) { ziel.hidden = true; return; }
+    ziel.hidden = false;
+    ziel.textContent = '';
+    ziel.appendChild(el('span', 'wozu', 'Monat'));
+    const sel = document.createElement('select');
+    /* Verankert an der GEGENWART, nicht am gewählten Monat (Abnahmefund):
+       stand die Liste am gewählten Monat, verlöre sie nach jedem Wechsel
+       zurück in die Vergangenheit den Weg zurück nach vorn — Juli und
+       August fielen nach einem Sprung auf Juni für immer aus der Auswahl,
+       auch nach einem Neuladen (der Speicherschlüssel überlebt es). Liegt
+       `monat` selbst außerhalb der letzten zwölf, kommt er trotzdem mit
+       hinein, sonst stünde die Auswahl auf einem Wert, den es gar nicht gibt. */
+    const liste = monateListe(monatSeit, heutigerMonat());
+    if (!liste.includes(monat)) liste.push(monat);
+    liste.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m;
+      o.textContent = nurMonat(m);
+      if (m === monat) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => monatWechseln(sel.value));
+    ziel.appendChild(sel);
+  }
+
+  const anfrage = () => '/api/statistik?tage=' + zeitraum + (monat ? '&monat=' + monat : '');
+
   async function wechseln(t) {
     if (t === zeitraum) return;
     zeitraum = t;
@@ -738,7 +1173,7 @@
     // Abschnitt, der beim Umschalten leer wird, springt.
     $('bilder').style.opacity = '.35';
     try {
-      zeichnen(await ruf('/api/statistik?tage=' + t));
+      zeichnen(await ruf(anfrage()));
       sagt('');
     } catch (e) {
       sagt('Der Zeitraum ließ sich nicht wechseln: ' + e.message, true);
@@ -747,26 +1182,148 @@
     }
   }
 
+  async function monatWechseln(m) {
+    if (m === monat) return;
+    monat = m;
+    try { localStorage.setItem(MONAT_SPEICHER, monat); } catch {}
+    monatswahlZeichnen();
+    $('bilder').style.opacity = '.35';
+    try {
+      zeichnen(await ruf(anfrage()));
+      sagt('');
+    } catch (e) {
+      sagt('Der Monat ließ sich nicht wechseln: ' + e.message, true);
+    } finally {
+      $('bilder').style.opacity = '';
+    }
+  }
+
   // ==========================================================================
   // Zeichnen
   // ==========================================================================
+  /* Dieselbe Farbe wie beim Status derselben Kette in `bilder.js`
+     (`LOS_FARBE`), von außen nachgebaut: `offen` bunt/mahnend, `gemeldet`
+     und `teilbezahlt` auf dem Weg dorthin. `bezahlt` taucht hier nie auf -
+     die Abfrage filtert schon auf `betrag_cent - gezahlt_cent > 0`. */
+  const SALDO_FARBE = { offen: Bilder.reihe[1], gemeldet: Bilder.reihe[3],
+                         teilbezahlt: Bilder.reihe[4] };
+
+  // Das fünfte Kassenbild ist kein Diagramm, drei Zahlen nebeneinander wie
+  // `#zwei-zahlen` im Kontor - derselbe Rahmen wie jedes andere Bild
+  // (`.bild`/`.b-kopf`), damit es nicht wie ein Fremdkörper im Raster sitzt.
+  function kassenstandKarte(titel, k) {
+    const box = el('div', 'bild');
+    const kopf = el('div', 'b-kopf');
+    kopf.appendChild(el('h3', null, titel));
+    box.appendChild(kopf);
+    const reihe = el('div', 'ks-reihe');
+    const paar = (was, wert) => {
+      const d = el('span');
+      d.appendChild(el('b', null, wert));
+      d.appendChild(document.createTextNode(' ' + was));
+      reihe.appendChild(d);
+    };
+    paar('getrunken', euro(k.eingenommen));
+    /* Der dritte Posten (Entscheidung 53) - nur, wenn es ihn wirklich gibt.
+       Er hängt NICHT an `regeln_an`: das Geld ist eingenommen und steht in
+       echten Salden, auch wenn die Gruppe die Hausordnung inzwischen
+       abgeschaltet hat. Wäre er dann weg, ginge die Kasse nicht mehr auf -
+       ein falscher Stand statt eines ausgeblendeten. Bei einer Gruppe ohne
+       Strafen ist er von selbst 0 und steht gar nicht erst da, das ist die
+       ganze Fallunterscheidung. */
+    if (k.strafgeld) paar('Strafgeld', euro(k.strafgeld));
+    paar('ausgegeben', euro(k.ausgegeben));
+    paar(k.saldo >= 0 ? 'Kasse' : 'Kasse, im Minus', euro(k.saldo));
+    box.appendChild(reihe);
+    return box;
+  }
+
+  /* --- Die Achse reicht so weit wie die Überschrift verspricht -------------
+     Der Worker gibt nur Tage zurück, an denen etwas passiert ist. Gezeichnet
+     wurde daraus eine Achse über genau diese Tage — „Meldungen je Tag, 90
+     Tage" spannte bei einer Runde mit 30 Tagen Geschichte eine 30-Tage-Achse,
+     und 60 gegen 90 sah aus wie derselbe Knopf zweimal. Der Regler wirkte tot,
+     obwohl er greift.
+
+     Ein Tag ohne Meldung IST ein Tag mit null Meldungen — das gilt für ZÄHLENDE
+     Kurven, und nur für die. Deshalb bekommen genau zwei Bilder diese
+     Behandlung: „Meldungen je Tag" und „Verbrauch je Tag".
+
+     NICHT gefüllt werden die STÄNDE: „Bestand je Melder", „Temperatur je
+     Melder" und „Vorrat der Runde" zeigen einen Pegel, und eine Null darin
+     hieße „der Kühlschrank war leer", nicht „niemand hat hingesehen". Der
+     Vorrat trägt seinen letzten Stand ohnehin fort (`vorlauf` im Worker), und
+     das ist die richtige Antwort für einen Pegel.
+
+     Und NICHT gefüllt werden die Säulen: „Betrieb je Woche" hätte bei 90 Tagen
+     dreizehn Balken, die meisten leer, und eine Säulenreihe kostet Breite, wo
+     eine Linie nur flach läuft. Die Woche ist dort ohnehin beschriftet — man
+     sieht, welche fehlen.
+
+     `von`/`bis` kommen vom Worker und werden hier NICHT nachgerechnet: er
+     rechnet in UTC wie SQLite, der Browser in Ortszeit, und ein selbst
+     gerechneter Rand läge je nach Zone einen Tag daneben. */
+  function tageFuellen(reihe, von, bis) {
+    if (!von || !bis) return reihe || [];
+    const hat = new Map((reihe || []).map(z => [z.tag, z]));
+    const raus = [];
+    // In UTC schrittweise weiterzählen - `Date.UTC` aus den drei Zahlen, damit
+    // keine Zeitzone dazwischenfunkt.
+    const [vj, vm, vt] = von.split('-').map(Number);
+    let d = Date.UTC(vj, vm - 1, vt);
+    const ende = (() => { const [j, m, t] = bis.split('-').map(Number); return Date.UTC(j, m - 1, t); })();
+    // Deckel gegen eine kaputte Antwort - 90 Tage sind das Größte, was es gibt.
+    for (let i = 0; d <= ende && i < 400; i++, d += 86400000) {
+      const tag = new Date(d).toISOString().slice(0, 10);
+      raus.push(hat.get(tag) || { tag, n: 0 });
+    }
+    return raus;
+  }
+
+  /* Das Bilderraster leeren, OHNE den Monatswähler mitzunehmen. Er wohnt seit
+     dem Umzug darin (siehe `.bilder > .monatswahl`), und ein `textContent = ''`
+     nähme ihn aus dem Dokument — `getElementById` fände ihn danach nicht mehr,
+     und der nächste `monatswahlZeichnen()` schriebe ins Leere. */
+  function bilderLeeren() {
+    const ziel = $('bilder'), wahl = $('monatswahl');
+    [...ziel.childNodes].forEach(k => { if (k !== wahl) k.remove(); });
+  }
+
   function zeichnen(s) {
     Bilder.tippZu();
     zeitraumZeichnen();
+    /* `s.kasse` fehlt ganz, wenn die Gruppe `kasse_an` abgeschaltet hat, und
+       `s.regeln` ebenso bei `regeln_an` - der Monatswähler blendet sich dann
+       über `monatswahlZeichnen()` selbst aus.
+
+       ZWEI Quellen für denselben Monat seit Etappe 8, und die zweite ist
+       nötig: eine Gruppe mit Regeln, aber OHNE Kasse hätte sonst ein
+       Monatsbild und keinen Wähler dazu. Beide Blöcke tragen denselben
+       Monat - der Worker liest ihn einmal aus `?monat=`. */
+    monat = (s.kasse && s.kasse.monat) || (s.regeln && s.regeln.monat) || null;
+    /* Der frühere der beiden Böden, und ein fehlender zählt nicht mit: eine
+       Gruppe mit Kasse seit März und der ersten Strafe im Juli soll bis März
+       zurückblättern können, nicht nur bis Juli. Ohne jeden Boden (`null`)
+       bleibt der laufende Monat allein stehen — siehe `monateListe`. */
+    monatSeit = [s.kasse && s.kasse.seit, s.regeln && s.regeln.seit]
+      .filter(Boolean).sort()[0] || null;
+    monatswahlZeichnen();
     /* Der Holzrahmen dieser Seite. Er gehört dem Leser: trägt ER heute den
        Regenbogen, ist das Holz bemalt. Die Auskunft reitet in der Statistik
        mit, statt eine eigene Runde nach `/api/me` zu kosten — und weil sie an
        jeder Antwort hängt, geht sie beim Wechsel des Zeitraums nicht verloren. */
     document.documentElement.classList.toggle('stolz-rahmen', !!s.stolz_heute);
     const ziel = $('bilder');
-    ziel.textContent = '';
+    bilderLeeren();
 
     /* Der Zeitraum steht in jeder Überschrift, und bei den Ranglisten steht
        „insgesamt": die folgen dem Schalter nicht. Wer der Gastgeber dieser
        Runde ist, beantworten 30 Tage nicht. */
     const fenster = ', ' + (s.tage || zeitraum) + ' Tage';
+    // Über das ganze Fenster, nicht nur über die Tage mit Meldungen — siehe
+    // `tageFuellen`. Ohne `von`/`bis` (alte Antwort) bleibt es beim Alten.
     ziel.appendChild(Bilder.flaeche('Meldungen je Tag' + fenster,
-      s.meldungen, z => z.n, z => nurTag(z.tag), 'Meldungen'));
+      tageFuellen(s.meldungen, s.von, s.bis), z => z.n, z => nurTag(z.tag), 'Meldungen'));
     // Kein Fenster, wie bei Gastgeber und Ziehungen unten: „wie viele sind
     // wir inzwischen" ist eine Frage an die ganze Geschichte der Runde.
     ziel.appendChild(Bilder.flaeche('Melder, insgesamt',
@@ -817,6 +1374,70 @@
         { feld: 'sterne',     titel: 'Sterne',     farbe: Bilder.reihe[3] },
       ], g => g.name));
 
+    /* AB HIER GILT DIE ANDERE UHR, und der Wähler dafür steht davor statt oben
+       am Kopf der Seite - der Grund steht ausführlich am Stil
+       `.bilder > .monatswahl`. `appendChild` VERSCHIEBT ihn nur: er ist schon
+       Kind dieses Rasters und hat das Leeren überlebt (`bilderLeeren`).
+
+       Ist er verborgen (weder `kasse_an` noch `regeln_an`), wandert er
+       trotzdem mit ans Ende - unsichtbar, und dort steht ohnehin nichts mehr,
+       was er trennen könnte. */
+    ziel.appendChild($('monatswahl'));
+
+    /* Die fünf Kassenbilder (Etappe 6, Entscheidungen 26 und 32) - nur wenn
+       `kasse_an` steht, sonst fehlt `s.kasse` ganz. Eigener Zeitraum-Zusatz
+       je Bild statt `fenster`: der gilt für das Tage-Fenster, hier ist es
+       der gewählte Kalendermonat. */
+    if (s.kasse) {
+      const k = s.kasse, kfenster = ', ' + nurMonat(k.monat);
+      ziel.appendChild(Bilder.liegend('Wer hat wieviel getrunken' + kfenster,
+        k.getrunken, z => z.name, z => z.n, 'Flaschen'));
+      // Über den ganzen Monat, im laufenden nur bis heute — dieselbe Regel wie
+      // bei „Meldungen je Tag", siehe `tageFuellen`.
+      ziel.appendChild(Bilder.flaeche('Verbrauch je Tag' + kfenster,
+        tageFuellen(k.verbrauch_je_tag, k.von, k.bis), z => z.n, z => nurTag(z.tag), 'Flaschen'));
+      // `abNull: false` — Bestand geht ins Minus (Entscheidung 11), und ohne
+      // die Option kappt die Skala bei 0 jede negative Kurve am Bildrand.
+      ziel.appendChild(Bilder.schar('Bestandsverlauf' + kfenster, k.bestandsverlauf, { abNull: false }));
+      ziel.appendChild(Bilder.liegend('Offene Beträge je Mitglied' + kfenster,
+        k.offene_betraege, z => z.name, z => z.offen, 'Betrag', {
+          format: euro,
+          tonVon: z => SALDO_FARBE[z.status] || Bilder.reihe[0],
+        }));
+      ziel.appendChild(kassenstandKarte('Kassenstand' + kfenster, k.kassenstand));
+    }
+
+    /* Das sechste Kassenbild (Etappe 8, Entscheidung 53) - und es hängt an
+       `regeln_an`, NICHT an `kasse_an`. Deshalb sein eigener Block hier und
+       kein `else`-Zweig oben: eine Gruppe kann Regeln ohne Kasse führen, und
+       dann steht dieses Bild allein.
+
+       GEZÄHLT WIRD DIE ANZAHL, nicht der Betrag: eine Gruppe ohne Kasse hat
+       nur Auflagen, und die tragen überhaupt keinen Cent - ein Geldbild wäre
+       dort strukturell leer. Der Betrag steht in der Beschriftung daneben,
+       über das zweite Argument von `opt.format` (das bilder.js dafür
+       bekommen hat). */
+    if (s.regeln) {
+      const g = s.regeln, gfenster = ', ' + nurMonat(g.monat);
+      const bild = Bilder.liegend('Sündenregister' + gfenster,
+        g.strafen_je_mensch || [], z => z.name, z => z.n, 'Strafen', {
+          format: (n, z) => n + (z && z.cent ? ' · ' + euro(z.cent) : ''),
+        });
+      /* Der Satz gehört IN das Bild, nicht daneben: `#bilder` ist ab 680 px
+         ein zweispaltiges Raster, und ein loser Absatz darin bekäme eine
+         eigene Zelle neben einem fremden Bild. Offene Auflagen sind zudem
+         monatsUNabhängig — sie kommentieren genau dieses Bild und wären
+         andernorts nicht zuzuordnen. */
+      if (g.auflagen_offen) {
+        bild.appendChild(el('p', 'bild-note',
+          g.auflagen_offen === 1
+            ? 'Eine Auflage ist noch offen — sie läuft über den Monatswechsel hinweg weiter.'
+            : g.auflagen_offen + ' Auflagen sind noch offen — sie laufen über den '
+              + 'Monatswechsel hinweg weiter.'));
+      }
+      ziel.appendChild(bild);
+    }
+
     // Der Name des Bildes für den Screenreader — und der Hinweis auf die
     // Pfeiltasten nur dort, wo es wirklich etwas zu blättern gibt.
     [...ziel.querySelectorAll('.bild')].forEach(b => {
@@ -832,20 +1453,44 @@
   function zeigeTuer(text) {
     $('skelett').hidden = true;
     $('zeitraum').hidden = true;
-    $('bilder').textContent = '';
+    $('monatswahl').hidden = true;
+    /* Und die Zungen mit, aus demselben Grund wie die beiden Regler darüber:
+       hinter der Tür ist nichts zu wählen. Der Zettel im Speicher überlebt ein
+       abgelaufenes Token — ohne diese Zeile stünde die Reihe über „Nur für die
+       Runde" und böte Blätter an, die der Besucher gerade nicht sehen darf.
+       Der Weg hinaus ist dann der Satz in der Tür („zur Tafel und anmelden"),
+       am Finger weiterhin der Griff. */
+    $('zunge-reihe').hidden = true;
+    /* Und der Punkt im Schild: ein 401 oder ein abgeschaltetes `statistik_an`
+       ist keine gerissene Leitung, sondern eine Antwort. Ein rotes „sucht"
+       daneben behauptete, hier werde noch etwas versucht. Der Name des Hauses
+       und der Tag bleiben stehen — die gelten auch vor verschlossener Tür. */
+    $('schild-strom').hidden = true;
+    $('schild-punkt').hidden = true;
+    // Über `bilderLeeren`, nicht über `textContent`: der Monatswähler wohnt im
+    // Raster und soll es überleben - er ist hier nur verborgen, nicht fort.
+    bilderLeeren();
     $('tuer').hidden = false;
     if (text) $('tuer-text').textContent = text;
   }
 
   async function laden() {
     if (!merke()) { zeigeTuer(); return; }
+    if (!(G > 0)) {
+      zeigeTuer('Welche Runde? Dieser Link kennt keine — geh über die Tafel hierher.');
+      return;
+    }
     let s;
     try {
-      s = await ruf('/api/statistik?tage=' + zeitraum);
+      s = await ruf(anfrage());
     } catch (e) {
       if (e.status === 401) {
         zeigeTuer('Die Anmeldung gilt hier nicht mehr. Melde dich auf der Tafel neu an, '
                 + 'dann steht der Verlauf wieder da.');
+      } else if (e.status === 403) {
+        // `statistik_an` ist abgeschaltet - der Einstieg verschwindet, die
+        // Zahlen dahinter bleiben unangetastet (Entscheidung 18).
+        zeigeTuer(e.message);
       } else {
         $('skelett').hidden = true;
         sagt('Die Zahlen ließen sich nicht holen: ' + e.message, true);

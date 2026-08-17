@@ -1,0 +1,1519 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Deine Runden — beerstock</title>
+<style>
+  /* ==========================================================================
+     DIE AUSWAHL
+
+     Die erste Seite nach dem Anmelden, sobald jemand in mehr als einer Runde
+     ist. Sie zeigt je Gruppe eine Zeile mit dem Kurzstand und führt von dort
+     auf die Tafel dieser Gruppe.
+
+     EIN BRETT, NICHT SECHS. Der Entwurf, aus dem diese Seite kommt
+     (`ideas/mocks/mock-o1-gruppen.html`), hat jeder Gruppe ihr eigenes Brett
+     samt Holzrahmen, Kreideablage und Schwamm gegeben — bei fünfzehn Gruppen
+     eine Wand aus Holz, durch die man scrollt. Jede ausgelieferte Seite dieses
+     Projekts hat GENAU EIN Brett; das ist der Gegenstand, an dem man die App
+     wiedererkennt, und ein Gegenstand, den es fünfzehnmal gibt, ist keiner.
+     Also: ein Brett, und die Gruppen sind Felder auf seinem Schiefer, getrennt
+     durch den Kreidestrich — so wie ein Wirt auf EINER Tafel untereinander
+     anschreibt, statt fünfzehn Tafeln aufzuhängen.
+
+     Das Brett ist so breit wie drüben (520 px) und nicht wie die Statistiken
+     (760): hier stehen keine zwei Bilder nebeneinander, hier steht eine Reihe.
+
+     Die Farben, der Rahmen und der Weg hinaus sind aus `statistik.html`
+     übernommen — wortgleich, wo es geht. Was diese Seite nicht braucht, ist
+     der bemalte Rahmen (`stolz-rahmen`): `/api/gruppen` sagt nichts über den
+     LESER, nur über seine Runden, und ein Rahmen, der mal so und mal so
+     aussieht, ohne dass es eine Auskunft dazu gibt, wäre Zufall.
+     ========================================================================== */
+  :root {
+    --schiefer:    #262c2e;
+    --schiefer-t:  #191d1f;
+    --kreide:      #eef1ea;
+    --kreide-matt: #cfd6cd;
+    --kreide-weg:  #93a09a;
+    --gelb:        #e8c766;
+    --rot:         #d9705f;
+    --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  }
+
+  * { box-sizing: border-box; }
+  /* `hidden` ist nur `display:none` mit schwachem Gewicht — jedes `display`
+     einer eigenen Regel schlägt es. Einmal hier, statt an jeder Stelle daran
+     zu denken. */
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; min-height: 100%;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--kreide);
+    background:
+      radial-gradient(130% 55% at 50% -12%, #e8c76614, transparent 60%),
+      radial-gradient(120% 90% at 50% 0%, #1f2629, #14181a 52%, #0c0f11 100%);
+    background-color: #0c0f11;
+    /* Beides gegen dieselbe harte Kante quer über die Seite; ausführlich steht
+       das in `statistik.html` am `body`. */
+    background-repeat: no-repeat;
+    min-height: 100svh;
+    padding: clamp(10px, 3vw, 28px);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- Der Holzrahmen -----------------------------------------------------
+     WORTGLEICH aus `statistik.html`, dort steht das Original samt Begründung:
+     vier Leisten, jede per `clip-path` auf ihr Trapez beschnitten, damit die
+     Faser an der Gehrung wirklich springt.
+
+     Die Palette ist die ausgelieferte (`--h-hell` … `--h-tief`). Das alte Paar
+     `--holz: #6b4a2c` / `--holz-t: #3f2a17`, das die Mocks noch tragen, ist
+     seit dem neuen Rahmen tot — `index.html` sagt das an derselben Stelle
+     ausdrücklich. Wer es hier wieder aufnähme, bekäme ein Brett, das neben
+     jeder anderen Seite der App braun aussieht.
+     --------------------------------------------------------------------- */
+  .brett {
+    /* Eine Zahl, vier Verwendungen: Polsterung, die vier Trapeze, die Naht,
+       der Falz. */
+    --r: clamp(9px, 2.4vw, 15px);
+    --h-hell:   #f8ecd2;
+    --h-mitte:  #eed5a6;
+    --h-dunkel: #d0b284;
+    --h-tief:   #a98a5e;
+    --fase-hell: .38;
+    --fase-dunkel: .55;
+    position: relative;
+    max-width: 520px; margin: 0 auto;
+    border-radius: 4px;
+    padding: var(--r);
+    box-shadow:
+      0 42px 70px -30px #000e,
+      0 14px 30px -18px #000c,
+      0 0 0 1px #14110d;
+  }
+  .rh {
+    position: absolute; inset: 0; border-radius: inherit;
+    overflow: hidden; pointer-events: none;
+  }
+  .rh-l { position: absolute; inset: 0; }
+  .rh-o { clip-path: polygon(0 0, 100% 0, calc(100% - var(--r)) var(--r), var(--r) var(--r)); }
+  .rh-u { clip-path: polygon(0 100%, var(--r) calc(100% - var(--r)), calc(100% - var(--r)) calc(100% - var(--r)), 100% 100%); }
+  .rh-li { clip-path: polygon(0 0, var(--r) var(--r), var(--r) calc(100% - var(--r)), 0 100%); }
+  .rh-re { clip-path: polygon(100% 0, 100% 100%, calc(100% - var(--r)) calc(100% - var(--r)), calc(100% - var(--r)) var(--r)); }
+
+  /* Die Maserung: eine GESTREIFTE Vorlage, verschoben von einer
+     `feDisplacementMap` — gefiltertes Rauschen allein wird nie eine Ader.
+     Zwei Bilder, liegend und stehend; alles Weitere in `statistik.html`. */
+  .rh-l {
+    --rh-bild-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='60'%3E%3Cdefs%3E%3Cpattern id='s' width='600' height='15' patternUnits='userSpaceOnUse'%3E%3Crect width='600' height='15' fill='%23eed5a6'/%3E%3Crect y='0' width='600' height='1.5' fill='%23a8825a'/%3E%3Crect y='3.5' width='600' height='0.8' fill='%2386633c'/%3E%3Crect y='6' width='600' height='3' fill='%23e4c48c'/%3E%3Crect y='10' width='600' height='1.2' fill='%23bd9a6c'/%3E%3Crect y='12.5' width='600' height='2' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.025' numOctaves='3' seed='5' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='13' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='26' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='720' height='180' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='600' height='60' filter='url(%23z)'/%3E%3Crect width='600' height='60' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-bild-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='600'%3E%3Cdefs%3E%3Cpattern id='s' width='15' height='600' patternUnits='userSpaceOnUse'%3E%3Crect width='15' height='600' fill='%23eed5a6'/%3E%3Crect x='0' width='1.5' height='600' fill='%23a8825a'/%3E%3Crect x='3.5' width='0.8' height='600' fill='%2386633c'/%3E%3Crect x='6' width='3' height='600' fill='%23e4c48c'/%3E%3Crect x='10' width='1.2' height='600' fill='%23bd9a6c'/%3E%3Crect x='12.5' width='2' height='600' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.025 0.006' numOctaves='3' seed='17' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='25' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='38' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='180' height='720' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='60' height='600' filter='url(%23z)'/%3E%3Crect width='60' height='600' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-flaum:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cfilter id='f1'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='3' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.22 0 0 0 0 0.14 0 0 0 0 0.06 0 0 0 0.3 0'/%3E%3C/filter%3E%3Cfilter id='f2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='41' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.95 0 0 0 0 0.84 0 0 0 0.26 0'/%3E%3C/filter%3E%3Crect width='60' height='60' filter='url(%23f1)'/%3E%3Crect width='60' height='60' filter='url(%23f2)'/%3E%3C/svg%3E");
+    --licht-v: linear-gradient(180deg, #ffe4bb28, #ffe4bb00 26%, #2b18051a);
+  }
+  /* Die Verläufe laufen über die LEISTE, nicht über das Brett — daher überall
+     die `/ 100% var(--r)`-Angaben. */
+  .rh-o {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      linear-gradient(180deg, #ffe4bb3d, #ffe4bb00 42%, #2b180536) 0 0 / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 0 no-repeat,
+      var(--h-mitte);
+  }
+  /* Die Unterleiste liegt im Eigenschatten; der helle Stopp steht erst bei
+     82 %, sonst käme das Licht von unten. */
+  .rh-u {
+    background:
+      var(--rh-flaum) 0 100% repeat,
+      linear-gradient(180deg, #2b18054f, #2b18051a 60%, #2b180500 82%, #ffe4bb22) 0 100% / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 100% no-repeat,
+      var(--h-dunkel);
+  }
+  .rh-li {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      var(--licht-v) 0 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #ffe4bb30, #2b180536) 0 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) -21px 0 no-repeat,
+      var(--h-mitte);
+  }
+  /* Rechts eine Spur dunkler: das Licht steht leicht links über der Tafel. */
+  .rh-re {
+    background:
+      var(--rh-flaum) 100% 0 repeat,
+      var(--licht-v) 100% 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #2b18053e, #2b180520) 100% 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) calc(100% + 19px) 0 no-repeat,
+      var(--h-dunkel);
+  }
+  .rh-naht {
+    position: absolute; inset: 0; opacity: .5;
+    background-image:
+      linear-gradient(45deg,  transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-45deg, transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-135deg,transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%),
+      linear-gradient(135deg, transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%);
+    background-size: var(--r) var(--r);
+    background-position: left top, right top, right bottom, left bottom;
+    background-repeat: no-repeat;
+  }
+  /* Die Außenfase: oben und links hell, unten und rechts dunkel — ein
+     umlaufender Ring legte auch dort eine Lichtkante an, wo kein Licht ist. */
+  .rh-fase {
+    position: absolute; inset: 0; border-radius: inherit;
+    box-shadow:
+      0 1px 0 rgb(255 232 197 / var(--fase-hell)) inset,
+      1px 0 0 rgb(255 232 197 / calc(var(--fase-hell) * .6)) inset,
+      0 -1px 0 rgb(43 24 5 / var(--fase-dunkel)) inset,
+      -1px 0 0 rgb(43 24 5 / calc(var(--fase-dunkel) * .8)) inset;
+  }
+  /* Der Falz: die Tafel liegt HINTER dem Holz. Der weiche Schatten rechnet mit
+     der Rahmenbreite — eine feste Wolke verschluckt eine schmale Leiste. */
+  .rh-falz {
+    position: absolute; inset: calc(var(--r) - 2px); border-radius: 3px;
+    box-shadow:
+      0 1px calc(var(--r) * .45) #2b180552,
+      0 0 0 1px #17100a,
+      0 1px 0 rgb(255 232 197 / var(--fase-hell));
+  }
+  .tafel {
+    position: relative; border-radius: 3px; overflow: hidden;
+    padding: clamp(18px, 5vw, 30px) clamp(14px, 4.2vw, 24px) clamp(20px, 4vw, 28px);
+    background:
+      radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
+    box-shadow:
+      0 7px 12px -6px #000a inset,
+      0 0 0 1px #000a inset,
+      0 16px 34px -14px #000b inset,
+      0 -10px 26px -18px #0009 inset;
+  }
+  .tafel::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 0.97 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23k)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='340' height='340' filter='url(%23w)'/%3E%3C/svg%3E");
+  }
+  .tafel::after {
+    content: ""; position: absolute; inset: -8%; pointer-events: none; opacity: .3;
+    background:
+      linear-gradient(112deg, transparent 12%, #ffffff12 22%, #ffffff26 30%, #ffffff0a 38%, transparent 46%),
+      linear-gradient(112deg, transparent 48%, #ffffff0e 58%, #ffffff1c 64%, transparent 74%),
+      linear-gradient(112deg, transparent 72%, #ffffff10 84%, transparent 94%),
+      radial-gradient(65% 30% at 24% 30%, #ffffff1f, transparent 70%),
+      radial-gradient(50% 22% at 74% 64%, #ffffff17, transparent 70%);
+    mix-blend-mode: screen;
+  }
+  .tafel > * { position: relative; z-index: 1; }
+  .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
+
+  /* --- Der Weg zurück ------------------------------------------------------
+     Am Zeigergerät die Kreide-Pille rechts auf der Überschriftenzeile, am
+     Finger der Balken oben — beides aus `statistik.html`, dort steht die
+     Begründung.
+
+     EIN UNTERSCHIED, und er ist wichtig: dort führt der Weg immer nach `./`,
+     hier nicht. `index.html` schickt genau dann hierher, wenn es NICHT genau
+     eine Mitgliedschaft gibt (`location.replace('start.html')`, Zeile 13966
+     drüben) — ein `./` von hier aus liefe also für den Regelfall sofort wieder
+     zurück auf diese Seite. Deshalb steht das Ziel erst im Skript fest: es ist
+     die Tafel, VON DER man kam, und wenn man von nirgends kam, gibt es keinen
+     Weg zurück und beide Griffe bleiben weg. Diese Seite ist dann das Erdge-
+     schoss, und ein Erdgeschoss hat keine Treppe nach unten.
+     --------------------------------------------------------------------- */
+  .kopfzeile {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
+    margin-bottom: 6px;
+  }
+  .kopfzeile .zur-tafel {
+    margin-left: auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 40px; padding: 4px 10px;
+    font: inherit; font-size: 12px; text-decoration: none;
+    border: 1px solid #ffffff40; border-radius: 999px;
+    background: #ffffff0a; color: var(--kreide-weg);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .kopfzeile .zur-tafel:hover {
+    background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
+  }
+
+  /* Der Griff. `touch-action: none` nimmt dem Browser die Geste ganz ab — und
+     das ist der Grund, warum nur VON HIER gezogen wird und nicht von überall
+     bei Scrollstand 0: dort gehört der Zug nach unten dem Zum-Neuladen-Ziehen
+     von Chrome. Als <button> führt er auch beim bloßen Antippen hinaus. */
+  .raus-griff {
+    display: none; width: 100%; padding: 13px 0 11px;
+    border: none; background: none; cursor: pointer;
+    touch-action: none;
+  }
+  .raus-griff::before {
+    content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
+    border-radius: 999px; background: #ffffff38;
+  }
+  .raus-griff:active::before { background: #ffffff5c; }
+  .raus-griff:focus-visible { outline: 2px solid var(--gelb); outline-offset: 2px; }
+
+  @media (hover: none), (pointer: coarse) {
+    .kopfzeile .zur-tafel { display: none; }
+    .raus-griff { display: block; }
+    /* Der Griff bringt seine eigene Polsterung mit; ein Balken mitten im Blatt
+       wäre kein Rand. Nur, wenn es ihn gibt. */
+    .tafel.hat-griff { padding-top: 0; }
+  }
+
+  .brett { transition: transform .22s ease-out; }
+  html.zieht .brett { transition: none; }
+  @media (prefers-reduced-motion: reduce) { .brett { transition: none; } }
+
+  /* Beim Hinauswischen liegt die Tafel schon darunter — das Bild dazu baut die
+     ANKUNFTSSEITE (`@view-transition` in `index.html`), hier steht nur die
+     Zustimmung, ohne die er gar nicht zustande käme. */
+  @view-transition { navigation: auto; }
+
+  .zurueck {
+    display: inline-block; color: var(--kreide-weg); font-size: 13px;
+    text-decoration: none; border-bottom: 1px dashed #ffffff2e; padding-bottom: 1px;
+  }
+  .zurueck:hover { color: var(--kreide); }
+
+  /* Wortgleich zu `.impressum-zeile` in `index.html` (Entscheidung 39,
+     Etappe 6) - derselbe Fuß, dieselbe Zeile, auch hier immer sichtbar,
+     egal ob `#tuer` oder `#reihe` gerade steht. */
+  .impressum-zeile {
+    margin-top: 11px; font-size: 10px; letter-spacing: .08em;
+  }
+  .impressum-zeile a {
+    color: var(--kreide-weg); text-decoration: underline;
+  }
+  .impressum-zeile a:hover { color: var(--kreide); }
+  h1 {
+    font-family: var(--hand); font-weight: 400;
+    font-size: clamp(26px, 7vw, 36px); line-height: 1.15;
+    margin: 0; transform: rotate(-.8deg); transform-origin: left;
+  }
+  .unterschrift {
+    margin: 0 0 4px; font-size: 12px; line-height: 1.5; color: var(--kreide-weg);
+  }
+
+  /* --- Der Kreidestrich ----------------------------------------------------
+     Was die sechs Bretter des Entwurfs voneinander trennte, ist hier eine
+     gezogene Linie — dieselbe Form wie in `mock-m-ganze-app.html`. Sie steht
+     VOR jeder Gruppe außer der ersten und einmal vor den beiden Wegen unten.
+     Nicht animiert: fünfzehn Striche, die nacheinander aufgehen, sind eine
+     Vorführung, und die Seite ist eine Weiche, kein Auftritt.
+     --------------------------------------------------------------------- */
+  .kreide-trenner {
+    display: block; width: 100%; height: 9px;
+    margin: clamp(12px, 3.2vw, 16px) 0 clamp(10px, 2.6vw, 13px);
+  }
+  .kreide-trenner path {
+    fill: none; stroke: #ffffff3d; stroke-width: 1.7; stroke-linecap: round;
+  }
+
+  /* --- Eine Gruppe ---------------------------------------------------------
+     DIE GANZE ZEILE IST DER WEG IN DIE GRUPPE. Ein 19 px hoher Textlink
+     „Tafel öffnen" unter jeder Gruppe wäre am Daumen ein Nadelöhr — und die
+     Fläche darüber, die groß und beschriftet und offensichtlich ist, täte
+     nichts. Also ist der Block selbst der Anker: Name, Beschreibung und der
+     ganze Kurzstand liegen darin.
+
+     „Verwalten" steht deutlich abgesetzt DARUNTER, hinter einer gestrichelten
+     Linie, mit eigener Trefferhöhe von 44 px und rechtsbündig. Der Abstand ist
+     kein Zierrat: ein Fehlgriff soll nicht aus dem Öffnen ein Verwalten
+     machen, und die beiden Ziele dürfen deshalb nicht aneinanderstoßen.
+     --------------------------------------------------------------------- */
+  .reihe { list-style: none; margin: 0; padding: 0; }
+  .g-weg {
+    display: block; text-decoration: none; color: inherit;
+    padding: 8px 8px 9px; margin: 0 -8px;
+    border-radius: 4px;
+    transition: background .15s;
+  }
+  .g-weg:hover { background: #ffffff0d; }
+  .g-weg:active { background: #ffffff14; }
+  .g-weg:focus-visible { outline: 2px solid var(--gelb); outline-offset: 1px; }
+
+  /* Name und Beiwerk auf EINER Zeile. Sichtbarkeit und Mitgliederzahl hatten
+     eine eigene Zeile darüber — fünfzehn Gruppen mal siebzehn Pixel für zwei
+     Wörter, die neben dem Namen genauso gut stehen. Bei einem langen Namen
+     rutschen sie um, statt ihn zu quetschen. */
+  .g-titel {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px;
+  }
+  .schild {
+    font-family: var(--hand); font-size: 11.5px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--kreide-matt); opacity: .8;
+    white-space: nowrap;
+  }
+  .g-titel .rechts {
+    margin-left: auto; font-family: var(--hand); font-size: 11.5px;
+    color: var(--kreide-weg); white-space: nowrap;
+  }
+  .g-name {
+    font-family: var(--hand); font-weight: 400; line-height: 1.12;
+    font-size: clamp(22px, 6.6vw, 28px); margin: 0;
+    transform: rotate(-.9deg); transform-origin: left; overflow-wrap: anywhere;
+  }
+  /* Eine Zeile, mehr nicht. Eine Beschreibung darf so lang sein, wie sie will —
+     aber fünfzehn dreizeilige Beschreibungen untereinander sind kein
+     Kurzstand mehr, sondern ein Lesetext, durch den man scrollt. */
+  .g-sinn {
+    display: block;
+    margin: 5px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--kreide-weg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* --- Der Kurzstand: feste Ordnung, feste Plätze --------------------------
+     kalt · offener Betrag · Rad, IMMER in dieser Reihenfolge und immer alle
+     drei — auch dann, wenn einer fehlt. Wer zwei Gruppen untereinander
+     vergleicht, findet dieselbe Auskunft an derselben Stelle, statt zählen zu
+     müssen, was diesmal da ist.
+
+     Und die Abwesenheit wird AUSGESCHRIEBEN: „führt keine Tafel", „dreht
+     nicht". Kein Strich, kein graues Kästchen, kein Zeichen, zu dem man
+     unten eine Legende suchen muss — auf einer Tafel steht, was ist, in
+     Worten.
+
+     Drei ZEILEN, nicht drei Spalten nebeneinander: bei 320 px blieben von drei
+     Spalten drei Schnipsel, und die Strichliste hätte in keinen davon gepasst.
+     Die Ordnung bleibt dieselbe, der Platz auch — die Beschriftungsspalte ist
+     fest breit, dahinter beginnt jeder Wert auf derselben Kante.
+     --------------------------------------------------------------------- */
+  .stand {
+    display: grid; grid-template-columns: 52px 1fr;
+    align-items: center; gap: 3px 10px;
+    margin-top: clamp(8px, 2.2vw, 11px);
+  }
+  .stand .was {
+    font-size: 8.5px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--kreide-weg); line-height: 1.3;
+  }
+  .stand .wert {
+    min-width: 0; min-height: 19px; display: flex; align-items: center; gap: 6px;
+    font-size: 12.5px; color: var(--kreide-matt); overflow-wrap: anywhere;
+  }
+  /* Was es nicht gibt, steht da — aber leiser als das, was es gibt. */
+  .stand .wert.fehlt { color: var(--kreide-weg); }
+  .stand .wert.an { color: var(--gelb); font-family: var(--hand); font-size: 14px; }
+  .stand .zahl {
+    font-family: var(--hand); font-size: 19px; line-height: 1;
+    font-variant-numeric: tabular-nums; color: var(--kreide);
+  }
+  .stand svg { display: block; }
+  .puls-punkt {
+    flex: none; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--gelb); box-shadow: 0 0 7px #e8c76688;
+    animation: atmen 2.6s ease-in-out infinite;
+  }
+  @keyframes atmen { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .puls-punkt { animation: none; } }
+
+  /* Die Striche, wie der Wirt sie anschreibt. Farbe und Saum wie in der
+     Zeilenfassung der Tafel (`.strich-gruppe.klein` in `index.html`): der Saum
+     hängt an der GRUPPE, nicht an jedem Strich — sonst zwanzig
+     Schattendurchläufe je Gruppe. Kein Korn: bei ~2 px Strichstärke hat es
+     keinen Platz mehr und wird zu Schmutz. */
+  .strich { stroke: var(--kreide); stroke-linecap: round; fill: none; }
+  .strich.quer { stroke: var(--rot); }
+  .strich-gruppe {
+    filter: drop-shadow(0 0 1px #ffffff5c) drop-shadow(0 1px 2px #00000055);
+  }
+
+  .g-fuss {
+    display: flex; align-items: center; justify-content: flex-end;
+    margin-top: 8px; padding-top: 2px;
+    border-top: 1px dashed #ffffff1a;
+  }
+  .verwalten {
+    display: inline-flex; align-items: center; gap: 8px;
+    min-height: 44px; padding: 0 4px 0 14px;
+    font-size: 12.5px; color: var(--kreide-weg); text-decoration: none;
+    transition: color .15s;
+  }
+  .verwalten:hover { color: var(--gelb); }
+  .verwalten:focus-visible { outline: 2px solid var(--gelb); outline-offset: -2px; border-radius: 3px; }
+  .verwalten .pfeil { opacity: .5; }
+  /* Wartende Beitrittsanträge. Sie stehen AM VERWALTEN und nicht im
+     Kurzstand: sie sind keine Auskunft über die Runde, sondern eine Arbeit,
+     die auf den wartet, der die Runde führt — und sie wird genau dort
+     erledigt, wohin dieser Link zeigt. */
+  .verwalten .warten {
+    font-family: var(--hand); font-size: 12.5px; color: var(--gelb);
+    border: 1px solid #e8c76655; border-radius: 999px; padding: 1px 9px 2px;
+    white-space: nowrap;
+  }
+
+  /* --- Die zwei Wege unten -------------------------------------------------
+     Gründen und Suchen gehören auf diese Seite, aber nicht in den Vordergrund:
+     die Reihe der eigenen Runden ist die Hauptsache, und wer schon drei hat,
+     gründet nicht täglich eine vierte. Also stehen sie am Fuß, hinter dem
+     Kreidestrich, als zwei zugeklappte Zeilen.
+     --------------------------------------------------------------------- */
+  .neu-zeile {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    min-height: 46px;
+    border: none; background: none; padding: 10px 2px; cursor: pointer;
+    font-family: var(--hand); font-size: clamp(15px, 4.4vw, 18px); color: var(--kreide);
+    text-align: left;
+  }
+  .neu-zeile + .neu-zeile { border-top: 1px dashed #ffffff1a; }
+  .neu-zeile:hover { color: var(--gelb); }
+  .neu-zeile:focus-visible { outline: 2px solid var(--gelb); outline-offset: 2px; }
+  .neu-zeile .zeichen {
+    flex: none; width: 22px; height: 22px; display: grid; place-items: center;
+    border: 1.4px solid #ffffff44; border-radius: 50%; font-size: 14px; line-height: 1;
+    transition: border-color .15s, transform .15s;
+  }
+  .neu-zeile:hover .zeichen { border-color: var(--gelb); }
+  .neu-zeile[aria-expanded="true"] .zeichen { transform: rotate(45deg); border-color: var(--gelb); }
+  /* Beim Suchen dreht sich nichts: aus einem Fragezeichen wird durch 45 Grad
+     kein Zeichen für „zu". */
+  .neu-zeile.frage[aria-expanded="true"] .zeichen { transform: none; }
+  .neu-zeile .sinn {
+    margin-left: auto; font-family: system-ui, sans-serif; font-size: 10.5px;
+    color: var(--kreide-weg); text-align: right; max-width: 48%;
+  }
+  .klapp { padding: 4px 2px 14px; }
+
+  .feld {
+    display: block; width: 100%; border: none; border-bottom: 1.5px dashed #ffffff44;
+    background: transparent; padding: 7px 2px 6px; border-radius: 0;
+    font-family: var(--hand); font-size: 17px; color: var(--kreide);
+  }
+  .feld:focus { outline: none; border-bottom-color: var(--gelb); border-bottom-style: solid; }
+  .feld::placeholder { color: #ffffff30; }
+  .feld-label {
+    display: block; font-size: 8.5px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--kreide-weg); margin-bottom: 3px;
+  }
+  .feld-satz { margin-bottom: 14px; }
+
+  .reiter { display: flex; flex-wrap: wrap; gap: 7px; }
+  .reiter button {
+    border: 1px solid #ffffff33; border-radius: 999px; background: none;
+    min-height: 34px; padding: 5px 14px; font: inherit; font-size: 12px;
+    color: var(--kreide-weg); cursor: pointer; white-space: nowrap;
+    transition: border-color .18s, color .18s, background .18s;
+  }
+  .reiter button:hover { color: var(--kreide-matt); border-color: #ffffff55; }
+  .reiter button[aria-pressed="true"] {
+    color: var(--gelb); border-color: #e8c76699; background: #e8c7661a;
+  }
+  .reiter button:focus-visible { outline: 2px solid var(--gelb); outline-offset: 2px; }
+
+  .knopf {
+    width: 100%; min-height: 44px;
+    border: 1.5px solid #ffffff55; border-radius: 3px; padding: 11px;
+    background: #ffffff0d; color: var(--kreide); cursor: pointer;
+    font-family: var(--hand); font-size: 16px; letter-spacing: .04em;
+    transition: background .2s, border-color .2s, transform .06s;
+  }
+  .knopf:hover { background: #ffffff1a; border-color: var(--gelb); }
+  .knopf:active { transform: translateY(1px); }
+  .knopf:focus-visible { outline: 2px solid var(--gelb); outline-offset: 2px; }
+  .knopf[disabled] { opacity: .45; cursor: default; }
+  .knopf.schmal { width: auto; padding: 8px 14px; font-size: 14px; }
+
+  .such-zeile { display: flex; align-items: flex-end; gap: 10px; }
+  .such-zeile .feld { flex: 1 1 auto; min-width: 0; }
+  .unter { font-size: 11px; color: var(--kreide-weg); line-height: 1.55; margin: 9px 0 0; }
+
+  /* Ein Treffer zeigt Name, Beschreibung, Mitgliederzahl — mehr gibt der
+     Worker an ein Nichtmitglied nicht heraus, und mehr steht hier auch nicht. */
+  .treffer {
+    margin-top: 11px; padding: 11px 12px; border-radius: 3px;
+    border: 1px solid #ffffff1f; background: #ffffff08;
+  }
+  .treffer + .treffer { margin-top: 8px; }
+  .treffer .t-name { font-family: var(--hand); font-size: 18px; line-height: 1.15; overflow-wrap: anywhere; }
+  .treffer .t-zahl { font-size: 10.5px; color: var(--kreide-weg); margin-top: 2px; }
+  .treffer .t-sinn { font-size: 11.5px; color: var(--kreide-matt); line-height: 1.5; margin: 7px 0 10px; }
+  .treffer .t-stand { font-size: 11.5px; color: var(--kreide-weg); }
+
+  .sagt {
+    margin: 12px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 12.5px;
+    line-height: 1.5; background: #ffffff0d; border-left: 2px solid var(--kreide-weg);
+    overflow-wrap: anywhere;
+  }
+  .sagt.schlecht { border-left-color: var(--rot); color: #f0c7bf; }
+  .sagt.gut { border-left-color: var(--gelb); }
+
+  /* --- Salden aus verlassenen Runden (Etappe 4) -----------------------------
+     Dieselbe Boxform wie ein Suchtreffer (`.treffer`), weil beides dieselbe
+     Sache ist: eine Zeile über etwas, das nicht mehr die eigene Kachel oben
+     ist. */
+  .eh-kopf { margin: 0 0 8px; }
+  .eh-zeile {
+    margin-top: 8px; padding: 11px 12px; border-radius: 3px;
+    border: 1px solid #ffffff1f; background: #ffffff08;
+  }
+  .eh-zeile:first-child { margin-top: 0; }
+  .eh-kopfzeile { display: flex; align-items: baseline; gap: 0 10px; flex-wrap: wrap; }
+  .eh-gruppe { font-family: var(--hand); font-size: 16px; }
+  .eh-monat { margin-left: auto; font-size: 11px; color: var(--kreide-weg); white-space: nowrap; }
+  .eh-betrag {
+    font-family: var(--hand); font-size: 19px; color: var(--rot);
+    margin-top: 3px; font-variant-numeric: tabular-nums;
+  }
+  .eh-status { font-size: 11.5px; color: var(--kreide-weg); margin-top: 4px; }
+
+  /* --- Die Zahlwege (Schema 36, Etappe 5) -----------------------------------
+     Wortgleich mit `index.html`s Fassung dieser Klassen - kein geteiltes CSS
+     jenseits von `bilder.js` in diesem Repo (CLAUDE.md). */
+  .zw-kasten { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #ffffff1f; }
+  .zw-zeile { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .zw-zeile:first-child { margin-top: 0; }
+  .zw-titel {
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--kreide-weg); min-width: 60px;
+  }
+  .zw-wert { font-size: 11.5px; color: var(--kreide-matt); overflow-wrap: anywhere; }
+  .zw-knopf {
+    border: 1px solid #ffffff33; border-radius: 3px; background: none;
+    padding: 4px 10px; font: inherit; font-size: 11px; letter-spacing: .04em;
+    color: var(--kreide-weg); cursor: pointer;
+  }
+  .zw-knopf:hover { background: #ffffff14; color: var(--kreide); }
+  .zw-qr-bild {
+    display: block; width: 128px; height: 128px; margin-top: 6px;
+    background: #fff; border-radius: 3px;
+  }
+
+  /* Wer noch in keiner Runde ist, sieht keinen leeren Bildschirm, sondern den
+     Weg hinein. Die drei Wege stehen als Satz da und nicht als drei Knöpfe:
+     zwei davon (Einladung, Antrag) fangen ohnehin woanders an. */
+  .keine {
+    margin: 4px 0 0; padding: 14px 14px 15px; border-radius: 3px;
+    border: 1px dashed #ffffff26; background: #ffffff06;
+    font-size: 13px; line-height: 1.6; color: var(--kreide-matt);
+  }
+  .keine b { display: block; font-family: var(--hand); font-weight: 400;
+    font-size: 17px; color: var(--kreide); margin-bottom: 5px; }
+
+  .tuer { text-align: center; padding: 40px 10px 30px; }
+  .tuer h2 { font-family: var(--hand); font-weight: 400; font-size: 24px; margin: 0 0 8px; }
+  .tuer p { color: var(--kreide-weg); font-size: 14px; margin: 0 0 16px; line-height: 1.5; }
+
+  /* Bis die Runden da sind. Kein Schimmern: auf Schiefer sieht ein wanderndes
+     Glanzlicht aus wie ein Fehler in der Tafel. */
+  .skelett div {
+    height: 96px; border-radius: 3px; margin-top: 12px;
+    border: 1px dashed #ffffff1f; background: #ffffff08;
+    animation: skelett-atmen 1.8s ease-in-out infinite;
+  }
+  .skelett div:nth-child(2) { animation-delay: .2s; }
+  @keyframes skelett-atmen { 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) { .skelett div { animation: none; } }
+</style>
+</head>
+<body>
+<div class="brett">
+
+  <!-- Das Holz. Vier Leisten, jede auf ihr Trapez beschnitten - erst dadurch
+       dreht die Faser an der Gehrung. Reine Zeichnung; darum `aria-hidden`. -->
+  <div class="rh" aria-hidden="true">
+    <i class="rh-l rh-o"></i><i class="rh-l rh-u"></i><i class="rh-l rh-li"></i><i class="rh-l rh-re"></i>
+    <i class="rh-naht"></i><i class="rh-fase"></i><i class="rh-falz"></i>
+  </div>
+
+  <div class="tafel" id="tafel">
+    <!-- Der Weg hinaus am Finger. Er steht VOR der Kopfzeile, weil er an den
+         oberen Rand gehört; ob es ihn überhaupt gibt, entscheidet das Skript. -->
+    <button class="raus-griff" id="raus-griff" type="button" aria-label="zurück zur Tafel" hidden></button>
+
+    <div class="kopfzeile">
+      <h1 class="kr">Deine Runden</h1>
+      <a class="zur-tafel" id="zur-tafel" href="./" aria-label="zurück zur Tafel" hidden>←</a>
+    </div>
+    <p class="unterschrift" id="unterschrift" hidden></p>
+
+    <div class="skelett" id="skelett"><div></div><div></div></div>
+
+    <ul class="reihe" id="reihe"></ul>
+
+    <div class="keine" id="keine" hidden>
+      <b>Noch keine Runde</b>
+      Eine Runde gründest du selbst — dann hängt die Tafel und du lädst die
+      anderen ein. Oder jemand lädt dich ein: der Link aus seiner Post führt
+      dich direkt hinein. Oder du suchst hier unten eine öffentliche Runde und
+      stellst einen Antrag.
+    </div>
+
+    <!-- Salden aus verlassenen Runden (Entscheidung 29, Etappe 4). Eine
+         AKTUELLE Mitgliedschaft zeigt ihren offenen Betrag schon in der
+         Kachel oben (`offen_cent`, summiert über alle Monate) - diese Liste
+         zeigt NUR, was keine Kachel mehr hat, weil die Runde verlassen
+         wurde. Ohne sie sähe ein Ausgetretener seine Schuld nirgends. -->
+    <div id="ehemalige-block" hidden>
+      <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M2 6.2 C 60 3.4, 118 7.4, 178 4.8 S 300 6.8, 378 3.6"/>
+      </svg>
+      <p class="unter eh-kopf">Offen aus Runden, die du verlassen hast:</p>
+      <div id="ehemalige"></div>
+    </div>
+
+    <!-- Die beiden Wege. Beide zugeklappt: die Reihe oben ist die Hauptsache. -->
+    <div id="wege" hidden>
+      <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M2 6.2 C 60 3.4, 118 7.4, 178 4.8 S 300 6.8, 378 3.6"/>
+      </svg>
+
+      <button class="neu-zeile" id="gruenden-auf" type="button"
+              aria-expanded="false" aria-controls="gruenden">
+        <span class="zeichen" aria-hidden="true">+</span>
+        <span>Runde gründen</span>
+        <span class="sinn">du führst sie</span>
+      </button>
+      <div class="klapp" id="gruenden" hidden>
+        <div class="feld-satz">
+          <label class="feld-label" for="ng-name">Name</label>
+          <input class="feld" id="ng-name" maxlength="40" autocomplete="off" placeholder="Am Tresen">
+        </div>
+        <div class="feld-satz">
+          <label class="feld-label" for="ng-sinn">Beschreibung</label>
+          <input class="feld" id="ng-sinn" maxlength="140" autocomplete="off"
+                 placeholder="Donnerstags, Ecktisch links">
+        </div>
+        <div class="feld-satz">
+          <span class="feld-label" id="ng-sicht-label">Sichtbarkeit</span>
+          <div class="reiter" id="ng-sicht" role="group" aria-labelledby="ng-sicht-label">
+            <button type="button" data-sicht="privat" aria-pressed="true">privat</button>
+            <button type="button" data-sicht="oeffentlich" aria-pressed="false">öffentlich</button>
+          </div>
+          <p class="unter" id="ng-sicht-sinn">Eine private Runde findet niemand über die Suche.
+             Du holst die Leute selbst herein.</p>
+        </div>
+        <button class="knopf" id="gruenden-tu" type="button">Tafel aufhängen</button>
+        <p class="sagt" id="gruenden-sagt" hidden></p>
+      </div>
+
+      <button class="neu-zeile frage" id="suchen-auf" type="button"
+              aria-expanded="false" aria-controls="suchen">
+        <span class="zeichen" aria-hidden="true">?</span>
+        <span>Runde suchen</span>
+        <span class="sinn">nur öffentliche</span>
+      </button>
+      <div class="klapp" id="suchen" hidden>
+        <label class="feld-label" for="such-feld">Name der Runde</label>
+        <div class="such-zeile">
+          <input class="feld" id="such-feld" autocomplete="off" placeholder="Radler">
+          <button class="knopf schmal" id="suchen-tu" type="button">suchen</button>
+        </div>
+        <p class="unter">Der Treffer zeigt Name, Beschreibung und Mitgliederzahl. Wer drin
+           ist und wieviel kalt steht — nichts davon, solange du nicht drin bist.</p>
+        <div id="treffer"></div>
+        <p class="sagt" id="suchen-sagt" hidden></p>
+      </div>
+    </div>
+
+    <div class="tuer" id="tuer" hidden>
+      <h2 class="kr">Erst anmelden</h2>
+      <p id="tuer-text">
+        Welche Runden dir gehören, weiß die Tafel erst, wenn sie weiß, wer du
+        bist. Melde dich an — auf der Tafel, mit derselben Adresse wie immer.
+      </p>
+      <a class="zurueck" href="./">zur Tafel und anmelden</a>
+    </div>
+
+    <p class="sagt" id="sagt" hidden></p>
+
+    <div class="impressum-zeile"><a href="impressum.html">Impressum &amp; Datenschutz</a></div>
+  </div>
+</div>
+
+<script>
+  // ==========================================================================
+  // Dieselbe Herkunft, dasselbe Token wie die Tafel — wer dort angemeldet ist,
+  // ist es hier auch. Kein zweiter Anmeldeweg, kein zweiter Angriffsweg.
+  // ==========================================================================
+  const API = location.hostname === 'localhost'
+    ? 'http://localhost:8787'
+    : 'https://beerstock-api.mc-schneider84.workers.dev';
+  const SPEICHER = 'beerstock-token';
+  const NS = 'http://www.w3.org/2000/svg';
+
+  const $ = id => document.getElementById(id);
+  const el = (tag, klasse, text) => {
+    const n = document.createElement(tag);
+    if (klasse) n.className = klasse;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const s_el = (tag, attrs) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  };
+  const merke = () => { try { return localStorage.getItem(SPEICHER); } catch { return null; } };
+
+  /* Ein Aufruf, GET wie POST. `statistik.html` kennt nur GET; hier gehen zwei
+     Dinge hinaus (gründen, beantragen), und beide sollen im selben Pfad
+     landen — dann zeigt 400, 409 und 429 alle denselben Weg: den Text des
+     Workers, wortgleich. Eigene Fehlersätze zu erfinden hieße, dieselbe Sache
+     an zwei Stellen zu formulieren, und die laufen auseinander. */
+  async function ruf(pfad, koerper) {
+    const t = merke();
+    const kopf = t ? { Authorization: 'Bearer ' + t } : {};
+    if (koerper) kopf['Content-Type'] = 'application/json';
+    const r = await fetch(API + pfad, {
+      method: koerper ? 'POST' : 'GET',
+      headers: kopf,
+      body: koerper ? JSON.stringify(koerper) : undefined,
+      cache: 'no-store',
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(d.fehler || 'Das ging nicht'), { status: r.status });
+    return d;
+  }
+
+  function sagtIn(id, text, art) {
+    const p = $(id);
+    p.textContent = text;
+    p.className = 'sagt' + (art ? ' ' + art : '');
+    p.hidden = !text;
+  }
+  const sagt = (text, art) => sagtIn('sagt', text, art);
+
+  // ==========================================================================
+  // Die Strichliste
+  //
+  // DIE REGEL FÜR GROSSE ZAHLEN, und sie steht hier, weil sie eine Entscheidung
+  // ist und keine Kleinigkeit: `kalt` ist die Summe der ganzen Runde, nicht der
+  // Kühlschrank eines Einzelnen — auf der Testinstanz stehen schon 88. Achtzehn
+  // Fünferbündel wären bei 320 px eine Zeile von über einem halben Meter, und
+  // sie umzubrechen hieße, in jede Gruppenzeile einen Block von vier Reihen zu
+  // setzen: genau der Fehler, den die Reihe als Ganzes gerade vermeidet.
+  //
+  // Also: bis STRICHE_BIS (= vier Bündel) die Striche, darüber die Zahl in
+  // Kreide. Das ist keine neue Erfindung — `striche()` in `index.html` macht es
+  // seit je genauso und schreibt jenseits von `VOLL_AB` ein WORT hin statt
+  // weiterzuzählen. Vier Bündel sind die Grenze, weil sie in der Wertspalte
+  // auch bei 320 px noch mit Luft stehen (viewBox 178 Einheiten, bei
+  // height=18 also ~107 px von ~200 verfügbaren) und weil man vier Bündel noch
+  // mit einem Blick liest.
+  //
+  // Kein Zahlwert mit angehängten Reststrichen: wer „17×" plus drei Striche
+  // sieht, muss rechnen und braucht eine Legende — und Legenden sind auf dieser
+  // Tafel genau das, was nicht sein soll.
+  //
+  // Übernommen ist die ZEILENFASSUNG (`klein`) aus `index.html`, nicht die des
+  // Kopfes: die legt ein `<defs>` mit fester ID an und verlässt sich darauf,
+  // dass es je Seite nur einen Aufrufer gibt. Hier gäbe es fünfzehn, und
+  // fünfzehn gleiche IDs sind fünfzehnmal dasselbe Filterergebnis oder gar
+  // keines. Die kleine Fassung braucht kein `<defs>`, der Saum steht im
+  // Stylesheet.
+  // ==========================================================================
+  const STRICHE_BIS = 20;
+
+  function striche(anzahl) {
+    // Bündelbreite, Abstand, Strichabstand, halbe Höhe, Strichstärke, Zeile —
+    // die Zahlen der `klein`-Fassung aus `index.html`, unverändert.
+    const B = { g: 34, a: 14, s: 7.5, h: 9, w: 3.4, zeile: 30 };
+    const gruppen = Math.ceil(anzahl / 5);
+    const breite = gruppen * B.g + (gruppen - 1) * B.a;
+    const svg = s_el('svg', {
+      viewBox: '0 0 ' + breite + ' ' + B.zeile,
+      height: 18, role: 'img', 'aria-label': anzahl + ' Flaschen kalt',
+    });
+    // `overflow: visible` wäre hier falsch: der Querstrich hängt links mit
+    // seiner runden Kappe hinaus, und in einer Rasterzelle stieße er in die
+    // Beschriftung. Ein Pixel Verlust an der Kappe sieht niemand.
+    const gruppe = s_el('g', { class: 'strich-gruppe' });
+    svg.appendChild(gruppe);
+
+    for (let gi = 0; gi < gruppen; gi++) {
+      const imBund = Math.min(5, anzahl - gi * 5);
+      const x0 = gi * (B.g + B.a), y = B.zeile / 2;
+      for (let s = 0; s < Math.min(imBund, 4); s++) {
+        gruppe.appendChild(s_el('line', {
+          class: 'strich', 'stroke-width': B.w,
+          x1: x0 + B.w + s * B.s, y1: y - B.h, x2: x0 + B.w + 4 + s * B.s, y2: y + B.h,
+        }));
+      }
+      // Der Querstrich des vollen Bündels, von unten links nach oben rechts —
+      // so streicht ein Wirt durch.
+      if (imBund === 5) {
+        gruppe.appendChild(s_el('line', {
+          class: 'strich quer', 'stroke-width': B.w,
+          x1: x0 + 1, y1: y + B.h - 2, x2: x0 + B.g - 8, y2: y - B.h + 2,
+        }));
+      }
+    }
+    return svg;
+  }
+
+  // ==========================================================================
+  // Die drei Werte des Kurzstands. Jede der drei Funktionen gibt IMMER etwas
+  // zurück — es gibt keinen Fall, in dem eine Zelle leer bleibt.
+  // ==========================================================================
+
+  function wertKalt(kalt) {
+    const w = el('span', 'wert');
+    if (kalt == null) {
+      // Die Gruppe hat die Tafel abgeschaltet. Das ist eine Einstellung und
+      // kein Ausfall, also steht es als Satz da und nicht als Fehlerzeichen.
+      w.className = 'wert fehlt';
+      w.textContent = 'führt keine Tafel';
+      return w;
+    }
+    if (kalt <= 0) { w.className = 'wert fehlt'; w.textContent = 'nichts kalt'; return w; }
+    if (kalt > STRICHE_BIS) {
+      w.appendChild(el('span', 'zahl', String(kalt)));
+      w.appendChild(el('span', null, 'Flaschen'));
+      return w;
+    }
+    w.appendChild(striche(kalt));
+    return w;
+  }
+
+  /* Der offene Betrag (Etappe 4). `null` heißt „diese Gruppe führt keine
+     Kasse" (`kasse_an = 0`), genau wie `kalt` bei abgeschalteter Tafel — kein
+     Unterschied zu einer erfundenen Null. Ist die Kasse an, aber nichts
+     offen, steht das ausdrücklich da, wie „nichts kalt" oben. */
+  function wertOffen(cent) {
+    const w = el('span', 'wert');
+    if (cent == null) { w.className = 'wert fehlt'; w.textContent = 'führt keine Kasse'; return w; }
+    if (cent <= 0) { w.className = 'wert fehlt'; w.textContent = 'nichts offen'; return w; }
+    w.appendChild(el('span', 'zahl',
+      (cent / 100).toLocaleString('de-DE', { minimumFractionDigits: 2 }) + ' €'));
+    return w;
+  }
+
+  function wertRad(rad) {
+    const w = el('span', 'wert');
+    if (rad == null) { w.className = 'wert fehlt'; w.textContent = 'diese Runde dreht nicht'; return w; }
+    if (rad) {
+      w.className = 'wert an';
+      w.appendChild(el('span', 'puls-punkt'));
+      w.appendChild(el('span', null, 'dreht heute'));
+      return w;
+    }
+    w.className = 'wert fehlt';
+    w.textContent = 'heute keine Ziehung';
+    return w;
+  }
+
+  // ==========================================================================
+  // Eine Gruppe als Feld auf dem Schiefer
+  // ==========================================================================
+  const TRENNER = [
+    'M2 6.2 C 60 3.4, 118 7.4, 178 4.8 S 300 6.8, 378 3.6',
+    'M3 4.4 C 70 7.2, 130 3.2, 195 6.2 S 310 3.4, 377 5.8',
+    'M2 5.8 C 66 3.2, 124 7.2, 190 4.4 S 306 7.4, 378 4.2',
+    'M3 4.2 C 74 6.8, 132 3.4, 200 5.8 S 312 3.6, 377 6.4',
+  ];
+  function trenner(i) {
+    const svg = s_el('svg', {
+      class: 'kreide-trenner', viewBox: '0 0 380 9',
+      preserveAspectRatio: 'none', 'aria-hidden': 'true',
+    });
+    // Vier Striche im Wechsel, nicht einer: fünfzehn Mal derselbe Schwung
+    // sieht gedruckt aus, und gedruckt ist auf einer Tafel nichts.
+    svg.appendChild(s_el('path', { d: TRENNER[i % TRENNER.length] }));
+    return svg;
+  }
+
+  function gruppeZeile(g) {
+    const li = el('li', 'g');
+
+    const a = el('a', 'g-weg');
+    a.href = 'index.html?g=' + g.id;
+
+    const titel = el('span', 'g-titel');
+    titel.appendChild(el('span', 'g-name kr', g.name));
+    titel.appendChild(el('span', 'schild', g.sichtbar === 'oeffentlich' ? 'öffentlich' : 'privat'));
+    titel.appendChild(el('span', 'rechts',
+      g.mitglieder === 1 ? 'du allein' : g.mitglieder + ' Leute'));
+    a.appendChild(titel);
+    if (g.beschreibung) a.appendChild(el('span', 'g-sinn', g.beschreibung));
+
+    /* Die feste Ordnung. Sie steht als Liste im Code, damit sie nicht an drei
+       Stellen von Hand wiederholt wird und dabei einmal die Reihenfolge
+       vertauscht: kalt, offener Betrag, Rad — in dieser Folge, jedes Mal. */
+    const stand = el('span', 'stand');
+    [['kalt', wertKalt(g.kalt)],
+     ['offen', wertOffen(g.offen_cent)],
+     ['Rad', wertRad(g.rad)]].forEach(([name, wert]) => {
+      stand.appendChild(el('span', 'was', name));
+      stand.appendChild(wert);
+    });
+    a.appendChild(stand);
+    li.appendChild(a);
+
+    /* Das Zweitziel. Es liegt AUSSERHALB des Ankers — ein Link im Link ist
+       kein gültiges HTML, und wichtiger: der Daumen soll die beiden nicht
+       verwechseln. Darum die gestrichelte Linie dazwischen, 44 px Höhe und
+       der rechte Rand. */
+    const fuss = el('div', 'g-fuss');
+    const v = el('a', 'verwalten');
+    v.href = 'gruppe.html?g=' + g.id;
+    /* Dasselbe Wort für beide Rollen. „Die Runde" für Mitglieder und
+       „Verwalten" für Admins wären zwei Namen für dasselbe Ziel — was ein
+       Mitglied dort darf, entscheidet die Seite dahinter, nicht ihre
+       Beschriftung hier. Auszutreten ist auch Verwalten. */
+    v.appendChild(el('span', null, 'Verwalten'));
+    if (g.rolle === 'admin' && g.antraege > 0) {
+      v.appendChild(el('span', 'warten',
+        g.antraege === 1 ? '1 Antrag wartet' : g.antraege + ' Anträge warten'));
+    }
+    v.appendChild(el('span', 'pfeil', '→'));
+    fuss.appendChild(v);
+    li.appendChild(fuss);
+
+    return li;
+  }
+
+  function reiheZeichnen(gruppen) {
+    const ziel = $('reihe');
+    ziel.textContent = '';
+    gruppen.forEach((g, i) => {
+      // Der Kreidestrich TRENNT, er schließt nicht ab: vor jeder Gruppe außer
+      // der ersten. Ein Strich unter der letzten sähe aus, als käme noch was.
+      if (i > 0) {
+        const li = el('li', 'g-strich');
+        li.appendChild(trenner(i - 1));
+        ziel.appendChild(li);
+      }
+      ziel.appendChild(gruppeZeile(g));
+    });
+    $('unterschrift').textContent = gruppen.length === 0 ? ''
+      : gruppen.length + (gruppen.length === 1 ? ' Runde' : ' Runden')
+        + ' — tippe auf eine, dann steht ihre Tafel da.';
+    $('unterschrift').hidden = gruppen.length === 0;
+    $('keine').hidden = gruppen.length > 0;
+  }
+
+  // ==========================================================================
+  // Salden aus verlassenen Runden (Entscheidung 29, Etappe 4) — `GET
+  // /api/salden` OHNE Gruppenschranke, gefiltert auf `ehemalig`: eine
+  // aktuelle Mitgliedschaft zeigt ihren offenen Betrag schon in der Kachel.
+  // ==========================================================================
+  const EH_MONATE = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+
+  function ehemaligeZeile(s) {
+    const z = el('div', 'eh-zeile');
+    const kopf = el('div', 'eh-kopfzeile');
+    kopf.appendChild(el('span', 'eh-gruppe kr', s.gruppe));
+    kopf.appendChild(el('span', 'eh-monat', EH_MONATE[s.monat] + ' ' + s.jahr));
+    z.appendChild(kopf);
+    z.appendChild(el('div', 'eh-betrag',
+      (s.offen_cent / 100).toLocaleString('de-DE', { minimumFractionDigits: 2 }) + ' € offen'));
+
+    if (s.status === 'gemeldet') {
+      z.appendChild(el('div', 'eh-status', 'Als bezahlt gemeldet — wartet auf Bestätigung.'));
+    } else {
+      if (s.status === 'teilbezahlt') {
+        z.appendChild(el('div', 'eh-status', 'Teilweise bestätigt, der Rest steht oben.'));
+      }
+      const knopf = el('button', 'knopf schmal', 'Als bezahlt melden');
+      knopf.type = 'button';
+      knopf.addEventListener('click', async () => {
+        knopf.disabled = true;
+        try {
+          await ruf('/api/saldo/meldung', { saldo: s.id });
+          // `knopf` direkt, nicht `z.lastChild` - der Zahlwege-Kasten unten
+          // (falls vorhanden) waere sonst nach dem Anhaengen das letzte Kind.
+          z.replaceChild(el('div', 'eh-status', 'Gemeldet — wartet auf Bestätigung.'), knopf);
+        } catch (e) {
+          knopf.disabled = false;
+          sagt(e.message, 'schlecht');
+        }
+      });
+      z.appendChild(knopf);
+    }
+
+    // Derselbe Besitz-Pfad wie in `index.html`s `abZeile()`, wortgleich - ein
+    // Ausgetretener hat genau hier seine einzige Oberflaeche dafuer (Opus-
+    // Konsultation vor der Festlegung, 2026-08-11: die Etappentabelle nannte
+    // nur `index.html`, das liesse ihn ohne Zahlweg da stehen).
+    if (s.zahlwege_da) {
+      const kasten = el('div', 'zw-kasten');
+      z.appendChild(kasten);
+      zahlwegeLaden(s.id).then(a => zahlwegeZeichnen(kasten, a)).catch(() => { kasten.hidden = true; });
+    }
+    return z;
+  }
+
+  /* --- Die Zahlwege (Schema 36, Etappe 5) -----------------------------------
+     Besitz-Pfad (`?saldo=`, siehe worker/src/index.js `saldoBesitz()`), KEIN
+     `?g=` - genau die Route, die ein Ausgetretener ohne Mitgliedschaft noch
+     aufrufen darf. Wortgleich mit `index.html`s Fassung dieser vier
+     Funktionen - kein geteiltes JS jenseits von `bilder.js` in diesem Repo
+     (CLAUDE.md). */
+  async function zahlwegeLaden(saldoId) {
+    const t = merke();
+    const kopf = t ? { Authorization: 'Bearer ' + t } : {};
+    const r = await fetch(API + '/api/zahlwege?saldo=' + saldoId, { headers: kopf, cache: 'no-store' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.fehler || 'Das ging nicht');
+    return d;
+  }
+
+  // Ein `<img>` traegt keinen Authorization-Kopf - die Route braucht einen
+  // (Besitzcheck), darum erst als Blob holen und als Objekt-URL einsetzen.
+  async function zwBildHolen(pfad) {
+    const t = merke();
+    const kopf = t ? { Authorization: 'Bearer ' + t } : {};
+    const r = await fetch(API + pfad, { headers: kopf });
+    if (!r.ok) throw new Error('Der QR-Code ging nicht');
+    return await r.blob();
+  }
+
+  async function zwKopieren(text, knopf) {
+    const alt = knopf.textContent;
+    const zurueck = () => setTimeout(() => { knopf.textContent = alt; }, 1500);
+    try {
+      if (!navigator.clipboard) throw new Error('kein Zwischenspeicher');
+      await navigator.clipboard.writeText(text);
+      knopf.textContent = 'kopiert'; zurueck();
+      return;
+    } catch { /* weiter unten */ }
+    const tmp = document.createElement('span');
+    tmp.textContent = text;
+    tmp.style.cssText = 'position:fixed;left:-9999px;top:-9999px;white-space:pre';
+    document.body.appendChild(tmp);
+    try {
+      const bereich = document.createRange();
+      bereich.selectNodeContents(tmp);
+      const wahl = window.getSelection();
+      wahl.removeAllRanges(); wahl.addRange(bereich);
+      if (document.execCommand('copy')) { knopf.textContent = 'kopiert'; zurueck(); }
+    } catch { /* kein Zwischenspeicher erreichbar - der Wert steht schon als Text da */ }
+    document.body.removeChild(tmp);
+  }
+
+  function zahlwegZeile(w) {
+    const z = el('div', 'zw-zeile');
+    z.appendChild(el('span', 'zw-titel', w.titel));
+
+    if (w.art === 'paypal') {
+      if (w.link) {
+        const a = document.createElement('a');
+        a.className = 'zw-knopf'; a.href = w.link; a.target = '_blank'; a.rel = 'noopener';
+        a.textContent = 'Mit PayPal zahlen';
+        z.appendChild(a);
+      } else {
+        z.appendChild(el('span', 'zw-wert', w.wert));
+      }
+    } else if (w.art === 'bank') {
+      z.appendChild(el('span', 'zw-wert', (w.inhaber ? w.inhaber + ' · ' : '') + w.wert));
+      const kop = el('button', 'zw-knopf', 'IBAN kopieren');
+      kop.type = 'button';
+      kop.addEventListener('click', () => zwKopieren(w.wert, kop));
+      z.appendChild(kop);
+      if (w.qr) {
+        const qrKnopf = el('button', 'zw-knopf', 'QR-Code');
+        qrKnopf.type = 'button';
+        const bild = el('img', 'zw-qr-bild');
+        bild.hidden = true;
+        bild.alt = 'EPC-QR-Code für die Überweisung';
+        qrKnopf.addEventListener('click', async () => {
+          if (!bild.hidden) { bild.hidden = true; return; }
+          try {
+            const blob = await zwBildHolen(w.qr);
+            if (bild.src && bild.src.startsWith('blob:')) URL.revokeObjectURL(bild.src);
+            bild.src = URL.createObjectURL(blob);
+            bild.hidden = false;
+          } catch { /* der Knopf bleibt einfach ohne Wirkung */ }
+        });
+        z.appendChild(qrKnopf);
+        z.appendChild(bild);
+      }
+    } else if (w.art === 'wero') {
+      z.appendChild(el('span', 'zw-wert', w.wert));
+      const kop = el('button', 'zw-knopf', 'Kennung kopieren');
+      kop.type = 'button';
+      kop.addEventListener('click', () => zwKopieren(w.wert, kop));
+      z.appendChild(kop);
+    } else { // 'bar' - Freitext ohne Knopf (Entscheidung 20)
+      z.appendChild(el('span', 'zw-wert', w.wert));
+    }
+    return z;
+  }
+
+  /* Der Verwendungszweck steht ÜBER den Wegen, nicht in einem von ihnen -
+     er gehört zu JEDEM (auch zu PayPal und Wero, die ihn nicht automatisch
+     mitschicken können). Wortgleich mit `index.html`s Fassung - kein
+     geteiltes JS jenseits von `bilder.js` in diesem Repo (CLAUDE.md). */
+  function zahlwegZweckZeile(zweck) {
+    const z = el('div', 'zw-zeile');
+    z.appendChild(el('span', 'zw-titel', 'Zweck'));
+    z.appendChild(el('span', 'zw-wert', zweck));
+    const kop = el('button', 'zw-knopf', 'kopieren');
+    kop.type = 'button';
+    kop.addEventListener('click', () => zwKopieren(zweck, kop));
+    z.appendChild(kop);
+    return z;
+  }
+
+  function zahlwegeZeichnen(ziel, antwort) {
+    ziel.textContent = '';
+    const wege = antwort.wege || [];
+    if (!wege.length) { ziel.hidden = true; return; }
+    ziel.hidden = false;
+    if (antwort.zweck) ziel.appendChild(zahlwegZweckZeile(antwort.zweck));
+    wege.forEach(w => ziel.appendChild(zahlwegZeile(w)));
+  }
+
+  // Gibt zurueck, ob es etwas zu zeigen gab - `laden()` braucht das, um den
+  // Automatik-Sprung bei genau einer Mitgliedschaft zu unterdruecken
+  // (Abnahmefund: sonst sieht ein Ausgetretener mit nur noch einer Runde
+  // seine Schuld NIE, weil `location.replace` diese Seite verlaesst, bevor
+  // hier je gezeichnet wird).
+  async function ehemaligeLaden() {
+    let d;
+    try {
+      d = await ruf('/api/salden');
+    } catch {
+      return false; // kein Blocker fuer die Seite - die Kacheln oben sind die Hauptsache
+    }
+    const ehemalig = (d.salden || []).filter(s => s.ehemalig);
+    $('ehemalige-block').hidden = !ehemalig.length;
+    if (!ehemalig.length) return false;
+    const ziel = $('ehemalige');
+    ziel.textContent = '';
+    ehemalig.forEach(s => ziel.appendChild(ehemaligeZeile(s)));
+    return true;
+  }
+
+  // ==========================================================================
+  // Gründen
+  // ==========================================================================
+  let sicht = 'privat';
+
+  function klappUm(knopf, blatt) {
+    const auf = blatt.hidden;
+    blatt.hidden = !auf;
+    knopf.setAttribute('aria-expanded', auf ? 'true' : 'false');
+    if (auf) {
+      const erstes = blatt.querySelector('input');
+      if (erstes) erstes.focus();
+    }
+  }
+
+  function gruendenAufsetzen() {
+    $('gruenden-auf').addEventListener('click',
+      () => klappUm($('gruenden-auf'), $('gruenden')));
+
+    $('ng-sicht').addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-sicht]');
+      if (!b) return;
+      sicht = b.dataset.sicht;
+      [...$('ng-sicht').querySelectorAll('button')].forEach(x => {
+        x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+      });
+      // Was die Wahl bedeutet, steht daneben und ändert sich mit ihr — sonst
+      // wählt man zwischen zwei Wörtern statt zwischen zwei Zuständen.
+      $('ng-sicht-sinn').textContent = sicht === 'privat'
+        ? 'Eine private Runde findet niemand über die Suche. Du holst die Leute selbst herein.'
+        : 'Eine öffentliche Runde steht in der Suche. Hereinkommen darf trotzdem nur, wen du hereinlässt.';
+    });
+
+    $('gruenden-tu').addEventListener('click', async () => {
+      const knopf = $('gruenden-tu');
+      const name = $('ng-name').value.trim();
+      /* Die Länge prüft der Worker (2 bis 40) und sagt es auch. Hier steht nur
+         der Fall, den es gar nicht erst zu schicken lohnt: ein leeres Feld. */
+      if (!name) { sagtIn('gruenden-sagt', 'Ohne Namen hängt keine Tafel.', 'schlecht');
+                   $('ng-name').focus(); return; }
+      knopf.disabled = true;
+      sagtIn('gruenden-sagt', '');
+      try {
+        const d = await ruf('/api/gruppen', {
+          name, beschreibung: $('ng-sinn').value.trim(), sichtbar: sicht,
+        });
+        /* Neu gegründet und gleich in der Reihe — aber NICHT hinüber-
+           gesprungen: wer gerade eine Tafel aufgehängt hat, will sehen, dass
+           sie hängt, und vielleicht gleich die nächste. Der Sprung auf die
+           eine Gruppe gehört dem nächsten Aufruf dieser Seite, nicht diesem. */
+        gruppen.unshift(d.gruppe);
+        reiheZeichnen(gruppen);
+        $('ng-name').value = ''; $('ng-sinn').value = '';
+        sagtIn('gruenden-sagt', 'Die Tafel hängt. Sie steht jetzt oben in der Reihe.', 'gut');
+      } catch (e) {
+        sagtIn('gruenden-sagt', e.message, 'schlecht');
+      } finally {
+        knopf.disabled = false;
+      }
+    });
+  }
+
+  // ==========================================================================
+  // Suchen und beantragen
+  // ==========================================================================
+  function trefferZeichnen(treffer, gesucht) {
+    const ziel = $('treffer');
+    ziel.textContent = '';
+    if (!treffer.length) {
+      /* Zwei verschiedene Nichts. Wer einen Namen eingetippt hat, hat unter
+         diesem Namen nichts gefunden; wer das Feld leer gelassen hat, hat nach
+         ALLEN öffentlichen Runden gefragt — „keine dieses Namens" wäre da
+         schlicht falsch, es war ja kein Name im Spiel. */
+      ziel.appendChild(el('p', 'unter', (gesucht
+        ? 'Keine öffentliche Runde dieses Namens. '
+        : 'Es gibt gerade keine öffentliche Runde. ')
+        + 'Private Runden stehen hier nicht — in die kommt man nur über eine Einladung.'));
+      return;
+    }
+    treffer.forEach(t => {
+      const k = el('div', 'treffer');
+      k.appendChild(el('div', 't-name', t.name));
+      k.appendChild(el('div', 't-zahl',
+        t.mitglieder === 1 ? '1 Mitglied' : t.mitglieder + ' Mitglieder'));
+      if (t.beschreibung) k.appendChild(el('p', 't-sinn', t.beschreibung));
+
+      if (t.drin) {
+        k.appendChild(el('p', 't-stand', 'Da bist du schon dabei.'));
+      } else if (t.beantragt) {
+        k.appendChild(el('p', 't-stand', 'Dein Antrag liegt vor. Jetzt entscheidet die Runde.'));
+      } else {
+        const b = el('button', 'knopf schmal', 'Beitritt beantragen');
+        b.type = 'button';
+        b.addEventListener('click', async () => {
+          b.disabled = true;
+          try {
+            await ruf('/api/gruppe/anfrage', { gruppe: t.id });
+            // Der Knopf verschwindet und der Satz steht an seiner Stelle:
+            // zweimal denselben Antrag zu stellen, geht ohnehin nicht (409).
+            b.replaceWith(el('p', 't-stand',
+              'Dein Antrag liegt vor. Jetzt entscheidet die Runde.'));
+          } catch (e) {
+            b.disabled = false;
+            sagtIn('suchen-sagt', e.message, 'schlecht');
+          }
+        });
+        k.appendChild(b);
+      }
+      ziel.appendChild(k);
+    });
+  }
+
+  function suchenAufsetzen() {
+    $('suchen-auf').addEventListener('click', () => klappUm($('suchen-auf'), $('suchen')));
+
+    async function suchen() {
+      const knopf = $('suchen-tu');
+      knopf.disabled = true;
+      sagtIn('suchen-sagt', '');
+      try {
+        // Ein leeres Feld ist erlaubt und gibt alle öffentlichen Runden — wer
+        // nicht weiß, wonach er sucht, soll trotzdem etwas sehen.
+        const gesucht = $('such-feld').value.trim();
+        const d = await ruf('/api/gruppen/suche?q=' + encodeURIComponent(gesucht));
+        trefferZeichnen(d.treffer || [], gesucht);
+      } catch (e) {
+        sagtIn('suchen-sagt', e.message, 'schlecht');
+      } finally {
+        knopf.disabled = false;
+      }
+    }
+
+    $('suchen-tu').addEventListener('click', suchen);
+    $('such-feld').addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); suchen(); }
+    });
+  }
+
+  // ==========================================================================
+  // Laden
+  // ==========================================================================
+  let gruppen = [];
+
+  function zeigeTuer(text) {
+    $('skelett').hidden = true;
+    $('reihe').textContent = '';
+    $('keine').hidden = true;
+    $('wege').hidden = true;
+    $('unterschrift').hidden = true;
+    $('tuer').hidden = false;
+    if (text) $('tuer-text').textContent = text;
+  }
+
+  async function laden() {
+    if (!merke()) { zeigeTuer(); return; }
+    let d;
+    try {
+      d = await ruf('/api/gruppen');
+    } catch (e) {
+      if (e.status === 401) {
+        zeigeTuer('Die Anmeldung gilt hier nicht mehr. Melde dich auf der Tafel neu an, '
+                + 'dann stehen deine Runden wieder da.');
+      } else {
+        /* Gründen und Suchen bleiben zu, und das ist Absicht: beide reden mit
+           demselben Worker, der gerade nicht antwortet. Ein Formular
+           anzubieten, dessen Absenden sicher scheitert, wäre eine zweite
+           Enttäuschung nach der ersten. */
+        $('skelett').hidden = true;
+        sagt('Deine Runden ließen sich nicht holen: ' + e.message, 'schlecht');
+      }
+      return;
+    }
+    gruppen = d.gruppen || [];
+
+    /* GENAU EINE MITGLIEDSCHAFT: diese Seite wird übersprungen, und zwar so,
+       dass sie niemand zu sehen bekommt — `replace` statt `href`, sonst führte
+       der Zurück-Knopf in eine Weiche zurück, die sofort wieder wegspringt.
+
+       Kein Ping-Pong: `index.html` schickt umgekehrt nur dann hierher, wenn es
+       NICHT genau eine ist (`gruppeFinden` drüben). Die beiden Bedingungen
+       schließen einander aus.
+
+       NUR BEIM ERSTEN LADEN. Wer mit null Runden hier ankommt und eine
+       gründet, hat danach genau eine — und würde von einem zweiten Durchlauf
+       weggerissen, ohne es entschieden zu haben. Deshalb steht der Sprung
+       hier und nicht in `reiheZeichnen`.
+
+       UND NUR AUF DEM AUTOMATISCHEN WEG. Nach der Migration ist JEDER
+       Bestandsnutzer in genau einer Runde — ohne diese Unterscheidung wäre
+       diese Seite für die ganze Runde unerreichbar, und mit ihr das Gründen
+       und das Suchen, die es nur hier gibt. Wer über „wechseln" im Deckel
+       oder aus der Verwaltung herkommt, WILL hierher; das sagt er mit
+       `?wahl=1`, und dann bleibt die Seite stehen, auch wenn nur eine Zeile
+       darauf steht. */
+    // VOR der Sprungentscheidung geholt: eine offene Schuld aus einer
+    // verlassenen Runde ist wichtiger als der Automatik-Sprung, sonst sieht
+    // ein Ausgetretener mit nur noch einer Mitgliedschaft sie nirgends.
+    const hatEhemalige = await ehemaligeLaden();
+
+    const gewollt = new URLSearchParams(location.search).get('wahl') === '1';
+    if (gruppen.length === 1 && !gewollt && !hatEhemalige) {
+      location.replace('index.html?g=' + gruppen[0].id);
+      return;
+    }
+
+    $('skelett').hidden = true;
+    reiheZeichnen(gruppen);
+    $('wege').hidden = false;
+    gruendenAufsetzen();
+    suchenAufsetzen();
+  }
+
+  /* --- Runterwischen führt hinaus -------------------------------------------
+     Dieselbe Geste wie an den Bögen der Tafel und auf den Schwesterseiten;
+     das Original samt Begründung steht in `statistik.html` („Runterwischen
+     führt hinaus"), hier die Kopie mit EINER Abweichung.
+
+     DAS ZIEL STEHT NICHT FEST. Drüben führt der Weg immer auf `./`; von hier
+     aus liefe das für den Regelfall im Kreis, weil `index.html` ohne `?g=` und
+     mit mehreren Runden sofort wieder hierher schickt. Also: wer von einer
+     Tafel kam, geht auf DIESE Tafel zurück — erkennbar am Verweisenden, denn
+     `location.replace` drüben setzt ihn genauso wie ein gewöhnlicher Klick.
+     Wer nicht von einer Tafel kam, hat keinen Rückweg; dann bleiben Pille und
+     Griff weg, statt irgendwohin zu führen. Das ist kein Verlust: diese Seite
+     ist nach dem Anmelden das Erdgeschoss.
+     --------------------------------------------------------------------- */
+  {
+    const pille = $('zur-tafel');
+
+    // Nur eine eigene Seite, nur eine mit `?g=` — ein fremder Verweisender
+    // (oder gar keiner) führt zu nichts.
+    const her = (() => {
+      try {
+        const u = new URL(document.referrer);
+        if (u.origin !== location.origin) return null;
+        if (u.pathname === location.pathname) return null;
+        const g = Number(u.searchParams.get('g'));
+        return Number.isInteger(g) && g > 0 ? 'index.html?g=' + g : null;
+      } catch { return null; }
+    })();
+
+    if (her) {
+      pille.href = her;
+      pille.hidden = false;
+      $('raus-griff').hidden = false;
+      $('tafel').classList.add('hat-griff');
+    }
+
+    const ZUG_AUF = 92, ZUG_SCHLUPF = 8, ZUG_VORSPRUNG = 1.5, ZUG_TAKT = 220;
+    const ohneTakt = matchMedia('(prefers-reduced-motion: reduce)');
+    const griff = $('raus-griff');
+    const zieher = document.querySelector('.brett');
+    let zug = null, gezogen = false;
+
+    const raus = () => pille.click();
+
+    /* Kann der Browser den dokumentübergreifenden Wechsel, übernimmt DER die
+       restliche Strecke; gesagt wird der Tafel das über eine einmalige Marke
+       im `sessionStorage`. Warum nicht über `viewTransition.types`, steht
+       drüben — das Set kommt leer an. */
+    const kannWechseln = () => 'onpagereveal' in window && !ohneTakt.matches;
+    window.addEventListener('pagereveal', ev => {
+      if (!ev.viewTransition) return;
+      // `ready` platzt beim Abbrechen mit einem AbortError; unbeachtet stünde
+      // er rot in der Konsole.
+      ev.viewTransition.ready.catch(() => {});
+      ev.viewTransition.skipTransition();
+    });
+
+    function zurueckfedern() {
+      document.documentElement.classList.remove('zieht');
+      zieher.style.transform = '';
+      zug = null;
+    }
+
+    // Ohne Rückweg werden die Zuhörer gar nicht erst gehängt: ein Griff, der
+    // nichts tut, ist schlimmer als keiner.
+    if (her) {
+      griff.addEventListener('click', () => {
+        // Ein kurzer Zug, der die Schwelle nicht erreicht, federt zurück — und
+        // der Browser schickt hinterher den synthetischen Klick, der dann doch
+        // hinausführte. `gezogen` fängt ihn.
+        if (gezogen) { gezogen = false; return; }
+        raus();
+      });
+
+      griff.addEventListener('touchstart', ev => {
+        zug = null; gezogen = false;
+        if (ev.touches.length !== 1) return;
+        zug = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, achse: null, weg: 0 };
+      }, { passive: true });
+
+      // `passive: false`, weil das Gummiband des Browsers weg muss, sobald die
+      // Bewegung uns gehört. Vorher NICHT — solange die Achse offen ist,
+      // könnte es noch ein Querwisch werden.
+      griff.addEventListener('touchmove', ev => {
+        if (!zug) return;
+        const t = ev.touches[0];
+        const dx = t.clientX - zug.x, dy = t.clientY - zug.y;
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) gezogen = true;
+        if (zug.achse === null) {
+          if (Math.abs(dx) > ZUG_SCHLUPF && Math.abs(dx) > Math.abs(dy)) { zug = null; return; }
+          if (dy < -ZUG_SCHLUPF) { zug = null; return; }
+          if (dy <= ZUG_SCHLUPF || dy <= Math.abs(dx) * ZUG_VORSPRUNG) return;
+          zug.achse = 'runter';
+          document.documentElement.classList.add('zieht');
+        }
+        ev.preventDefault();
+        zug.weg = Math.max(0, dy - ZUG_SCHLUPF);
+        zieher.style.transform = 'translateY(' + zug.weg + 'px)';
+      }, { passive: false });
+
+      griff.addEventListener('touchend', () => {
+        if (!zug || zug.achse !== 'runter' || zug.weg < ZUG_AUF) { zurueckfedern(); return; }
+        zug = null;
+        document.documentElement.classList.remove('zieht');
+        if (navigator.vibrate) navigator.vibrate(12);
+        if (ohneTakt.matches) { zurueckfedern(); raus(); return; }
+        if (kannWechseln()) {
+          try { sessionStorage.setItem('beerstock-wisch-raus', '1'); } catch (e) { /* Privatmodus */ }
+          raus();
+          return;
+        }
+        zieher.style.transform = 'translateY(' + window.innerHeight + 'px)';
+        // Eine Uhr, kein `transitionend`: fällt das Ereignis einmal aus, bliebe
+        // die Seite weggeschoben und leer stehen.
+        setTimeout(raus, ZUG_TAKT);
+      }, { passive: true });
+
+      griff.addEventListener('touchcancel', zurueckfedern, { passive: true });
+    }
+  }
+
+  laden();
+</script>
+</body>
+</html>

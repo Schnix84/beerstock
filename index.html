@@ -537,9 +537,6 @@
     font-family: var(--hand); font-size: 13px; color: var(--kreide-weg);
     transform: rotate(-.6deg); transform-origin: left;
   }
-  .hero-unter .marke-gemessen {
-    color: var(--gelb); border-bottom: 1px solid #e8c76655; padding-bottom: 1px;
-  }
 
   /* Oben zwei Dinge nebeneinander, und beide sagen dasselbe auf verschiedene
      Weise: die Striche nennen die genaue Zahl, das Glas zeigt den Bestand als
@@ -1084,25 +1081,65 @@
      die beiden Enden und die Überschrift stünde dazwischen. */
   .block-kopf .kopf-neben { display: flex; gap: 14px; }
 
+  /* --- Die Zungenreihe (Schema 32, Etappe 2) --------------------------------
+     Dieselbe Kreide-Pille wie im Kontor (`.reiter`), nur ohne dessen Datei zu
+     laden — die Tafel bleibt geschlossen. `flex-wrap` statt `.nur-breit`:
+     eine Zunge, die unter 320 px verschwände, wäre eine Funktion, die nur am
+     Rechner erreichbar ist, und genau das soll die Schalterleiste nicht sein.
+     `hidden` auf der Reihe selbst heißt "höchstens eine Zunge verfügbar" -
+     dann lohnt sich keine Wahl, und die Reihe verschwindet ganz. */
+  /* Die Maße sind seit Etappe 10 knapper (Polster 15 → 12, Abstand 8 → 6):
+     vier Pillen statt zwei, und mit den alten Werten brach die Reihe schon am
+     390er Telefon auf 3 + 1 um - eine einzelne Pille unter dreien sieht aus
+     wie ein vergessener Rest. So passen alle vier ab 360 px in eine Zeile;
+     darunter bricht sie sauber in zwei Hälften. */
+  .zunge-reihe {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+    margin: clamp(14px, 3.6vw, 20px) 0 4px;
+  }
+  .zunge-reihe button {
+    border: 1px solid #ffffff33; border-radius: 999px; background: #ffffff0d;
+    color: var(--kreide-weg); font: inherit; font-size: 13px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .zunge-reihe button:hover { background: #ffffff1a; }
+  .zunge-reihe button[aria-selected="true"] {
+    color: var(--gelb); border-color: #e8c76688; background: #e8c76614;
+  }
+  /* Ein zweiter Sichtbarkeits-Kanal NEBEN `hidden`, absichtlich getrennt:
+     `hidden` sagt "gibt es hier etwas zu zeigen" (Schalter UND Inhalt),
+     `.blatt-zu` sagt nur "ist gerade nicht die gewählte Zunge". Beides in
+     einem Attribut hätte `notrufLiveStoppen()` bei jedem Zungenwechsel
+     mitgerissen (siehe `zeichneNotrufe`) - der Live-Standort soll aber
+     weiterlaufen, waehrend man aufs Rad schaut. */
+  .blatt-zu { display: none; }
+
   /* --- Der Notruf ----------------------------------------------------------
-     Steht über dem Rad, weil eine Not vor der Frage des Abends kommt. Solange
-     nichts los ist, ist es eine schmale Zeile mit einem Knopf — kein Kasten,
-     der eine Dringlichkeit behauptet, die gerade keine ist.
+     Der Knopf steht seit Etappe 10 wieder rechts neben „Wo wird heute
+     getrunken?", wie vor Etappe 7 — dieselbe Zeile, dieselbe Pille. Der
+     eigene Streifen im Kopf ist damit weg: er war die Antwort darauf, dass
+     der Notruf nicht hinter einer Zunge liegen sollte (Entscheidung 42), und
+     seit der Kopf selbst im Blatt „Privat" liegt, wäre er nicht mehr näher
+     als die Zeile hier.
+
+     `margin-left: auto` hält den Knopf rechts, AUCH wenn die Überschrift
+     daneben fehlt: `.block-kopf` schiebt mit `space-between`, und bei nur
+     einem Kind schöbe es ihn an den linken Rand. Das ist keine Kosmetik —
+     eine Gruppe mit `rad_an = 0, notruf_an = 1` hat genau diesen Fall.
      --------------------------------------------------------------------- */
-  .notruf-block { margin-top: clamp(14px, 3.6vw, 20px); }
+  #abend-kopf { margin-top: clamp(12px, 3vw, 18px); }
+  #abend-kopf .nr-knopf { margin-left: auto; }
+  /* Die Liste steht unter der Skala und braucht Luft nach oben — aber nur,
+     wenn wirklich eine da ist. `:empty` greift hier nicht: die Zeilen werden
+     von `zeichneNotrufe` eingehängt, und der Behälter trägt dann Kinder. Also
+     über `hidden`, das dieselbe Funktion ohnehin setzt. */
+  .nr-liste { margin-top: clamp(12px, 3vw, 18px); }
   .nr-knopf {
     border: 1px solid #e0745c66; border-radius: 3px; background: none;
     padding: 3px 9px; font: inherit; font-size: 11px; letter-spacing: .06em;
     text-transform: uppercase; color: var(--rot); cursor: pointer;
   }
   .nr-knopf:hover { background: #e0745c14; }
-
-  /* Die Frage des Abends steht am FUSS des Notrufblocks, direkt über dem Rad,
-     das sie beantwortet — nicht über den Notrufen, die sie nichts angeht. Der
-     Abstand nach oben kommt NUR, wenn wirklich ein Notruf darüber steht: in
-     Ruhe ist die Liste leer, und dann muss die Zeile genau dort sitzen, wo sie
-     immer saß (siehe `:not(:empty)`). */
-  #notruf-liste:not(:empty) + #abend-kopf { margin-top: clamp(12px, 3vw, 18px); }
 
   .nr-zeile {
     display: grid; grid-template-columns: 1fr auto; gap: 4px 11px;
@@ -1177,6 +1214,166 @@
   .nr-marke-live::before {
     content: '●'; font-size: 7px; margin-right: 4px; vertical-align: 1px;
     animation: t-puls 2.2s ease-in-out infinite;
+  }
+
+  /* --- Die Kasse (Schema 34, Etappe 3) --------------------------------------
+     Dieselbe Zeilenform wie der Notruf (`.nr-zeile`): links der Name in
+     Kreideschrift, rechts die Handlung. Eigene Klasse statt Wiederverwendung,
+     weil rechts hier ZWEI Elemente stehen (Mengenfeld und Knopf statt einer
+     einzelnen Marke) und `grid-template-columns` das wissen muss. */
+  .kasse-block { margin-top: clamp(14px, 3.6vw, 20px); }
+  .ks-zeile {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 11px;
+    align-items: center; padding: 9px 0;
+    border-bottom: 1px dashed #ffffff1f;
+  }
+  .ks-zeile:last-child { border-bottom: none; }
+  .ks-zeile.aus { opacity: .55; }
+  .ks-name { font-family: var(--hand); font-size: clamp(15px, 4vw, 17px); color: var(--gelb); }
+  .ks-unter {
+    grid-column: 1 / -1;
+    font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
+  }
+  /* Bestand unter null ist Entscheidung 11: kein Fehler, ein Hinweis, dass
+     Nachschub fehlt - deshalb keine eigene Warnfarbe, nur das Minus selbst.
+     Unter dem MINDESTBESTAND (Entscheidung 34) ist das etwas anderes und
+     bekommt die Warnfarbe der Tafel (`.nr-knopf` & Co.). */
+  .ks-knapp { display: block; margin-top: 2px; color: var(--rot); }
+  .ks-kauf { display: flex; align-items: center; gap: 6px; }
+  .ks-menge {
+    width: 2.6em; text-align: center; padding: 4px 2px;
+  }
+  .ks-buchung {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 11px;
+    align-items: center; padding: 7px 0; border-bottom: 1px dashed #ffffff1f;
+  }
+  .ks-buchung:last-child { border-bottom: none; }
+  .ks-buchung.ab { opacity: .5; }
+  .ks-storno {
+    border: 1px solid #ffffff33; border-radius: 3px; background: none;
+    padding: 3px 9px; font: inherit; font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--kreide-weg); cursor: pointer;
+  }
+  .ks-storno:hover { background: #ffffff14; }
+
+  /* --- Die Abrechnung (Schema 35, Etappe 4) --------------------------------
+     Dieselbe Zeilenform wie `.ks-buchung`, ein Monat statt einer Buchung je
+     Zeile. Eigene Klasse trotzdem, weil hier ZWEI Beträge stehen (Betrag,
+     Rest) und eine Statuszeile dazukommt. */
+  .ab-kopf { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; }
+  .ab-nav {
+    border: 1px solid #ffffff33; border-radius: 3px; background: none;
+    min-width: 30px; min-height: 30px; font: inherit; font-size: 15px;
+    color: var(--kreide-weg); cursor: pointer;
+  }
+  .ab-nav:hover { background: #ffffff14; color: var(--kreide); }
+  .ab-nav[disabled] { opacity: .35; cursor: default; }
+  .ab-titel { font-family: var(--hand); font-size: 15px; color: var(--gelb); }
+  .ab-zeile {
+    display: grid; grid-template-columns: 1fr auto; gap: 2px 11px;
+    align-items: baseline; padding: 8px 0; border-bottom: 1px dashed #ffffff1f;
+  }
+  .ab-zeile:last-child { border-bottom: none; }
+  .ab-zeile.mir { background: #e8c76610; margin: 0 -8px; padding: 8px; border-radius: 3px; }
+  .ab-name { font-family: var(--hand); font-size: 15px; }
+  .ab-betrag { font-variant-numeric: tabular-nums; }
+  .ab-unter {
+    grid-column: 1 / -1; font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
+  }
+  .ab-status-offen { color: var(--rot); }
+  .ab-status-bezahlt { color: var(--kreide-weg); }
+  .ab-melden {
+    grid-column: 1 / -1; justify-self: start; margin-top: 4px;
+    border: 1px solid #ffffff33; border-radius: 3px; background: none;
+    padding: 4px 10px; font: inherit; font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--kreide-weg); cursor: pointer;
+  }
+  .ab-melden:hover { background: #ffffff14; }
+  .ab-druck {
+    display: block; margin-top: 10px; width: auto; padding: 8px 16px; font-size: 13px;
+  }
+  /* Die Zwischenüberschrift vor dem Strafenblock (Etappe 8). Kein `.block-kopf`:
+     der gehört einem ganzen Blatt, hier trennt es zwei Listen innerhalb einer
+     Ansicht. */
+  .ab-trenner {
+    margin: 16px 0 2px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--kreide-weg);
+  }
+
+  /* --- Die Hausordnung (Schema 38, Etappe 8) --------------------------------
+     Zwei Zeilenformen in einer Zunge, und sie dürfen sich nicht ähneln: oben
+     die REGEL (was gilt, mit Preisschild rechts wie eine Speisekarte),
+     unten die verhängte STRAFE (wer, was, wann). Sähen sie gleich aus, läse
+     man eine Regel als Vorwurf.
+     --------------------------------------------------------------------- */
+  .hr-zeile {
+    display: grid; grid-template-columns: 1fr auto; gap: 2px 11px;
+    align-items: baseline; padding: 8px 0; border-bottom: 1px dashed #ffffff1f;
+  }
+  .hr-zeile:last-child { border-bottom: none; }
+  .hr-titel { font-family: var(--hand); font-size: clamp(15px, 4vw, 17px); color: var(--gelb); }
+  .hr-preis { font-variant-numeric: tabular-nums; color: var(--kreide-weg); font-size: 13px; }
+  .hr-text {
+    grid-column: 1 / -1; font-size: 12px; line-height: 1.45; color: var(--kreide-weg);
+  }
+  .hr-leer {
+    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--kreide-weg); margin: 14px 0 4px;
+  }
+  .st-zeile {
+    display: grid; grid-template-columns: 1fr auto; gap: 2px 11px;
+    align-items: baseline; padding: 8px 0; border-bottom: 1px dashed #ffffff1f;
+  }
+  .st-zeile:last-child { border-bottom: none; }
+  .st-zeile.mir { background: #e8c76610; margin: 0 -8px; padding: 8px; border-radius: 3px; }
+  .st-wer { font-family: var(--hand); font-size: 15px; }
+  .st-was { font-size: 13px; color: var(--kreide-weg); }
+  .st-unter {
+    grid-column: 1 / -1; font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
+  }
+  /* Derselbe leise Knopf wie „habe bezahlt" in der Abrechnung — es ist
+     dieselbe Sorte Geste: eine Meldung, die noch jemand bestätigen muss. */
+  .st-melden {
+    grid-column: 1 / -1; justify-self: start; margin-top: 4px;
+    border: 1px solid #ffffff33; border-radius: 3px; background: none;
+    padding: 4px 10px; font: inherit; font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--kreide-weg); cursor: pointer; width: auto;
+  }
+  .st-melden:hover { background: #ffffff14; }
+  /* Das Begründungsfeld eines Einspruchs (Etappe 9) - erst nach dem Druck auf
+     „Einspruch" da, deshalb kein fester Platz im Markup. */
+  .st-einspruch {
+    grid-column: 1 / -1; display: grid; gap: 6px; margin-top: 6px;
+  }
+  .st-einspruch .feld { font-size: 13px; padding: 7px 9px; }
+
+  /* --- Die Zahlwege (Schema 36, Etappe 5) -----------------------------------
+     Steht unter der eigenen Zeile in `.ab-zeile.mir`, nur wenn ein Betrag
+     offen ist. Derselbe Kasten, wortgehend identisch in `start.html`
+     (`ehemaligeZeile`) - kein geteiltes JS jenseits von `bilder.js` in diesem
+     Repo, siehe CLAUDE.md. */
+  .zw-kasten {
+    grid-column: 1 / -1; margin-top: 8px; padding-top: 8px;
+    border-top: 1px dashed #ffffff1f;
+  }
+  .zw-zeile {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px;
+  }
+  .zw-zeile:first-child { margin-top: 0; }
+  .zw-titel {
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--kreide-weg); min-width: 60px;
+  }
+  .zw-wert { font-size: 11.5px; color: var(--kreide-matt); overflow-wrap: anywhere; }
+  .zw-knopf {
+    border: 1px solid #ffffff33; border-radius: 3px; background: none;
+    padding: 4px 10px; font: inherit; font-size: 11px; letter-spacing: .04em;
+    color: var(--kreide-weg); cursor: pointer;
+  }
+  .zw-knopf:hover { background: #ffffff14; color: var(--kreide); }
+  .zw-qr-bild {
+    display: block; width: 128px; height: 128px; margin-top: 6px;
+    background: #fff; border-radius: 3px;
   }
 
   /* --- Die Karte -----------------------------------------------------------
@@ -1711,6 +1908,9 @@
      Anbindung abschalten will, will nicht erst eine Anleitung lesen. */
   .dk-haus { margin-top: 9px; }
   .dk-haus-tat { display: flex; gap: 11px; }
+  /* Dieselbe enge Fuge wie beim Hausanschluss darüber: Gerät, Haus und Runde
+     sind drei Zeilen desselben Blocks, nicht drei Absätze. */
+  .dk-runde { margin-top: 9px; }
 
   /* Der Weg ins Kontor steht UNTER der Gerätezeile und mit Abstand: „alle
      abmelden" und „Mitgliederverwaltung" sind zwei sehr verschiedene Knöpfe,
@@ -3049,6 +3249,15 @@
   .knopf:active { transform: translateY(1px); }
   .knopf[disabled] { opacity: .45; cursor: default; }
   .knopf.leer { background: transparent; }
+  /* Ein Knopf, der eine Entscheidung anbietet, die man nicht suchen soll:
+     kleiner, ohne Füllung, ohne Ausrufezeichen. Bisher einmal gebraucht —
+     der Ausweg am Namensschritt (Entscheidung 43). */
+  .knopf.leise {
+    background: transparent; border-color: #ffffff33; font-size: 14px;
+    padding: 9px 11px; color: var(--kreide-weg);
+  }
+  .knopf.leise:hover { border-color: #ffffff66; color: var(--kreide); }
+  .ausweg { margin-top: 13px; display: grid; gap: 9px; }
   /* Der Fuss fuer den, der noch nicht mitschreibt: erst der Weg, dann das
      Feld. Vorher stand da ein nackter Knopf "Mitschreiben", hinter dem sich
      das Adressfeld erst auftat - eine Tuer vor der Tuer, und was dahinter
@@ -3137,6 +3346,20 @@
     border: none; background: none; padding: 0; font: inherit; color: var(--kreide-weg);
     text-decoration: underline; cursor: pointer;
   }
+
+  /* Der Weg zum Impressum (Entscheidung 39, Etappe 6) - eigener, IMMER
+     sichtbarer Geschwisterknoten von `#melde-form`/`#anmelde-form` &c.
+     innerhalb von `#block-fuss`, aus demselben Grund wie `#block-fuss`
+     selbst schon einer ist (Kommentar am Markup): ein Impressum, das nur
+     angemeldet erreichbar wäre, verfehlte genau den Fall, für den es da
+     ist. */
+  .impressum-zeile {
+    margin-top: 11px; font-size: 10px; letter-spacing: .08em;
+  }
+  .impressum-zeile a {
+    color: var(--kreide-weg); text-decoration: underline;
+  }
+  .impressum-zeile a:hover { color: var(--kreide); }
 
   /* --- Ein Wort, hinter dem ein Film liegt ---------------------------------
      Zweimal auf der Seite: „how to" am Türsteher und „Tour" in der kleinen
@@ -3535,6 +3758,53 @@
     z-index: 2; animation: raus-runter .3s cubic-bezier(.32, .72, 0, 1) both;
   }
   @keyframes raus-runter { to { transform: translateY(100%); } }
+
+  /* --- Druckansicht der Abrechnung (Entscheidung 7, §2.5) -------------------
+     Kein PDF-Erzeuger — der Browser macht "Als PDF sichern".
+
+     ABNAHMEFUND, DER DEN ERSTEN ANSATZ VERWORFEN HAT: das live-DOM-Blatt
+     `#abrechnung-blatt` steckt tief in `.tafel` (die `.tafel` traegt
+     `overflow: hidden`) und `#kasse-block` (ein positionierter Vorfahre) -
+     ein `position:absolute; inset:0` DARIN positioniert sich relativ zu
+     DIESEM Vorfahren, nicht zur Seite, und die Klippkante schneidet den
+     Ausdruck nach acht Zeilen ab. Gemessen: Inhalt bis y≈2044, Klippkante bei
+     y≈871. Gelöst durch einen EIGENEN, TOP-LEVEL Druckbereich
+     (`#abrechnung-druck`, direktes Kind von `<body>`, kein positionierter
+     Vorfahre, keine `overflow`-Klippung) - `abDruckAufbauen()` im Skript
+     befüllt ihn beim Klick auf "Drucken" frisch aus den geladenen Daten,
+     unabhängig vom interaktiven Blatt.
+
+     ZWEITER ABNAHMEFUND: eine `body * { visibility:hidden }`-Regel OHNE
+     Bedingung gilt bei JEDEM Druckvorgang, auch einem blossen `Cmd+P` auf der
+     Tafel - die Seite hatte vorher gar keine Druckregeln, jetzt bekäme jeder,
+     der irgendwo drucken will, leeres Papier. Darum steht die ganze Regel
+     hinter einer Klasse, die NUR der Drucken-Knopf setzt
+     (`html.druckt-abrechnung`), und die nach dem Druck wieder faellt
+     (`afterprint`). Ausserhalb dieses einen Knopfs aendert `@media print`
+     nichts an der Seite. */
+  @media print {
+    html.druckt-abrechnung body * { visibility: hidden; }
+    html.druckt-abrechnung #abrechnung-druck,
+    html.druckt-abrechnung #abrechnung-druck * { visibility: visible; }
+    html.druckt-abrechnung #abrechnung-druck {
+      position: absolute; top: 0; left: 0; width: 100%; margin: 0; padding: 20px;
+      background: #fff; color: #000;
+    }
+  }
+  #abrechnung-druck { font-family: system-ui, sans-serif; }
+  #abrechnung-druck h1 { font-size: 20px; margin: 0 0 14px; }
+  #abrechnung-druck .ad-zeile {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 7px 0; border-bottom: 1px solid #0003; font-size: 13px;
+  }
+  #abrechnung-druck .ad-unter { color: #444; font-size: 11.5px; }
+  #abrechnung-druck .ad-offen { color: #a00; }
+  /* Der Strafenblock (Etappe 8) - Abstand nach oben, damit er sich vom Saldo
+     darüber löst, und `break-inside: avoid` an der Überschrift, damit sie
+     nicht allein am Seitenende steht. */
+  #abrechnung-druck h2 {
+    font-size: 15px; margin: 20px 0 8px; break-after: avoid; page-break-after: avoid;
+  }
 </style>
 </head>
 <!-- `draussen` steht von Anfang an da und faellt erst weg, wenn ein Token
@@ -3571,6 +3841,38 @@
           <span id="schild-datum"></span>
         </div>
       </div>
+
+      <!-- ============ Die Zungenreihe (Schema 32, Etappe 2) =============
+           Welches der Blätter darunter gerade zu sehen ist. Dynamisch, nicht
+           in der Zahl: eine Gruppe mit `kasse_an=0, regeln_an=0` zeigt eine
+           Zunge weniger. Gebaut von `zungenZeichnen()`, NIE per `hidden`
+           gesteuert - das Attribut gehört den Blättern selbst (Schalter UND
+           Inhalt), die Zunge entscheidet nur, welches der VERFÜGBAREN gerade
+           oben liegt (`.blatt-zu`).
+
+           SIE STEHT SEIT ETAPPE 10 GANZ OBEN, direkt unter dem Schild. Der
+           Kopf - Siegerplatz, „Bier · Grad · Stand", Notruf und Skala - liegt
+           jetzt IM Blatt „Privat" und nicht mehr darüber: ohne Tafel gibt es
+           keinen Ersten, keine Temperatur und keine Skala, und was mit einem
+           Schalter verschwindet, gehört hinter dessen Zunge.
+
+           WAS OBEN BLEIBT, ist die Schildzeile darüber - Name des Hauses,
+           Datum und der Live-Punkt. Der sagt nicht, wie warm das Bier ist,
+           sondern ob die Leitung überhaupt steht; wanderte er mit, läse man
+           auf „Termine" alte Zahlen für frische, ohne es zu merken. -->
+      <div class="zunge-reihe" id="zunge-reihe" role="tablist" aria-label="Bereiche" hidden></div>
+
+      <!-- ============ Das Blatt „Privat" (Etappe 10) ====================
+           Alles, was der Runde selbst gehört und nicht dem Verein: der Erste,
+           der Notruf, das Rad, die Tafel und das Feld zum Anschreiben. EIN
+           gestapeltes Blatt, ausdrücklich ohne Unterreiter - anders als
+           „Verein", wo Kasse und Regeln zwei eigene bleiben.
+
+           Das Blatt selbst setzt sein `hidden` NICHT selbst: es folgt seinen
+           Kindern (`blaetterFalten()`). Jeder Block darin prüft weiter seinen
+           eigenen Schalter, genau wie vorher - deshalb bleibt „einzeln
+           abschaltbar" hier von allein erhalten. -->
+      <section class="privat-blatt" id="privat-blatt" role="tabpanel" hidden>
 
       <!-- ============ Der Siegerplatz =================================== -->
       <div class="hero-oben">
@@ -3747,28 +4049,39 @@
 
       <div class="strich-linie"></div>
 
-      <!-- ============ Der Notruf ========================================
-           Über dem Rad, weil eine Not vor der Frage des Abends kommt. Nur für
-           Angemeldete: draußen kommt vom Worker gar keine Zeile davon an.
-           ============================================================= -->
-      <section class="notruf-block" id="notruf-block" hidden>
-        <!-- Kein Kopf mit Handlungen mehr: was am eigenen Notruf zu tun ist,
-             steht AN der eigenen Zeile (`nr-hin` und das „aktualisieren" am
-             Ende der Standortzeile, siehe `notrufStand`). Über der Liste stand
-             es falsch — kommt ein fremder Notruf nach dem eigenen, steht er
-             darüber (`erstellt DESC`), und der Knopf sass über einer Zeile,
-             für die er nicht gilt. -->
-        <div id="notruf-liste"></div>
-        <!-- Die Frage des Abends gehört dem Rad darunter, nicht den Notrufen
-             darüber — deshalb steht sie hier, am Fuß des Blocks. Sie bleibt
-             trotzdem IM Notrufblock, weil nur der die richtige Sichtbarkeit
-             hat: `#rad-block` ist ohne Los versteckt, und mit ihm wäre auch
-             „Notruf absetzen" weg. -->
-        <div class="block-kopf kr" id="abend-kopf">
-          <span class="titel">Wo wird heute getrunken?</span>
-          <button class="nr-knopf" id="notruf-auf" type="button"><span class="k-wort">Notruf absetzen</span></button>
-        </div>
-      </section>
+      <!-- Läuft einer, steht er HIER, über der Frage des Abends:
+           vollständig, mit Karte, „hin", „zurücknehmen" und der Standort-
+           Aktualisierung.
+
+           Kein Kopf mit weiteren Handlungen: was an einem laufenden Notruf zu
+           tun ist, steht AN der eigenen Zeile (`nr-hin` und das
+           „aktualisieren" am Ende der Standortzeile, siehe `notrufStand`).
+           Über der Liste stand es falsch — kommt ein fremder Notruf nach dem
+           eigenen, steht er darüber (`erstellt DESC`), und ein Knopf dort
+           säße über einer Zeile, für die er nicht gilt. -->
+      <div class="nr-liste" id="notruf-liste" hidden></div>
+
+      <!-- ============ Die Frage des Abends + der Notruf (Etappe 10) ======
+           Der Knopf steht wieder rechts neben „Wo wird heute getrunken?", wie
+           vor Etappe 7. Der Streifen im Kopf ist damit weg — er hatte seinen
+           Grund (Entscheidung 42: nicht hinter einer Zunge liegen), und seit
+           der Kopf selbst in diesem Blatt liegt, trüge er ihn nicht mehr:
+           beide sind jetzt gleich weit weg.
+
+           DIESE ZEILE STEHT AUSSERHALB VON `#rad-block`, und das ist der
+           Punkt. `zeichneRad` versteckt den Block, solange KEIN Los gezogen
+           ist — läge die Zeile darin, wäre „Notruf absetzen" an jedem Tag vor
+           der ersten Drehung verschwunden. Genau davor warnte schon der
+           Kommentar der alten Fassung.
+
+           Zwei Teile, zwei Bedingungen: die Überschrift hängt an `rad_an`
+           (`zeichneRad`), der Knopf an `notruf_an` und daran, dass nicht schon
+           ein eigener Notruf läuft (`notrufSichtbar`). Sind beide aus, fällt
+           die Zeile ganz weg (`blaetterFalten`). -->
+      <div class="block-kopf kr" id="abend-kopf" hidden>
+        <span class="titel" id="abend-titel" hidden>Wo wird heute getrunken?</span>
+        <button class="nr-knopf" id="notruf-auf" type="button" hidden><span class="k-wort">Notruf absetzen</span></button>
+      </div>
 
       <!-- ============ Das Glücksrad =====================================
            Steht zwischen dem Ersten und der Karte, weil es die Frage des
@@ -3776,6 +4089,10 @@
            kalt hat, der wechselt nach Bestand und nicht nach Losglück.
            ============================================================= -->
       <section class="rad-block" id="rad-block" hidden>
+        <!-- Die Frage des Abends steht seit Etappe 10 in `#abend-kopf` DARÜBER
+             und nicht mehr hier: sie muss stehenbleiben, wenn dieser Block
+             mangels Los verschwindet, und sie trägt den Notrufknopf neben
+             sich. -->
         <div class="rad-buehne" id="rad-buehne" hidden>
           <!-- Links und rechts 45 Einheiten Luft im viewBox: dort stehen die
                Namen, und sie sollen nicht aus der Tafel laufen. -->
@@ -3854,15 +4171,73 @@
         <div class="strich-linie"></div>
       </section>
 
+      <!-- ============ Die Tafel ========================================
+           Sie steht seit Etappe 10 direkt hinter dem Rad, im selben Blatt:
+           „Tafel und Eingabe haengen fest zusammen" - die Liste und das
+           Feld zum Anschreiben sind eine Sache und lassen sich nur
+           gemeinsam abschalten (`tafel_an`).
+           ============================================================= -->
+      <section class="block" id="block" hidden>
+        <!-- „Die Tafel" und nicht mehr „Wer hat kalt": der Name des Hauses
+             steht seit dem Schild ganz oben, und zweimal derselbe Name auf
+             einem Brett ist einer zu viel. Aus demselben Grund steht rechts
+             kein Datum mehr, sondern wofür die Liste steht — das Datum hat
+             das Schild übernommen. -->
+        <div class="block-kopf kr">
+          <span class="titel">Die Tafel</span>
+          <span class="kopf-neben">
+            <span class="datum">Stand von heute</span>
+          </span>
+        </div>
+
+        <div id="rangliste"></div>
+
+        <!-- ============ Melden (Etappe 7, Entscheidung 41) ==============
+             Die Felder stehen seit Etappe 7 HIER, in der Tafel-Zunge, und
+             nicht mehr im Fuß: gemeldet wird da, wo das Gemeldete hingehört.
+             Wer aufs Rad oder in die Kasse sieht, sieht kein Bierfeld mehr.
+
+             Bewusst in Kauf genommen: bei `tafel_an = 0` meldet in dieser
+             Gruppe niemand mehr — keine Tafel, kein Ziel für eine Meldung.
+             Das schränkt Entscheidung 2b ein: die MELDUNG gehört weiter der
+             Person (`reports` trägt keine `gruppe_id`, die HA-Route ist
+             unangetastet), der WEG dorthin gehört ab hier der Gruppe. Genau
+             so hält es Entscheidung 18 mit jedem anderen Schalter auch: er
+             blendet seinen Bereich ganz aus, nicht halb.
+
+             Was NICHT mitgewandert ist: „Tour · mein Deckel · abmelden"
+             (`#konto-zeile`). Die Zeile stand bis Etappe 7 INNERHALB dieses
+             Formulars, und wer das Formular am Stück mitnimmt, nimmt den
+             einzigen Weg zum eigenen Konto mit in die Zunge — genau der
+             Fehler, den der Kommentar an `#block-fuss` beschreibt. -->
+        <form id="melde-form" hidden>
+          <div class="melde">
+            <label><span class="feld-label">Biere</span>
+              <input class="feld" id="f-biere" inputmode="numeric" autocomplete="off"
+                     placeholder="9" required></label>
+            <label><span class="feld-label">Grad</span>
+              <input class="feld" id="f-grad" inputmode="decimal" autocomplete="off"
+                     placeholder="4,9" required></label>
+          </div>
+          <!-- Die Aufschrift wechselt, siehe `wuerfleAufschrift`. Im Markup
+               steht das nuechterne Wort: es ist das einzige, das auch ohne
+               JS erscheint, und es sagt, was der Knopf tut. -->
+          <button class="knopf" id="melde-knopf" type="submit"><span class="k-wort">Anschreiben</span></button>
+        </form>
+      </section>
+
+      </section><!-- /#privat-blatt -->
+
       <!-- ============ Termine ==========================================
            Was aus den Zusagen geworden ist, plus was von Hand eingetragen
-           wurde. Steht hinter dem Rad, weil es dessen Folge ist.
+           wurde. Eigene Zunge, seit Etappe 10 „Termine" statt „Abende" — so
+           heißt die Überschrift darin, so heißt der Schalter (`termine_an`),
+           und drei Namen für eine Sache sind zwei zu viel.
            ============================================================= -->
-      <section class="termin-block" id="termin-block" hidden>
+      <section class="termin-block" id="termin-block" role="tabpanel" hidden>
         <div class="block-kopf kr">
           <span class="titel">Termine</span>
           <span class="kopf-neben">
-            <button class="neben" id="wrapped-auf" type="button" hidden>Dein Jahr</button>
             <button class="neben" id="chronik-auf" type="button" hidden>Chronik</button>
             <button class="neben" id="termin-neu" type="button" hidden>eintragen</button>
           </span>
@@ -3918,42 +4293,148 @@
         <div class="strich-linie"></div>
       </section>
 
-      <!-- ============ Die Karte ========================================= -->
-      <section class="block" id="block" hidden>
-        <!-- „Die Tafel" und nicht mehr „Wer hat kalt": der Name des Hauses
-             steht seit dem Schild ganz oben, und zweimal derselbe Name auf
-             einem Brett ist einer zu viel. Aus demselben Grund steht rechts
-             kein Datum mehr, sondern wofür die Liste steht — das Datum hat
-             das Schild übernommen. -->
+      <!-- ============ Das Blatt „Verein" (Etappe 10) =====================
+           Was der Runde als Gemeinschaft gehört: die Kasse und die
+           Hausordnung. Anders als „Privat" ist das hier KEIN Stapel — die
+           beiden bleiben zwei eigene Zungen, in einer zweiten Reihe unter der
+           ersten. Zwei Buchhaltungen mit je eigenem Monat und eigener Liste
+           untereinander wären ein langes Blatt, durch das man scrollt, statt
+           zu wählen.
+
+           Die zweite Reihe trägt dieselbe Pille wie die erste (`.zunge-reihe`)
+           und einen EIGENEN `aria-label` — zwei verschachtelte `tablist` mit
+           demselben Namen sind für eine Vorlesehilfe zwei Reihen ohne
+           Unterschied. Sie verschwindet, sobald nur eine der beiden verfügbar
+           ist: dann lohnt keine Wahl. -->
+      <section class="verein-blatt" id="verein-blatt" role="tabpanel" hidden>
+
+      <div class="zunge-reihe" id="verein-reihe" role="tablist" aria-label="Verein" hidden></div>
+
+      <!-- ============ Die Kasse (Schema 34, Etappe 3) ===================
+           Selbstbuchung und Bestand. Hängt an `kasse_an`, nicht an
+           `tafel_an` — eine Gruppe kann die Kasse führen, ohne dass hier
+           irgendwer meldet, wieviel er zuhause kalt hat.
+           ============================================================= -->
+      <section class="kasse-block" id="kasse-block" role="tabpanel" hidden>
         <div class="block-kopf kr">
-          <span class="titel">Die Tafel</span>
+          <span class="titel">Kasse</span>
           <span class="kopf-neben">
-            <!-- Der Weg zu den Bildern. Er hängt an DIESEM Block, weil dieser
-                 Block die Daten sind: die Bilder sind seine Vorgeschichte.
-                 Sichtbar nur für Angemeldete — draußen zeigt die Tafel nur den
-                 Ersten, ein Verlauf über Wochen ist Innenraum, und ein Link
-                 auf lauter 401er wäre eine Einladung ins Leere. -->
-            <button class="neben" id="verlauf-auf" type="button" hidden>Statistiken</button>
-            <span class="datum">Stand von heute</span>
+            <span class="datum" id="kasse-monat"></span>
+            <button class="neben" id="kasse-historie-auf" type="button" hidden>Historie</button>
+            <button class="neben" id="abrechnung-auf" type="button" hidden>Abrechnung</button>
           </span>
         </div>
 
-        <div id="rangliste"></div>
+        <div id="kasse-getraenke"></div>
+        <p class="sagt" id="kasse-sagt" hidden></p>
 
-        <div class="block-fuss">
-          <form id="melde-form" hidden>
-            <div class="melde">
-              <label><span class="feld-label">Biere</span>
-                <input class="feld" id="f-biere" inputmode="numeric" autocomplete="off"
-                       placeholder="9" required></label>
-              <label><span class="feld-label">Grad</span>
-                <input class="feld" id="f-grad" inputmode="decimal" autocomplete="off"
-                       placeholder="4,9" required></label>
+        <div id="kasse-historie" hidden>
+          <div id="kasse-historie-liste"></div>
+        </div>
+
+        <!-- Die Abrechnung eines Monats (Schema 35, Etappe 4). Ein Monat vor
+             und zurück blättern, mit `#abrechnung-blatt` als dem einen
+             Element, das `@media print` stehen lässt (siehe dort). -->
+        <div id="abrechnung" hidden>
+          <div id="abrechnung-blatt">
+            <div class="ab-kopf">
+              <button class="ab-nav" id="ab-zurueck" type="button" aria-label="voriger Monat">‹</button>
+              <span class="ab-titel" id="ab-titel"></span>
+              <button class="ab-nav" id="ab-vor" type="button" aria-label="nächster Monat">›</button>
             </div>
-            <!-- Die Aufschrift wechselt, siehe `wuerfleAufschrift`. Im Markup
-                 steht das nuechterne Wort: es ist das einzige, das auch ohne
-                 JS erscheint, und es sagt, was der Knopf tut. -->
-            <button class="knopf" id="melde-knopf" type="submit"><span class="k-wort">Anschreiben</span></button>
+            <div id="ab-liste"></div>
+            <p class="sagt" id="ab-sagt" hidden></p>
+            <button class="knopf ab-druck" id="ab-drucken" type="button" hidden>Drucken / als PDF</button>
+          </div>
+        </div>
+
+        <div class="strich-linie"></div>
+      </section>
+
+      <!-- ============ Die Hausordnung (Schema 38, Etappe 8) ==============
+           Die eigenen Regeln der Gruppe und das Sündenregister. Für JEDES
+           Mitglied lesbar, namentlich (Entscheidung 54) — wie die offenen
+           Beträge seit Entscheidung 27: die Strichliste am Tresen hängt auch
+           für alle sichtbar da.
+
+           Verhängen kann hier niemand: das ist Sache des Gruppenadmins
+           (Entscheidung 48) und steht in `gruppe.html`. Was ein Mitglied hier
+           tun kann, ist genau eine Sache — seine eigene Auflage als erledigt
+           melden (55). -->
+      <section class="regeln-block" id="regeln-block" role="tabpanel" hidden>
+        <div class="block-kopf kr">
+          <span class="titel">Hausordnung</span>
+          <span class="kopf-neben">
+            <span class="datum" id="regeln-monat"></span>
+          </span>
+        </div>
+
+        <div id="regeln-liste"></div>
+
+        <div class="block-kopf kr" id="suender-kopf" hidden>
+          <span class="titel">Sündenregister</span>
+        </div>
+        <div id="strafen-liste"></div>
+        <p class="sagt" id="regeln-sagt" hidden></p>
+
+        <!-- Vorschlagen — oder VERHÄNGEN. Zugeklappt, bis jemand darauf
+             drückt: die Zunge ist ein Aushang, kein Anzeigeformular, und was
+             man selten tut, soll nicht dauernd dastehen.
+
+             HIER STAND EINMAL „Verhängen kann hier weiterhin niemand", und
+             das war schlicht falsch. `POST /api/strafe` hat seit Etappe 9 ZWEI
+             Ausgänge, und den Unterschied macht allein die Rolle: ein Mitglied
+             erzeugt `vorgeschlagen`, wer die Gruppe führt, erzeugt `offen`.
+             Für den Gruppenadmin war das Formular also nie ein Vorschlag — es
+             ging sofort in die Abrechnung und schickte dem Betroffenen sofort
+             Post. Nur die Beschriftung behauptete etwas anderes.
+
+             Die Wörter kommen darum jetzt aus `darf_verhaengen` derselben
+             Antwort, die auch über die Sichtbarkeit entscheidet. Ein zweites
+             Formular wäre der falsche Weg: es sind dieselben Felder und
+             dieselbe Route, und zwei Formulare mit demselben Rumpf laufen
+             irgendwann auseinander — genau die Begründung, mit der der Worker
+             die beiden Ausgänge in EINE Route legt. -->
+        <button class="neben" id="vorschlag-auf" type="button" hidden>Strafe vorschlagen</button>
+        <div id="vorschlag-form" hidden>
+          <div class="melde">
+            <label><span class="feld-label">Wen trifft es</span>
+              <select class="feld" id="vs-wen"></select></label>
+            <label><span class="feld-label">Regel</span>
+              <select class="feld" id="vs-regel"></select></label>
+          </div>
+          <div class="melde eins">
+            <label><span class="feld-label">Warum</span>
+              <input class="feld" id="vs-grund" maxlength="200" autocomplete="off"
+                     placeholder="Licht brannte bis morgens"></label>
+          </div>
+          <button class="knopf" id="vs-tu" type="button">Vorschlagen</button>
+        </div>
+
+        <div class="strich-linie"></div>
+      </section>
+
+      </section><!-- /#verein-blatt -->
+
+      <!-- „Statistiken" hat KEIN Blatt (Etappe 10). Die Zunge führt geradewegs
+           auf `statistik.html` — dort stehen die Bilder, und ein Blatt, hinter
+           dem nur ein Knopf auf eine andere Seite liegt, ist ein leeres Blatt.
+           Die Zunge steht darum als Weg-Zunge in `ZUNGEN` (ohne `id`, mit
+           `weg`), und „Dein Jahr" ist mit hinübergezogen: es steht jetzt oben
+           rechts auf der Statistikseite. -->
+
+      <!-- Die Anmeldemaschinerie: aus der Tafel-Zunge herausgezogen (Etappe
+           2), weil sie zu NIEMANDEM gehört, der abgeschaltet werden kann.
+           Bliebe der Fuß im Blatt, verschwände er mit der Zunge, sobald sie
+           nicht die aktive ist oder die Gruppe die Tafel abschaltet - und mit
+           ihm der einzige Weg zum eigenen Konto.
+
+           Seit Etappe 7 (Entscheidung 41) steht das ANSCHREIBEN nicht mehr
+           hier, sondern in der Tafel-Zunge: der Weg zum eigenen Konto gehört
+           der Person, die Meldung gehört dorthin, wo sie erscheint. Was hier
+           bleibt, ist alles, was auch ohne Tafel gilt - Kontozeile, Namens-
+           schritt, Türsteher, Anmeldung, Impressum. -->
+      <div class="block-fuss" id="block-fuss">
             <!-- Die Meta-Zeile: was nicht Bier ist, steht hier. „Tour"
                  steht VOR dem Paar und nicht zwischen ihm — „mein Deckel" und
                  „abmelden" gehören beide zum eigenen Konto und bleiben
@@ -3962,15 +4443,15 @@
                  „Tour" und nicht „Rundgang", seit die Zeile mit einem Namen
                  ab fünf Buchstaben umbrach: das Wort ist der einzige Platz in
                  dieser Zeile, an dem sich sparen ließ — die anderen beiden
-                 sagen, was sie tun. Die Id heißt weiter `rundgang`, wie
-                 `verlauf-auf` das Blatt „Statistiken" öffnet; im Haus weichen
+                 sagen, was sie tun. Die Id heißt weiter `rundgang`, wie das
+                 Blatt `#block` „Die Tafel" überschreibt; im Haus weichen
                  innerer Name und Aufschrift öfter voneinander ab.
 
                  Warum hier und nicht oben neben „Statistiken": ein dritter Weg
                  im Kopf der Tafel zerlegte dort bei 360 px „Stand von heute"
                  in drei Zeilen (gemessen, ideas/pruefungen/filme-knopf-*.mjs).
                  Diese Zeile bricht statt dessen sauber um. -->
-            <div class="zeile-klein">
+            <div class="zeile-klein" id="konto-zeile" hidden>
               <span id="wer-bin-ich"></span>
               <span>
                 <button class="film-wort" type="button" id="rundgang-auf">
@@ -3987,7 +4468,6 @@
                 <button type="button" id="abmelden">abmelden</button>
               </span>
             </div>
-          </form>
 
           <!-- Erster Klick nach dem Magic Link: der Nutzer steht in der
                Datenbank, hat aber noch keinen Namen für die Karte. -->
@@ -3999,6 +4479,27 @@
             </div>
             <button class="knopf" type="submit">Merken</button>
           </form>
+
+          <!-- Der Ausweg (Entscheidung 43, Etappe 7). Er erscheint nur nach
+               einem 409 mit `ausweg: 'verwerfen'`, also nur für ein NAMENLOSES
+               Konto, das gegen einen vergebenen Namen läuft.
+
+               Warum hier und nicht an der Anmeldemaske: `POST /api/anmelden`
+               sagt bewusst nicht, ob es die Adresse schon gibt — das wäre
+               Kontenaufzählung. Die Auskunft darf frühestens fallen, wenn der
+               Link geklickt ist. Der häufigste Fall dahinter ist banal und war
+               bis Etappe 7 eine Sackgasse: jemand meldet sich unter der
+               zweiten Schreibweise seiner eigenen Adresse an und läuft beim
+               eigenen Namen auf. -->
+          <div class="ausweg" id="name-ausweg" hidden>
+            <p class="tuer-note">
+              Das kann dein eigenes Konto sein — dann melde dich mit der Adresse
+              an, die du beim ersten Mal genommen hast.
+            </p>
+            <button class="knopf leise" id="verwerfen-knopf" type="button">
+              Das war schon mein Konto — diese Anmeldung verwerfen
+            </button>
+          </div>
 
           <!-- Wer noch nicht mitschreibt, liest hier, was ihn erwartet - und
                hat das Feld dafuer gleich darunter, ohne Zwischenschritt. -->
@@ -4093,8 +4594,9 @@
           </form>
 
           <p class="sagt" id="sagt" hidden></p>
-        </div>
-      </section>
+
+          <div class="impressum-zeile"><a href="impressum.html">Impressum &amp; Datenschutz</a></div>
+      </div>
     </div>
   </div>
 
@@ -4442,6 +4944,28 @@
         </span>
       </div>
 
+      <!-- An welchem Tisch sitze ich gerade (Schema 32), und die zwei Wege von
+           ihm weg. Dieselbe Zeilenform wie Geräte und Hausanschluss darüber —
+           eine eigene Kachel für die Gruppe wäre ein zweiter Ort für dieselbe
+           Sorte Auskunft.
+
+           Sie steht IMMER da, auch bei genau einer Mitgliedschaft. Wer nur eine
+           Runde hat, sieht die Auswahl nie (`start.html` wird übersprungen) und
+           erführe sonst nirgends, dass es Runden überhaupt gibt — genau
+           dasselbe Argument wie eine Zeile höher beim Hausanschluss.
+
+           „verwalten" führt für jedes Mitglied irgendwohin, nicht nur für den,
+           der die Gruppe führt: `gruppe.html` zeigt einem gewöhnlichen Mitglied
+           dieselben Angaben zum Lesen. Ein Knopf, der je nach Rolle da ist oder
+           nicht, hätte einen zweiten Zustand für nichts. -->
+      <div class="dk-fuss dk-runde" id="dk-runde" hidden>
+        <span id="dk-runde-was"></span>
+        <span class="dk-haus-tat">
+          <button class="ko-tat" id="dk-runde-verwalten" type="button">verwalten</button>
+          <button class="ko-tat" id="dk-runde-wechseln" type="button">wechseln</button>
+        </span>
+      </div>
+
       <!-- Der einzige Wegweiser ins Kontor. Bisher kannte man die Adresse oder
            man kam nicht hin — verlinkt war sie nirgends. Sichtbar nur mit der
            Rolle `admin`, weil er für alle anderen ein Weg auf lauter 403er
@@ -4723,6 +5247,14 @@
     </div>
   </div>
   <div class="wr-tip" id="wr-tip" role="status" hidden></div>
+
+  <!-- Druckbereich der Abrechnung (Entscheidung 7, §2.5) - bewusst ein
+       DIREKTES Kind von body, nicht in `.brett`/`.tafel`/`#kasse-block`
+       verschachtelt: die haben eigenes `overflow`/eigene Positionierung, und
+       darin geriete ein `position:absolute`-Druckziel unter die Klippkante
+       des Vorfahren (Abnahmefund, siehe die Begründung im Stylesheet oben).
+       `abDruckAufbauen()` befüllt es frisch bei jedem Klick auf "Drucken". -->
+  <div id="abrechnung-druck" hidden></div>
 
 <script>
   // ==========================================================================
@@ -6186,11 +6718,18 @@
       bier.setAttribute('fill', stolzKopf ? stolzVerweis(bier) : 'url(#bier)');
       $('glas').classList.toggle('stolz-bier', stolzKopf);
       $('krone').textContent = modus === 'fuehrend' ? 'Führt das Feld an' : '';
+      /* HIER STAND „gemessen, nicht behauptet", wenn der Führende selbst meldet
+         (`p.gemessen`, also `users.quelle = 'ha'`). Die Zeile ist weg: dieselbe
+         Person trägt in der Tafel darunter die Marke „gemessen" (Zeile am
+         `.z-name`), und zwei Auskünfte über denselben Umstand auf einem
+         Bildschirm sind eine zu viel. Die Marke ist außerdem die allgemeine
+         Form — sie steht an JEDEM, der misst, nicht nur am Ersten.
+
+         Der Platz gehört damit wieder der Bestmarke, die vorher genau bei den
+         messenden Konten verdrängt wurde. */
       const unter = $('hero-unter');
       unter.textContent = '';
-      if (modus === 'fuehrend' && p.gemessen) {
-        unter.appendChild(el('span', 'marke-gemessen', 'gemessen, nicht behauptet'));
-      } else if (modus === 'fuehrend' && Number.isFinite(p.best) && p.best > p.biere) {
+      if (modus === 'fuehrend' && Number.isFinite(p.best) && p.best > p.biere) {
         unter.textContent = 'Bestmarke ' + p.best;
       } else if (modus === 'nichts') {
         unter.textContent = 'Die Tafel ist gerade nicht zu erreichen.';
@@ -7857,10 +8396,12 @@
 
      Der neunte kommt nicht von dort, sondern aus `ideas/film/ursprung/klein/`
      (derselbe Griff von Hand: 540 px, CRF 26, Ton kopiert). Sein Standbild
-     steht bei Sekunde 6,5 und NICHT in der Mitte: in der Mitte läuft bei ihm
+     steht bei Sekunde 10,5 und NICHT in der Mitte: in der Mitte läuft bei ihm
      schon die App, und damit sähe seine Kachel aus wie die acht darunter. Die
      Regel „aus der Mitte" gilt für Filme, die sich am Anfang gleichen — dieser
-     gleicht sich ihnen am Ende.
+     gleicht sich ihnen am Ende. (Seit dem Vorspann vor Takt 1 ist das
+     Standbild bei 6,5 + 4,01 s — der Vollmond ist derselbe Grund, nur die
+     Zahl ist gewandert.)
 
      Hochgeladen wird von Hand, einmal je Fassung:
        cd worker && npx wrangler r2 object put beerstock-bilder/filme/<datei> \
@@ -7967,6 +8508,29 @@
      Behauptung dieses Geraets. */
   const drinnen = () => !!merke() && !vonDraussen;
 
+  /* WELCHE GRUPPE DIESE TAFEL ZEIGT (Schema 32).
+     Sie steht als `?g=<id>` in der Adresse, damit ein Lesezeichen und ein
+     Neuladen dieselbe Runde treffen — und damit `start.html` sie schlicht
+     anhängen kann. Ein Fragment wäre hier falsch: es ist kein Geheimnis, es
+     soll weitergegeben werden können.
+
+     Von hier aus reist sie an genau zwei Stellen weiter: als Feld `gruppe` in
+     jedem POST (siehe `ruf`) und als `?g=` an der Leitung (siehe `strom`).
+     Beide sind EINE Stelle — an einunddreissig Aufrufstellen von Hand wäre
+     eine davon irgendwann vergessen worden, und ein vergessenes Feld ist hier kein
+     Schreibfehler, sondern eine Zeile in der falschen Gruppe. */
+  let GRUPPE = null;
+  let gruppeName = '';
+  /* Die Schalterleiste DIESER Gruppe (Etappe 2) - `{tafel_an, rad_an, ...}`,
+     kommt aus derselben Antwort wie `GRUPPE` selbst mit, kein zweiter Ruf.
+     `null` nur im allerersten Wimpernschlag, bevor `gruppeFinden()` fertig
+     ist - danach immer ein Objekt. */
+  let GRUPPE_SCHALTER = null;
+  /* Liegt gerade eine Einladung als Blatt vorn? Steht hier oben bei `GRUPPE`
+     und nicht bei der Funktion, die es setzt: `gruppeFinden` liest es, und die
+     ist weiter oben in der Datei. */
+  let einladungOffen = false;
+
   let heuteBei = null;      // Gewinner der geltenden Ziehung, faerbt die Liste
   let heuteStatus = null;   // 'offen' (wartet auf Antwort) oder 'zugesagt'
   /* Der Bierabend-Tag der Ziehung, nicht das Datum des Browsers: um ein Uhr
@@ -8017,6 +8581,11 @@
     p.hidden = !text;
   }
 
+  /* Der Kopf „Verlauf" (Etappe 2) zeigt sich nur, wenn wenigstens einer der
+     beiden Knöpfe darunter wirklich etwas zu tun hat - sonst stünde eine
+     Überschrift über nichts. Von beiden Stellen aufgerufen, die je einen der
+     Knöpfe setzen (`formular()` und `zeichneTermine()`), NACHDEM der eigene
+     Knopf gesetzt ist. */
   /* Drei Zustaende, und immer ist genau einer sichtbar:
        draussen        -> der Tuersteher, das Adressfeld offen darunter
        drin, namenlos  -> Namensfeld (direkt nach dem ersten Magic Link)
@@ -8027,8 +8596,19 @@
   function formular() {
     const drin = drinnen();
     const namenlos = drin && brauchtNamen;
+    /* AUS EINEM FLAG WERDEN ZWEI (Etappe 7, Entscheidung 41). Bis hierher war
+       `$('melde-form').hidden` der eine Schalter für beides und bedeutete
+       schlicht "angemeldet". Seit die Felder in der Tafel-Zunge stehen und die
+       Kontozeile im Fuß, sind es zwei Orte mit derselben Bedingung — aber mit
+       verschiedenen Vorfahren: das Formular verschwindet zusätzlich mit
+       `tafel_an` und mit jeder anderen gewählten Zunge, die Kontozeile nie.
+       Genau das ist der Zweck der Teilung. */
     $('melde-form').hidden = !drin || namenlos;
+    $('konto-zeile').hidden = !drin || namenlos;
     $('name-form').hidden = !namenlos;
+    // Der Ausweg gehört zum Namensschritt und verschwindet mit ihm - sonst
+    // stünde er noch da, wenn der Name längst sitzt.
+    if (!namenlos) $('name-ausweg').hidden = true;
     $('tuersteher').hidden = drin || linkRaus;
     $('anmelde-form').hidden = drin || linkRaus;
     /* Das Einsetzfeld hängt NICHT an `linkRaus`, anders als alles andere hier:
@@ -8043,8 +8623,11 @@
     document.body.classList.toggle('draussen', !drin);
     $('rangliste').toggleAttribute('inert', !drin);
     $('wer-bin-ich').textContent = meinName ? 'angemeldet als ' + meinName : 'angemeldet';
-    // Der Weg zu den Bildern gilt dieselbe Bedingung wie die Liste selbst.
-    $('verlauf-auf').hidden = !drin;
+    /* Der Weg zu den Bildern gilt dieselbe Bedingung wie die Liste selbst,
+       dazu `statistik_an` (Schema 32) - der Einstieg verschwindet mit dem
+       Schalter. Seit Etappe 10 ist der Einstieg die Zunge „Statistiken"
+       selbst; gezeichnet wird sie gleich darauf in `zungenZeichnen()`. */
+    statistikDa = !!drin && !!GRUPPE_SCHALTER && !!GRUPPE_SCHALTER.statistik_an;
   }
 
   /* Der Platzhalter unter dem verwischten Satz. Draussen kommt gar kein Feld
@@ -8090,7 +8673,28 @@
   }
 
   function zeichneFeld(feld, los, termine, notrufe) {
-    $('block').hidden = false;
+    /* `tafel_an` (Schema 32): abgeschaltet blendet die Liste aus - und seit
+       Etappe 7 (Entscheidung 41) auch das Meldeformular, das jetzt IN diesem
+       Blatt steht. Das ist gewollt: keine Tafel, kein Ziel für eine Meldung.
+       Was bleibt, ist der Weg zum eigenen Konto (`#konto-zeile` im
+       eigenständigen `#block-fuss`) - der gehört der Person, nicht der Gruppe.
+       DRAUSSEN gilt der Schalter nicht: der Köder für Vorbeikommende (2b)
+       kennt keine Gruppe, `GRUPPE_SCHALTER` bleibt für sie `null`, und die
+       Zeile davor stünde sonst nie da. */
+    $('block').hidden = vonDraussen ? false : (!GRUPPE_SCHALTER || !GRUPPE_SCHALTER.tafel_an);
+    /* `kasse_an`: kein Melden, kein Kühlschrank - eine eigene Leseroute, die
+       hier nur angestossen wird, nicht mitgeliefert. Ohne Anmeldung nichts,
+       DRAUSSEN erst recht nichts (die Kasse ist keine Werbetafel). */
+    $('kasse-block').hidden = vonDraussen || !meinName
+      || !GRUPPE_SCHALTER || !GRUPPE_SCHALTER.kasse_an;
+    if (!$('kasse-block').hidden) kasseLaden();
+    /* `regeln_an` (Schema 38): dieselbe Bauart wie die Kasse — eine eigene
+       Leseroute, hier nur angestoßen, nicht mitgeliefert. Ohne Anmeldung
+       nichts, DRAUSSEN erst recht nichts: eine Hausordnung ist kein Aushang
+       für Vorbeikommende. */
+    $('regeln-block').hidden = vonDraussen || !meinName
+      || !GRUPPE_SCHALTER || !GRUPPE_SCHALTER.regeln_an;
+    if (!$('regeln-block').hidden) regelnLaden();
     letztesFeld = feld;
     heuteBei = los && los.gewinner || null;
     heuteStatus = los && los.status || null;
@@ -8103,21 +8707,1021 @@
     zeichneTermine(termine || [], chronikZahl);
     liste(feld);
     formular();
+    // ZULETZT: die fünf Blätter haben ihr `hidden` gerade erst bekommen: erst
+    // jetzt steht fest, welche davon überhaupt verfügbar sind.
+    zungenZeichnen();
   }
 
+  /* --- Die Zungen (Schema 32, Etappe 2; zwei Ebenen seit Etappe 10) ---------
+     ZWEI REIHEN, und nur die zweite ist neu. Oben stehen vier Bereiche:
+
+       Privat  — der Erste, der Notruf, das Rad, die Tafel samt Eingabe
+       Termine — die Abende (früher hieß die Zunge „Abende", die Überschrift
+                 darin aber schon immer „Termine"; jetzt heißen beide gleich)
+       Verein  — Kasse und Hausordnung, und DIE bleiben zwei eigene Zungen
+       Verlauf — die zwei Wege in die Bilder
+
+     „Privat" ist ein Stapel ohne zweite Reihe: der Erste, der Notruf und das
+     Rad gehören zusammengelesen, nicht nacheinander weggeklickt. „Verein"
+     dagegen trägt zwei Buchhaltungen mit je eigenem Monat - untereinander
+     wäre das ein Blatt, durch das man scrollt, statt zu wählen.
+
+     DER VERTRAG BLEIBT: die BLÖCKE entscheiden über ihr `hidden` allein
+     (Schalter UND Inhalt, siehe `zeichneRad` & Co.), die Zunge markiert nur
+     eines der VERFÜGBAREN als aktiv (`.blatt-zu` an den anderen). Deshalb
+     bleibt „jeder Bereich einzeln abschaltbar" von selbst erhalten, ohne dass
+     hier ein einziger Schalter abgefragt würde. Die BLÄTTER dagegen setzen ihr
+     `hidden` nicht selbst - sie folgen ihren Kindern (`blaetterFalten`).
+
+     Bei höchstens einem verfügbaren Blatt lohnt keine Wahl: die Reihe
+     verschwindet, und das eine Blatt zeigt sich ganz normal über sein eigenes
+     `hidden`. Das gilt für JEDE Reihe für sich - eine Gruppe mit Kasse, aber
+     ohne Hausordnung, hat oben eine Reihe und innen keine. */
+  /* Die vierte ist eine WEG-ZUNGE: sie hat kein Blatt, sondern führt hinaus.
+     Die Bilder passen nicht auf ein Blatt dieser Tafel, und die Tafel bleibt
+     dadurch, was sie ist - eine geschlossene Datei, die von den Bildern nichts
+     weiß außer dieser einen Adresse. Ihre Verfügbarkeit kommt darum aus einer
+     Frage (`da`) und nicht aus dem `hidden` eines Elements, das es nicht
+     gibt. */
+  const ZUNGEN = [
+    { id: 'privat-blatt', wort: 'Privat'  },
+    { id: 'termin-block', wort: 'Termine' },
+    { id: 'verein-blatt', wort: 'Verein'  },
+    { wort: 'Statistiken',
+      da: () => statistikDa,
+      weg: () => 'statistik.html' + (GRUPPE ? '?g=' + GRUPPE : '') },
+  ];
+  /* Dieselbe Bedingung wie früher am Knopf „Statistiken": angemeldet UND
+     `statistik_an`. Ein Merker und keine Abfrage an Ort und Stelle, weil
+     `formular()` ihn setzt und `zungenZeichnen()` ihn liest - dieselbe
+     Reihenfolge wie bei jedem Block, nur ohne Block. */
+  let statistikDa = false;
+  const VEREIN_ZUNGEN = [
+    { id: 'kasse-block',  wort: 'Kasse'  },
+    { id: 'regeln-block', wort: 'Regeln' },
+  ];
+  let zungeAktiv = null;
+  let vereinAktiv = null;
+  const ZUNGE_SPEICHER = () => 'beerstock-zunge-' + GRUPPE;
+  const VEREIN_SPEICHER = () => 'beerstock-verein-' + GRUPPE;
+
+  /* Welche Blätter es in dieser Runde überhaupt gibt - hinterlegt für
+     `statistik.html`. Die Zunge „Statistiken" führt auf eine EIGENE Seite,
+     und dort soll die Reihe stehenbleiben statt einem Rückpfeil zu weichen
+     (Konsistenz: ein Bereich wird über die Reihe gewählt, überall). Die Seite
+     dort weiß von den Schaltern der Gruppe aber nichts - sie fragt nur die
+     Zahlen ab. Sie könnte sie nachladen; dann käme die Reihe aber erst nach
+     der Antwort und ruckte den Inhalt herunter.
+
+     Also legt die Tafel den Zettel hin: `[{id, wort}, …]` in der Reihenfolge
+     der Reihe, ohne die Weg-Zungen (die führen fort und sind kein Blatt).
+
+     `localStorage` und NICHT `sessionStorage` wie die beiden Merker daneben,
+     und der Unterschied ist der Sache nach da: welche Zunge gerade oben liegt,
+     ist eine Sache dieses Fensters — WELCHE ES GIBT, ist eine Sache der
+     Gruppe. In `sessionStorage` verlöre die Statistikseite ihre Reiter bei
+     jedem Lesezeichen und in jedem zweiten Tab, also genau dort, wo niemand
+     einen Grund dafür sähe.
+
+     Er darf veralten, und das ist der Preis: schaltet die Führung die Kasse
+     ab, während irgendwo ein alter Zettel liegt, zeigt die Statistikseite dort
+     einmal noch eine Zunge zu viel. Ein Klick darauf führt auf die Tafel, und
+     die weiß es besser — sie schlägt dann das erste verfügbare Blatt auf und
+     schreibt den Zettel im selben Atemzug neu. Ein falscher Weg, der sich beim
+     Begehen selbst berichtigt, ist billiger als eine Abfrage bei jedem Aufruf.
+
+     Ohne Zettel — der allererste Besuch auf `statistik.html`, ohne je die
+     Tafel gesehen zu haben — zeichnet die Seite dort keine Reihe und behält
+     ihren Pfeil. */
+  const ZUNGEN_STAPEL_SPEICHER = () => 'beerstock-zungen-' + GRUPPE;
+  const zungeDa = z => z.da ? z.da() : !$(z.id).hidden;
+
+  /* Die Blätter folgen ihren Kindern, nicht umgekehrt. Es gibt keinen eigenen
+     Schalter für „Privat" oder „Verein" - ein Blatt ist da, wenn irgendetwas
+     darin da ist, und sonst nicht.
+
+     DER NOTRUF ZÄHLT MIT, und das ist keine Feinheit: eine Gruppe mit
+     `tafel_an = 0, rad_an = 0, notruf_an = 1` hat in „Privat" nichts als den
+     roten Knopf - genau die Betriebsart, für die es Entscheidung 40 gibt.
+     Ohne diesen Summanden fiele das Blatt weg und mit ihm der Notruf.
+
+     `#abend-kopf` trägt zwei Dinge mit verschiedenen Bedingungen (die Frage
+     an `rad_an`, den Knopf an `notruf_an`) und verschwindet nur, wenn beide
+     fort sind. */
+  function blaetterFalten() {
+    const notrufDa = !$('notruf-auf').hidden || !$('notruf-liste').hidden;
+    $('abend-kopf').hidden = $('abend-titel').hidden && $('notruf-auf').hidden;
+    $('privat-blatt').hidden = $('block').hidden && $('rad-block').hidden && !notrufDa;
+    $('verein-blatt').hidden = $('kasse-block').hidden && $('regeln-block').hidden;
+  }
+
+  /* Eine Reihe zeichnen. Beide Ebenen laufen durch dieselbe Funktion - die
+     zweite ist dieselbe Pille an derselben Stelle im Baum, nur eine Ebene
+     tiefer, und zwei Kopien davon liefen früher oder später auseinander.
+     `merker` ist der Rückgabewert: welche Zunge jetzt die aktive ist. */
+  function reiheZeichnen(reihe, zungen, aktiv, speicher, waehlen) {
+    const verfuegbar = zungen.filter(zungeDa);
+    const blaetter = verfuegbar.filter(z => !z.weg);
+
+    /* Weniger als zwei zur Wahl: die Reihe verschwindet, das eine Blatt zeigt
+       sich über sein eigenes `hidden`. EINE WEG-ZUNGE ZÄHLT DABEI MIT, auch
+       wenn sie allein steht - sie ist kein Blatt, unter denen man wählt,
+       sondern eine Tür, und eine Tür ohne Griff ist keine. Ohne diesen Zusatz
+       verlöre eine Gruppe mit nur `statistik_an` den einzigen Weg zu den
+       Bildern. */
+    if (verfuegbar.length < 2 && !verfuegbar.some(z => z.weg)) {
+      reihe.hidden = true;
+      reihe.textContent = '';
+      zungen.forEach(z => { if (z.id) $(z.id).classList.remove('blatt-zu'); });
+      return blaetter.length ? blaetter[0].id : null;
+    }
+
+    // Aktiv wird nur ein BLATT. Eine Weg-Zunge führt fort und bleibt darum
+    // nie stehen - sonst zeigte die Reihe eine Wahl, die niemand getroffen hat.
+    // AUF DER ANKUNFTSSEITE ist das anders: `statistik.html` zeichnet dieselbe
+    // Reihe mit „Statistiken" als der aktiven Zunge. Kein Widerspruch - dort
+    // IST sie das aufgeschlagene Blatt, hier war sie nur die Tür dorthin.
+    if (!blaetter.some(z => z.id === aktiv)) {
+      let gemerkt = null;
+      try { gemerkt = sessionStorage.getItem(speicher()); } catch {}
+      aktiv = blaetter.some(z => z.id === gemerkt) ? gemerkt
+            : (blaetter.length ? blaetter[0].id : null);
+    }
+
+    reihe.hidden = false;
+    reihe.textContent = '';
+    verfuegbar.forEach(z => {
+      const an = !z.weg && z.id === aktiv;
+      const b = el('button', null, z.wort);
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(an));
+      b.addEventListener('click', () => { if (z.weg) location.href = z.weg(); else waehlen(z.id); });
+      reihe.appendChild(b);
+      if (z.id) $(z.id).classList.toggle('blatt-zu', !an);
+    });
+    return aktiv;
+  }
+
+  function zungenZeichnen() {
+    blaetterFalten();
+    /* Die INNERE Reihe zuerst. Sie schreibt `.blatt-zu` an Kasse und Regeln,
+       und beim Wechsel auf „Verein" muss eines von beiden schon offen sein -
+       sonst stünde das Blatt für einen Lidschlag leer da. Auf das `hidden` des
+       Vereinsblatts wirkt sie nicht: `blaetterFalten` hat das eben gesetzt,
+       und `.blatt-zu` ist ein zweiter Kanal (siehe die CSS-Notiz dort). */
+    vereinAktiv = reiheZeichnen($('verein-reihe'), VEREIN_ZUNGEN, vereinAktiv,
+      VEREIN_SPEICHER, vereinWaehlen);
+    zungeAktiv = reiheZeichnen($('zunge-reihe'), ZUNGEN, zungeAktiv,
+      ZUNGE_SPEICHER, zungeWaehlen);
+    zungenHinterlegen();
+  }
+
+  /* Der Zettel für `statistik.html` (siehe `ZUNGEN_STAPEL_SPEICHER`). Er wird
+     bei JEDEM Zeichnen neu geschrieben, nicht einmal beim Start: schaltet die
+     Führung mitten in der Sitzung die Kasse ab, verschwindet die Zunge hier
+     sofort - drüben soll sie es dann auch. */
+  function zungenHinterlegen() {
+    if (!GRUPPE) return;
+    const blaetter = ZUNGEN.filter(z => z.id && zungeDa(z)).map(z => ({ id: z.id, wort: z.wort }));
+    try { localStorage.setItem(ZUNGEN_STAPEL_SPEICHER(), JSON.stringify(blaetter)); } catch {}
+  }
+
+  function zungeWaehlen(id) {
+    if (id === zungeAktiv) return;
+    zungeAktiv = id;
+    try { sessionStorage.setItem(ZUNGE_SPEICHER(), id); } catch {}
+    zungenZeichnen();
+  }
+
+  function vereinWaehlen(id) {
+    if (id === vereinAktiv) return;
+    vereinAktiv = id;
+    try { sessionStorage.setItem(VEREIN_SPEICHER(), id); } catch {}
+    zungenZeichnen();
+  }
+
+  /* --- Die Kasse (Schema 34, Etappe 3) --------------------------------------
+     Eigene Route (`/api/kasse`), nicht Teil des Hauptabrufs - geladen wird
+     sie aus `zeichneFeld()` heraus, sobald `kasse_an` steht, und erneut auf
+     die Marke 'kasse' (siehe `angestossen`). Wer die Gruppe führt, bekommt in
+     derselben Antwort auch die abgeschalteten Getränke und ihre
+     Preishistorie - hier ungenutzt, das ist Sache von `gruppe.html`.
+     ------------------------------------------------------------------------ */
+  const KASSE_MENGE_MAX = 24;   // Deckel wie im Worker (BUCHUNG_MENGE_MAX) - ein Kasten
+  let kasseHistorieOffen = false;
+
+  const euro = cent => (cent / 100).toLocaleString('de-DE', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  const ksTag = iso => new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+
+  function kasseSagt(text, schlecht) {
+    const p = $('kasse-sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  async function kasseLaden() {
+    if ($('kasse-block').hidden) return;
+    try {
+      const r = await fetch(API + '/api/kasse' + (GRUPPE ? '?g=' + GRUPPE : ''),
+        { headers: mitToken(), cache: 'no-store' });
+      if (!r.ok) return;
+      zeichneKasse(await r.json());
+      if (kasseHistorieOffen) kasseHistorieLaden();
+    } catch { /* der naechste Anstoss holt es nach */ }
+  }
+
+  function kasseZeile(g, gemerkteMenge) {
+    const z = el('div', 'ks-zeile' + (g.aktiv ? '' : ' aus'));
+    z.appendChild(el('span', 'ks-name', g.name));
+
+    const kauf = el('div', 'ks-kauf');
+    if (g.aktiv && g.preis_cent != null) {
+      const menge = document.createElement('input');
+      menge.type = 'number'; menge.className = 'feld ks-menge';
+      menge.min = '1'; menge.max = String(KASSE_MENGE_MAX);
+      menge.value = gemerkteMenge != null ? gemerkteMenge : '1';
+      menge.inputMode = 'numeric';
+      menge.dataset.g = String(g.id);
+      menge.setAttribute('aria-label', 'Menge ' + g.name);
+      // Ein-Klick-Buchung (§2.2): die Vorgabe 1 bucht ohne Umweg, das Feld
+      // daneben ist nur da fuer den, der mehr als eins auf einmal will.
+      const knopf = el('button', 'knopf ks-buchen', 'Buchen');
+      knopf.type = 'button';
+      knopf.addEventListener('click', () => kasseBuchen(g, menge, knopf));
+      kauf.appendChild(menge);
+      kauf.appendChild(knopf);
+    } else if (g.aktiv) {
+      kauf.appendChild(el('span', 'ks-unter', 'noch kein Preis'));
+    }
+    z.appendChild(kauf);
+
+    const teile = [];
+    if (g.preis_cent != null) teile.push(euro(g.preis_cent) + ' je Stück');
+    // Ein Bestand unter null ist Absicht (Entscheidung 11): keine eigene
+    // Warnfarbe, das Minus selbst ist der Hinweis, dass Nachschub fehlt.
+    teile.push('Bestand: ' + g.bestand);
+    if (g.naechster_preis) {
+      teile.push('ab ' + ksTag(g.naechster_preis.gueltig_ab) + ': ' + euro(g.naechster_preis.cent));
+    }
+    if (!g.aktiv) teile.push('abgeschaltet');
+    z.appendChild(el('span', 'ks-unter', teile.join(' · ')));
+
+    /* Die MINDESTBESTANDS-Warnung ist etwas anderes als das Minus oben
+       (§2.3: „steht auf der Seite UND schickt eine Mail" - beides, nicht
+       nur die Mail) - eine eigene, rote Zeile statt eines Wortes in der
+       Aufzählung, sonst geht sie zwischen „1,50 € je Stück · Bestand: 4"
+       unter. */
+    if (g.mindest != null && g.bestand < g.mindest) {
+      z.appendChild(el('span', 'ks-unter ks-knapp',
+        'Unter dem Mindestbestand (' + g.mindest + ')'));
+    }
+
+    return z;
+  }
+
+  function zeichneKasse(d) {
+    const ziel = $('kasse-getraenke');
+    /* Was jemand gerade eingetippt hat, überlebt den Neuaufbau. `kasseLaden()`
+       hängt am Anstoß 'kasse' — bucht ein anderes Mitglied, während hier eine 6
+       im Feld steht, wurde das Feld bisher durch ein frisches mit der Vorgabe 1
+       ersetzt, und der nächste Druck auf „Buchen" buchte EINE Flasche. Gemerkt
+       wird nach Getränk; steht das Getränk hinterher nicht mehr in der Liste,
+       fällt die Merkung mit ihm weg. Der Tastenfokus wandert mit, sonst tippt
+       man mitten im Wort ins Leere. */
+    const getippt = new Map();
+    ziel.querySelectorAll('.ks-menge').forEach(f => {
+      if (f.value !== '1') getippt.set(f.dataset.g, f.value);
+    });
+    const hatFokus = document.activeElement && document.activeElement.classList
+      && document.activeElement.classList.contains('ks-menge')
+      ? document.activeElement.dataset.g : null;
+    ziel.textContent = '';
+    if (!d.getraenke.length) {
+      ziel.appendChild(el('div', 'leer-hinweis kr',
+        'Noch kein Getränk angelegt — das erledigt, wer die Gruppe führt.'));
+    } else {
+      d.getraenke.forEach(g => ziel.appendChild(kasseZeile(g, getippt.get(String(g.id)))));
+      if (hatFokus) {
+        const wieder = ziel.querySelector('.ks-menge[data-g="' + hatFokus + '"]');
+        if (wieder) wieder.focus();
+      }
+    }
+    $('kasse-monat').textContent = d.mein_monat && d.mein_monat.biere
+      ? 'diesen Monat: ' + d.mein_monat.biere + ' · ' + euro(d.mein_monat.cent) : '';
+    $('kasse-historie-auf').hidden = false;
+    $('abrechnung-auf').hidden = false;
+  }
+
+  async function kasseBuchen(g, mengeFeld, knopf) {
+    const menge = Math.max(1, Math.min(KASSE_MENGE_MAX, parseInt(mengeFeld.value, 10) || 1));
+    knopf.disabled = true;
+    try {
+      await ruf('/api/kasse/buchung', { getraenk: g.id, menge });
+      mengeFeld.value = '1';
+      kasseSagt(menge + ' × ' + g.name + ' gebucht.');
+      await kasseLaden();
+    } catch (e) {
+      kasseSagt(e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  }
+
+  $('kasse-historie-auf').addEventListener('click', () => {
+    kasseHistorieOffen = !kasseHistorieOffen;
+    $('kasse-historie').hidden = !kasseHistorieOffen;
+    $('kasse-historie-auf').textContent = kasseHistorieOffen ? 'Historie schließen' : 'Historie';
+    if (kasseHistorieOffen) kasseHistorieLaden();
+  });
+
+  async function kasseHistorieLaden() {
+    try {
+      const r = await fetch(API + '/api/kasse/historie' + (GRUPPE ? '?g=' + GRUPPE : ''),
+        { headers: mitToken(), cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      zeichneKasseHistorie(d.buchungen || []);
+    } catch { /* der naechste Anstoss holt es nach */ }
+  }
+
+  function zeichneKasseHistorie(buchungen) {
+    const ziel = $('kasse-historie-liste');
+    ziel.textContent = '';
+    if (!buchungen.length) {
+      ziel.appendChild(el('div', 'leer-hinweis kr', 'Noch keine Buchung.'));
+      return;
+    }
+    buchungen.forEach(b => {
+      const z = el('div', 'ks-buchung' + (b.storniert_am ? ' ab' : ''));
+      z.appendChild(el('span', 'ks-name', b.menge + ' × ' + b.getraenk
+        + (b.wer !== meinName ? ' — ' + b.wer : '')));
+      if (b.storniert_am) {
+        z.appendChild(el('span', 'ks-unter', 'storniert'));
+      } else if (b.stornierbar) {
+        const knopf = el('button', 'ks-storno', 'Stornieren');
+        knopf.type = 'button';
+        knopf.addEventListener('click', () => kasseStorno(b.id, knopf));
+        z.appendChild(knopf);
+      } else {
+        z.appendChild(el('span', 'ks-unter', euro(b.menge * b.cent)));
+      }
+      ziel.appendChild(z);
+    });
+  }
+
+  async function kasseStorno(buchungId, knopf) {
+    knopf.disabled = true;
+    try {
+      await ruf('/api/kasse/storno', { buchung: buchungId });
+      await kasseHistorieLaden();
+      await kasseLaden();
+    } catch (e) {
+      kasseSagt(e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  }
+
+  /* --- Die Abrechnung (Schema 35, Etappe 4) ---------------------------------
+     Ein Monat, vor- und zurückblätterbar; die Vorschau des laufenden Monats
+     ist live gerechnet (`vorschau: true`), ein vergangener ist eingefroren.
+     Das Blättern geht nie über den laufenden Monat hinaus - ein künftiger
+     Monat hat keine einzige Buchung, seine "Vorschau" wäre eine leere Seite.
+     ------------------------------------------------------------------------ */
+  const AB_MONATE = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+                      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  let abrechnungOffen = false;
+  let abJahr = null, abMonat = null;
+  let abLetzte = null; // die zuletzt geladene Antwort - Grundlage fuer den Druckbereich
+
+  function abSagt(text, schlecht) {
+    const p = $('ab-sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  function abMonatSchluessel(jahr, monat) { return jahr * 12 + (monat - 1); }
+
+  /* Lädt einen Monat. Der GEWÜNSCHTE Monat kommt als Bitte herein und wird
+     erst festgeschrieben, wenn er auch da ist — vorher schoben die Pfeile
+     `abJahr`/`abMonat` gleich weiter, und ein Aussetzer ließ die Anzeige auf
+     dem alten Monat stehen, während die Zählung schon einen weiter stand: der
+     nächste Druck übersprang still einen Monat, und „Drucken" baute aus
+     `abLetzte` ein Blatt, das nicht zur Überschrift passte.
+
+     `abLauf` sortiert zwei schnelle Klicks: nur die Antwort auf den zuletzt
+     gestellten Wunsch darf zeichnen, sonst gewinnt die langsamere. */
+  let abLauf = 0;
+  async function abrechnungLaden(zielJahr, zielMonat) {
+    if ($('abrechnung').hidden) return;
+    const jahr = zielJahr ?? abJahr, monat = zielMonat ?? abMonat;
+    const lauf = ++abLauf;
+    try {
+      const r = await fetch(API + '/api/abrechnung?jahr=' + jahr + '&monat=' + monat
+          + (GRUPPE ? '&g=' + GRUPPE : ''),
+        { headers: mitToken(), cache: 'no-store' });
+      const d = await r.json().catch(() => ({}));
+      if (lauf !== abLauf) return;
+      if (!r.ok) { abSagt(d.fehler || 'Das ging nicht', true); return; }
+      abJahr = jahr; abMonat = monat;
+      zeichneAbrechnung(d);
+    } catch { /* der naechste Anstoss/Klick holt es nach */ }
+  }
+
+  function abZeile(e, zahlwegeDa) {
+    const mir = e.name === meinName;
+    const z = el('div', 'ab-zeile' + (mir ? ' mir' : ''));
+    z.appendChild(el('span', 'ab-name', e.name + (e.ehemalig ? ' (ausgetreten)' : '')));
+    /* „davon x Strafen" nur, wenn wirklich welche drin sind (Etappe 8,
+       Entscheidung 50): der Saldo ist EINE Zahl aus zwei Quellen, aber wer
+       nichts verbrochen hat, soll darüber auch nichts lesen. Ein Guthaben
+       (negativer Strafenanteil aus einer Gutschrift) wird genannt, wie es
+       ist - `euro()` setzt das Minus selbst. */
+    const strafeTeil = e.strafe_cent ? ' · davon ' + euro(e.strafe_cent) + ' Strafen' : '';
+    z.appendChild(el('span', 'ab-betrag',
+      e.biere + (e.biere === 1 ? ' Getränk · ' : ' Getränke · ') + euro(e.cent) + strafeTeil));
+
+    if (e.status === undefined) return z; // Vorschau: keine Statuskette, nur die Zahl
+
+    const teile = [];
+    const offen = e.offen_cent;
+    if (offen > 0) {
+      teile.push(euro(offen) + ' offen');
+    } else if (e.cent > 0) {
+      teile.push('bezahlt');
+    } else {
+      teile.push('ausgeglichen'); // Guthaben oder eine Gegenbuchung hat alles aufgehoben
+    }
+    if (e.status === 'gemeldet') teile.push('als bezahlt gemeldet');
+    if (e.status === 'teilbezahlt') teile.push('teilweise bestätigt');
+    if (e.status === 'abgelehnt') teile.push('Meldung zurückgewiesen');
+    z.appendChild(el('span', 'ab-unter' + (offen > 0 ? ' ab-status-offen' : ' ab-status-bezahlt'),
+      teile.join(' · ')));
+
+    if (mir && offen > 0 && e.status !== 'gemeldet') {
+      const knopf = el('button', 'ab-melden', 'Als bezahlt melden');
+      knopf.type = 'button';
+      knopf.addEventListener('click', () => abMelden(e.id, knopf));
+      z.appendChild(knopf);
+    }
+
+    // Zahlwege stehen unabhaengig vom Melden-Knopf da (auch waehrend
+    // "gemeldet" - der Weg bleibt sichtbar, solange etwas offen ist) und nur,
+    // wenn die Gruppe ueberhaupt einen hinterlegt hat (`zahlwegeDa`, Etappe-4-
+    // Falle: sonst zeigte diese Zeile einen Kasten, der ins Leere fuehrt).
+    if (mir && offen > 0 && zahlwegeDa) {
+      const kasten = el('div', 'zw-kasten');
+      z.appendChild(kasten);
+      zahlwegeLaden(e.id).then(a => zahlwegeZeichnen(kasten, a)).catch(() => { kasten.hidden = true; });
+    }
+    return z;
+  }
+
+  function zeichneAbrechnung(d) {
+    abLetzte = d;
+    $('ab-titel').textContent = AB_MONATE[d.monat] + ' ' + d.jahr
+      + (d.vorschau ? ' (läuft noch)' : '');
+    const ziel = $('ab-liste');
+    ziel.textContent = '';
+    const zahlwegeDa = !!d.zahlwege_da;
+    if (!d.eintraege.length) {
+      ziel.appendChild(el('div', 'leer-hinweis kr',
+        d.vorschau ? 'Diesen Monat ist noch nichts gebucht.' : 'In diesem Monat wurde nichts gebucht.'));
+    } else {
+      d.eintraege.forEach(e => ziel.appendChild(abZeile(e, zahlwegeDa)));
+    }
+
+    /* Die einzelnen Strafen des Monats, als eigener Block unter den Salden
+       (Etappe 8). Nicht in die Saldozeilen gemischt: eine Person kann mehrere
+       haben, und eine Auflage trägt gar keinen Betrag. Die Liste kommt nur,
+       wenn die Gruppe Regeln führt — sonst ist `d.strafen` leer, und dann
+       steht hier auch keine Überschrift. */
+    (d.strafen || []).forEach((s, i) => {
+      if (!i) ziel.appendChild(el('div', 'ab-trenner kr', 'Strafen'));
+      const z = el('div', 'ab-zeile' + (s.name === meinName ? ' mir' : ''));
+      z.appendChild(el('span', 'ab-name', s.name));
+      z.appendChild(el('span', 'ab-betrag',
+        s.art === 'geld' ? euro(s.cent || 0) : (s.tat || 'Auflage')));
+      const unter = [s.titel, STRAFE_STAND[s.status] || s.status];
+      if (s.grund) unter.push(s.grund);
+      z.appendChild(el('span', 'ab-unter', unter.join(' · ')));
+      ziel.appendChild(z);
+    });
+
+    $('ab-drucken').hidden = d.eintraege.length === 0 && !(d.strafen || []).length;
+
+    const jetzt = new Date();
+    const amEnde = abMonatSchluessel(abJahr, abMonat) >= abMonatSchluessel(jetzt.getUTCFullYear(), jetzt.getUTCMonth() + 1);
+    $('ab-vor').disabled = amEnde;
+  }
+
+  async function abMelden(saldoId, knopf) {
+    knopf.disabled = true;
+    try {
+      await ruf('/api/saldo/meldung', { saldo: saldoId });
+      abSagt('Gemeldet — wartet auf Bestätigung.');
+      await abrechnungLaden();
+    } catch (e) {
+      knopf.disabled = false;
+      abSagt(e.message, true);
+    }
+  }
+
+  /* --- Die Zahlwege (Schema 36, Etappe 5) -----------------------------------
+     Besitz-Pfad (`?saldo=`, siehe worker/src/index.js `saldoBesitz()`), KEIN
+     `?g=`: diese Ansicht braucht `kasse_an` nicht, ein Ausgetretener erreicht
+     sie ueber dieselbe Route auf `start.html`. Wortgleich mit `start.html`s
+     Fassung dieser vier Funktionen - kein geteiltes JS jenseits von
+     `bilder.js` in diesem Repo (CLAUDE.md). */
+  async function zahlwegeLaden(saldoId) {
+    const r = await fetch(API + '/api/zahlwege?saldo=' + saldoId, { headers: mitToken(), cache: 'no-store' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.fehler || 'Das ging nicht');
+    return d;
+  }
+
+  // Ein `<img>` traegt keinen Authorization-Kopf - die Route braucht einen
+  // (Besitzcheck), darum erst als Blob holen und als Objekt-URL einsetzen,
+  // wie beim Foto-Upload weiter unten (`flyBildHochladen`).
+  async function zwBildHolen(pfad) {
+    const r = await fetch(API + pfad, { headers: mitToken() });
+    if (!r.ok) throw new Error('Der QR-Code ging nicht');
+    return await r.blob();
+  }
+
+  // Mit Rueckfall auf eine Markierung, wie `gruppe.html`s `e-kopie` - dort
+  // steht ein fester Knoten, hier ein beliebiger Text, darum ueber ein
+  // temporaeres Element statt eines vorhandenen.
+  async function zwKopieren(text, knopf) {
+    const alt = knopf.textContent;
+    const zurueck = () => setTimeout(() => { knopf.textContent = alt; }, 1500);
+    try {
+      if (!navigator.clipboard) throw new Error('kein Zwischenspeicher');
+      await navigator.clipboard.writeText(text);
+      knopf.textContent = 'kopiert'; zurueck();
+      return;
+    } catch { /* weiter unten */ }
+    const tmp = document.createElement('span');
+    tmp.textContent = text;
+    tmp.style.cssText = 'position:fixed;left:-9999px;top:-9999px;white-space:pre';
+    document.body.appendChild(tmp);
+    try {
+      const bereich = document.createRange();
+      bereich.selectNodeContents(tmp);
+      const wahl = window.getSelection();
+      wahl.removeAllRanges(); wahl.addRange(bereich);
+      if (document.execCommand('copy')) { knopf.textContent = 'kopiert'; zurueck(); }
+    } catch { /* kein Zwischenspeicher erreichbar - der Wert steht schon als Text da */ }
+    document.body.removeChild(tmp);
+  }
+
+  function zahlwegZeile(w) {
+    const z = el('div', 'zw-zeile');
+    z.appendChild(el('span', 'zw-titel', w.titel));
+
+    if (w.art === 'paypal') {
+      if (w.link) {
+        const a = document.createElement('a');
+        a.className = 'zw-knopf'; a.href = w.link; a.target = '_blank'; a.rel = 'noopener';
+        a.textContent = 'Mit PayPal zahlen';
+        z.appendChild(a);
+      } else {
+        z.appendChild(el('span', 'zw-wert', w.wert));
+      }
+    } else if (w.art === 'bank') {
+      z.appendChild(el('span', 'zw-wert', (w.inhaber ? w.inhaber + ' · ' : '') + w.wert));
+      const kop = el('button', 'zw-knopf', 'IBAN kopieren');
+      kop.type = 'button';
+      kop.addEventListener('click', () => zwKopieren(w.wert, kop));
+      z.appendChild(kop);
+      if (w.qr) {
+        const qrKnopf = el('button', 'zw-knopf', 'QR-Code');
+        qrKnopf.type = 'button';
+        const bild = el('img', 'zw-qr-bild');
+        bild.hidden = true;
+        bild.alt = 'EPC-QR-Code für die Überweisung';
+        qrKnopf.addEventListener('click', async () => {
+          if (!bild.hidden) { bild.hidden = true; return; }
+          try {
+            const blob = await zwBildHolen(w.qr);
+            if (bild.src && bild.src.startsWith('blob:')) URL.revokeObjectURL(bild.src);
+            bild.src = URL.createObjectURL(blob);
+            bild.hidden = false;
+          } catch { /* der Knopf bleibt einfach ohne Wirkung */ }
+        });
+        z.appendChild(qrKnopf);
+        z.appendChild(bild);
+      }
+    } else if (w.art === 'wero') {
+      z.appendChild(el('span', 'zw-wert', w.wert));
+      const kop = el('button', 'zw-knopf', 'Kennung kopieren');
+      kop.type = 'button';
+      kop.addEventListener('click', () => zwKopieren(w.wert, kop));
+      z.appendChild(kop);
+    } else { // 'bar' - Freitext ohne Knopf (Entscheidung 20)
+      z.appendChild(el('span', 'zw-wert', w.wert));
+    }
+    return z;
+  }
+
+  /* Der Verwendungszweck steht ÜBER den Wegen, nicht in einem von ihnen -
+     er gehört zu JEDEM (auch zu PayPal und Wero, die ihn nicht automatisch
+     mitschicken können). Abnahmefund: `zweck` kam von der Route schon immer
+     mit, stand aber nirgends auf der Seite - der einzige Weg, ihn zu sehen,
+     war der QR-Code, und wer per Hand überweist oder PayPal/Wero ohne
+     Deeplink nutzt, hätte der Zuordnung des Admins nichts mitgegeben. */
+  function zahlwegZweckZeile(zweck) {
+    const z = el('div', 'zw-zeile');
+    z.appendChild(el('span', 'zw-titel', 'Zweck'));
+    z.appendChild(el('span', 'zw-wert', zweck));
+    const kop = el('button', 'zw-knopf', 'kopieren');
+    kop.type = 'button';
+    kop.addEventListener('click', () => zwKopieren(zweck, kop));
+    z.appendChild(kop);
+    return z;
+  }
+
+  function zahlwegeZeichnen(ziel, antwort) {
+    ziel.textContent = '';
+    const wege = antwort.wege || [];
+    if (!wege.length) { ziel.hidden = true; return; }
+    ziel.hidden = false;
+    if (antwort.zweck) ziel.appendChild(zahlwegZweckZeile(antwort.zweck));
+    wege.forEach(w => ziel.appendChild(zahlwegZeile(w)));
+  }
+
+  $('abrechnung-auf').addEventListener('click', () => {
+    abrechnungOffen = !abrechnungOffen;
+    $('abrechnung').hidden = !abrechnungOffen;
+    $('abrechnung-auf').textContent = abrechnungOffen ? 'Abrechnung schließen' : 'Abrechnung';
+    if (abrechnungOffen && abJahr === null) {
+      const jetzt = new Date();
+      abJahr = jetzt.getUTCFullYear();
+      abMonat = jetzt.getUTCMonth() + 1;
+    }
+    if (abrechnungOffen) abrechnungLaden();
+  });
+
+  // Der Wunsch geht mit, der Stand bleibt stehen, bis der Monat wirklich da ist.
+  $('ab-zurueck').addEventListener('click', () => {
+    const m = abMonat - 1;
+    abrechnungLaden(m < 1 ? abJahr - 1 : abJahr, m < 1 ? 12 : m);
+  });
+  $('ab-vor').addEventListener('click', () => {
+    if ($('ab-vor').disabled) return;
+    const m = abMonat + 1;
+    abrechnungLaden(m > 12 ? abJahr + 1 : abJahr, m > 12 ? 1 : m);
+  });
+  /* Baut den Druckbereich frisch aus den geladenen Daten auf - EIGENER,
+     einfacher Aufbau statt eines Klons des Live-Blatts: der Druck ist ein
+     anderes Medium (Schwarz auf Weiß, keine Knöpfe, keine Fettung durch
+     `.mir`) und braucht keine der interaktiven Elemente. */
+  function abDruckAufbauen(d) {
+    const wurzel = $('abrechnung-druck');
+    wurzel.textContent = '';
+    wurzel.appendChild(el('h1', null,
+      'Abrechnung — ' + AB_MONATE[d.monat] + ' ' + d.jahr + (d.vorschau ? ' (läuft noch)' : '')));
+    d.eintraege.forEach(e => {
+      const z = el('div', 'ad-zeile');
+      z.appendChild(el('span', null, e.name + (e.ehemalig ? ' (ausgetreten)' : '')));
+      z.appendChild(el('span', null,
+        e.biere + (e.biere === 1 ? ' Getränk · ' : ' Getränke · ') + euro(e.cent)
+        + (e.strafe_cent ? ' · davon ' + euro(e.strafe_cent) + ' Strafen' : '')));
+      wurzel.appendChild(z);
+      if (e.status === undefined) return; // Vorschau: keine Statuskette
+      const offen = e.offen_cent;
+      const text = offen > 0 ? euro(offen) + ' offen'
+        : (e.cent > 0 ? 'bezahlt' : 'ausgeglichen');
+      wurzel.appendChild(el('p', 'ad-unter' + (offen > 0 ? ' ad-offen' : ''), text));
+    });
+
+    // Derselbe zweite Block wie auf dem Bildschirm und im CSV (Etappe 8) -
+    // eine ausgedruckte Abrechnung, in der die Strafen fehlen, wäre ein
+    // Dokument, dem die Seite widerspricht.
+    (d.strafen || []).forEach((s, i) => {
+      if (!i) wurzel.appendChild(el('h2', null, 'Strafen'));
+      const z = el('div', 'ad-zeile');
+      z.appendChild(el('span', null, s.name + ' — ' + s.titel));
+      z.appendChild(el('span', null,
+        s.art === 'geld' ? euro(s.cent || 0) : (s.tat || 'Auflage')));
+      wurzel.appendChild(z);
+      const unter = [STRAFE_STAND[s.status] || s.status];
+      if (s.grund) unter.push(s.grund);
+      wurzel.appendChild(el('p', 'ad-unter', unter.join(' · ')));
+    });
+  }
+
+  $('ab-drucken').addEventListener('click', () => {
+    if (!abLetzte) return;
+    abDruckAufbauen(abLetzte);
+    // Die Klasse ist die einzige Bedingung, unter der `@media print`
+    // überhaupt etwas an der Seite ändert (siehe die Begründung im
+    // Stylesheet) - ohne sie druckte ein bloßes `Cmd+P` anderswo leeres
+    // Papier.
+    document.documentElement.classList.add('druckt-abrechnung');
+    window.print();
+  });
+  window.addEventListener('afterprint', () => {
+    document.documentElement.classList.remove('druckt-abrechnung');
+  });
+
+  /* --- Die Hausordnung (Schema 38, Etappe 8) --------------------------------
+     Eigene Leseroute (`/api/hausordnung`), nicht Teil des Hauptabrufs -
+     dieselbe Bauart wie die Kasse: geladen wird sie aus `zeichneFeld()`
+     heraus, sobald `regeln_an` steht, und erneut auf die Marke 'regeln'
+     (siehe `angestossen`).
+
+     WAS EIN MITGLIED HIER TUN KANN, IST GENAU EINE SACHE: seine eigene
+     Auflage als erledigt melden (Entscheidung 55). Verhängen, erlassen,
+     bestätigen — alles das ist Sache des Gruppenadmins (48) und steht in
+     `gruppe.html`. Diese Zunge ist ein Aushang mit einem einzigen Knopf.
+     ------------------------------------------------------------------------ */
+  let regelnStand = null;
+  // Die eine offene Einspruchs-Eingabe: { id, text }. Sie liegt hier und nicht
+  // im DOM, damit ein Anstoß von außen sie nicht mitsamt dem Getippten wegwischt.
+  let einspruchOffen = null;
+
+  function regelnSagt(text, schlecht) {
+    const p = $('regeln-sagt');
+    p.textContent = text;
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  async function regelnLaden() {
+    if ($('regeln-block').hidden) return;
+    try {
+      const r = await fetch(API + '/api/hausordnung' + (GRUPPE ? '?g=' + GRUPPE : ''),
+        { headers: mitToken(), cache: 'no-store' });
+      if (!r.ok) return;
+      regelnStand = await r.json();
+      zeichneRegeln(regelnStand);
+    } catch { /* der naechste Anstoss holt es nach */ }
+  }
+
+  const strafeWort = s => s.art === 'geld' ? euro(s.cent || 0) : (s.tat || 'eine Auflage');
+
+  const STRAFE_STAND = {
+    offen: 'offen', gemeldet: 'als erledigt gemeldet', erledigt: 'erledigt',
+    abgerechnet: 'läuft mit der Abrechnung', erlassen: 'erlassen',
+    vorgeschlagen: 'vorgeschlagen', verworfen: 'verworfen', bestritten: 'bestritten',
+  };
+
+  function regelZeile(r) {
+    const z = el('div', 'hr-zeile');
+    z.appendChild(el('span', 'hr-titel', r.titel));
+    z.appendChild(el('span', 'hr-preis', strafeWort(r)));
+    if (r.text) z.appendChild(el('p', 'hr-text', r.text));
+    return z;
+  }
+
+  function strafeZeile(s) {
+    /* Die eigene Zeile wird fett, wie in der Rangliste und in der Abrechnung -
+       in einer Liste, die alle namentlich zeigt (54), ist "wo stehe ich" die
+       erste Frage. */
+    const meins = !!meinName && s.name === meinName;
+    const z = el('div', 'st-zeile' + (meins ? ' mir' : ''));
+    z.appendChild(el('span', 'st-wer', s.name));
+    z.appendChild(el('span', 'st-was', s.titel + ' · ' + strafeWort(s)));
+    const unter = [STRAFE_STAND[s.status] || s.status, ksTag(s.verhaengt_am)];
+    if (s.grund) unter.push(s.grund);
+    z.appendChild(el('p', 'st-unter', unter.join(' · ')));
+
+    // Die eigene Auflage melden (Entscheidung 55).
+    if (meins && s.art === 'tat' && s.status === 'offen') {
+      const k = el('button', 'knopf st-melden', 'Habe ich erledigt');
+      k.type = 'button';
+      k.addEventListener('click', async () => {
+        k.disabled = true;
+        regelnSagt('');
+        try {
+          await ruf('/api/strafe/meldung', { strafe: s.id });
+          await regelnLaden();
+          regelnSagt('Gemeldet. Jetzt muss es noch jemand bestätigen.');
+        } catch (e) {
+          regelnSagt(e.message, true);
+        } finally {
+          k.disabled = false;
+        }
+      });
+      z.appendChild(k);
+    }
+
+    /* Einspruch (Etappe 9), einmal je Strafe. Er braucht eine Begründung —
+       der Worker besteht darauf, und das ist richtig: ein Widerspruch ohne
+       Grund ist für den, der ihn entscheiden soll, keine Auskunft. Also erst
+       das Feld, dann die Tat; kein `prompt()`, die Seite fragt nirgends so. */
+    if (meins && s.status === 'offen') {
+      const k = el('button', 'knopf st-melden st-einwand', 'Einspruch');
+      k.type = 'button';
+
+      /* Der Kasten hängt an `einspruchOffen` und nicht am DOM: das Blatt wird
+         bei jeder Marke 'regeln' neu gezeichnet, und vorher nahm ein solcher
+         Anstoß dem Schreibenden mitten im Satz Feld und Text weg. Der Merker
+         trägt auch das Getippte — dieselbe Sorte Rettung wie bei der Menge in
+         der Kasse. */
+      const kastenBauen = () => {
+        k.hidden = true;
+        const kasten = el('div', 'st-einspruch');
+        const feld = document.createElement('input');
+        feld.className = 'feld'; feld.maxLength = 200;
+        feld.placeholder = 'Das war nicht ich';
+        feld.value = einspruchOffen ? einspruchOffen.text : '';
+        feld.addEventListener('input', () => {
+          if (einspruchOffen) einspruchOffen.text = feld.value;
+        });
+        kasten.appendChild(feld);
+        const ab = el('button', 'knopf st-melden st-einwand', 'Absenden');
+        ab.type = 'button';
+        ab.addEventListener('click', async () => {
+          ab.disabled = true;
+          regelnSagt('');
+          try {
+            await ruf('/api/strafe/einspruch', { strafe: s.id, grund: feld.value.trim() });
+            einspruchOffen = null;
+            await regelnLaden();
+            regelnSagt('Einspruch eingelegt. Jetzt entscheidet, wer die Gruppe führt.');
+          } catch (e) {
+            regelnSagt(e.message, true);
+            ab.disabled = false;
+          }
+        });
+        kasten.appendChild(ab);
+        z.appendChild(kasten);
+        return feld;
+      };
+
+      k.addEventListener('click', () => {
+        einspruchOffen = { id: s.id, text: '' };
+        kastenBauen().focus();
+      });
+      z.appendChild(k);
+      /* Beim Neuzeichnen steht der Kasten wieder da, aber OHNE `focus()`: der
+         Anstoß kam von außen, und wer gerade woanders tippt, soll davon nicht
+         weggerissen werden. */
+      if (einspruchOffen && einspruchOffen.id === s.id) kastenBauen();
+    }
+    return z;
+  }
+
+  function zeichneRegeln(d) {
+    $('regeln-monat').textContent = d.monat
+      ? new Date(d.monat + '-01T00:00:00Z').toLocaleDateString('de-DE',
+          { month: 'long', year: 'numeric', timeZone: 'UTC' })
+      : '';
+
+    const ziel = $('regeln-liste');
+    ziel.textContent = '';
+    const regeln = (d.regeln || []).filter(r => r.aktiv);
+    if (!regeln.length) {
+      ziel.appendChild(el('p', 'hr-leer', 'Noch keine Regel aufgeschrieben.'));
+    } else {
+      regeln.forEach(r => ziel.appendChild(regelZeile(r)));
+    }
+
+    /* Erst, was aus FRÜHEREN Monaten noch offen ist, dann dieser Monat -
+       dieselbe Reihenfolge wie in `gruppe.html`. Eine Auflage läuft über den
+       Monatswechsel hinweg weiter, kein Abschluss holt sie ab; stünde sie nur
+       im Monat ihrer Verhängung, wäre sie am Ersten aus dem Blick. */
+    const liste = $('strafen-liste');
+    liste.textContent = '';
+    const alt = d.offen_alt || [];
+    const jetzt = d.strafen || [];
+    $('suender-kopf').hidden = !alt.length && !jetzt.length;
+    if (alt.length) {
+      liste.appendChild(el('p', 'hr-leer', 'Aus früheren Monaten noch offen:'));
+      alt.forEach(s => liste.appendChild(strafeZeile(s)));
+    }
+    if (jetzt.length) {
+      if (alt.length) liste.appendChild(el('p', 'hr-leer', 'Dieser Monat:'));
+      jetzt.forEach(s => liste.appendChild(strafeZeile(s)));
+    }
+
+    // Vorschlagen geht nur, wenn es überhaupt eine geltende Regel gibt - eine
+    // freie Strafe darf hier niemand erfinden, das bliebe dem vorbehalten,
+    // der die Gruppe führt (Entscheidung 48/49).
+    const waehlbar = regeln.length > 0 && (d.mitglieder || []).length > 0;
+    $('vorschlag-auf').hidden = !d.darf_vorschlagen || !waehlbar;
+    if ($('vorschlag-auf').hidden) $('vorschlag-form').hidden = true;
+    /* Die Rolle merken, BEVOR die Beschriftung gesetzt wird: die beiden Hörer
+       weiter unten (Auf/Zu und der Knopf im Formular) laufen später und haben
+       die Antwort nicht mehr. Ein Merker wie `statistikDa` daneben, aus
+       demselben Grund. */
+    darfVerhaengen = !!d.darf_verhaengen;
+    vorschlagWorte();
+    if (waehlbar) vorschlagAuswahl(d);
+  }
+
+  /* --- Vorschlagen oder verhängen: dieselben Felder, andere Wörter ----------
+     Der Gruppenadmin VERHÄNGT — seine Eingabe steht sofort auf `offen`, zählt
+     sofort in der Abrechnung mit und schickt dem Betroffenen sofort Post.
+     Ein Mitglied SCHLÄGT VOR, und daraus wird erst durch die Annahme eine
+     Strafe. Dieselbe Route, derselbe Rumpf, nur ein anderer Anfangszustand
+     (siehe `POST /api/strafe`) — und darum auch dasselbe Formular mit anderer
+     Beschriftung statt zweier Formulare.
+
+     `darfVerhaengen` steht vor der ersten Antwort auf `false`: „vorschlagen"
+     ist die harmlosere der beiden Behauptungen, und der Knopf ist bis dahin
+     ohnehin verborgen. */
+  let darfVerhaengen = false;
+  const vorschlagWort = () => darfVerhaengen ? 'Strafe verhängen' : 'Strafe vorschlagen';
+  function vorschlagWorte() {
+    const auf = !$('vorschlag-form').hidden;
+    $('vorschlag-auf').textContent = auf
+      ? (darfVerhaengen ? 'Verhängen schließen' : 'Vorschlag schließen')
+      : vorschlagWort();
+    $('vs-tu').textContent = darfVerhaengen ? 'Verhängen' : 'Vorschlagen';
+  }
+
+  /* Die zwei Wahlfelder des Vorschlags. `mitglieder` kommt aus derselben
+     Antwort und nicht aus `/api/stand` - eine Gruppe mit `tafel_an = 0` hat
+     gar keine Liste von dort, könnte also niemanden benennen. */
+  function vorschlagAuswahl(d) {
+    const wen = $('vs-wen'), regel = $('vs-regel');
+    const vorherW = wen.value, vorherR = regel.value;
+    wen.textContent = '';
+    (d.mitglieder || []).forEach(m => {
+      const o = el('option', null, m.name);
+      o.value = String(m.id);
+      wen.appendChild(o);
+    });
+    if (vorherW) wen.value = vorherW;
+    regel.textContent = '';
+    (d.regeln || []).filter(r => r.aktiv).forEach(r => {
+      const o = el('option', null, r.titel + ' — ' + strafeWort(r));
+      o.value = String(r.id);
+      regel.appendChild(o);
+    });
+    if (vorherR) regel.value = vorherR;
+  }
+
+  $('vorschlag-auf').addEventListener('click', () => {
+    $('vorschlag-form').hidden = !$('vorschlag-form').hidden;
+    vorschlagWorte();
+  });
+
+  $('vs-tu').addEventListener('click', async () => {
+    const k = $('vs-tu');
+    k.disabled = true;
+    regelnSagt('');
+    try {
+      await ruf('/api/strafe', {
+        user: Number($('vs-wen').value),
+        regel: Number($('vs-regel').value),
+        grund: $('vs-grund').value.trim(),
+      });
+      $('vs-grund').value = '';
+      $('vorschlag-form').hidden = true;
+      vorschlagWorte();
+      await regelnLaden();
+      /* Zwei Sätze für zwei Vorgänge. „jetzt entscheidet ein Gruppenadmin"
+         wäre am Gruppenadmin eine Lüge — der HAT entschieden, und die Strafe
+         steht ab sofort in der Abrechnung und im Postfach des Betroffenen. */
+      regelnSagt(darfVerhaengen
+        ? 'Verhängt. Sie steht in der Abrechnung dieses Monats, und der Betroffene hat Post.'
+        : 'Vorgeschlagen, jetzt entscheidet ein Gruppenadmin.');
+    } catch (e) {
+      regelnSagt(e.message, true);
+    } finally {
+      k.disabled = false;
+    }
+  });
+
   /* --- Die Notrufe ---------------------------------------------------------
-     Der Block steht für jeden Angemeldeten da, auch leer: der Knopf ist der
-     Sinn der Sache, und einer, der erst auftaucht, wenn schon jemand in Not
-     ist, kommt zu spät. Die Zeilen darunter gibt es nur, solange etwas gilt —
-     der Worker schickt gar nichts anderes.
+     Der Knopf steht für jeden Angemeldeten da, auch wenn nichts los ist: er
+     ist der Sinn der Sache, und einer, der erst auftaucht, wenn schon jemand
+     in Not ist, kommt zu spät. Die Zeilen darüber gibt es nur, solange etwas
+     gilt — der Worker schickt gar nichts anderes.
+
+     ZWEI ORTE, und beide hängen an derselben Bedingung: die Liste unter der
+     Skala, der Knopf rechts neben „Wo wird heute getrunken?" (Etappe 10, wie
+     vor Etappe 7). Sie erben kein `hidden` von einem Block und müssen
+     `notruf_an` deshalb SELBST prüfen. `notrufSichtbar()` ist die eine Stelle,
+     die das tut — `blaetterFalten()` liest ihr Ergebnis danach ab und
+     entscheidet daran, ob die Zeile und das Blatt „Privat" überhaupt stehen.
 
      `meiner` geht über den Namen, wie überall auf dieser Seite (`p.name ===
      meinName` in der Liste): eine Id gibt `/api/me` nicht her, und die Namen
      sind das, woran sich diese Runde erkennt.
      ------------------------------------------------------------------------ */
+
+  /* Beide Teile auf einen Griff. `aus` heißt "diese Gruppe führt keinen
+     Notruf, oder hier sitzt niemand Angemeldetes" — dann verschwindet alles.
+     Sonst entscheidet der laufende eigene Notruf über den Knopf (wer schon
+     einen hat, braucht keinen zweiten) und die Zahl der Zeilen über die
+     Liste. */
+  function notrufSichtbar(aus, meiner, zeilen) {
+    $('notruf-auf').hidden = aus || !!meiner;
+    $('notruf-liste').hidden = aus || !zeilen;
+  }
+
   function zeichneNotrufe(notrufe) {
     meineNot = null;
-    const block = $('notruf-block'), liste = $('notruf-liste');
+    const liste = $('notruf-liste');
     /* Die Karten der letzten Zeichnung retten, bevor die Zeilen fallen. Sie
        tragen geladene Kacheln, und ein Live-Notruf käme sonst alle fünf
        Sekunden mit einem frischen Kachelnetz wieder — siehe `karteRuecken`. */
@@ -8134,20 +9738,23 @@
     liste.textContent = '';
     // Draussen gibt es den Knopf nicht: die Routen dahinter sind zu, und ein
     // Knopf, der nur 401 sagen kann, ist eine Einladung ins Leere.
-    block.hidden = vonDraussen || !meinName;
+    // `notruf_an` (Schema 32) blendet Streifen UND Liste aus derselben Reihe.
+    const aus = vonDraussen || !meinName || !GRUPPE_SCHALTER || !GRUPPE_SCHALTER.notruf_an;
     // Abgemeldet oder draussen gibt es sicher keinen eigenen Notruf mehr zu
     // sehen - der frühe Ausstieg darf den Live-Nachtrag nicht überspringen.
-    if (block.hidden) { notrufLiveStoppen(); return; }
+    if (aus) { notrufSichtbar(true, null, 0); notrufLiveStoppen(); return; }
 
     for (const n of notrufe) {
       const meiner = n.name === meinName;
       if (meiner) meineNot = n;
       liste.appendChild(VARIANTE.notruf(n, meiner, alteKarten.get(n.id)));
     }
-    // Erst jetzt, wo die Zeilen hängen und eine Breite haben.
+    /* Sichtbar VOR dem Füllen der Kacheln: ein `hidden` Behälter hat keine
+       Breite, und ohne Breite gibt es kein Kachelraster — die Karte bliebe
+       leer und zeigte nur ihre Namensnennung. Derselbe Grund, aus dem
+       `notrufAuf()` das Blatt vor `notrufLage()` aufmacht. */
+    notrufSichtbar(false, meineNot, notrufe.length);
     for (const k of liste.querySelectorAll('.karte')) karteFuellen(k);
-
-    $('notruf-auf').hidden = !!meineNot;
 
     /* Der Kreis im offenen Blatt geht mit. `meineNot` ist eben ersetzt worden,
        und ohne das zeigte das Blatt den Kreis von vorhin — geändert am Handy,
@@ -8338,7 +9945,8 @@
      gemeldet hat, fiele aus der Auswahl still heraus. */
   async function kreisLeuteHolen() {
     try {
-      const r = await fetch(API + '/api/kreis', { headers: mitToken(), cache: 'no-store' });
+      const r = await fetch(API + '/api/kreis' + (GRUPPE ? '?g=' + GRUPPE : ''),
+        { headers: mitToken(), cache: 'no-store' });
       if (!r.ok) throw new Error('Fehler ' + r.status);
       const d = await r.json();
       kreisLeute = d.leute || [];
@@ -8829,14 +10437,14 @@
     const darf = !!merke() && !!meinName;
 
     $('chronik-auf').hidden = !chronikZahl;
-    /* Ab 1. Dezember, und nur fuer Angemeldete - die Route dahinter antwortet
-       ohne Token mit 401 (Wrapped ist nichts fuers Schaufenster), ein Knopf
-       ins Leere waere schlechter als gar keiner. Lokale Zeit: das ist die
-       Kalenderfrage des Menschen davor, nicht des Servers. */
-    $('wrapped-auf').hidden = !drinnen() || new Date().getMonth() !== 11;
-
-    // Ohne Termine, ohne Archiv, ohne Anmeldung und ohne Wrapped-Knopf hat die Sektion nichts zu sagen.
-    block.hidden = !termine.length && !darf && !chronikZahl && $('wrapped-auf').hidden;
+    /* „Dein Jahr" stand bis Etappe 10 hier und steht jetzt oben rechts auf
+       `statistik.html` - der Dezember-Riegel ist mit hinuebergezogen. Die
+       Termine-Zunge haengt darum nicht mehr an ihm: ohne Termine, ohne Archiv
+       und ohne das Recht einzutragen hat sie nichts zu sagen.
+       `termine_an` (Schema 32) geht davor: abgeschaltet zeigt sie nichts,
+       ganz gleich wieviel Inhalt sonst da waere. */
+    block.hidden = !GRUPPE_SCHALTER || !GRUPPE_SCHALTER.termine_an
+      || (!termine.length && !darf && !chronikZahl);
     $('termin-neu').hidden = !darf;
     if (block.hidden) return;
 
@@ -8935,6 +10543,10 @@
     } else {
       uhrwerk();
     }
+    // Beide Zweige oben koennen ein `hidden` gekippt haben (Mitternacht,
+    // ein Termin, der gerade beginnt) - zungenZeichnen() ist billig genug,
+    // um es einfach immer nachzuziehen (Gegenlesen-Fund, Etappe 2).
+    zungenZeichnen();
   }
 
   function uhrwerk() {
@@ -9031,7 +10643,16 @@
     letztesLos = los || null;   // das Uhrwerk braucht die Frist daraus
     gesternStand = losGestern();// ... und die Beschriftung, die gleich entsteht
     const block = $('rad-block');
-    if (!los) { block.hidden = true; return; }
+    // `rad_an` (Schema 32): abgeschaltet schickt der Worker `los: null` schon
+    // mit, aber die Prüfung steht trotzdem explizit da - sonst gilt sie nur,
+    // solange der Worker das genauso löst, und niemand hier weiß warum.
+    /* DIE FRAGE HÄNGT AM SCHALTER, DAS RAD AM LOS - zwei verschiedene Dinge,
+       seit die Frage in `#abend-kopf` darüber steht (Etappe 10). Vor der
+       ersten Drehung eines Tages gibt es kein `los`, und der Block darunter
+       bleibt leer; die Frage steht trotzdem schon da, sonst hinge der
+       Notrufknopf neben nichts. */
+    $('abend-titel').hidden = !GRUPPE_SCHALTER || !GRUPPE_SCHALTER.rad_an;
+    if (!los || !GRUPPE_SCHALTER || !GRUPPE_SCHALTER.rad_an) { block.hidden = true; return; }
     block.hidden = false;
     losTag = los.tag;
 
@@ -9244,6 +10865,7 @@
            anzufahren — das Ergebnis steht schon fest und wird nur gelesen. */
         dreht = false;
         zeichneRad(d);
+        zungenZeichnen();
         radSagt('Die Flasche hatte sich heute schon gedreht.');
         return;
       }
@@ -9263,6 +10885,7 @@
       heuteBei = d.gewinner;
       heuteStatus = d.status;
       zeichneRad(d);
+      zungenZeichnen();
       liste(letztesFeld);          // die Zeile des Gewinners einfärben
     } catch (e) {
       dreht = false;
@@ -9333,6 +10956,7 @@
       // Der Termin aus der Zusage steht sofort in der Liste — die Antwort
       // bringt sie mit, dafür braucht es keinen zweiten Ruf.
       if (d.termine) zeichneTermine(d.termine);
+      zungenZeichnen();
       radSagt(ja
         ? 'Zugesagt. Die anderen sehen es binnen einer halben Minute.'
         : 'Abgesagt. Die Flasche ist wieder frei — und dich zieht sie heute nicht mehr.');
@@ -10013,7 +11637,12 @@
     if (!ziel) return;
     if (still && (dreht || laeuft)) { merkeAnstoss(false, ziel); return; }
     try {
-      const r = await fetch(API + '/api/bewertungen?ziel=' + encodeURIComponent(ziel),
+      /* `&g=` MUSS mit: die Route liefert sonst die eigene Bewertung aus einer
+         beliebigen Runde, und der nächste Tipp schriebe sie in diese hier
+         zurück. Die erste Leseroute, die ihre Gruppe kennt — die übrigen
+         bekommen sie mit der Schalterleiste. */
+      const r = await fetch(API + '/api/bewertungen?ziel=' + encodeURIComponent(ziel)
+          + '&g=' + GRUPPE,
         { headers: mitToken(), cache: 'no-store' });
       const roh = await r.text();
       let d = {};
@@ -10544,6 +12173,7 @@
        soll beim stillen Nachfassen nicht auf die erste zurückfallen. Der Worker
        deckelt das auf 100, mehr fragen wir gar nicht erst. */
     else p.set('anzahl', String(Math.min(100, Math.max(CH_SEITE, chronikAbende.length))));
+    if (GRUPPE) p.set('g', String(GRUPPE));
     const r = await fetch(API + '/api/chronik?' + p,
       { headers: mitToken(), cache: 'no-store' });
     const roh = await r.text();
@@ -10653,7 +12283,12 @@
   const wrWochentag = iso => new Date(iso).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
 
   let wrJahr = null, wrKachelListe = [], wrWo = 0, wrFarbenKarte = new Map(), wrLauf = 0;
-  let wrAusKontor = false;   // aus dem Kontor geöffnet? — entscheidet den Rückweg
+  /* Wohin das × zurückführt, oder `null` für „zurück auf die Tafel, auf der
+     der Rückblick ohnehin liegt". Seit Etappe 10 eine Adresse statt eines
+     Ja/Nein: es sind zwei Türen geworden (Kontor und Bilderseite), und ein
+     zweites Flaggenpaar dafür hieße, den nächsten Weg wieder daneben zu
+     bauen. */
+  let wrRueckweg = null;
   const wrFarbe = id => wrFarbenKarte.get(id) || '#93a09a';
 
   function wrSagt(text, schlecht) {
@@ -11099,17 +12734,17 @@
     wrappedZeigen(wrWo + 1);
   });
 
-  async function wrappedAuf(jahr, ausKontor) {
+  async function wrappedAuf(jahr, rueckweg) {
     // Ein Laufzaehler statt eines Jahresvergleichs: "dasselbe Jahr zweimal
     // geoeffnet" (zu, dann gleich wieder auf) muss die veraltete Antwort
     // genauso verwerfen wie ein Jahreswechsel waehrend des Ladens - sonst
     // haengen doppelte Fortschrittsstriche an.
     const lauf = ++wrLauf;
     wrJahr = jahr;
-    // Bei JEDEM Öffnen neu gesetzt, nicht nur beim Weg aus dem Kontor: sonst
+    // Bei JEDEM Öffnen neu gesetzt, nicht nur beim Weg von aussen: sonst
     // erbte die Chronik den Stand von vorhin und schickte einen beim
     // Zumachen in die Verwaltung, aus der man nie gekommen ist.
-    wrAusKontor = !!ausKontor;
+    wrRueckweg = rueckweg || null;
     /* Aus demselben Grund hier: schließt man die Karte durch Wischen, feuert
        das `touchend` der Bühne noch mit und setzt `wrGezogen` — den Klick, der
        ihn wieder abräumen würde, bekommt danach aber das ×, nicht die Bühne.
@@ -11158,7 +12793,7 @@
      Dauer des Ladens die Tafel zu zeigen — ein Aufblitzen der Seite, die man
      gerade nicht sehen will. */
   function wrappedZu() {
-    if (wrAusKontor) { wrAusKontor = false; location.href = 'admin.html'; return; }
+    if (wrRueckweg) { const weg = wrRueckweg; wrRueckweg = null; location.href = weg; return; }
     $('wrapped').hidden = true;
     wrTipWeg();
     koerperSperren();
@@ -11448,7 +13083,6 @@
     }
   }
 
-  $('wrapped-auf').addEventListener('click', () => wrappedAuf(new Date().getFullYear()));
   $('wr-zu').addEventListener('click', wrappedZu);
   $('wr-schirm').addEventListener('click', wrappedZu);
   $('wr-teilen').addEventListener('click', wrappedTeilen);
@@ -11592,6 +13226,7 @@
        Sätzen. Der Rückfall in `deckelZeichnen` fängt das ab, gut aussehen tut
        er nicht. */
     notruf:         'wenn jemand Bier oder Gesellschaft braucht',
+    bestand_knapp:  'wenn ein Getränk den Mindestbestand unterschreitet',
   };
   /* Die einzige Abwahl mit einer Folge, und die gehört im Klartext darunter —
      wer sie nicht kennt, wundert sich drei Stunden später über einen Abend,
@@ -11620,9 +13255,9 @@
      Neuladen wieder da — und für den, der `admin.html` von Hand tippt, wäre er
      ohnehin nicht da; der soll auch keinen Deckel vorfinden.
 
-     `statistik.html` bekommt das bewusst NICHT: dorthin führt ein Knopf auf der
-     Tafel selbst (`verlauf-auf`), und wer von dort zurückkommt, kam von der
-     Tafel. */
+     `statistik.html` bekommt das bewusst NICHT: dorthin führt die Zunge
+     „Statistiken" auf der Tafel selbst, und wer von dort zurückkommt, kam von
+     der Tafel. */
   const DECKEL_WEG_SPEICHER = 'beerstock-deckel-zurueck';
   const deckelWegMerken = () => { try { sessionStorage.setItem(DECKEL_WEG_SPEICHER, '1'); } catch {} };
   const deckelWegNehmen = () => {
@@ -11805,6 +13440,13 @@
     // Rückfrage gehört zu dem Klick, der sie ausgelöst hat, nicht zum Blatt.
     dkHausSicher = false;
     $('dk-haus-weg').textContent = 'widerrufen';
+
+    /* Die Runde. `gruppeName` steht seit dem Aufbau fest (siehe
+       `gruppeFinden`); fehlt er, ist die Seite ohne Gruppe unterwegs — dann
+       hat die Zeile nichts zu sagen und geht weg, statt „Runde: " zu
+       schreiben. */
+    $('dk-runde').hidden = !GRUPPE;
+    $('dk-runde-was').textContent = gruppeName ? 'Runde: ' + gruppeName : '';
 
     // `/api/me` trug die Rolle schon immer mit, nur hat sie hier nie jemand
     // gelesen. Verlässt sich nichts drauf: das Kontor prüft selbst.
@@ -12028,7 +13670,7 @@
     // und eine eigene Antwort ist jünger als alles, was hier ankäme.
     if (still && (dreht || laeuft)) { merkeAnstoss(true, null); return; }
     try {
-      const r = await fetch(API + '/api/leaderboard',
+      const r = await fetch(API + '/api/leaderboard' + (GRUPPE ? '?g=' + GRUPPE : ''),
         { headers: mitToken(), cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
       /* Hier steht fest, dass die API antwortet — und zwar VOR dem Ausstieg
@@ -12037,6 +13679,17 @@
          haeufigste Erfolgsfall des stillen Nachfassens ist der, in dem
          nichts Neues kommt. */
       netzWeg = false; stromStand();
+      /* Die Schalterleiste nachholen, falls sie beim Aufbau im Netzloch
+         steckengeblieben ist. `gruppeFinden()` gibt in seinem `catch` nur die
+         Nummer aus der Adresse weiter und lässt `GRUPPE_SCHALTER` auf `null` —
+         und weil es kein zweites Mal läuft, blieb die Tafel für den Rest der
+         Sitzung ein Kopf ohne Blätter: jedes Panel prüft den Schalter und
+         versteckt sich, die Zungenreihe fällt hinterher.
+
+         Bedingt auf `GRUPPE`: von draußen ist `null` kein Loch, sondern der
+         Normalfall (siehe die Zeile bei `$('block').hidden`) — sonst liefe hier
+         bei jedem Besucher ohne Konto in jedem Takt eine Anfrage mit. */
+      if (GRUPPE && !GRUPPE_SCHALTER) await gruppeFinden();
       const roh = await r.text();
       if (still && roh === letzterStand) return;   // nichts Neues, nichts zu tun
       letzterStand = roh;
@@ -12069,13 +13722,26 @@
       letzterStand = '';
       $('block').hidden = true;
       $('rad-block').hidden = true;
+      // Die Frage des Abends steht seit Etappe 10 AUSSERHALB von `#rad-block`
+      // und fällt darum nicht mit ihm — ohne diese Zeile bliebe „Wo wird heute
+      // getrunken?" über einer leeren Stelle stehen.
+      $('abend-titel').hidden = true;
       $('termin-block').hidden = true;
       // Ohne Worker kein Notruf: der Knopf führte in eine Fehlermeldung, und
-      // die Zeilen darunter wären ein Stand, den niemand mehr bestätigt.
-      $('notruf-block').hidden = true;
+      // die Zeilen darüber wären ein Stand, den niemand mehr bestätigt.
+      notrufSichtbar(true, null, 0);
+      // Ebenso keine Kasse: ohne Worker kein Preis, kein Bestand, kein Buchen.
+      $('kasse-block').hidden = true;
+      /* Und ebenso die Regeln (Etappe 8). Ohne diese Zeile blieb die
+         Hausordnung als EINZIGER Eintrag in `verfuegbar` stehen — die
+         Zungenreihe verschwand dann (weniger als zwei), und die Tafel schrumpfte
+         auf ein veraltetes Blatt mit Knöpfen, die nur noch Fehler geben
+         konnten. JEDER Block gehört in diese Liste, nicht nur in `zeichneFeld`. */
+      $('regeln-block').hidden = true;
       meineNot = null;
       notrufLiveStoppen();
       VARIANTE.kopf(null, 'nichts');
+      zungenZeichnen();
     }
   }
 
@@ -12106,7 +13772,7 @@
     if (dreht || laeuft || notrufeLaeuft) { merkeAnstoss(true, null); return; }
     notrufeLaeuft = true;
     try {
-      const r = await fetch(API + '/api/notrufe',
+      const r = await fetch(API + '/api/notrufe' + (GRUPPE ? '?g=' + GRUPPE : ''),
         { headers: mitToken(), cache: 'no-store' });
       if (!r.ok) return;
       const d = await r.json();
@@ -12130,6 +13796,10 @@
   function angestossen(marken) {
     if (marken.includes('tafel')) hole(true);
     if (marken.includes('notruf')) notrufeLaden();
+    if (marken.includes('kasse')) { kasseLaden(); abrechnungLaden(); }
+    // Eine Geldstrafe meldet BEIDE Marken ('regeln' und 'kasse'): sie steht
+    // in der Hausordnung und läuft zugleich in die Abrechnung.
+    if (marken.includes('regeln')) regelnLaden();
     if (flyZiel && marken.includes(flyZiel)) flyLaden(true);
     /* Die Chronik hört auf 'tafel' mit: ein Kommentar an einem archivierten
        Abend meldet beide Marken, und der Zähler an seiner Zeile steht hier.
@@ -12149,12 +13819,27 @@
     const kopf = mitToken({ 'Content-Type': 'application/json', 'X-Tab': TAB });
     laeuft++;
     try {
+      /* Die Gruppe fährt in JEDEM Schreibvorgang mit (Schema 32) — hier und
+         nicht an den einunddreissig Aufrufstellen. Sie steht VORNE, damit ein
+         Aufrufer, der ausdrücklich eine andere meint (der Beitritt über einen
+         Einladungslink etwa), sie schlicht überschreibt. */
       const r = await fetch(API + pfad, {
-        method: 'POST', headers: kopf, body: JSON.stringify(rumpf),
+        method: 'POST', headers: kopf,
+        body: JSON.stringify(GRUPPE ? { gruppe: GRUPPE, ...rumpf } : rumpf),
       });
       let d = {};
       try { d = await r.json(); } catch {}
-      if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));
+      if (!r.ok) {
+        /* Der ganze Rumpf reist mit (Etappe 7). Bis dahin ging alles außer
+           `fehler` verloren, und ein Fehler, der dem Aufrufer etwas ANBIETEN
+           will, konnte das nicht — der Ausweg am Namensschritt (Entscheidung
+           43) ist der erste, der es tut (`ausweg: 'verwerfen'`). Die Nachricht
+           bleibt, wo sie war: `e.message` funktioniert an allen bestehenden
+           Fangstellen unverändert. */
+        const fehl = new Error(d.fehler || ('Fehler ' + r.status));
+        fehl.daten = d;
+        throw fehl;
+      }
       return d;
     } finally {
       laeuft--;
@@ -12244,12 +13929,6 @@
   $('fly-schirm').addEventListener('click', flyZu);
 
   $('chronik-auf').addEventListener('click', chronikAuf);
-  /* Eine eigene Seite, kein Flyout: die Grafiken passen nicht auf ein Blatt,
-     das von der Seite hereinfährt, und die Tafel bleibt dadurch, was sie ist —
-     eine geschlossene Datei, die von den Bildern nichts weiß außer diesem
-     einen Knopf. Dasselbe gilt für das Kontor. */
-  $('verlauf-auf').addEventListener('click', () => { location.href = 'statistik.html'; });
-
   // --- Der Notruf -----------------------------------------------------------
   $('notruf-auf').addEventListener('click', notrufAuf);
   $('nr-zu').addEventListener('click', notrufZu);
@@ -12289,6 +13968,11 @@
     ev.preventDefault();
     if (ev.target.closest('.nr-zeile.meiner')) notrufAuf();
   });
+  $('dk-runde-verwalten').addEventListener('click',
+    () => ausDemDeckel('gruppe.html?g=' + GRUPPE));
+  /* Ohne `?g=`: die Auswahl gilt allen Runden, und eine mitgeschleppte Nummer
+     hiesse dort „diese hier ist gemeint" — genau das Gegenteil. */
+  $('dk-runde-wechseln').addEventListener('click', () => ausDemDeckel('start.html?wahl=1'));
   $('dk-kontor').addEventListener('click', () => ausDemDeckel('admin.html'));
   $('ch-zu').addEventListener('click', chronikZu);
   $('ch-schirm').addEventListener('click', chronikZu);
@@ -13263,6 +14947,7 @@
       $('termin-form').hidden = true;
       $('termin-neu').textContent = 'eintragen';
       zeichneTermine(d.termine || letzteTermine);
+      zungenZeichnen();
       terminSagt('Eingetragen — ' + (d.ort || 'Bierabend bei ' + d.gastgeber) + '.');
     } catch (e) {
       terminSagt(e.message, true);
@@ -13290,6 +14975,7 @@
     try {
       const d = await ruf('/api/termin/aendern', { id: t.id, absagen: true });
       zeichneTermine(d.termine || letzteTermine);
+      zungenZeichnen();
       flyAbsagenZeigen();          // abgesagt ist abgesagt: der Knopf geht weg
       absagenSagt('Abgesagt.');
       // Hing eine Zusage daran, ist der Tag wieder frei - dann muss auch das
@@ -13359,13 +15045,55 @@
     ev.preventDefault();
     const knopf = ev.target.querySelector('button[type=submit]');
     knopf.disabled = true; sagt('');
+    $('name-ausweg').hidden = true;
     try {
       const d = await ruf('/api/name', { name: $('f-name').value });
       meinName = d.name;
       brauchtNamen = false;
       sagt('Willkommen, ' + d.name + '. Jetzt eintragen, wie viel kalt steht.');
       formular();
-      $('f-biere').focus();
+      /* Das Feld steht seit Etappe 7 in der Tafel-Zunge und kann dort
+         abgeschaltet (`tafel_an = 0`) oder gerade zugeklappt sein. `focus()`
+         auf etwas Unsichtbares tut nichts, würde aber auf schmalen Geräten die
+         Seite ruckeln lassen — also nur, wenn das Feld wirklich dasteht. */
+      if ($('f-biere').offsetParent) $('f-biere').focus();
+      await hole();
+    } catch (e) {
+      sagt(e.message, true);
+      /* Entscheidung 43: der Worker bietet den Ausweg nur einem NAMENLOSEN
+         Konto an, das gegen einen vergebenen Namen läuft. Ob das der Fall ist,
+         entscheidet er, nicht diese Seite — hier wird nur gezeigt, was er
+         mitgeschickt hat. */
+      if (e.daten && e.daten.ausweg === 'verwerfen') $('name-ausweg').hidden = false;
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  /* Die Anmeldung wegwerfen, die gerade entstanden ist (Entscheidung 43).
+     Danach ist dieses Gerät abgemeldet und steht wieder an der Adressmaske —
+     mit der Bitte, es diesmal mit der anderen Schreibweise zu versuchen.
+
+     Kein `confirm()`: die Seite fragt nirgends so (siehe `gruppe.html`, Etappe
+     4). Der Knopf sagt selbst, was er tut, und er steht hinter einem Satz, der
+     erklärt, warum. */
+  $('verwerfen-knopf').addEventListener('click', async () => {
+    const knopf = $('verwerfen-knopf');
+    knopf.disabled = true; sagt('');
+    try {
+      await ruf('/api/konto/verwerfen', {});
+      /* Das Token zeigt jetzt auf nichts mehr - es MUSS weg, sonst hält sich
+         die Seite bis zum nächsten Laden für angemeldet und läuft in 401er.
+         `wirf()` ist derselbe Griff wie beim Abmelden, nur ohne Route
+         dahinter: es gibt nichts mehr abzumelden, das Konto ist fort. */
+      wirf();
+      brauchtNamen = false;
+      meinName = null;
+      $('name-ausweg').hidden = true;
+      $('f-name').value = '';
+      linkRaus = false;
+      formular();
+      sagt('Verworfen. Trag die Adresse ein, mit der du das erste Mal hier warst.');
       await hole();
     } catch (e) {
       sagt(e.message, true);
@@ -13534,9 +15262,21 @@
       mailBlattZu();
       /* Von Hand nachziehen, was sonst der nächste Aufbau erledigt hätte: die
          Seite wird hier ja nicht neu geladen. Erst das Formular (der
-         Türsteher muss weg), dann die Tafel, dann das Push-Abo. */
+         Türsteher muss weg), dann die RUNDE, dann die Tafel, dann das Abo.
+
+         `gruppeFinden` gehört hier her und nicht in die Aufbaukette allein:
+         die ist längst durchgelaufen und dort an `if (!merke())` ausgestiegen,
+         weil beim Laden noch niemand angemeldet war. Ohne diese Zeile bliebe
+         `GRUPPE` die ganze Sitzung leer — jeder Schreibvorgang liefe in
+         „Welche Gruppe?", und `strom()` verbände sich nie. Genau der normale
+         Anmeldeweg wäre der kaputte. Dieselbe Reihenfolge wie unten im
+         Aufbau: erst die Runde, dann laden. */
       formular();
+      await gruppeFinden();
       await hole();
+      /* Und die Leitung, die vorhin mangels Gruppe nicht zustande kam. Ohne
+         das steht die Tafel bis zum nächsten Nachfassen ohne Strom da. */
+      strom();
       pushAbgleich();
     });
   }
@@ -13698,9 +15438,14 @@
     /* Zum Notruf gibt es kein eigenes Blatt: fremde Notrufe STEHEN auf der
        Tafel, mit Karte und Weg. Also wird dorthin gescrollt und nichts
        aufgeklappt — ein Blatt, das dieselbe Karte noch einmal zeigt, wäre
-       eine zweite Wahrheit für dieselbe Sache. */
-    const block = $('notruf-block');
-    if (!block.hidden) block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+       eine zweite Wahrheit für dieselbe Sache.
+
+       Seit Etappe 7 stimmt dieser Kommentar endlich wörtlich: bis dahin stand
+       hier ein `zungeWaehlen('notruf-block')`, also doch ein Blatt. Die Liste
+       sitzt jetzt im Kopf, außerhalb jeder Zunge — es gibt nichts mehr zu
+       wählen, nur noch hinzuscrollen. */
+    const liste = $('notruf-liste');
+    if (!liste.hidden) liste.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function losMailZu() {
@@ -13766,8 +15511,14 @@
      --------------------------------------------------------------------- */
   function strom() {
     if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+    /* Seit Schema 32 hält der Verteiler eine Leitung JE GRUPPE. Ohne Gruppe
+       gibt es also nichts, woran man sich hängen könnte — und ein Versuch
+       liefe in einen 400er, den der Backoff dann alle paar Sekunden
+       wiederholte. Der Aufbau ruft `strom()` erst, wenn die Gruppe steht;
+       diese Zeile fängt die Wege, die es doch früher versuchen. */
+    if (!GRUPPE) return;
     let s;
-    try { s = new WebSocket(API.replace(/^http/, 'ws') + '/api/strom'); }
+    try { s = new WebSocket(API.replace(/^http/, 'ws') + '/api/strom?g=' + GRUPPE); }
     catch { planeStrom(); return; }
     ws = s;
 
@@ -13913,9 +15664,14 @@
      Adresszeile — sonst schlüge ein Neuladen der Seite denselben Rückblick
      wieder auf, und irgendwann fragt man sich, warum man ihn nicht loswird.
 
-     Der Dezember-Riegel am Knopf `wrapped-auf` bleibt, wie er ist: er
-     betrifft den KNOPF auf der Tafel, nicht diesen Weg. Wer eigens im Kontor
-     ein Jahr gewählt hat, hat die Frage schon beantwortet. */
+     Der Dezember-Riegel bleibt, wie er ist: er betrifft den KNOPF „Dein Jahr"
+     (seit Etappe 10 oben rechts auf `statistik.html`), nicht diesen Weg. Wer
+     eigens im Kontor ein Jahr gewählt hat, hat die Frage schon beantwortet.
+
+     `von` sagt, wohin das × zurückführt: ohne Angabe ins Kontor (so ruft
+     `admin.html` seit jeher), mit `von=statistik` auf die Bilderseite. Der
+     Rückweg gehört zum Aufruf, nicht zum Rückblick - derselbe Rückblick,
+     zwei Türen. */
   function wrappedAusAdresse() {
     const roh = new URLSearchParams(location.search).get('wrapped');
     if (!roh) return;
@@ -13930,9 +15686,12 @@
     const heuer = new Date().getFullYear();
     if (!Number.isInteger(jahr) || jahr < 2024 || jahr > heuer) return;
     if (!drinnen()) return;   // ohne Anmeldung gibt es nichts zu erzählen
-    // Der zweite Wert ist der Rückweg: von hier aus führt das Zumachen ins
-    // Kontor zurück, nicht auf die Tafel.
-    wrappedAuf(jahr, true);
+    // Der zweite Wert ist der Rückweg: von hier aus führt das Zumachen
+    // dorthin zurück, woher man kam, nicht auf die Tafel.
+    const g = new URLSearchParams(location.search).get('g') || GRUPPE;
+    wrappedAuf(jahr, new URLSearchParams(location.search).get('von') === 'statistik'
+      ? 'statistik.html' + (g ? '?g=' + g : '')
+      : 'admin.html');
   }
 
   /* Ein Film aus der Adresse: `?film=ursprung` schlägt ihn beim Aufbau gleich
@@ -13981,6 +15740,107 @@
     schauAuf(f);
   }
 
+  /* --- Welche Runde ist das hier? (Schema 32) -------------------------------
+     Die Gruppe steht als `?g=` in der Adresse. Sie wird nicht geglaubt,
+     sondern gegengeprüft: eine erfundene oder eine fremde Nummer im Link darf
+     keine fremde Tafel aufmachen — der Worker weist sie ohnehin ab, aber die
+     Seite soll dann bei der eigenen landen und nicht bei einer leeren.
+
+     Steht keine da, entscheidet die Zahl der Mitgliedschaften: genau eine
+     wird stillschweigend genommen (dafür ist die Auffanggruppe da — für den
+     Nutzer hat sich damit nichts geändert), bei mehreren oder gar keiner
+     führt der Weg auf `start.html`. Deshalb ist die Wahl auch kein Blatt auf
+     der Tafel: die Tafel IST die eine Gruppe, ihre Auswahl liegt davor.
+     --------------------------------------------------------------------- */
+  async function gruppeFinden() {
+    if (!merke()) return;
+
+    const roh = Number(new URLSearchParams(location.search).get('g'));
+    if (Number.isInteger(roh) && roh > 0) {
+      try {
+        const r = await fetch(API + '/api/gruppe?g=' + roh,
+          { headers: mitToken(), cache: 'no-store' });
+        if (r.ok) {
+          const d = await r.json();
+          GRUPPE = d.id; gruppeName = d.name; GRUPPE_SCHALTER = d.schalter;
+          return;
+        }
+        /* 403 oder 404: die Nummer im Link gehört nicht mir. Weiter unten
+           landet der Weg dann bei meiner eigenen Gruppe oder auf der Auswahl —
+           besser als eine Tafel, die auf jeden Abruf einen Fehler zeigt. */
+      } catch {
+        // Netz weg. Dann eben ungeprüft: der Worker prüft sowieso, und ohne
+        // Gruppe wäre die Seite bis zur Rückkehr des Netzes stumm.
+        GRUPPE = roh;
+        return;
+      }
+    }
+
+    let gruppen = [];
+    try {
+      const r = await fetch(API + '/api/gruppen', { headers: mitToken(), cache: 'no-store' });
+      if (r.ok) gruppen = (await r.json()).gruppen || [];
+    } catch {
+      return;   // ohne Auskunft nichts entscheiden, schon gar nicht wegspringen
+    }
+
+    if (gruppen.length === 1) {
+      GRUPPE = gruppen[0].id;
+      gruppeName = gruppen[0].name;
+      GRUPPE_SCHALTER = gruppen[0].schalter;
+      /* Die Nummer wandert in die Adresse nach. Nicht aus Ordnungsliebe: wer
+         von hier aus einen Link weitergibt, gibt sonst einen weiter, der beim
+         Empfänger auf dessen Gruppe zeigt. */
+      const p = new URLSearchParams(location.search);
+      p.set('g', String(GRUPPE));
+      history.replaceState(null, '', location.pathname + '?' + p + location.hash);
+      return;
+    }
+
+    /* Keine Gruppe oder mehrere: die Auswahl davor. `replace`, damit der
+       Zurück-Knopf nicht in diese Weiche zurückführt.
+
+       NICHT, solange eine Einladung offen liegt. Der Regelfall einer Einladung
+       ist ja gerade der, der noch in KEINER Runde ist — die Weiche hier würde
+       ihn mitsamt seinem offenen Blatt nach `start.html` werfen, und der Token
+       ist dann fort (das Fragment ist schon geräumt). Der Sprung ist nach dem
+       Beitritt ohnehin unnötig: die Tat im Blatt springt selbst dorthin, wo er
+       jetzt dazugehört. */
+    if (einladungOffen) return;
+    location.replace('start.html' + location.hash);
+  }
+
+  /* Ein Einladungslink aus dem Postfach. Wie der Magic Link ein Fragment (es
+     geht an keinen Server und steht in keinem Protokoll) und wie er hinter
+     einem Fingertipp: ein Link, der beim bloßen Öffnen einer Gruppe beitritt,
+     tut das auch dann, wenn ihn jemand nur neugierig anklickt. */
+  function einladungEinloesen() {
+    const treffer = /[#&]einladung=([a-f0-9]{32,})/i.exec(location.hash || '');
+    if (!treffer) return;
+    const token = treffer[1];
+    /* Wer nicht angemeldet ist, behält seinen Link. Das Fragment wird DANACH
+       geräumt und nicht davor: sonst meldet er sich per Magic Link an, kehrt
+       auf eine Tafel ohne Fragment zurück, und die Einladung ist
+       unwiederbringlich weg — ausgerechnet für den, an den sie gerichtet war.
+       So kann er den Link ein zweites Mal öffnen, wenn er drin ist. */
+    if (!merke()) { sagt('Erst anmelden — dann führt die Einladung hinein.'); return; }
+    history.replaceState(null, '', location.pathname + location.search);
+    einladungOffen = true;
+    mailBlattAuf('Eine Einladung liegt an', 'einmal tippen, dann bist du dabei',
+      'Beitreten', async () => {
+        try {
+          const d = await ruf('/api/gruppe/beitritt', { token });
+          einladungOffen = false;
+          mailBlattZu();
+          // Und gleich dorthin: eine Einladung, nach der man auf der alten
+          // Tafel stehenbleibt, sieht aus, als sei nichts passiert.
+          location.replace(location.pathname + '?g=' + d.gruppe.id);
+        } catch (e) {
+          mlSagt(e.message, true);
+        }
+      });
+  }
+
   /* Reihenfolge: erst den Link einloesen (der setzt das Token), dann wissen,
      wer man ist, dann zeichnen. Die beiden Wege aus dem Postfach hängen sich
      davor: sie lesen dasselbe Fragment, und `magicEinloesen` räumt es weg. */
@@ -14007,6 +15867,7 @@
     stummEinloesen();
     losAusMail();
     magicEinloesen();
+    einladungEinloesen();
     pushEinstieg();
   });
 
@@ -14048,12 +15909,18 @@
     eng.addEventListener('change', schild);
   }
 
+  einladungEinloesen();
   /* Vor der Kette und nicht in ihr: der Film braucht keine Daten, und wer aus
      einer Mail kommt, soll ihn sehen und nicht erst den Aufbau. */
   filmAusAdresse();
 
   Promise.resolve()
     .then(() => merke() && !meinName && !brauchtNamen ? werBinIch() : null)
+    /* VOR `hole`: von hier an trägt jeder Schreibvorgang die Gruppe mit sich,
+       und die Leitung hängt an ihr. Steht sie nicht rechtzeitig, schreibt der
+       erste Klick nach dem Aufbau in die Leere — und `strom()` verbindet
+       gegen einen Verteiler, den es ohne Gruppe nicht gibt. */
+    .then(() => gruppeFinden())
     // Ohne den Pfeil bekäme `hole` die Antwort von `werBinIch` als `still` —
     // und der erste Aufbau dürfte dann bei einem Fehler nicht mehr zurückfallen.
     .then(() => hole())

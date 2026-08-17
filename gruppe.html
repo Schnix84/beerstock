@@ -1,0 +1,2811 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Gruppe verwalten — beerstock</title>
+<style>
+  /* ==========================================================================
+     EINE GRUPPE VERWALTEN
+
+     Die kleine Schwester des Kontors. Dort verwaltet der Wirt den ganzen
+     Laden, hier verwaltet einer seinen eigenen Tisch — und weil das derselbe
+     Handgriff in kleiner ist, sieht die Seite aus wie das Kontor und wie die
+     Tafel: Kreide auf Schiefer, vier Holzleisten drumherum, dieselbe Hand.
+
+     NEUN BEREICHE, in dieser Reihenfolge gewachsen: Stammdaten, Funktionen
+     (Etappe 2), Getränke und Wareneingang (3), Abrechnung (4), Zahlwege (5),
+     Hausordnung samt Verhängen und Sündenregister (8), dazu von Anfang an
+     Mitglieder, offene Anträge und Einladungslinks.
+
+     Jeder Bereich kam ERST, als der Worker dahinter stand — die Schalterleiste
+     etwa nicht in Etappe 1, obwohl `PATCH /api/gruppe` sie schon stellen
+     konnte: ein Schalter, der umspringt und nichts bewirkt, ist schlimmer als
+     keiner. Dieselbe Begründung steht im Worker an der Route. Wer hier einen
+     zehnten Bereich anhängt, hält sich daran.
+
+     Das Brett ist so breit wie die Tafel (520 px) und nicht so breit wie die
+     Statistiken. Es ist kein Bilderbrett, sondern eine einzelne Tafel, die
+     man aufgeklappt hat — dieselbe Tafel, die auf der Auswahl in der Reihe
+     hängt, nur von innen.
+     ========================================================================== */
+  :root {
+    --schiefer:    #262c2e;
+    --schiefer-t:  #191d1f;
+    --kreide:      #eef1ea;
+    --kreide-matt: #cfd6cd;
+    --kreide-weg:  #93a09a;
+    --gelb:        #e8c766;
+    --rot:         #d9705f;
+    --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  }
+
+  * { box-sizing: border-box; }
+  /* `hidden` ist nur `display:none` mit schwachem Gewicht — jedes `display`
+     einer eigenen Regel schlägt es. Einmal hier, statt an jeder Stelle daran
+     zu denken. Wortgleich aus `statistik.html`. */
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  /* Kein `background-attachment: fixed` — diese Seite ist lang, und ein
+     fixierter Hintergrund ruckelt auf mobilem Safari beim Scrollen. */
+  body {
+    margin: 0; min-height: 100%;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--kreide);
+    background:
+      radial-gradient(130% 55% at 50% -12%, #e8c76614, transparent 60%),
+      radial-gradient(120% 90% at 50% 0%, #1f2629, #14181a 52%, #0c0f11 100%);
+    background-color: #0c0f11;
+    /* BEIDES ist noetig, und beides gegen denselben Fehler — die Begründung
+       steht ausführlich in `statistik.html`: `no-repeat` gegen die harte
+       waagerechte Kante, `min-height: 100svh` gegen den in die obersten
+       Pixel gequetschten Verlauf. */
+    background-repeat: no-repeat;
+    min-height: 100svh;
+    padding: clamp(10px, 3vw, 28px);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- Der Holzrahmen -----------------------------------------------------
+     VIER LEISTEN, nicht eine Flaeche, jede per `clip-path` auf ihr Trapez
+     beschnitten - dadurch ist die Gehrung eine echte Kante zwischen zwei
+     Flaechen, jede Leiste hat ihre eigene Faserrichtung und ihre eigene
+     Beleuchtung.
+
+     WORTGLEICH von `index.html` und `statistik.html`. Dort steht das
+     Original samt der langen Begründung (warum vier Elemente und nicht vier
+     Hintergrundschichten, warum gestreifte Vorlagen statt Rauschen, warum
+     alle Kanten warm sind); hier steht die Kopie, wie überall sonst auch.
+
+     Was hier FEHLT und in `statistik.html` steht: der Regenbogenrahmen
+     (`--rh-ton`, `html.stolz-rahmen`). Er gehört dem Leser und hängt an
+     `stolz_heute`, und diese Seite fragt keine Route, die das mitliefert. Ein
+     Rahmen, der bei jedem Seitenwechsel an- und ausginge, wäre schlimmer als
+     einer, der hier gar nicht vorkommt.
+     --------------------------------------------------------------------- */
+  .brett {
+    /* Eine Zahl, vier Verwendungen: Polsterung, die vier Trapeze, die Naht,
+       der Falz. */
+    --r: clamp(9px, 2.4vw, 15px);
+    /* Der Ton des Holzes. `--holz`/`--holz-t` gibt es nicht mehr: alle vier
+       Seiten und die Wrapped-Karte tragen jetzt denselben Rahmen, damit war
+       das alte Paar tot. Diese vier Werte stehen wortgleich an jeder Stelle,
+       an der ein Rahmen haengt. */
+    --h-hell:   #f8ecd2;
+    --h-mitte:  #eed5a6;
+    --h-dunkel: #d0b284;
+    --h-tief:   #a98a5e;
+    --fase-hell: .38;
+    --fase-dunkel: .55;
+    position: relative;
+    max-width: 520px; margin: 0 auto;
+    /* Knapper gerundet als bisher (7 px -> 4). Eine gegehrte Leiste laeuft in
+       der Ecke spitz zu; je runder die Silhouette, desto mehr sieht der Rahmen
+       nach Gehaeuse aus und desto weniger nach Holz. */
+    border-radius: 4px;
+    padding: var(--r);
+    box-shadow:
+      0 42px 70px -30px #000e,
+      0 14px 30px -18px #000c,
+      0 0 0 1px #14110d;
+  }
+  /* `overflow` sitzt hier und nicht auf `.brett`: auf `.brett` schnitte es
+     alles ab, was aus der Tafel herausragen darf. */
+  .rh {
+    position: absolute; inset: 0; border-radius: inherit;
+    overflow: hidden; pointer-events: none;
+  }
+  .rh-l { position: absolute; inset: 0; }
+  .rh-o { clip-path: polygon(0 0, 100% 0, calc(100% - var(--r)) var(--r), var(--r) var(--r)); }
+  .rh-u { clip-path: polygon(0 100%, var(--r) calc(100% - var(--r)), calc(100% - var(--r)) calc(100% - var(--r)), 100% 100%); }
+  .rh-li { clip-path: polygon(0 0, var(--r) var(--r), var(--r) calc(100% - var(--r)), 0 100%); }
+  .rh-re { clip-path: polygon(100% 0, 100% 100%, calc(100% - var(--r)) calc(100% - var(--r)), calc(100% - var(--r)) var(--r)); }
+
+  /* --- Die Maserung -------------------------------------------------------
+     DER KERN, und er ist nicht offensichtlich: gefiltertes Rauschen wird NIE
+     eine Ader. Was traegt, ist eine GESTREIFTE Vorlage, verschoben von einer
+     `feDisplacementMap`. Zwei Bilder, nicht vier: liegend fuer Ober- und
+     Unterleiste, stehend fuer die Seiten. Ausführlich in `index.html`. */
+  .rh-l {
+    --rh-bild-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='60'%3E%3Cdefs%3E%3Cpattern id='s' width='600' height='15' patternUnits='userSpaceOnUse'%3E%3Crect width='600' height='15' fill='%23eed5a6'/%3E%3Crect y='0' width='600' height='1.5' fill='%23a8825a'/%3E%3Crect y='3.5' width='600' height='0.8' fill='%2386633c'/%3E%3Crect y='6' width='600' height='3' fill='%23e4c48c'/%3E%3Crect y='10' width='600' height='1.2' fill='%23bd9a6c'/%3E%3Crect y='12.5' width='600' height='2' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.025' numOctaves='3' seed='5' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='13' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='26' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='720' height='180' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='600' height='60' filter='url(%23z)'/%3E%3Crect width='600' height='60' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-bild-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='600'%3E%3Cdefs%3E%3Cpattern id='s' width='15' height='600' patternUnits='userSpaceOnUse'%3E%3Crect width='15' height='600' fill='%23eed5a6'/%3E%3Crect x='0' width='1.5' height='600' fill='%23a8825a'/%3E%3Crect x='3.5' width='0.8' height='600' fill='%2386633c'/%3E%3Crect x='6' width='3' height='600' fill='%23e4c48c'/%3E%3Crect x='10' width='1.2' height='600' fill='%23bd9a6c'/%3E%3Crect x='12.5' width='2' height='600' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.025 0.006' numOctaves='3' seed='17' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='25' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='38' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='180' height='720' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='60' height='600' filter='url(%23z)'/%3E%3Crect width='60' height='600' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-flaum:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cfilter id='f1'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='3' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.22 0 0 0 0 0.14 0 0 0 0 0.06 0 0 0 0.3 0'/%3E%3C/filter%3E%3Cfilter id='f2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='41' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.95 0 0 0 0 0.84 0 0 0 0.26 0'/%3E%3C/filter%3E%3Crect width='60' height='60' filter='url(%23f1)'/%3E%3Crect width='60' height='60' filter='url(%23f2)'/%3E%3C/svg%3E");
+    --licht-v: linear-gradient(180deg, #ffe4bb28, #ffe4bb00 26%, #2b18051a);
+  }
+  /* WICHTIG: jede Leiste liegt zwar ueber der ganzen Flaeche (`inset: 0`) und
+     zeigt davon nur ihr Trapez - ihre Verlaeufe muessen aber ueber die LEISTE
+     laufen, nicht ueber das Brett. Daher die `/ 100% var(--r)`-Angaben. */
+  .rh-o {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      linear-gradient(180deg, #ffe4bb3d, #ffe4bb00 42%, #2b180536) 0 0 / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 0 no-repeat,
+      var(--h-mitte);
+  }
+  /* Die Unterleiste liegt im Eigenschatten: oben nimmt ihr die Tafel das
+     Licht, nach unten hin hellt nur auf, was vom Boden zurueckkommt - und das
+     ist WENIG. Der helle Stopp steht erst bei 82 %: sonst ist die Unterleiste
+     am Ende heller als die obere, und das Licht kaeme von unten. */
+  .rh-u {
+    background:
+      var(--rh-flaum) 0 100% repeat,
+      linear-gradient(180deg, #2b18054f, #2b18051a 60%, #2b180500 82%, #ffe4bb22) 0 100% / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 100% no-repeat,
+      var(--h-dunkel);
+  }
+  /* Die Seitenleisten zeigen sonst den blassesten Streifen des stehenden
+     Bildes; darum der Versatz. */
+  .rh-li {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      var(--licht-v) 0 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #ffe4bb30, #2b180536) 0 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) -21px 0 no-repeat,
+      var(--h-mitte);
+  }
+  /* Rechts ist eine Spur dunkler als links: das Licht steht leicht links ueber
+     der Tafel, sonst stuende sie in einem Fotostudio. */
+  .rh-re {
+    background:
+      var(--rh-flaum) 100% 0 repeat,
+      var(--licht-v) 100% 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #2b18053e, #2b180520) 100% 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) calc(100% + 19px) 0 no-repeat,
+      var(--h-dunkel);
+  }
+  /* Die Gehrungsfuge entsteht schon dadurch, dass an ihr die Faserrichtung
+     springt. Der Haarstrich macht sie nur lesbar. */
+  .rh-naht {
+    position: absolute; inset: 0; opacity: .5;
+    background-image:
+      linear-gradient(45deg,  transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-45deg, transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-135deg,transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%),
+      linear-gradient(135deg, transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%);
+    background-size: var(--r) var(--r);
+    background-position: left top, right top, right bottom, left bottom;
+    background-repeat: no-repeat;
+  }
+  /* Die Aussenfase: zwei Haarstriche, keine Verlaeufe. Die vier Kanten duerfen
+     NICHT dasselbe tun - oben und links hell, unten und rechts dunkel. */
+  .rh-fase {
+    position: absolute; inset: 0; border-radius: inherit;
+    box-shadow:
+      0 1px 0 rgb(255 232 197 / var(--fase-hell)) inset,
+      1px 0 0 rgb(255 232 197 / calc(var(--fase-hell) * .6)) inset,
+      0 -1px 0 rgb(43 24 5 / var(--fase-dunkel)) inset,
+      -1px 0 0 rgb(43 24 5 / calc(var(--fase-dunkel) * .8)) inset;
+  }
+  /* Der Falz: die Tafel liegt HINTER dem Holz, nicht darauf. Der weiche
+     Schatten MUSS mit der Rahmenbreite rechnen - eine feste Wolke verschluckt
+     eine neun Pixel schmale Leiste komplett. */
+  .rh-falz {
+    position: absolute; inset: calc(var(--r) - 2px); border-radius: 3px;
+    box-shadow:
+      0 1px calc(var(--r) * .45) #2b180552,
+      0 0 0 1px #17100a,
+      0 1px 0 rgb(255 232 197 / var(--fase-hell));
+  }
+  .tafel {
+    position: relative; border-radius: 3px; overflow: hidden;
+    padding: clamp(18px, 5vw, 30px) clamp(15px, 4.5vw, 26px) clamp(20px, 4vw, 28px);
+    background:
+      radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
+    /* Die erste Zeile ist der Schatten, den die Falzlippe des Rahmens auf den
+       Stein wirft. Ohne sie stimmt der Falz von aussen und ist von innen nicht
+       zu sehen. */
+    box-shadow:
+      0 7px 12px -6px #000a inset,
+      0 0 0 1px #000a inset,
+      0 16px 34px -14px #000b inset,
+      0 -10px 26px -18px #0009 inset;
+  }
+  .tafel::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 0.97 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23k)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='340' height='340' filter='url(%23w)'/%3E%3C/svg%3E");
+  }
+  /* Die Wischbahnen. */
+  .tafel::after {
+    content: ""; position: absolute; inset: -8%; pointer-events: none; opacity: .3;
+    background:
+      linear-gradient(112deg, transparent 12%, #ffffff12 22%, #ffffff26 30%, #ffffff0a 38%, transparent 46%),
+      linear-gradient(112deg, transparent 48%, #ffffff0e 58%, #ffffff1c 64%, transparent 74%),
+      linear-gradient(112deg, transparent 72%, #ffffff10 84%, transparent 94%),
+      radial-gradient(65% 30% at 24% 30%, #ffffff1f, transparent 70%),
+      radial-gradient(50% 22% at 74% 64%, #ffffff17, transparent 70%);
+    mix-blend-mode: screen;
+  }
+  .tafel > * { position: relative; z-index: 1; }
+  .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
+
+  /* --- Der Weg zurück ------------------------------------------------------
+     Wortgleich aus `statistik.html`: am Zeigergerät die Kreide-Pille rechts
+     auf der Kopfzeile, am Finger der Balken oben. Zwei Wege nebeneinander
+     hieße, dass sich einer davon falsch anfühlt; also tauscht die
+     Medienabfrage sie gegeneinander aus.
+
+     ER FÜHRT DORTHIN ZURÜCK, WO MAN HERKAM — und das sind zwei Orte, weil es
+     zwei Eingänge gibt: „verwalten" im Deckel der Tafel und „Verwalten" in der
+     Reihe auf `start.html`.
+
+     Woran das zu erkennen ist, steht schon da und musste nicht erfunden
+     werden: `ausDemDeckel()` in `index.html` legt eine Marke in den
+     `sessionStorage`, bevor es die Seite verlässt (`beerstock-deckel-zurueck`),
+     und schlägt den Deckel beim Zurückkommen damit wieder auf. Diese Seite
+     LIEST sie nur — genommen wird sie drüben, sonst käme man auf einer Tafel
+     mit geschlossenem Deckel an.
+
+     Ohne Marke bleibt es bei `start.html`: dann kam man aus der Reihe.
+     Ein fester Ausgang wäre in genau einem der beiden Fälle falsch, und
+     zwar dem häufigeren — die Tafel ist der Ort, an dem man wohnt.
+     --------------------------------------------------------------------- */
+  .kopfzeile {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
+    margin-bottom: 4px;
+  }
+  .kopfzeile .zur-tafel {
+    margin-left: auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 40px; padding: 4px 10px;
+    font: inherit; font-size: 12px; text-decoration: none;
+    border: 1px solid #ffffff40; border-radius: 999px;
+    background: #ffffff0a; color: var(--kreide-weg);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .kopfzeile .zur-tafel:hover {
+    background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
+  }
+
+  /* Der Griff. OHNE Hintergrund, anders als der an den Bögen der Tafel: dort
+     klebt er oben und muss abdecken, was unter ihm durchscrollt; hier fährt er
+     mit dem Blatt und hat nichts zu verbergen. `touch-action: none` nimmt dem
+     Browser die Geste ganz ab — und darum wird nur VOM GRIFF aus gezogen und
+     nicht von überall bei Scrollstand 0: dort gehört der Zug nach unten dem
+     Zum-Neuladen-Ziehen von Chrome. Er ist ausdrücklich ein <button>, damit
+     VoiceOver am Finger überhaupt einen Weg von dieser Seite herunter hat. */
+  .raus-griff {
+    display: none; width: 100%; padding: 13px 0 11px;
+    border: none; background: none; cursor: pointer;
+    touch-action: none;
+  }
+  .raus-griff::before {
+    content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
+    border-radius: 999px; background: #ffffff38;
+  }
+  .raus-griff:active::before { background: #ffffff5c; }
+  .raus-griff:focus-visible { outline: 2px solid var(--gelb); outline-offset: 2px; }
+
+  @media (hover: none), (pointer: coarse) {
+    .kopfzeile .zur-tafel { display: none; }
+    .raus-griff { display: block; }
+    /* Der Griff bringt seine eigene Polsterung mit. Ohne das stünde er 20 px
+       unter der Oberkante, und ein Balken mitten im Blatt ist kein Rand. */
+    .tafel { padding-top: 0; }
+  }
+
+  /* Gezogen wird ohne Überblendung, die Rückfahrt und der Abgang mit ihr.
+     KEIN `html.zieht { overflow: hidden }` — `overflow` am Wurzelelement
+     schlägt aufs Fenster durch und setzt den Scrollstand auf 0; wer den Griff
+     aus ein paar gescrollten Pixeln heraus fasst, dem spränge die Seite im
+     ersten Millimeter nach oben. Gemessen und begründet in `statistik.html`. */
+  .brett { transition: transform .22s ease-out; }
+  html.zieht .brett { transition: none; }
+  @media (prefers-reduced-motion: reduce) { .brett { transition: none; } }
+
+  /* Die Zustimmung zum dokumentübergreifenden Wechsel, wie in `statistik.html`
+     und `admin.html`. Sie hat hier zuerst gefehlt, mit der Begründung, die
+     Ankunftsseite `start.html` bringe sie vielleicht nicht mit — sie tut es
+     (dort im Stil, mit derselben Zeile), und `index.html` erst recht.
+
+     WAS DIE FEHLENDE ZEILE GEKOSTET HAT: der Weg HIERHER kommt von einer
+     Seite, die zustimmt. Ohne Gegenstück wird der begonnene Wechsel beim
+     Ankommen verworfen, und die Ablehnung stand unbeachtet rot in der Konsole
+     — bei jedem Öffnen dieser Seite. Gemessen mit einem CDP-Lauf über die drei
+     Wege: `Tafel -> gruppe.html: AbortError: Transition was skipped`, die
+     beiden anderen Richtungen sauber.
+
+     Gefahren wird trotzdem nichts: der Handler unten schlägt ihn aus, genau
+     wie `statistik.html` es hält. Herein soll es keinen Wechsel geben — sonst
+     bekäme der Weg VON der Tafel hierher die Vorgabe des Browsers, ein
+     Überblenden. Hinaus fährt weiter das Brett um eine Fensterhöhe weg. */
+  @view-transition { navigation: auto; }
+
+  /* Der gestrichelte Link. Er steht auf der verschlossenen Tür — dort ist er
+     ein Satzende und keine Pille. Wortgleich aus `statistik.html`. */
+  .zurueck {
+    display: inline-block; color: var(--kreide-weg); font-size: 13px;
+    text-decoration: none; border-bottom: 1px dashed #ffffff2e; padding-bottom: 1px;
+  }
+  .zurueck:hover { color: var(--kreide); }
+
+  /* --- Der Kopf ------------------------------------------------------------
+     Anders als auf den Statistiken steht der Name NICHT neben der Pille,
+     sondern darunter: ein Gruppenname darf bis zu 40 Zeichen haben
+     (`GRUPPE_NAME_MAX` im Worker), und 40 Zeichen Handschrift neben einer
+     Pille brechen auf 320 px in drei Zeilen um, von denen die letzte allein
+     unter dem Pfeil steht. Oben also nur das Schild und der Weg hinaus, dann
+     der Name über die volle Breite — wie auf der Tafelreihe drüben. */
+  .schild {
+    font-family: var(--hand); font-size: 11.5px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--kreide-matt); opacity: .8;
+    transform: rotate(-.4deg); white-space: nowrap;
+  }
+  h1 {
+    font-family: var(--hand); font-weight: 400;
+    font-size: clamp(24px, 7vw, 33px); line-height: 1.15;
+    margin: 0; transform: rotate(-.8deg); transform-origin: left;
+    overflow-wrap: anywhere;
+  }
+  .g-sinn {
+    font-size: 11.5px; line-height: 1.5; color: var(--kreide-weg);
+    margin: 8px 0 0; overflow-wrap: anywhere;
+  }
+
+  /* --- Die Kreidestriche zwischen den Bereichen ----------------------------
+     Vier Bereiche auf EINER Tafel brauchen eine Fuge, und die Fuge dieser App
+     ist ein Kreidestrich, keine Linie und keine Karte. Jeder Strich hat einen
+     eigenen Pfad — vier gleiche Bögen untereinander sähen aus wie ein
+     Raster, und gerastert ist an einer Tafel nichts. */
+  .kreide-trenner {
+    display: block; width: 100%; height: 9px;
+    margin: clamp(18px, 5vw, 26px) 0 clamp(11px, 3vw, 15px);
+  }
+  .kreide-trenner path {
+    fill: none; stroke: #ffffff3d; stroke-width: 1.7; stroke-linecap: round;
+  }
+
+  .b-kopf {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 12px;
+    margin-bottom: 9px;
+  }
+  .b-kopf h2 {
+    font-family: var(--hand); font-weight: 400; letter-spacing: .05em;
+    font-size: 16px; margin: 0;
+  }
+  .b-kopf .zahl {
+    margin-left: auto; font-family: var(--hand); font-size: 12.5px;
+    color: var(--kreide-weg); white-space: nowrap;
+  }
+  .b-sinn { font-size: 11.5px; line-height: 1.55; color: var(--kreide-weg); margin: 0 0 12px; }
+  .unter { font-size: 11.5px; color: var(--kreide-weg); line-height: 1.55; margin: 0; }
+  .ge-knapp { color: var(--rot); margin-top: 3px; }
+
+  /* --- Felder und Knöpfe ---------------------------------------------------
+     WORTGLEICH aus `index.html`: `.feld` ist die gestrichelte Kreidelinie,
+     `.knopf` der Kreideumriss. Es gibt genau ZWEI Knopfarten in dieser App,
+     `.knopf` und `.knopf.leer`, und diese Seite erfindet keine dritte — keine
+     eigene Größe, keine rote Warnfassung. Eine gefährliche Tat wird hier
+     durch die RÜCKFRAGE abgesichert (zweiter Klick auf denselben Knopf, siehe
+     unten im Skript), nicht durch eine Farbe, die man erst lernen muss.
+
+     `min-height: 44px` ist die einzige Zutat und keine neue Art: auf der
+     Tafel ist `.knopf` ohnehin breit und hoch genug, hier stehen mehrere
+     nebeneinander in einer Zeile, und dort ist die 44 die Untergrenze für
+     einen Daumen. Die Regel gilt für alle, damit nicht zwei verschieden hohe
+     Knöpfe in derselben Reihe stehen. */
+  .feld {
+    display: block; width: 100%; border: none; border-bottom: 1.5px dashed #ffffff44;
+    background: transparent; padding: 8px 2px 7px; border-radius: 0;
+    font-family: var(--hand); font-size: 17px; color: var(--kreide);
+    min-height: 44px;
+  }
+  textarea.feld { resize: vertical; min-height: 58px; line-height: 1.4; font-size: 15px; }
+  .feld:focus { outline: none; border-bottom-color: var(--gelb); border-bottom-style: solid; }
+  .feld::placeholder { color: #ffffff30; }
+  /* Zahlenfelder ohne Steppertreppchen: die zwei Pfeile sind auf Schiefer ein
+     weißer Klotz, und getippt wird die Zahl ohnehin. */
+  .feld[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+  .feld[type="number"]::-webkit-outer-spin-button,
+  .feld[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .feld-label {
+    display: block; font-size: 8.5px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--kreide-weg); margin-bottom: 3px;
+  }
+  .feld-satz { margin-bottom: 14px; }
+  .feld-paar { display: flex; flex-wrap: wrap; gap: 12px; }
+  .feld-paar > * { flex: 1 1 130px; min-width: 0; }
+
+  .knopf {
+    width: 100%; min-height: 44px;
+    border: 1.5px solid #ffffff55; border-radius: 3px; padding: 11px;
+    background: #ffffff0d; color: var(--kreide); cursor: pointer;
+    font-family: var(--hand); font-size: 16px; letter-spacing: .04em;
+    transition: background .2s, border-color .2s, transform .06s;
+  }
+  .knopf:hover { background: #ffffff1a; border-color: var(--gelb); }
+  .knopf:active { transform: translateY(1px); }
+  .knopf[disabled] { opacity: .45; cursor: default; }
+  .knopf.leer { background: transparent; }
+
+  /* Steht ein Knopf in einer Reihe neben anderen, gibt er die volle Breite
+     zurück. Dieselbe Zeile wie an `.dk-tat`/`.lm-knoepfe` in `index.html` —
+     nicht dieselbe Klasse, weil es dort ein Deckel ist und hier eine
+     Personenzeile, aber genau dasselbe Mittel und keine neue Knopfart. */
+  /* `flex: 0 1 auto` und nicht `1 1 auto`: ein einzelnes „widerrufen" nähme
+     sonst die volle Breite und läse sich als der Hauptknopf des Abschnitts —
+     drei davon untereinander sahen aus, als sei das Widerrufen der Zweck der
+     Seite. Sie sind so breit wie ihr Wort und stehen links, wie die Zeile,
+     zu der sie gehören.
+
+     KEIN eigener Schriftgrad. Breite, Fluss und Polsterung darf ein Behälter
+     einem Knopf vorgeben — das tun `.dk-tat` und `.meme-kopfzeile` in
+     `index.html` genauso. Der Schriftgrad ist das, was aus einer Anordnung
+     eine eigene GRÖSSE machte, und eine dritte Größe gibt es nicht.
+
+     Der Preis dafür ist sichtbar: „zu Admin machen" und „entfernen" passen in
+     voller Schrift auf keinem Telefon nebeneinander und stehen untereinander.
+     Das ist die richtige Seite des Handels — ein Daumen trifft zwei Knöpfe
+     untereinander sicher, zwei geschrumpfte nebeneinander nicht. */
+  .tat-reihe { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tat-reihe .knopf { width: auto; flex: 0 1 auto; padding: 9px 13px; }
+
+  /* --- Abrechnung (Schema 35, Etappe 4) -------------------------------------
+     Der Monatswähler: zwei schmale Knöpfe links und rechts eines mittig
+     stehenden Titels — dieselbe `.knopf.leer`-Form wie überall, nur zu dritt
+     in einer Zeile statt untereinander. */
+  .ab2-nav-reihe { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+  .ab2-nav-reihe .knopf { width: auto; padding: 6px 12px; }
+  .ab2-nav-reihe .z-name { flex: 1; text-align: center; }
+  .ab2-zeile {
+    padding: 9px 0; border-bottom: 1px dashed #ffffff1f;
+  }
+  .ab2-zeile:last-child { border-bottom: none; }
+  .ab2-zeile .z-name { display: flex; justify-content: space-between; gap: 8px; }
+  .ab2-betrag { font-variant-numeric: tabular-nums; color: var(--kreide-weg); }
+  .ab2-offen { color: var(--rot); }
+  .ab2-tat { margin-top: 12px; }
+  .ab2-bestaetigen { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .ab2-bestaetigen input {
+    width: 6.5em; padding: 6px 8px; border: 1px solid #ffffff33; border-radius: 3px;
+    background: transparent; color: var(--kreide); font: inherit; font-size: 13px;
+  }
+
+  /* --- Reiter (Sichtbarkeit) -----------------------------------------------
+     WERTGLEICH zum Sieb im Kontor und zum Zeitraum auf den Statistiken: heller
+     Rand, helle Schrift, Grund unverändert. Das Gewählte wird NICHT ausgemalt
+     — eine Kreidefläche ist auf Schiefer das Lauteste, was es gibt. Der dicke
+     Strich kommt über den Schatten und nicht über `font-weight`, sonst rücken
+     die Reiter bei jeder Wahl. */
+  .reiter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .reiter button {
+    font: inherit; font-size: 12px; cursor: pointer;
+    border: 1px solid #ffffff40; border-radius: 999px; padding: 0 14px;
+    min-height: 44px;
+    background: #ffffff0a; color: var(--kreide-weg);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .reiter button:hover {
+    background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
+  }
+  .reiter button.an {
+    color: var(--kreide); border-color: var(--kreide); border-width: 2px;
+    text-shadow: 0 0 .6px currentColor, 0 0 .6px currentColor;
+  }
+
+  /* --- Eine Zeile: Mensch, Antrag oder Link --------------------------------
+     Gitter aus zwei Spalten, Aktionen darunter. Bei 320 px fallen Marke und
+     Knöpfe in die eigene Reihe, statt den Namen zu quetschen — ein Name, der
+     in der Mitte umbricht, weil rechts ein Knopf steht, ist die häufigste
+     Art, eine Liste auf einem schmalen Telefon kaputtzumachen. */
+  .zeile {
+    display: grid; grid-template-columns: 1fr auto; gap: 0 10px;
+    align-items: baseline; padding: 11px 0 10px; border-bottom: 1px dashed #ffffff1f;
+  }
+  .zeile:last-child { border-bottom: none; }
+  .z-name {
+    font-family: var(--hand); font-size: clamp(16px, 4.4vw, 18px); line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  /* Die Kreide des Menschen als Punkt vor dem Namen — dieselbe, mit der er im
+     Kontor, in den Bildern und am Rad steht. Nur ein Punkt, kein gefärbter
+     Name: gefärbte Handschrift auf Schiefer liest sich als Hervorhebung, und
+     hervorgehoben ist hier niemand. */
+  .z-punkt {
+    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    margin-right: 7px; vertical-align: 1px; flex: none;
+  }
+  /* „du" — die Kreide-Umrissform der Marke von der Tafel, in Rot, weil sie
+     eine Person meint und keine Rolle. */
+  .z-name .du {
+    font-family: system-ui, sans-serif;
+    font-size: 11px; color: var(--rot); margin-left: 8px;
+    border: 1px solid #d9705f80; border-radius: 40% 60% 55% 45% / 60% 40% 60% 40%;
+    padding: 1px 7px 2px; vertical-align: 2px; letter-spacing: .04em; white-space: nowrap;
+  }
+  .z-marke {
+    font-size: 8px; letter-spacing: .16em; text-transform: uppercase;
+    border-radius: 2px; padding: 2px 5px; white-space: nowrap;
+    color: var(--gelb); border: 1px solid #e8c76655;
+  }
+  .z-marke.mit { color: var(--kreide-weg); border-color: #ffffff26; }
+  .z-unter {
+    grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
+    margin-top: 6px; font-size: 10.5px; letter-spacing: .04em; color: var(--kreide-weg);
+    overflow-wrap: anywhere;
+  }
+  .z-unter .pkt { opacity: .4; }
+  .z-tat { grid-column: 1 / -1; margin-top: 10px; }
+  /* Ein widerrufener oder abgelaufener Link steht blass da, statt zu
+     verschwinden: dass es ihn GAB, ist die Auskunft. */
+  .zeile.weg { opacity: .45; }
+
+  /* --- Der eine Moment: der Klartext des Einladungslinks -------------------
+     Gespeichert ist nur ein Abdruck (`token_hash`), der Klartext steht genau
+     einmal in der Antwort auf `POST /api/gruppe/einladung` und danach
+     nirgends mehr — nicht in der Liste, nicht in der Datenbank, nicht auf
+     dieser Seite nach einem Neuladen. Deshalb ist dieser Kasten der lauteste
+     auf der ganzen Seite: gelber Rand, gelbe Ansage, der Link in
+     Schreibmaschinenschrift, damit man Null und O unterscheiden kann.
+
+     Er wird NICHT von selbst geschlossen und überlebt jedes Nachladen der
+     Liste darunter — er geht erst weg, wenn jemand „habe ich, weg damit"
+     drückt. Ein Kasten, der nach acht Sekunden verschwindet, ist bei einem
+     Geheimnis, das nicht wiederkommt, kein Aufräumen, sondern ein Verlust. */
+  .einmal {
+    margin-top: 14px; padding: 12px; border-radius: 3px;
+    border: 1.5px solid #e8c76677; background: #e8c7660f;
+  }
+  .einmal .warn {
+    font-family: var(--hand); font-size: 15px; color: var(--gelb);
+    margin: 0 0 9px;
+  }
+  .einmal .kette {
+    display: block; padding: 10px; border-radius: 2px;
+    background: #00000047; border: 1px solid #ffffff1f;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; line-height: 1.55; color: var(--kreide);
+    overflow-wrap: anywhere; word-break: break-word;
+    /* Anfassbar für die Tastatur: der Rückfall aufs Markieren muss auch dann
+       gehen, wenn der Zwischenspeicher gesperrt ist. */
+    user-select: all; -webkit-user-select: all;
+  }
+  .einmal .kette:focus-visible { outline: 2px solid var(--gelb); outline-offset: 2px; }
+  /* Im Einmal-Kasten dürfen die beiden Knöpfe die Breite nehmen: sie sind der
+     Zweck des Kastens, und zwei linksbündige Wörter unter einem gelb
+     umrandeten Geheimnis sehen aus wie ein Nachsatz. */
+  .einmal .tat { margin-top: 12px; }
+  .einmal .tat-reihe .knopf { flex: 1 1 130px; }
+  .einmal .klein { margin: 10px 0 0; font-size: 10.5px; line-height: 1.55; color: var(--kreide-weg); }
+
+  .sagt {
+    margin: 14px 0 0; padding: 9px 11px; border-radius: 3px; font-size: 13px;
+    line-height: 1.5; background: #ffffff0d; border-left: 2px solid var(--kreide-weg);
+    overflow-wrap: anywhere;
+  }
+  .sagt.schlecht { border-left-color: var(--rot); color: #f0c7bf; }
+
+  /* Der Fuß: austreten. Steht ganz unten und mit Abstand, weil es die einzige
+     Tat auf dieser Seite ist, die einen selbst betrifft. */
+  .fuss {
+    margin-top: clamp(20px, 5vw, 28px); padding-top: 14px;
+    border-top: 1px dashed #ffffff1f;
+  }
+
+  /* Die verschlossene Tür: keine Gruppe in der Adresse, nicht angemeldet,
+     oder nicht dabei. Ein ehrlicher Satz und der Weg zurück — kein leeres
+     Gerüst, das aussieht, als lade noch etwas. */
+  .tuer { text-align: center; padding: 34px 6px 24px; }
+  .tuer h2 { font-family: var(--hand); font-weight: 400; font-size: 22px; margin: 0 0 8px; }
+  .tuer p { color: var(--kreide-weg); font-size: 14px; margin: 0 0 16px; line-height: 1.5; }
+
+  /* Bis die Daten da sind. Kein Schimmern: auf Schiefer sieht ein wanderndes
+     Glanzlicht aus wie ein Fehler in der Tafel. */
+  .skelett div {
+    height: 74px; border-radius: 3px; margin-bottom: 12px;
+    border: 1px dashed #ffffff1f; background: #ffffff08;
+    animation: atmen 1.8s ease-in-out infinite;
+  }
+  .skelett div:nth-child(2) { animation-delay: .2s; }
+  .skelett div:nth-child(3) { animation-delay: .4s; }
+  @keyframes atmen { 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) { .skelett div { animation: none; } }
+</style>
+</head>
+<body>
+<div class="brett">
+
+  <!-- Das Holz. Vier Leisten, jede auf ihr Trapez beschnitten - erst dadurch
+       dreht die Faser an der Gehrung. Reine Zeichnung; darum `aria-hidden`. -->
+  <div class="rh" aria-hidden="true">
+    <i class="rh-l rh-o"></i><i class="rh-l rh-u"></i><i class="rh-l rh-li"></i><i class="rh-l rh-re"></i>
+    <i class="rh-naht"></i><i class="rh-fase"></i><i class="rh-falz"></i>
+  </div>
+
+  <div class="tafel">
+    <!-- Der Weg hinaus am Finger. Er steht VOR der Kopfzeile, weil er an den
+         oberen Rand gehört; warum es ihn gibt, steht bei `.raus-griff`. -->
+    <button class="raus-griff" type="button" aria-label="zurück zur Auswahl"></button>
+
+    <div class="kopfzeile">
+      <span class="schild">Gruppe verwalten</span>
+      <a class="zur-tafel" href="start.html?wahl=1" aria-label="zurück zur Auswahl">←</a>
+    </div>
+
+    <h1 class="kr" id="g-name">…</h1>
+    <p class="g-sinn" id="g-rolle"></p>
+
+    <div class="skelett" id="skelett"><div></div><div></div><div></div></div>
+
+    <div id="blatt" hidden>
+
+      <!-- ---- (a) Stammdaten ---------------------------------------------- -->
+      <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M2 6.2 C 60 3.4, 118 7.4, 178 4.8 S 300 6.8, 378 3.6"/>
+      </svg>
+      <div class="b-kopf"><h2 class="kr">Stammdaten</h2></div>
+      <p class="b-sinn">Was auf dem Schild steht. Ändert einer, der die Gruppe führt,
+         sehen es alle.</p>
+
+      <!-- Für den, der die Gruppe führt: die Felder. -->
+      <div id="st-form" hidden>
+        <div class="feld-satz">
+          <label class="feld-label" for="st-name">Name</label>
+          <input class="feld" id="st-name" maxlength="40" autocomplete="off">
+        </div>
+        <div class="feld-satz">
+          <label class="feld-label" for="st-sinn">Beschreibung</label>
+          <textarea class="feld" id="st-sinn" rows="2" maxlength="200"
+                    placeholder="Wann, wo, wer holt — in einem Satz"></textarea>
+        </div>
+        <div class="feld-satz">
+          <span class="feld-label" id="st-sicht-label">Sichtbarkeit</span>
+          <div class="reiter" id="st-sicht" role="group" aria-labelledby="st-sicht-label"></div>
+          <p class="unter" id="st-sicht-sinn" style="margin-top:8px"></p>
+        </div>
+        <button class="knopf" type="button" id="st-tu">Übernehmen</button>
+      </div>
+
+      <!-- Für alle anderen: dasselbe zum Lesen. -->
+      <div id="st-lesen" hidden></div>
+      <p class="sagt" id="st-sagt" hidden></p>
+
+      <!-- ---- (b) Funktionen ------------------------------------------------
+           Nur für den, der die Gruppe führt — steht ganz weg, wenn er es nicht
+           ist, statt ausgegraut dazustehen: ein Schalter, den man nicht
+           anfassen darf, ist keine Auskunft, sondern eine Frage. -->
+      <div id="fu-block" hidden>
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M2 5.6 C 64 3, 122 7, 188 4.2 S 304 7.2, 378 4"/>
+        </svg>
+        <div class="b-kopf"><h2 class="kr">Funktionen</h2></div>
+        <p class="b-sinn">Was diese Gruppe führt — und was nicht. Abgeschaltet
+           heißt ausgeblendet, nie gelöscht: nichts geht verloren, auch nicht,
+           was schon dastand.</p>
+        <div id="fu-form"></div>
+        <p class="sagt" id="fu-sagt" hidden></p>
+      </div>
+
+      <!-- ---- (b2) Getränke, Preise, Wareneingang (Schema 34, Etappe 3) ------
+           Nur, wer die Gruppe führt UND `kasse_an` steht - bei abgeschaltetem
+           Schalter würfe jede Handlung hier ohnehin 403 (Entscheidung 18). -->
+      <div id="ge-block" hidden>
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M2 6 C 62 3.6, 120 7.6, 186 4.6 S 302 7, 378 4.4"/>
+        </svg>
+        <div class="b-kopf"><h2 class="kr">Getränke</h2></div>
+        <p class="b-sinn">Name, Preis, Bestand — was hier steht, sieht jedes Mitglied in der
+           Kasse. Abgeschaltete Getränke bleiben in der Historie stehen, nur der Knopf zum
+           Buchen verschwindet.</p>
+
+        <div id="ge-liste"></div>
+        <p class="sagt" id="ge-sagt" hidden></p>
+
+        <div class="feld-paar" style="margin-top:14px">
+          <div class="feld-satz">
+            <label class="feld-label" for="ge-neu-name">Neues Getränk</label>
+            <input class="feld" id="ge-neu-name" maxlength="40" autocomplete="off" placeholder="Pils">
+          </div>
+        </div>
+        <button class="knopf" type="button" id="ge-neu-tu">Anlegen</button>
+        <p class="sagt" id="ge-neu-sagt" hidden></p>
+
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M3 4.6 C 68 7, 128 3.6, 192 6.4 S 308 3.8, 377 6.2"/>
+        </svg>
+        <div class="b-kopf"><h2 class="kr">Wareneingang</h2></div>
+        <p class="b-sinn">Eine Lieferung hebt den Bestand, eine Korrektur gleicht Schwund,
+           Bruch oder eine Spende aus — beides bleibt als Zeile stehen, nichts wird überschrieben.</p>
+
+        <div class="feld-satz">
+          <label class="feld-label" for="be-getraenk">Getränk</label>
+          <select class="feld" id="be-getraenk"></select>
+        </div>
+        <div class="reiter" id="be-art" role="group" style="margin-bottom:12px"></div>
+        <div class="feld-paar">
+          <div class="feld-satz">
+            <label class="feld-label" for="be-menge">Menge</label>
+            <input class="feld" id="be-menge" type="number" inputmode="numeric" min="1" placeholder="24">
+          </div>
+          <div class="feld-satz" id="be-einkauf-satz">
+            <label class="feld-label" for="be-einkauf">Einkauf gesamt, in Cent — 0, wenn geschenkt</label>
+            <input class="feld" id="be-einkauf" type="number" inputmode="numeric" min="0" placeholder="1800">
+          </div>
+          <div class="feld-satz" id="be-grund-satz" hidden>
+            <label class="feld-label" for="be-grund">Grund</label>
+            <input class="feld" id="be-grund" maxlength="200" autocomplete="off" placeholder="drei Flaschen zerbrochen">
+          </div>
+        </div>
+        <button class="knopf" type="button" id="be-tu">Erfassen</button>
+        <p class="sagt" id="be-sagt" hidden></p>
+      </div>
+
+      <!-- ---- (b3) Abrechnung (Schema 35, Etappe 4) --------------------------
+           Dieselbe Sichtbarkeitsregel wie (b2): nur, wer führt, und nur bei
+           `kasse_an`. -->
+      <div id="ab-block" hidden>
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M2 5.4 C 64 7.8, 122 3.4, 188 6.8 S 304 4, 378 6.6"/>
+        </svg>
+        <div class="b-kopf">
+          <h2 class="kr">Abrechnung</h2>
+        </div>
+        <div class="ab2-nav-reihe">
+          <button class="knopf leer" type="button" id="ab2-zurueck" aria-label="voriger Monat">‹</button>
+          <span class="z-name" id="ab2-titel"></span>
+          <button class="knopf leer" type="button" id="ab2-vor" aria-label="nächster Monat">›</button>
+        </div>
+
+        <div id="ab2-liste"></div>
+        <p class="sagt" id="ab2-sagt" hidden></p>
+
+        <div class="tat-reihe ab2-tat">
+          <button class="knopf" type="button" id="ab2-abschliessen" hidden>Monat abschließen</button>
+          <button class="knopf leer" type="button" id="ab2-csv" hidden>CSV herunterladen</button>
+        </div>
+        <p class="unter" id="ab2-hinweis"></p>
+      </div>
+
+      <!-- ---- (b4) Zahlwege (Schema 36, Etappe 5) ----------------------------
+           Dieselbe Sichtbarkeitsregel wie (b2)/(b3): nur, wer führt, und nur
+           bei `kasse_an`. -->
+      <div id="zw-block" hidden>
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M3 4.8 C 66 7.4, 124 3.6, 190 6.6 S 306 3.8, 379 6.2"/>
+        </svg>
+        <div class="b-kopf"><h2 class="kr">Zahlwege</h2></div>
+        <p class="b-sinn">Wie ein Mitglied seine Schuld begleicht — gezahlt wird immer
+           außerhalb von BeerStock, hier steht nur der Weg dorthin.</p>
+
+        <div id="zw-liste"></div>
+
+        <div class="reiter" id="zw-art" role="group" style="margin-bottom:12px"></div>
+        <div class="feld-satz">
+          <label class="feld-label" for="zw-wert" id="zw-wert-label">PayPal.me-Link oder Kennung</label>
+          <input class="feld" id="zw-wert" type="text" maxlength="200" autocomplete="off">
+        </div>
+        <div class="feld-satz" id="zw-inhaber-satz" hidden>
+          <label class="feld-label" for="zw-inhaber">Kontoinhaber</label>
+          <input class="feld" id="zw-inhaber" type="text" maxlength="70" autocomplete="off">
+        </div>
+        <button class="knopf leer" type="button" id="zw-hinzufuegen">Hinzufügen</button>
+        <button class="knopf" type="button" id="zw-speichern" style="margin-top:8px">Speichern</button>
+        <p class="sagt" id="zw-sagt" hidden></p>
+      </div>
+
+      <!-- ---- (b5) Hausordnung (Schema 38, Etappe 8) --------------------------
+           Dieselbe Sichtbarkeitsregel wie (b2) bis (b4), nur an einem anderen
+           Schalter: nur, wer führt, und nur bei `regeln_an`.
+
+           `regeln_an` ist von `kasse_an` UNABHÄNGIG — eine Gruppe darf Regeln
+           ohne Kasse führen. Dann gibt es nur Auflagen, und die Wahl „Geld"
+           steht gar nicht erst da (siehe `hoArtZeichnen`). -->
+      <div id="ho-block" hidden>
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M2 6.2 C 66 3.4, 126 7.4, 190 4.4 S 306 7, 378 4.6"/>
+        </svg>
+        <div class="b-kopf"><h2 class="kr">Hausordnung</h2><span class="zahl" id="ho-zahl"></span></div>
+        <p class="b-sinn">Eure eigenen Regeln, und was ihre Übertretung kostet — Geld oder
+           eine Auflage. Jedes Mitglied liest sie auf der Tafel; verhängen kannst nur du.
+           Eine abgeschaltete Regel bleibt stehen, damit alte Strafen ihre Herkunft behalten.</p>
+
+        <div id="ho-liste"></div>
+        <p class="sagt" id="ho-sagt" hidden></p>
+
+        <div class="feld-satz" style="margin-top:14px">
+          <label class="feld-label" for="ho-neu-titel">Neue Regel</label>
+          <input class="feld" id="ho-neu-titel" maxlength="60" autocomplete="off" placeholder="Licht aus">
+        </div>
+        <div class="feld-satz">
+          <label class="feld-label" for="ho-neu-text">Der Satz dazu (freiwillig)</label>
+          <input class="feld" id="ho-neu-text" maxlength="400" autocomplete="off"
+                 placeholder="Wer als Letzter geht, macht das Licht aus.">
+        </div>
+        <div class="reiter" id="ho-neu-art" role="group" style="margin-bottom:12px"></div>
+        <div class="feld-satz" id="ho-neu-cent-satz">
+          <label class="feld-label" for="ho-neu-cent">Strafe in Cent</label>
+          <input class="feld" id="ho-neu-cent" type="number" inputmode="numeric" min="1" placeholder="50">
+        </div>
+        <div class="feld-satz" id="ho-neu-tat-satz" hidden>
+          <label class="feld-label" for="ho-neu-tat">Auflage</label>
+          <input class="feld" id="ho-neu-tat" maxlength="120" autocomplete="off"
+                 placeholder="bringt den nächsten Kasten mit">
+        </div>
+        <button class="knopf" type="button" id="ho-neu-tu">Anlegen</button>
+        <p class="sagt" id="ho-neu-sagt" hidden></p>
+
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M3 4.2 C 68 6.8, 128 3.4, 192 6.6 S 308 3.6, 377 6"/>
+        </svg>
+        <div class="b-kopf"><h2 class="kr">Verhängen</h2></div>
+        <p class="b-sinn">Aus einer Regel oder frei. Der Betroffene bekommt eine Mail;
+           Geldstrafen laufen mit der nächsten Monatsabrechnung mit.</p>
+
+        <div class="feld-paar">
+          <div class="feld-satz">
+            <label class="feld-label" for="sv-wen">Wen trifft es</label>
+            <select class="feld" id="sv-wen"></select>
+          </div>
+          <div class="feld-satz">
+            <label class="feld-label" for="sv-regel">Regel</label>
+            <select class="feld" id="sv-regel"></select>
+          </div>
+        </div>
+        <!-- Nur bei „frei, ohne Regel": dann muss der Admin selbst sagen,
+             worum es geht und was es kostet. -->
+        <div id="sv-frei" hidden>
+          <div class="feld-satz">
+            <label class="feld-label" for="sv-titel">Worum geht es</label>
+            <input class="feld" id="sv-titel" maxlength="60" autocomplete="off" placeholder="Sonderfall">
+          </div>
+          <div class="reiter" id="sv-art" role="group" style="margin-bottom:12px"></div>
+          <div class="feld-satz" id="sv-cent-satz">
+            <label class="feld-label" for="sv-cent">Strafe in Cent</label>
+            <input class="feld" id="sv-cent" type="number" inputmode="numeric" min="1" placeholder="200">
+          </div>
+          <div class="feld-satz" id="sv-tat-satz" hidden>
+            <label class="feld-label" for="sv-tat">Auflage</label>
+            <input class="feld" id="sv-tat" maxlength="120" autocomplete="off" placeholder="fegt den Hof">
+          </div>
+        </div>
+        <div class="feld-satz">
+          <label class="feld-label" for="sv-grund">Grund (freiwillig)</label>
+          <input class="feld" id="sv-grund" maxlength="200" autocomplete="off"
+                 placeholder="Licht brannte bis morgens">
+        </div>
+        <button class="knopf" type="button" id="sv-tu">Verhängen</button>
+        <p class="sagt" id="sv-sagt" hidden></p>
+
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M2 5.8 C 64 3.2, 122 7.2, 188 4.6 S 304 7.4, 378 4.2"/>
+        </svg>
+        <div class="b-kopf"><h2 class="kr">Sündenregister</h2><span class="zahl" id="sr-zahl"></span></div>
+        <p class="b-sinn">Was gerade aussteht und was diesen Monat verhängt wurde. Jeder
+           Wechsel steht im Protokoll — erlassen kannst du, solange nichts abgerechnet ist.</p>
+        <div id="sr-liste"></div>
+        <p class="sagt" id="sr-sagt" hidden></p>
+      </div>
+
+      <!-- ---- (c) Mitglieder ------------------------------------------------ -->
+      <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M3 4.4 C 70 7.2, 130 3.2, 195 6.2 S 310 3.4, 377 5.8"/>
+      </svg>
+      <div class="b-kopf"><h2 class="kr">Mitglieder</h2><span class="zahl" id="m-zahl"></span></div>
+      <p class="b-sinn" id="m-sinn"></p>
+      <div id="m-liste"></div>
+      <p class="sagt" id="m-sagt" hidden></p>
+
+      <!-- ---- (d) Offene Beitrittsanträge --------------------------------- -->
+      <!-- Der ganze Abschnitt steht nur da, wenn jemand wartet: eine
+           Überschrift mit „nichts offen" darunter ist eine Zeile, die man
+           jeden Tag liest und die jeden Tag nichts sagt. -->
+      <div id="a-block" hidden>
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M2 5.8 C 66 3.2, 124 7.2, 190 4.4 S 306 7.4, 378 4.2"/>
+        </svg>
+        <div class="b-kopf"><h2 class="kr">Offene Anträge</h2><span class="zahl" id="a-zahl"></span></div>
+        <p class="b-sinn">Wer von selbst kommt, stellt einen Antrag. Bis er beschieden ist,
+           sieht der Antragsteller von der Gruppe nur Name, Beschreibung und Mitgliederzahl.</p>
+        <div id="a-liste"></div>
+        <p class="sagt" id="a-sagt" hidden></p>
+      </div>
+
+      <!-- ---- (e) Einladungslinks ----------------------------------------- -->
+      <div id="e-block" hidden>
+        <svg class="kreide-trenner" viewBox="0 0 380 9" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M3 4.2 C 74 6.8, 132 3.4, 200 5.8 S 312 3.6, 377 6.4"/>
+        </svg>
+        <div class="b-kopf"><h2 class="kr">Einladungslinks</h2><span class="zahl" id="e-zahl"></span></div>
+        <p class="b-sinn">Wen du selbst holst, braucht keinen Antrag. Gespeichert wird nur ein
+           Abdruck des Links — der Klartext steht genau einmal da, beim Erzeugen.</p>
+
+        <div class="feld-paar">
+          <div class="feld-satz">
+            <label class="feld-label" for="e-tage">Läuft ab nach</label>
+            <input class="feld" id="e-tage" type="number" inputmode="numeric"
+                   min="1" max="365" placeholder="ohne Ablauf">
+          </div>
+          <div class="feld-satz">
+            <label class="feld-label" for="e-max">Höchstens</label>
+            <input class="feld" id="e-max" type="number" inputmode="numeric"
+                   min="1" max="999" placeholder="unbegrenzt">
+          </div>
+        </div>
+        <p class="unter" style="margin:-4px 0 12px">Tage und Einlösungen sind beide freiwillig.
+           Leer heißt: gilt, bis ihn jemand widerruft.</p>
+
+        <button class="knopf" type="button" id="e-neu">Neuen Link erzeugen</button>
+
+        <div class="einmal" id="e-einmal" hidden>
+          <p class="warn">Nur jetzt zu sehen. Danach nie wieder.</p>
+          <code class="kette" id="e-kette" tabindex="0"></code>
+          <div class="tat">
+            <div class="tat-reihe">
+              <button class="knopf" type="button" id="e-kopie">kopieren</button>
+              <button class="knopf leer" type="button" id="e-fertig">habe ich, weg damit</button>
+            </div>
+          </div>
+          <p class="klein">Wer ihn hat, ist ohne Bestätigung drin — behandle ihn wie einen
+             Schlüssel. Verloren? Dann mach einen neuen und widerrufe diesen.</p>
+        </div>
+
+        <div id="e-liste" style="margin-top:8px"></div>
+        <p class="sagt" id="e-sagt" hidden></p>
+      </div>
+
+      <!-- ---- Selbst gehen ------------------------------------------------- -->
+      <div class="fuss" id="fuss" hidden>
+        <p class="b-sinn" id="fuss-sinn"></p>
+        <button class="knopf leer" type="button" id="austritt">Aus dieser Gruppe austreten</button>
+        <p class="sagt" id="f-sagt" hidden></p>
+      </div>
+
+    </div>
+
+    <div class="tuer" id="tuer" hidden>
+      <h2 class="kr" id="tuer-titel">Diese Tafel hängt woanders</h2>
+      <p id="tuer-text"></p>
+      <a class="zurueck" href="start.html?wahl=1">zurück zur Auswahl</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ==========================================================================
+  // Dieselbe Herkunft, dasselbe Token wie die Tafel — wer dort angemeldet ist,
+  // ist es hier auch. Kein zweiter Anmeldeweg, kein zweiter Angriffsweg.
+  // ==========================================================================
+  const API = location.hostname === 'localhost'
+    ? 'http://localhost:8787'
+    : 'https://beerstock-api.mc-schneider84.workers.dev';
+  const SPEICHER = 'beerstock-token';
+
+  const $ = id => document.getElementById(id);
+  const el = (tag, klasse, text) => {
+    const n = document.createElement(tag);
+    if (klasse) n.className = klasse;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const merke = () => { try { return localStorage.getItem(SPEICHER); } catch { return null; } };
+
+  /* Welche Gruppe, steht in der Adresse. Der Worker prüft die Zahl selbst und
+     antwortet auf Unsinn mit einem Satz für Menschen — hier wird trotzdem
+     vorgeprüft, damit eine Adresse ohne `?g=` gar nicht erst eine Runde ans
+     Netz kostet. */
+  const G = Number(new URLSearchParams(location.search).get('g'));
+
+  /* Der Rückweg, einmal bestimmt — Begründung oben im Stil bei `.zur-tafel`.
+     NUR GELESEN, nicht genommen: `deckelAusMarke()` drüben nimmt sie und
+     schlägt damit den Deckel wieder auf. Wer sie hier wegräumte, käme auf
+     einer Tafel mit geschlossenem Deckel an und müsste den Griff, den er
+     gerade getan hat, noch einmal tun. */
+  /* Der begonnene Wechsel wird ausgeschlagen — Begründung oben bei
+     `@view-transition`. `ready` platzt dabei mit einem AbortError, und
+     unbeachtet stünde er rot in der Konsole; dieselbe Zeile steht in
+     `index.html` und in `statistik.html`. */
+  window.addEventListener('pagereveal', ev => {
+    if (!ev.viewTransition) return;
+    ev.viewTransition.ready.catch(() => {});
+    ev.viewTransition.skipTransition();
+  });
+
+  const AUS_DEM_DECKEL = (() => {
+    try { return !!sessionStorage.getItem('beerstock-deckel-zurueck'); }
+    catch { return false; }
+  })();
+  const ZURUECK = AUS_DEM_DECKEL && G > 0 ? 'index.html?g=' + G : 'start.html?wahl=1';
+  {
+    const wohin = AUS_DEM_DECKEL ? 'zurück zur Tafel' : 'zurück zur Auswahl';
+    const pfeil = document.querySelector('.zur-tafel');
+    pfeil.href = ZURUECK;
+    pfeil.setAttribute('aria-label', wohin);
+    document.querySelector('.raus-griff').setAttribute('aria-label', wohin);
+  }
+
+  /* Die neun Kreiden, EINE je Mensch — dieselbe an seiner Karte im Kontor, an
+     seiner Kurve in den Bildern und an seinem Bogen im Rad. Welchen Platz
+     jemand hat, sagt der Worker (`farbe`, siehe migrations/0028); wie Platz
+     0..8 aussieht, steht hier.
+
+     ABGESCHRIEBEN, NICHT GELADEN: die Reihe ist die Vorgabe `menschen` in
+     `bilder.js` und steht wortgleich auch in `index.html` (`MENSCHEN`) und in
+     `admin.html`. Diese Seite lädt `bilder.js` NICHT — sie ist wie die Tafel
+     eine geschlossene Datei, und für neun Zeichenketten hinge sie sonst an
+     einer fremden. Ändert sich die Reihe dort, muss sie hier mitgeändert
+     werden, sonst trägt derselbe Mensch auf zwei Seiten zwei Farben.
+
+     Der Worker kennt die ZAHL neun ebenfalls (`FARBEN`) und prüft damit die
+     Wahl im Kontor; `% MENSCHEN.length` steht trotzdem an jeder Verwendung —
+     eine Reihe, die einmal kürzer wird, soll keinen `undefined`-Punkt malen. */
+  const MENSCHEN = ['#d153a2', '#be4523', '#c18705', '#017a16',
+                    '#39ac6f', '#1d9af0', '#6956c2', '#adc83e', '#61ccdb'];
+
+  const nurTag = iso => iso
+    ? new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })
+    : '—';
+  /* Ein Antrag ist frisch, ein Beitritt ist alt: beim Antrag steht darum auch
+     die Uhrzeit da. Wer heute Vormittag geklopft hat, wartet anders lange als
+     wer es am 3. Mai tat. */
+  const tagUndZeit = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })
+      + ', ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+  };
+
+  async function ruf(pfad, rumpf, verb) {
+    const t = merke();
+    const kopf = t ? { Authorization: 'Bearer ' + t } : {};
+    if (rumpf) kopf['Content-Type'] = 'application/json';
+    const r = await fetch(API + pfad, {
+      method: verb || (rumpf ? 'POST' : 'GET'),
+      headers: kopf,
+      body: rumpf ? JSON.stringify(rumpf) : undefined,
+      cache: 'no-store',
+    });
+    const d = await r.json().catch(() => ({}));
+    // Der Text des Workers ist für Menschen geschrieben; er wird gezeigt, wie
+    // er kommt. Ein eigener Satz daneben wäre eine zweite Wahrheit.
+    if (!r.ok) throw Object.assign(new Error(d.fehler || 'Das ging nicht'), { status: r.status });
+    return d;
+  }
+
+  function sagt(id, text, schlecht) {
+    const p = $(id);
+    p.textContent = text || '';
+    p.classList.toggle('schlecht', !!schlecht);
+    p.hidden = !text;
+  }
+
+  function zeigeTuer(titel, text) {
+    $('skelett').hidden = true;
+    $('blatt').hidden = true;
+    /* Name und Rolle gehen MIT weg, nicht nur der Inhalt. Ein „Gruppe" in
+       Handschrift über dem Satz „Welche Gruppe denn?" beantwortet die Frage
+       falsch; die Tür bringt ihre eigene Überschrift mit. */
+    $('g-name').hidden = true;
+    $('g-rolle').hidden = true;
+    if (titel) $('tuer-titel').textContent = titel;
+    $('tuer-text').textContent = text;
+    $('tuer').hidden = false;
+  }
+
+  // ==========================================================================
+  // Der Stand. EINE Kopie, aus der alles gezeichnet wird — nach jeder Tat wird
+  // die betroffene Liste neu geholt und neu gemalt, statt die Zeile im Blatt
+  // von Hand nachzuziehen. Nachziehen geht solange gut, bis eine Tat zwei
+  // Dinge ändert: wer den letzten Admin entfernt, ändert auch die Rolle des
+  // Nachrückers, und die stünde dann falsch da.
+  // ==========================================================================
+  let gruppe = null;        // Antwort von GET /api/gruppe
+  let mitglieder = [];
+  let anfragen = [];
+  let einladungen = [];
+  const darfIch = () => gruppe && gruppe.rolle === 'admin';
+
+  /* Jede zerstörende Tat fragt zurück — als zweiter Klick auf DENSELBEN Knopf,
+     mit dem Satz darüber, was gleich passiert. Wortgleiches Vorgehen wie im
+     Kontor (`sicher` in `admin.html`) und aus denselben zwei Gründen: ein
+     `confirm()` reißt einen aus dem Blatt, und man klickt es weg, ohne es
+     gelesen zu haben. Der Knopf wird dabei NICHT rot — die App kennt keine
+     rote Knopfart, und die Rückfrage selbst ist die Sicherung.
+
+     Die Rückfrage verfällt von selbst: ein „wirklich?", das eine Minute
+     stehen bleibt, wird irgendwann versehentlich getroffen. */
+  let sicher = null;
+  let sicherUhr = null;
+  /* Womit die VORIGE Rückfrage gemalt wurde. Es gibt nur einen `sicher`, und
+     das ist richtig — zwei offene „wirklich?" nebeneinander sind eine Falle.
+     Ohne diesen Merker blieb aber die alte Aufschrift stehen: wer bei Kai
+     „entfernen" antippt und dann an einem Link „widerrufen", dem las der
+     Knopf bei Kai weiter „wirklich entfernen", weil die Uhr, die ihn hätte
+     zurücksetzen sollen, gerade auf die Einladungsliste umgehängt wurde.
+     Getan hätte er nichts (der Schlüssel passt nicht mehr, er fragt erneut) —
+     aber ein zerstörend aussehender Knopf, der stehen bleibt, nimmt genau der
+     Sicherung die Kraft, die hier die einzige ist. */
+  let sicherMalen = null;
+  const SICHER_TAKT = 8000;
+
+  function rueckfrage(schluessel, satzId, satz, malen) {
+    // Erst die vorige Frage zurücknehmen, dann die neue stellen.
+    const vorher = sicherMalen;
+    sicher = null;
+    if (vorher && vorher !== malen) vorher();
+    sicher = schluessel;
+    sicherMalen = malen;
+    clearTimeout(sicherUhr);
+    sicherUhr = setTimeout(() => {
+      sicher = null;
+      sicherMalen = null;
+      malen();
+      // Der Satz muss mit weg. Bleibt er stehen, während der Knopf schon
+      // wieder harmlos aussieht, liest man ihn als Zustand statt als Frage.
+      sagt(satzId, '');
+    }, SICHER_TAKT);
+    malen();
+    sagt(satzId, satz);
+  }
+
+  function loesen(satzId) {
+    sicher = null;
+    sicherMalen = null;
+    clearTimeout(sicherUhr);
+    sagt(satzId, '');
+  }
+
+  /* Wer entfernt wird oder geht, kann der letzte Admin gewesen sein — dann
+     rückt das dienstälteste Mitglied nach (Entscheidung 30 im Worker), und
+     das MUSS dastehen. Sonst führt jemand eine Gruppe, ohne es zu wissen. */
+  const nachsatz = n => n ? ` „${n.name}" führt die Gruppe jetzt.` : '';
+
+  // ==========================================================================
+  // (a) Stammdaten
+  // ==========================================================================
+  const SICHT = [
+    { wert: 'privat', wort: 'privat',
+      sinn: 'Privat: nicht auffindbar. Herein kommt nur, wer einen Einladungslink hat.' },
+    { wert: 'oeffentlich', wort: 'öffentlich',
+      sinn: 'Öffentlich: über die Suche zu finden. Der Beitritt bleibt trotzdem ein Antrag, '
+          + 'den einer von euch beschieden hat.' },
+  ];
+  let sichtWahl = 'privat';
+
+  function stammdaten() {
+    if (darfIch()) {
+      $('st-form').hidden = false;
+      $('st-lesen').hidden = true;
+      $('st-name').value = gruppe.name || '';
+      $('st-sinn').value = gruppe.beschreibung || '';
+      sichtWahl = gruppe.sichtbar === 'oeffentlich' ? 'oeffentlich' : 'privat';
+      sichtZeichnen();
+      return;
+    }
+    /* Nur lesen. Dieselben drei Auskünfte in derselben Reihenfolge — wer
+       einmal Admin war und es nicht mehr ist, soll die Seite wiedererkennen
+       und nicht suchen müssen, wohin die Beschreibung verschwunden ist. */
+    $('st-form').hidden = true;
+    const k = $('st-lesen');
+    k.hidden = false;
+    k.textContent = '';
+    const satz = (was, wert) => {
+      const d = el('div', 'feld-satz');
+      d.appendChild(el('span', 'feld-label', was));
+      d.appendChild(el('div', 'z-name', wert));
+      k.appendChild(d);
+    };
+    satz('Name', gruppe.name);
+    satz('Beschreibung', gruppe.beschreibung || 'Steht nichts.');
+    const s = SICHT.find(x => x.wert === gruppe.sichtbar) || SICHT[0];
+    satz('Sichtbarkeit', s.wort);
+    k.appendChild(el('p', 'unter', s.sinn));
+  }
+
+  function sichtZeichnen() {
+    const ziel = $('st-sicht');
+    ziel.textContent = '';
+    SICHT.forEach(s => {
+      const b = el('button', s.wert === sichtWahl ? 'an' : null, s.wort);
+      b.type = 'button';
+      // `aria-pressed` UND die Klasse: die Klasse malt, das Attribut spricht.
+      b.setAttribute('aria-pressed', String(s.wert === sichtWahl));
+      b.addEventListener('click', () => { sichtWahl = s.wert; sichtZeichnen(); });
+      ziel.appendChild(b);
+    });
+    $('st-sicht-sinn').textContent = (SICHT.find(s => s.wert === sichtWahl) || SICHT[0]).sinn;
+  }
+
+  $('st-tu').addEventListener('click', async () => {
+    const knopf = $('st-tu');
+    knopf.disabled = true;
+    sagt('st-sagt', '');
+    try {
+      /* Alle drei Felder gehen mit, auch die unveränderten. `PATCH` nimmt
+         weggelassene Felder als „nicht anfassen" — hier wurde aber nichts
+         weggelassen, sondern das Formular ist der Stand, den der Nutzer sieht
+         und übernimmt. Drei Felder zu vergleichen und nur die geänderten zu
+         schicken, spart nichts und kostet die Frage, was bei gleichzeitigem
+         Ändern von zwei Geräten gilt. */
+      const d = await ruf('/api/gruppe', {
+        gruppe: G,
+        name: $('st-name').value,
+        beschreibung: $('st-sinn').value,
+        sichtbar: sichtWahl,
+      }, 'PATCH');
+      gruppe = { ...gruppe, ...d.gruppe };
+      kopf();
+      stammdaten();
+      sagt('st-sagt', 'Steht auf dem Schild.');
+    } catch (e) {
+      sagt('st-sagt', e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  // ==========================================================================
+  // (b) Funktionen — die Schalterleiste (Schema 32, wirkt seit Etappe 2)
+  // ==========================================================================
+  /* Sechs Zeilen, eine Form: dieselbe An/Aus-Pille wie beim Regenbogen im
+     Kontor (`stolzRegelZeichnen`) — zwei Knöpfe statt einem, der sich
+     umbeschriftet, sonst liest die Hälfte der Leute die Aufschrift als
+     Zustand und die andere als Handlung.
+
+     `sinn` erklärt WAS abgeschaltet wird, nicht WARUM man das täte — das
+     weiß nur der Admin selbst (Entscheidung 14: ein Büro nimmt Kasse und
+     Termine, lässt Tafel, Rad und Notruf aus). */
+  const FUNKTIONEN = [
+    { schalter: 'tafel_an', wort: 'Tafel',
+      sinn: 'Wer hat kalt — die Liste, das Melden, der Bestand.' },
+    { schalter: 'rad_an', wort: 'Glücksrad',
+      sinn: 'Das tägliche Drehen. Läuft mit Tafel gewichtet nach Bestand, '
+          + 'ohne Tafel gleichverteilt.' },
+    { schalter: 'notruf_an', wort: 'Notruf',
+      sinn: 'Der Ruf über den Standort, mit Karte und Empfängerkreis.' },
+    { schalter: 'termine_an', wort: 'Termine',
+      sinn: 'Wer wann bei wem war, samt Chronik.' },
+    { schalter: 'kasse_an', wort: 'Kasse',
+      sinn: 'Getränke, Preise, Bestand — samt Monatsabrechnung und Zahlwegen. '
+          + 'Die Verwaltung dazu steht weiter unten.' },
+    { schalter: 'statistik_an', wort: 'Statistiken',
+      sinn: 'Der Verlauf: Meldungen, Betrieb, wer wie oft Gastgeber war.' },
+    /* Der siebte, und der einzige mit Vorgabe AUS (Entscheidung 45): eine
+       leere Hausordnung hat nichts zu zeigen, anders als eine Tafel oder eine
+       Kasse, die vom ersten Tag an nützlich sind. */
+    { schalter: 'regeln_an', wort: 'Hausordnung',
+      sinn: 'Eigene Regeln und Strafen dazu. Ohne Kasse gibt es nur Auflagen, '
+          + 'kein Strafgeld.' },
+  ];
+
+  function funktionZeile(f) {
+    const an = !!gruppe.schalter[f.schalter];
+    const zeile = el('div', 'feld-satz');
+    zeile.appendChild(el('span', 'feld-label', f.wort));
+    const reihe = el('div', 'reiter');
+    reihe.setAttribute('role', 'group');
+    [[true, 'an'], [false, 'aus']].forEach(([wert, wort]) => {
+      const b = el('button', wert === an ? 'an' : null, wort);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(wert === an));
+      if (wert !== an) b.addEventListener('click', () => funktionSchalten(f, wert));
+      reihe.appendChild(b);
+    });
+    zeile.appendChild(reihe);
+    zeile.appendChild(el('p', 'unter', f.sinn));
+    return zeile;
+  }
+
+  function funktionenZeichnen() {
+    $('fu-block').hidden = !darfIch();
+    if (!darfIch()) return;
+    const ziel = $('fu-form');
+    ziel.textContent = '';
+    FUNKTIONEN.forEach(f => ziel.appendChild(funktionZeile(f)));
+  }
+
+  async function funktionSchalten(f, an) {
+    sagt('fu-sagt', '');
+    try {
+      const d = await ruf('/api/gruppe', { gruppe: G, [f.schalter]: an }, 'PATCH');
+      gruppe = { ...gruppe, ...d.gruppe };
+      funktionenZeichnen();
+      /* `kasse_an` entscheidet mit, ob (b2), (b3) und (b4) überhaupt zu sehen
+         sind, `regeln_an` über (b5) - Abnahmefund aus Etappe 5: (b4) fehlte
+         hier, der Block blieb nach dem Abschalten stehen (ein Speichern gab
+         dann 403) und erschien nach dem Einschalten erst nach einem Neuladen.
+         Derselbe Fehler war schon in Etappe 2 `zungenZeichnen()` passiert.
+         JEDER neue Block gehört in diese Liste, nicht nur in `laden()`.
+
+         (b5) hängt zusätzlich an `kasse_an`, ohne von ihm abzuhängen: die
+         Wahl „Geld" verschwindet aus den Formularen, der Block bleibt. Darum
+         steht `hausordnungHolen()` auch dann hier, wenn `kasse_an` gewechselt
+         hat. */
+      /* `getraenkeHolen()` und nicht bloss `geSichtbarkeit()`: eine Gruppe,
+         die mit `kasse_an = 0` geladen wurde, hat den Block nie geholt (die
+         Funktion bricht bei verstecktem Block selbst ab). Nach dem Einschalten
+         stand dort sonst "Noch kein Getränk angelegt" und der Wareneingang
+         hatte eine leere Auswahl, bis jemand neu lud - genau die Sorte Falle,
+         vor der der Absatz darueber warnt. */
+      getraenkeHolen().catch(e => sagt('ge-sagt', e.message, true));
+      abHolen().catch(e => sagt('ab2-sagt', e.message, true));
+      zahlwegeHolen().catch(e => sagt('zw-sagt', e.message, true));
+      hausordnungHolen().catch(e => sagt('ho-sagt', e.message, true));
+    } catch (e) {
+      sagt('fu-sagt', e.message, true);
+    }
+  }
+
+  // ==========================================================================
+  // (b2) Getränke, Preise, Wareneingang (Schema 34, Etappe 3)
+  // ==========================================================================
+  let getraenke = [];   // Antwort von GET /api/kasse — als Gruppenadmin inkl. Inaktive und Historie
+  // Welches Getraenk gerade ein Unterformular zeigt, und welches: nur eines
+  // auf einmal, wie `sicher` bei den zerstoerenden Taten weiter unten.
+  let geOffen = null;
+
+  const euro = cent => (cent / 100).toLocaleString('de-DE', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  const geTag = iso => new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+
+  function geSichtbarkeit() {
+    $('ge-block').hidden = !darfIch() || !gruppe.schalter.kasse_an;
+  }
+
+  async function getraenkeHolen() {
+    geSichtbarkeit();
+    if ($('ge-block').hidden) return;
+    const d = await ruf('/api/kasse?g=' + G);
+    getraenke = d.getraenke || [];
+    getraenkeZeichnen();
+    beGetraenkeZeichnen();
+  }
+
+  function geTatKnopf(wort, fn) {
+    const b = el('button', 'knopf leer', wort);
+    b.type = 'button';
+    b.addEventListener('click', fn);
+    return b;
+  }
+
+  function geForm(g, was) {
+    const wrap = el('div', null, null);
+    wrap.style.marginTop = '10px';
+
+    if (was === 'umbenennen') {
+      const satz = el('div', 'feld-satz');
+      const feld = document.createElement('input');
+      feld.className = 'feld'; feld.maxLength = 40; feld.value = g.name; feld.autocomplete = 'off';
+      satz.appendChild(el('span', 'feld-label', 'Neuer Name'));
+      satz.appendChild(feld);
+      wrap.appendChild(satz);
+      wrap.appendChild(geTatKnopf('Übernehmen',
+        () => geAktion(() => ruf('/api/getraenk',
+          { gruppe: G, aktion: 'umbenennen', id: g.id, name: feld.value }))));
+    } else if (was === 'preis') {
+      const centSatz = el('div', 'feld-satz');
+      const cent = document.createElement('input');
+      cent.className = 'feld'; cent.type = 'number'; cent.min = '0'; cent.inputMode = 'numeric';
+      cent.placeholder = 'Cent, z. B. 150';
+      if (g.preis_cent != null) cent.value = g.preis_cent;
+      centSatz.appendChild(el('span', 'feld-label', 'Preis in Cent'));
+      centSatz.appendChild(cent);
+      wrap.appendChild(centSatz);
+
+      const abSatz = el('div', 'feld-satz');
+      const ab = document.createElement('input');
+      ab.className = 'feld'; ab.type = 'datetime-local';
+      abSatz.appendChild(el('span', 'feld-label', 'Gültig ab — leer heißt sofort'));
+      abSatz.appendChild(ab);
+      wrap.appendChild(abSatz);
+
+      wrap.appendChild(geTatKnopf('Setzen', () => geAktion(() => {
+        /* Ein leeres Feld ist keine Null. `Number('')` waere sie, und weil
+           `POST /api/preis` die 0 ausdruecklich zulaesst (ein Getraenk darf
+           umsonst sein), ginge ein Tippfehler still durch und jede Buchung
+           danach kostete nichts. Dieselbe Wache wie bei `mindest` unten und
+           beim Einkaufspreis im Wareneingang. */
+        if (cent.value === '') throw new Error('Preis fehlt. Umsonst? Dann 0.');
+        const rumpf = { gruppe: G, aktion: 'setzen', getraenk: g.id, cent: Number(cent.value) };
+        // `datetime-local` traegt keine Zeitzone - der Browser meint Ortszeit,
+        // und genau die rechnet `toISOString()` nach UTC um.
+        if (ab.value) rumpf.gueltig_ab = new Date(ab.value).toISOString();
+        return ruf('/api/preis', rumpf);
+      })));
+
+      if (g.naechster_preis) {
+        wrap.appendChild(el('p', 'unter',
+          'Vorgemerkt: ab ' + geTag(g.naechster_preis.gueltig_ab) + ' ' + euro(g.naechster_preis.cent)));
+        wrap.appendChild(geTatKnopf('vorgemerkten Preis entfernen', () => geAktion(
+          () => ruf('/api/preis',
+            { gruppe: G, aktion: 'entfernen', getraenk: g.id, id: g.naechster_preis.id }))));
+      }
+    } else if (was === 'mindest') {
+      const satz = el('div', 'feld-satz');
+      const feld = document.createElement('input');
+      feld.className = 'feld'; feld.type = 'number'; feld.min = '0'; feld.inputMode = 'numeric';
+      feld.placeholder = 'leer = keine Warnung';
+      if (g.mindest != null) feld.value = g.mindest;
+      satz.appendChild(el('span', 'feld-label', 'Mindestbestand'));
+      satz.appendChild(feld);
+      wrap.appendChild(satz);
+      wrap.appendChild(geTatKnopf('Übernehmen', () => geAktion(() => ruf('/api/getraenk', {
+        gruppe: G, aktion: 'mindest', id: g.id,
+        mindest: feld.value === '' ? null : Number(feld.value),
+      }))));
+    }
+    return wrap;
+  }
+
+  function geZeile(g) {
+    const z = el('div', 'feld-satz');
+    z.appendChild(el('div', 'z-name', g.name + (g.aktiv ? '' : ' — abgeschaltet')));
+
+    const teile = [
+      g.preis_cent != null ? euro(g.preis_cent) + ' je Stück' : 'noch kein Preis',
+      'Bestand: ' + g.bestand,
+      g.mindest != null ? 'Warnung unter ' + g.mindest : 'keine Mindestbestandswarnung',
+    ];
+    if (g.naechster_preis) teile.push('ab ' + geTag(g.naechster_preis.gueltig_ab) + ': ' + euro(g.naechster_preis.cent));
+    z.appendChild(el('p', 'unter', teile.join(' · ')));
+
+    // Eigene, rote Zeile statt eines Wortes in der Aufzaehlung (§2.3: die
+    // Warnung soll auffallen, nicht zwischen Preis und Bestand untergehen).
+    if (g.mindest != null && g.bestand < g.mindest) {
+      z.appendChild(el('p', 'unter ge-knapp', 'Unter dem Mindestbestand (' + g.mindest + ')'));
+    }
+
+    const tat = el('div', 'tat-reihe');
+    tat.appendChild(geTatKnopf(g.aktiv ? 'deaktivieren' : 'aktivieren', () => geAktion(
+      () => ruf('/api/getraenk', { gruppe: G, aktion: g.aktiv ? 'deaktivieren' : 'aktivieren', id: g.id }))));
+    tat.appendChild(geTatKnopf('umbenennen', () => geFormZeigen(g.id, 'umbenennen')));
+    tat.appendChild(geTatKnopf('Preis setzen', () => geFormZeigen(g.id, 'preis')));
+    tat.appendChild(geTatKnopf('Mindestbestand', () => geFormZeigen(g.id, 'mindest')));
+    z.appendChild(tat);
+
+    if (geOffen && geOffen.id === g.id) z.appendChild(geForm(g, geOffen.was));
+    return z;
+  }
+
+  function geFormZeigen(id, was) {
+    geOffen = (geOffen && geOffen.id === id && geOffen.was === was) ? null : { id, was };
+    getraenkeZeichnen();
+  }
+
+  function getraenkeZeichnen() {
+    const ziel = $('ge-liste');
+    ziel.textContent = '';
+    if (!getraenke.length) {
+      ziel.appendChild(el('p', 'unter', 'Noch kein Getränk angelegt.'));
+      return;
+    }
+    getraenke.forEach(g => ziel.appendChild(geZeile(g)));
+  }
+
+  async function geAktion(tu) {
+    sagt('ge-sagt', '');
+    try {
+      await tu();
+      geOffen = null;
+      await getraenkeHolen();
+      sagt('ge-sagt', 'Übernommen.');
+    } catch (e) {
+      sagt('ge-sagt', e.message, true);
+    }
+  }
+
+  $('ge-neu-tu').addEventListener('click', async () => {
+    const feld = $('ge-neu-name');
+    const knopf = $('ge-neu-tu');
+    knopf.disabled = true;
+    sagt('ge-neu-sagt', '');
+    try {
+      await ruf('/api/getraenk', { gruppe: G, aktion: 'anlegen', name: feld.value });
+      feld.value = '';
+      await getraenkeHolen();
+      sagt('ge-neu-sagt', 'Angelegt.');
+    } catch (e) {
+      sagt('ge-neu-sagt', e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  // --- Wareneingang: Lieferung oder Korrektur --------------------------------
+  let beArt = 'lieferung';
+
+  function beArtZeichnen() {
+    const ziel = $('be-art');
+    ziel.textContent = '';
+    [['lieferung', 'Lieferung'], ['korrektur', 'Korrektur']].forEach(([wert, wort]) => {
+      const b = el('button', wert === beArt ? 'an' : null, wort);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(wert === beArt));
+      b.addEventListener('click', () => { beArt = wert; beArtZeichnen(); });
+      ziel.appendChild(b);
+    });
+    $('be-einkauf-satz').hidden = beArt !== 'lieferung';
+    $('be-grund-satz').hidden = beArt !== 'korrektur';
+    // Eine Lieferung hebt den Bestand immer (der Worker weist Negatives ab);
+    // eine Korrektur geht in BEIDE Richtungen - Schwund und Bruch senken ihn,
+    // eine Spende oder ein Nachzählen kann ihn auch heben. Das Vorzeichen
+    // tippt der Admin darum bei „Korrektur" selbst.
+    $('be-menge').min = beArt === 'lieferung' ? '1' : '';
+    $('be-menge').placeholder = beArt === 'lieferung' ? '24' : '-3 oder 3';
+  }
+  beArtZeichnen();
+
+  function beGetraenkeZeichnen() {
+    const ziel = $('be-getraenk');
+    const vorher = ziel.value;
+    ziel.textContent = '';
+    getraenke.filter(g => g.aktiv).forEach(g => {
+      const o = document.createElement('option');
+      o.value = g.id; o.textContent = g.name;
+      ziel.appendChild(o);
+    });
+    // Gegen die GEFILTERTE Liste geprüft, nicht gegen alle: wer das gerade
+    // gewählte Getränk abschaltet, bekäme sonst einen Wert zugewiesen, zu dem
+    // es keine Option mehr gibt - `value` fällt auf '' zurück, und der
+    // Wareneingang meldete „Erst ein Getränk anlegen.", obwohl andere da sind.
+    if (vorher && getraenke.some(g => g.aktiv && String(g.id) === vorher)) ziel.value = vorher;
+  }
+
+  $('be-tu').addEventListener('click', async () => {
+    const knopf = $('be-tu');
+    const getraenkId = Number($('be-getraenk').value);
+    const menge = Number($('be-menge').value);
+    if (!getraenkId) { sagt('be-sagt', 'Erst ein Getränk anlegen.', true); return; }
+    if (!Number.isInteger(menge) || menge === 0) { sagt('be-sagt', 'Menge fehlt.', true); return; }
+    // Pflicht bei einer Lieferung (Entscheidung 32) - ein leeres Feld waere
+    // still 0 geworden, und genau das soll ein Tippfehler nicht duerfen.
+    if (beArt === 'lieferung' && $('be-einkauf').value === '') {
+      sagt('be-sagt', 'Was hat die Lieferung gekostet? Notfalls 0.', true); return;
+    }
+    knopf.disabled = true;
+    sagt('be-sagt', '');
+    try {
+      const rumpf = {
+        gruppe: G, art: beArt, getraenk: getraenkId,
+        menge: beArt === 'lieferung' ? Math.abs(menge) : menge,
+      };
+      if (beArt === 'lieferung') rumpf.einkauf_cent = Number($('be-einkauf').value);
+      if (beArt === 'korrektur') rumpf.grund = $('be-grund').value;
+      await ruf('/api/bestand', rumpf);
+      $('be-menge').value = ''; $('be-einkauf').value = ''; $('be-grund').value = '';
+      await getraenkeHolen();
+      sagt('be-sagt', 'Erfasst.');
+    } catch (e) {
+      sagt('be-sagt', e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  // ==========================================================================
+  // (b3) Abrechnung (Schema 35, Etappe 4)
+  // ==========================================================================
+  const AB2_MONATE = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+                       'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  let ab2Jahr = null, ab2Monat = null, ab2Letzte = null;
+  // Fuer welchen Saldo gerade das Ablehnen-Formular offen ist - KEIN
+  // `confirm()` (siehe die Begruendung bei `sicher` oben), sondern derselbe
+  // Zweischritt wie bei den Getraenke-Formularen: erst der Grund, dann der Tu.
+  let ab2OffenAblehnen = null;
+
+  function ab2Sichtbarkeit() {
+    $('ab-block').hidden = !darfIch() || !gruppe.schalter.kasse_an;
+  }
+
+  function ab2Schluessel(jahr, monat) { return jahr * 12 + (monat - 1); }
+
+  async function abHolen() {
+    ab2Sichtbarkeit();
+    if ($('ab-block').hidden) return;
+    if (ab2Jahr === null) {
+      const jetzt = new Date();
+      ab2Jahr = jetzt.getUTCFullYear();
+      ab2Monat = jetzt.getUTCMonth() + 1;
+    }
+    await ab2Laden();
+  }
+
+  async function ab2Laden() {
+    const d = await ruf('/api/abrechnung?g=' + G + '&jahr=' + ab2Jahr + '&monat=' + ab2Monat);
+    ab2Zeichnen(d);
+  }
+
+  async function ab2Aktion(tu) {
+    sagt('ab2-sagt', '');
+    try {
+      await tu();
+      ab2OffenAblehnen = null;
+      await ab2Laden();
+      sagt('ab2-sagt', 'Übernommen.');
+    } catch (e) {
+      sagt('ab2-sagt', e.message, true);
+    }
+  }
+
+  function ab2BestaetigenForm(e) {
+    const wrap = el('div', 'ab2-bestaetigen');
+    const feld = document.createElement('input');
+    feld.type = 'number'; feld.min = '1'; feld.max = String(e.offen_cent);
+    feld.value = String(e.offen_cent); feld.inputMode = 'numeric';
+    feld.setAttribute('aria-label', 'Bestätigter Betrag in Cent für ' + e.name);
+    wrap.appendChild(feld);
+    const knopf = el('button', 'knopf leer', 'Bestätigen');
+    knopf.type = 'button';
+    knopf.addEventListener('click', () => ab2Aktion(() => ruf('/api/saldo/bestaetigung', {
+      gruppe: G, saldo: e.id, aktion: 'bestaetigen', cent: Number(feld.value),
+    })));
+    wrap.appendChild(knopf);
+    return wrap;
+  }
+
+  function ab2AblehnenForm(e) {
+    const wrap = el('div', 'ab2-bestaetigen');
+    const feld = document.createElement('input');
+    feld.type = 'text'; feld.placeholder = 'Grund';
+    feld.style.flex = '1'; feld.style.width = 'auto';
+    wrap.appendChild(feld);
+    const knopf = el('button', 'knopf leer', 'wirklich zurückweisen');
+    knopf.type = 'button';
+    knopf.addEventListener('click', () => {
+      const notiz = feld.value.trim();
+      if (!notiz) { sagt('ab2-sagt', 'Ohne Grund keine Ablehnung.', true); return; }
+      ab2Aktion(() => ruf('/api/saldo/bestaetigung', {
+        gruppe: G, saldo: e.id, aktion: 'ablehnen', notiz,
+      }));
+    });
+    wrap.appendChild(knopf);
+    return wrap;
+  }
+
+  function ab2Zeile(e) {
+    const z = el('div', 'ab2-zeile');
+    const kopf = el('div', 'z-name');
+    kopf.appendChild(el('span', null, e.name + (e.ehemalig ? ' (ausgetreten)' : '')));
+    kopf.appendChild(el('span', 'ab2-betrag',
+      e.biere + (e.biere === 1 ? ' Getränk · ' : ' Getränke · ') + euro(e.cent)));
+    z.appendChild(kopf);
+
+    if (e.status === undefined) return z; // Vorschau: keine Statuskette, nur die Zahl
+
+    const teile = [];
+    if (e.offen_cent > 0) teile.push(euro(e.offen_cent) + ' offen');
+    else if (e.cent > 0) teile.push('bezahlt');
+    else teile.push('ausgeglichen');
+    if (e.status === 'gemeldet') teile.push('als bezahlt gemeldet');
+    if (e.status === 'teilbezahlt') teile.push('teilweise bestätigt');
+    if (e.status === 'abgelehnt') teile.push('Meldung zurückgewiesen');
+    z.appendChild(el('p', 'unter' + (e.offen_cent > 0 ? ' ab2-offen' : ''), teile.join(' · ')));
+
+    if (e.offen_cent > 0) {
+      const tat = el('div', 'tat-reihe');
+      tat.appendChild(ab2BestaetigenForm(e));
+      if (e.status === 'gemeldet') {
+        const knopf = el('button', 'knopf leer', 'Zurückweisen');
+        knopf.type = 'button';
+        knopf.addEventListener('click', () => {
+          ab2OffenAblehnen = ab2OffenAblehnen === e.id ? null : e.id;
+          ab2Zeichnen(ab2Letzte);
+        });
+        tat.appendChild(knopf);
+      }
+      z.appendChild(tat);
+      if (ab2OffenAblehnen === e.id) z.appendChild(ab2AblehnenForm(e));
+    }
+    return z;
+  }
+
+  function ab2Zeichnen(d) {
+    ab2Letzte = d;
+    $('ab2-titel').textContent = AB2_MONATE[d.monat] + ' ' + d.jahr + (d.vorschau ? ' (läuft noch)' : '');
+    const ziel = $('ab2-liste');
+    ziel.textContent = '';
+    if (!d.eintraege.length) {
+      ziel.appendChild(el('p', 'unter',
+        d.vorschau ? 'Diesen Monat ist noch nichts gebucht.' : 'In diesem Monat wurde nichts gebucht.'));
+    } else {
+      d.eintraege.forEach(e => ziel.appendChild(ab2Zeile(e)));
+    }
+
+    const jetzt = new Date();
+    const aktuell = ab2Schluessel(jetzt.getUTCFullYear(), jetzt.getUTCMonth() + 1);
+    const dieser = ab2Schluessel(ab2Jahr, ab2Monat);
+    $('ab2-vor').disabled = dieser >= aktuell;
+
+    // Abschliessbar ist ein VOLLSTAENDIG abgelaufener Monat ohne Abschluss -
+    // derselbe Guard wie im Worker (`POST /api/abrechnung/abschluss`).
+    const abschliessbar = d.vorschau && dieser < aktuell;
+    $('ab2-abschliessen').hidden = !abschliessbar;
+    $('ab2-csv').hidden = d.vorschau;
+    $('ab2-hinweis').textContent = abschliessbar
+      ? 'Dieser Monat ist vorbei und noch nicht abgerechnet.'
+      : (d.vorschau ? 'Der laufende Monat lässt sich erst nach seinem Ende abschließen.' : '');
+  }
+
+  async function ab2CsvHerunterladen() {
+    const knopf = $('ab2-csv');
+    knopf.disabled = true;
+    sagt('ab2-sagt', '');
+    try {
+      const t = merke();
+      const r = await fetch(API + '/api/abrechnung/csv?g=' + G + '&jahr=' + ab2Jahr + '&monat=' + ab2Monat,
+        { headers: t ? { Authorization: 'Bearer ' + t } : {} });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.fehler || 'Das ging nicht');
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'beerstock-' + gruppe.slug + '-' + ab2Jahr + '-' + String(ab2Monat).padStart(2, '0') + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      sagt('ab2-sagt', e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  }
+
+  $('ab2-zurueck').addEventListener('click', () => {
+    ab2Monat--; if (ab2Monat < 1) { ab2Monat = 12; ab2Jahr--; }
+    ab2OffenAblehnen = null;
+    ab2Laden().catch(e => sagt('ab2-sagt', e.message, true));
+  });
+  $('ab2-vor').addEventListener('click', () => {
+    if ($('ab2-vor').disabled) return;
+    ab2Monat++; if (ab2Monat > 12) { ab2Monat = 1; ab2Jahr++; }
+    ab2OffenAblehnen = null;
+    ab2Laden().catch(e => sagt('ab2-sagt', e.message, true));
+  });
+  $('ab2-abschliessen').addEventListener('click', async () => {
+    const knopf = $('ab2-abschliessen');
+    knopf.disabled = true;
+    sagt('ab2-sagt', '');
+    try {
+      await ruf('/api/abrechnung/abschluss', { gruppe: G, jahr: ab2Jahr, monat: ab2Monat });
+      await ab2Laden();
+      sagt('ab2-sagt', 'Abgeschlossen.');
+    } catch (e) {
+      sagt('ab2-sagt', e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+  $('ab2-csv').addEventListener('click', ab2CsvHerunterladen);
+
+  // ==========================================================================
+  // (b4) Zahlwege (Schema 36, Etappe 5)
+  // ==========================================================================
+  // Arbeitskopie - erst `zw-speichern` schickt sie als GANZE Liste raus
+  // (`POST /api/zahlwege` ersetzt vollstaendig, keine Teil-Updates, siehe
+  // Worker-Kommentar dort: die Reihenfolge ist eine Eigenschaft der Liste).
+  let zahlwege = [];
+  let zwArt = 'paypal';
+  const ZW_MAX = 8; // muss zu ZAHLWEG_MAX in worker/src/index.js passen
+
+  const ZW_TITEL = { paypal: 'PayPal', bank: 'Überweisung', wero: 'Wero', bar: 'Bar' };
+  const ZW_WERT_LABEL = {
+    paypal: 'PayPal.me-Link oder Kennung', bank: 'IBAN',
+    wero: 'Handynummer oder Mailadresse', bar: 'Freitext, z. B. „bar bei Stefan"',
+  };
+
+  function zwSichtbarkeit() {
+    $('zw-block').hidden = !darfIch() || !gruppe.schalter.kasse_an;
+  }
+
+  async function zahlwegeHolen() {
+    zwSichtbarkeit();
+    if ($('zw-block').hidden) return;
+    const d = await ruf('/api/zahlwege?g=' + G);
+    zahlwege = (d.wege || []).map(w => ({ art: w.art, wert: w.wert, inhaber: w.inhaber }));
+    zwListeZeichnen();
+  }
+
+  function zwArtZeichnen() {
+    const ziel = $('zw-art');
+    ziel.textContent = '';
+    Object.entries(ZW_TITEL).forEach(([wert, wort]) => {
+      const b = el('button', wert === zwArt ? 'an' : null, wort);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(wert === zwArt));
+      b.addEventListener('click', () => { zwArt = wert; zwArtZeichnen(); });
+      ziel.appendChild(b);
+    });
+    $('zw-wert-label').textContent = ZW_WERT_LABEL[zwArt];
+    $('zw-inhaber-satz').hidden = zwArt !== 'bank';
+  }
+
+  function zwZeile(w, i) {
+    const z = el('div', 'feld-satz');
+    z.appendChild(el('div', 'z-name',
+      ZW_TITEL[w.art] + ': ' + w.wert + (w.art === 'bank' && w.inhaber ? ' (' + w.inhaber + ')' : '')));
+    const tat = el('div', 'tat-reihe');
+    const b = el('button', 'knopf leer', 'entfernen');
+    b.type = 'button';
+    b.addEventListener('click', () => { zahlwege.splice(i, 1); zwListeZeichnen(); });
+    tat.appendChild(b);
+    z.appendChild(tat);
+    return z;
+  }
+
+  function zwListeZeichnen() {
+    const ziel = $('zw-liste');
+    ziel.textContent = '';
+    if (!zahlwege.length) { ziel.appendChild(el('p', 'unter', 'Noch kein Zahlweg hinterlegt.')); return; }
+    zahlwege.forEach((w, i) => ziel.appendChild(zwZeile(w, i)));
+  }
+
+  zwArtZeichnen();
+
+  $('zw-hinzufuegen').addEventListener('click', () => {
+    if (zahlwege.length >= ZW_MAX) { sagt('zw-sagt', `Höchstens ${ZW_MAX} Zahlwege.`, true); return; }
+    const wert = $('zw-wert').value.trim();
+    if (!wert) { sagt('zw-sagt', 'Erst einen Wert eintragen.', true); return; }
+    let inhaber = null;
+    if (zwArt === 'bank') {
+      inhaber = $('zw-inhaber').value.trim();
+      if (!inhaber) { sagt('zw-sagt', 'Bei einer Überweisung braucht es den Kontoinhaber.', true); return; }
+    }
+    zahlwege.push({ art: zwArt, wert, inhaber });
+    $('zw-wert').value = ''; $('zw-inhaber').value = '';
+    sagt('zw-sagt', '');
+    zwListeZeichnen();
+  });
+
+  $('zw-speichern').addEventListener('click', async () => {
+    const knopf = $('zw-speichern');
+    knopf.disabled = true;
+    try {
+      await ruf('/api/zahlwege', { gruppe: G, wege: zahlwege });
+      sagt('zw-sagt', 'Gespeichert.');
+    } catch (e) {
+      sagt('zw-sagt', e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  // ==========================================================================
+  // (b5) Hausordnung, Verhängen, Sündenregister (Schema 38, Etappe 8)
+  // ==========================================================================
+  let hausordnung = null;   // Antwort von GET /api/hausordnung
+  let hoNeuArt = 'geld';    // Art der Regel, die gerade angelegt wird
+  let svArt = 'geld';       // Art der FREIEN Strafe (ohne Regel)
+  let hoOffen = null;       // welche Regel gerade ihr Änderungsformular zeigt
+
+  /* Nur, wer führt, und nur bei `regeln_an` - dieselbe Regel wie (b2) bis (b4),
+     nur an einem anderen Schalter. Sie steht in einer eigenen Funktion, weil
+     `funktionSchalten()` sie sofort nach dem Umlegen braucht (sonst bleibt der
+     Block stehen, bis jemand neu lädt - der Abnahmefund aus Etappe 5). */
+  function hoSichtbarkeit() {
+    $('ho-block').hidden = !darfIch() || !gruppe.schalter.regeln_an;
+  }
+
+  // Ohne Kasse gibt es kein Strafgeld (Entscheidung 45: die Schalter sind
+  // unabhängig). Die Wahl steht dann gar nicht erst da, statt in ein 400 zu
+  // laufen - der Worker lehnt es ohnehin ab, aber ein Formular, das eine
+  // unmögliche Wahl anbietet, ist eine Falle.
+  const geldMoeglich = () => !!(gruppe && gruppe.schalter.kasse_an);
+
+  async function hausordnungHolen() {
+    hoSichtbarkeit();
+    if ($('ho-block').hidden) return;
+    hausordnung = await ruf('/api/hausordnung?g=' + G);
+    hoZeichnen();
+    hoArtReihen();
+    svAuswahlZeichnen();
+    srZeichnen();
+  }
+
+  /* Die zwei Art-Umschalter (neue Regel, freie Strafe) - eine Funktion für
+     beide, weil sie dasselbe tun und sonst zwei Fassungen derselben Regel
+     entstünden. */
+  function artReihe(id, wahl, setzen, centSatz, tatSatz) {
+    const ziel = $(id);
+    ziel.textContent = '';
+    const arten = geldMoeglich() ? [['geld', 'Geld'], ['tat', 'Auflage']] : [['tat', 'Auflage']];
+    if (!geldMoeglich() && wahl !== 'tat') { wahl = 'tat'; setzen('tat'); }
+    arten.forEach(([wert, wort]) => {
+      const b = el('button', wert === wahl ? 'an' : null, wort);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(wert === wahl));
+      b.addEventListener('click', () => { setzen(wert); hoArtReihen(); });
+      ziel.appendChild(b);
+    });
+    $(centSatz).hidden = wahl !== 'geld';
+    $(tatSatz).hidden = wahl !== 'tat';
+  }
+
+  function hoArtReihen() {
+    artReihe('ho-neu-art', hoNeuArt, w => { hoNeuArt = w; }, 'ho-neu-cent-satz', 'ho-neu-tat-satz');
+    artReihe('sv-art', svArt, w => { svArt = w; }, 'sv-cent-satz', 'sv-tat-satz');
+  }
+
+  const hoStrafeWort = r => r.art === 'geld' ? euro(r.cent || 0) : (r.tat || 'eine Auflage');
+
+  function hoTatKnopf(wort, fn) {
+    const b = el('button', 'knopf leer', wort);
+    b.type = 'button';
+    b.addEventListener('click', fn);
+    return b;
+  }
+
+  /* Das Änderungsformular EINER Regel, direkt an ihrer Zeile - dieselbe Form
+     wie `geForm()` bei den Getränken, aus demselben Grund: der Betrag gehört
+     dorthin, wo die Regel steht, nicht in ein Formular weiter unten. */
+  function hoForm(r) {
+    const wrap = el('div', 'feld-satz');
+    const istGeld = r.art === 'geld';
+    const feld = el('input', 'feld');
+    feld.type = istGeld ? 'number' : 'text';
+    if (istGeld) { feld.min = '1'; feld.value = String(r.cent ?? ''); }
+    else { feld.maxLength = 120; feld.value = r.tat || ''; }
+    wrap.appendChild(el('span', 'feld-label', istGeld ? 'Neuer Betrag in Cent' : 'Neue Auflage'));
+    wrap.appendChild(feld);
+    const tat = el('div', 'tat-reihe');
+    tat.appendChild(hoTatKnopf('Übernehmen', () => hoAktion(() => ruf('/api/hausregel', {
+      gruppe: G, aktion: 'aendern', regel: r.id,
+      ...(istGeld ? { cent: Number(feld.value) } : { tat: feld.value }),
+    }))));
+    tat.appendChild(hoTatKnopf('Abbrechen', () => { hoOffen = null; hoZeichnen(); }));
+    wrap.appendChild(tat);
+    return wrap;
+  }
+
+  function hoZeile(r) {
+    const z = el('div', 'feld-satz');
+    z.appendChild(el('div', 'z-name', r.titel + (r.aktiv ? '' : ' — abgeschaltet')));
+    const teile = [hoStrafeWort(r)];
+    if (r.text) teile.unshift(r.text);
+    z.appendChild(el('p', 'unter', teile.join(' · ')));
+
+    const tat = el('div', 'tat-reihe');
+    tat.appendChild(hoTatKnopf(r.aktiv ? 'abschalten' : 'anschalten', () => hoAktion(
+      () => ruf('/api/hausregel', { gruppe: G, aktion: r.aktiv ? 'aus' : 'an', regel: r.id }))));
+    if (r.aktiv) {
+      tat.appendChild(hoTatKnopf(r.art === 'geld' ? 'Betrag ändern' : 'Auflage ändern',
+        () => { hoOffen = hoOffen === r.id ? null : r.id; hoZeichnen(); }));
+    }
+    z.appendChild(tat);
+    if (hoOffen === r.id) z.appendChild(hoForm(r));
+    return z;
+  }
+
+  function hoZeichnen() {
+    const ziel = $('ho-liste');
+    ziel.textContent = '';
+    const regeln = (hausordnung && hausordnung.regeln) || [];
+    $('ho-zahl').textContent = regeln.filter(r => r.aktiv).length || '';
+    if (!regeln.length) {
+      ziel.appendChild(el('p', 'unter', 'Noch keine Regel — die Hausordnung ist leer.'));
+      return;
+    }
+    regeln.forEach(r => ziel.appendChild(hoZeile(r)));
+  }
+
+  async function hoAktion(tu) {
+    sagt('ho-sagt', '');
+    try {
+      await tu();
+      hoOffen = null;
+      await hausordnungHolen();
+      sagt('ho-sagt', 'Übernommen.');
+    } catch (e) {
+      sagt('ho-sagt', e.message, true);
+    }
+  }
+
+  $('ho-neu-tu').addEventListener('click', async () => {
+    sagt('ho-neu-sagt', '');
+    const rumpf = {
+      gruppe: G, aktion: 'anlegen',
+      titel: $('ho-neu-titel').value.trim(),
+      text: $('ho-neu-text').value.trim(),
+      art: hoNeuArt,
+      ...(hoNeuArt === 'geld' ? { cent: Number($('ho-neu-cent').value) } : { tat: $('ho-neu-tat').value.trim() }),
+    };
+    try {
+      await ruf('/api/hausregel', rumpf);
+      ['ho-neu-titel', 'ho-neu-text', 'ho-neu-cent', 'ho-neu-tat'].forEach(id => { $(id).value = ''; });
+      await hausordnungHolen();
+      sagt('ho-neu-sagt', 'Angelegt.');
+    } catch (e) {
+      sagt('ho-neu-sagt', e.message, true);
+    }
+  });
+
+  // --- Verhängen -------------------------------------------------------------
+  function svAuswahlZeichnen() {
+    const wen = $('sv-wen');
+    const vorher = wen.value;
+    wen.textContent = '';
+    mitglieder.forEach(m => {
+      // `id`, nicht `user_id`: GET /api/gruppe/mitglieder gibt die Spalte als
+      // `m.user_id AS id` heraus. Mit dem falschen Namen stand in jedem Wert
+      // die Zeichenkette "undefined", der Name daneben stimmte trotzdem (der
+      // Worker faellt auf "Ohne Namen" zurueck) - und jedes Verhaengen ging
+      // mit "Wen trifft es?" zurueck.
+      const o = el('option', null, m.name || ('Nutzer ' + m.id));
+      o.value = String(m.id);
+      wen.appendChild(o);
+    });
+    if (vorher) wen.value = vorher;
+
+    const regel = $('sv-regel');
+    const vorherR = regel.value;
+    regel.textContent = '';
+    const frei = el('option', null, 'frei, ohne Regel');
+    frei.value = '';
+    regel.appendChild(frei);
+    ((hausordnung && hausordnung.regeln) || []).filter(r => r.aktiv).forEach(r => {
+      const o = el('option', null, r.titel + ' — ' + hoStrafeWort(r));
+      o.value = String(r.id);
+      regel.appendChild(o);
+    });
+    if (vorherR) regel.value = vorherR;
+    $('sv-frei').hidden = !!regel.value;
+  }
+
+  $('sv-regel').addEventListener('change', () => {
+    $('sv-frei').hidden = !!$('sv-regel').value;
+  });
+
+  $('sv-tu').addEventListener('click', async () => {
+    /* Der Knopf sperrt sich, wie `ge-neu-tu` und `be-tu` es tun. Hier wiegt
+       es schwerer als dort: `POST /api/strafe` legt auf dem gewöhnlichen Weg
+       schlicht eine Zeile an (nur die Gutschrift hat einen eigenen Riegel),
+       zwei Tipper auf einer trägen Leitung verhängen die Geldstrafe also
+       zweimal - und beide fließen beim Monatsabschluss in den Saldo. */
+    const knopf = $('sv-tu');
+    knopf.disabled = true;
+    sagt('sv-sagt', '');
+    const regel = $('sv-regel').value;
+    const rumpf = {
+      gruppe: G, user: Number($('sv-wen').value),
+      grund: $('sv-grund').value.trim(),
+      ...(regel
+        ? { regel: Number(regel) }
+        : {
+            titel: $('sv-titel').value.trim(), art: svArt,
+            ...(svArt === 'geld' ? { cent: Number($('sv-cent').value) } : { tat: $('sv-tat').value.trim() }),
+          }),
+    };
+    try {
+      await ruf('/api/strafe', rumpf);
+      ['sv-grund', 'sv-titel', 'sv-cent', 'sv-tat'].forEach(id => { $(id).value = ''; });
+      await hausordnungHolen();
+      sagt('sv-sagt', 'Verhängt. Der Betroffene bekommt eine Mail.');
+    } catch (e) {
+      sagt('sv-sagt', e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  // --- Sündenregister --------------------------------------------------------
+  let srOffen = null;       // welche Strafe gerade ihr Grund-Formular zeigt
+  const SR_WORT = {
+    offen: 'offen', gemeldet: 'als erledigt gemeldet', erledigt: 'erledigt',
+    abgerechnet: 'abgerechnet', erlassen: 'erlassen',
+    vorgeschlagen: 'vorgeschlagen', verworfen: 'verworfen', bestritten: 'bestritten',
+  };
+
+  function srZeile(s) {
+    const z = el('div', 'feld-satz');
+    z.appendChild(el('div', 'z-name', s.name + ' — ' + s.titel));
+    const teile = [
+      s.art === 'geld' ? euro(s.cent || 0) : (s.tat || 'Auflage'),
+      SR_WORT[s.status] || s.status,
+      geTag(s.verhaengt_am),
+    ];
+    if (s.grund) teile.push(s.grund);
+    z.appendChild(el('p', 'unter', teile.join(' · ')));
+
+    const tat = el('div', 'tat-reihe');
+    /* Ein Vorschlag (Etappe 9) wartet auf genau zwei Knöpfe, sonst auf keinen:
+       er ist noch keine Strafe, also gibt es an ihm auch nichts zu erledigen
+       oder zurückzuweisen. */
+    if (s.status === 'vorgeschlagen') {
+      tat.appendChild(hoTatKnopf('annehmen', () => srAktion(
+        () => ruf('/api/strafe/bescheid', { gruppe: G, strafe: s.id, aktion: 'annehmen' }))));
+      tat.appendChild(hoTatKnopf('verwerfen', () => srAktion(
+        () => ruf('/api/strafe/bescheid', { gruppe: G, strafe: s.id, aktion: 'verwerfen' }))));
+    }
+    /* Ein Einspruch ebenso: halten oder stattgeben. „Stattgeben" heißt
+       erlassen — einen zweiten Ausgang dafür zu erfinden hieße, dieselbe
+       Sache zweimal zu nennen. */
+    if (s.status === 'bestritten') {
+      tat.appendChild(hoTatKnopf('Einspruch abweisen', () => srAktion(
+        () => ruf('/api/strafe/bescheid', { gruppe: G, strafe: s.id, aktion: 'halten' }))));
+    }
+    if (s.art === 'tat' && (s.status === 'offen' || s.status === 'gemeldet')) {
+      tat.appendChild(hoTatKnopf('erledigt', () => srAktion(
+        () => ruf('/api/strafe/bescheid', { gruppe: G, strafe: s.id, aktion: 'erledigt' }))));
+    }
+    if (s.art === 'tat' && s.status === 'gemeldet') {
+      tat.appendChild(hoTatKnopf('zurückweisen',
+        () => { srOffen = srOffen === s.id ? null : s.id; srZeichnen(); }));
+    }
+    /* Erlassen geht nur, solange nichts abgerechnet ist (Entscheidung 52) -
+       danach ist der Weg die Gutschrift im laufenden Monat. Der Knopf sagt
+       das selbst, statt den Nutzer in den 409 laufen zu lassen. Bei einem
+       Einspruch heißt derselbe Knopf, was er dort bedeutet. */
+    if (s.status === 'offen' || s.status === 'gemeldet' || s.status === 'bestritten') {
+      tat.appendChild(hoTatKnopf(s.status === 'bestritten' ? 'Einspruch stattgeben' : 'erlassen',
+        () => srAktion(
+          () => ruf('/api/strafe/bescheid', { gruppe: G, strafe: s.id, aktion: 'erlassen' }))));
+    }
+    if (s.status === 'abgerechnet' && !s.gutschrift_zu) {
+      tat.appendChild(hoTatKnopf('gutschreiben', () => srAktion(
+        () => ruf('/api/strafe', { gruppe: G, gutschrift: s.id }))));
+    }
+    if (tat.children.length) z.appendChild(tat);
+    if (srOffen === s.id) z.appendChild(srGrundForm(s, 'zurueck'));
+    return z;
+  }
+
+  /* Eine Zurückweisung braucht einen Grund (der Worker besteht darauf) - also
+     erst das Feld, dann die Tat. Kein `prompt()`: die Seite fragt nirgends so.
+
+     AN DER ZEILE, nicht unten an der Liste, und mit `srOffen` als Merker -
+     dieselbe Form wie `hoOffen` und `geOffen`. Vorher hängte jeder Druck ein
+     weiteres Formular ans Ende des Registers: drei Tipper, drei gleiche
+     Felder, von ihrer Zeile losgelöst, und zwei der drei Absenden-Knöpfe
+     liefen nach dem ersten Erfolg in einen 409. */
+  function srGrundForm(s, aktion) {
+    const wrap = el('div', 'feld-satz');
+    const feld = el('input', 'feld');
+    feld.maxLength = 200;
+    feld.placeholder = 'Der Kasten steht noch nicht da';
+    wrap.appendChild(el('span', 'feld-label', 'Warum zurückweisen?'));
+    wrap.appendChild(feld);
+    const tat = el('div', 'tat-reihe');
+    tat.appendChild(hoTatKnopf('Absenden', () => srAktion(
+      () => ruf('/api/strafe/bescheid', { gruppe: G, strafe: s.id, aktion, notiz: feld.value.trim() }))));
+    tat.appendChild(hoTatKnopf('Abbrechen', () => { srOffen = null; srZeichnen(); }));
+    wrap.appendChild(tat);
+    // Nach dem Zeichnen in den Fokus - `srZeichnen()` hängt die Zeile erst
+    // danach in die Liste, und ein Feld ausserhalb des Dokuments nimmt keinen.
+    setTimeout(() => feld.focus(), 0);
+    return wrap;
+  }
+
+  async function srAktion(tu) {
+    sagt('sr-sagt', '');
+    try {
+      await tu();
+      srOffen = null;
+      await hausordnungHolen();
+      sagt('sr-sagt', 'Übernommen.');
+    } catch (e) {
+      sagt('sr-sagt', e.message, true);
+    }
+  }
+
+  function srZeichnen() {
+    const ziel = $('sr-liste');
+    ziel.textContent = '';
+    if (!hausordnung) return;
+    /* Zuerst, was aus FRÜHEREN Monaten noch offen ist: eine Auflage läuft über
+       den Monatswechsel hinweg weiter, kein Abschluss holt sie ab. Stünde sie
+       nur im Monat ihrer Verhängung, wäre sie am Ersten aus dem Blick. */
+    const alt = hausordnung.offen_alt || [];
+    const jetzt = hausordnung.strafen || [];
+    $('sr-zahl').textContent = (alt.length + jetzt.length) || '';
+    if (!alt.length && !jetzt.length) {
+      ziel.appendChild(el('p', 'unter', 'Nichts verhängt, nichts offen.'));
+      return;
+    }
+    if (alt.length) {
+      ziel.appendChild(el('p', 'unter', 'Aus früheren Monaten noch offen:'));
+      alt.forEach(s => ziel.appendChild(srZeile(s)));
+    }
+    if (jetzt.length) {
+      if (alt.length) ziel.appendChild(el('p', 'unter', 'Dieser Monat:'));
+      jetzt.forEach(s => ziel.appendChild(srZeile(s)));
+    }
+  }
+
+  // ==========================================================================
+  // (c) Mitglieder
+  // ==========================================================================
+  function mitgliederZeichnen() {
+    /* Die Wahl „wen trifft es" (b5) steht auf DIESER Liste. Beide werden in
+       `laden()` NEBENEINANDER geholt - wer zuerst fertig ist, weiss vom
+       anderen nichts. Ohne diese Zeile bliebe die Auswahl leer, wenn die
+       Hausordnung schneller da war als die Mitglieder; ein Neuladen half
+       manchmal und manchmal nicht, je nach Netz. Dieselbe Sorte Falle wie
+       `zungenZeichnen()` an sechs von sieben Aufrufstellen. */
+    if (hausordnung) svAuswahlZeichnen();
+    $('m-zahl').textContent = mitglieder.length
+      + (mitglieder.length === 1 ? ' Mensch' : ' Leute');
+    $('m-sinn').textContent = darfIch()
+      ? 'Rolle ändern macht aus einem Mitglied einen Admin und zurück. Wer entfernt '
+      + 'wird, verliert die Mitgliedschaft — seine Buchungen und offenen Beträge '
+      + 'bleiben stehen. Dich selbst entfernst du nicht; dafür gibt es den Austritt '
+      + 'ganz unten.'
+      : 'Wer hier mitschreibt. Ändern kann das, wer die Gruppe führt.';
+
+    const ziel = $('m-liste');
+    ziel.textContent = '';
+    if (!mitglieder.length) {
+      ziel.appendChild(el('p', 'unter', 'Steht niemand drin.'));
+      return;
+    }
+
+    mitglieder.forEach(m => {
+      const z = el('div', 'zeile');
+
+      const name = el('div', 'z-name');
+      const punkt = el('span', 'z-punkt');
+      punkt.style.background = MENSCHEN[(m.farbe ?? 0) % MENSCHEN.length];
+      name.appendChild(punkt);
+      name.appendChild(document.createTextNode(m.name || 'Ehemaliger'));
+      if (m.ich) name.appendChild(el('span', 'du', 'du'));
+      z.appendChild(name);
+
+      z.appendChild(el('span', m.rolle === 'admin' ? 'z-marke' : 'z-marke mit',
+        m.rolle === 'admin' ? 'Admin' : 'Mitglied'));
+
+      const unter = el('div', 'z-unter');
+      unter.appendChild(el('span', null, 'dabei seit ' + nurTag(m.beigetreten)));
+      /* Gesperrt sagt der Wirt, nicht die Gruppe — hier steht es nur, damit
+         niemand rätselt, warum von dem Menschen nichts mehr kommt. */
+      if (m.gesperrt) {
+        unter.appendChild(el('span', 'pkt', '·'));
+        unter.appendChild(el('span', null, 'gesperrt'));
+      }
+      z.appendChild(unter);
+
+      // Am eigenen Namen stehen keine Knöpfe: die eigene Rolle zu tauschen
+      // hieße, sich selbst aus der Führung zu nehmen, und das ist der
+      // Austritt unten — mit dem Nachrücker, den er mitbringt.
+      if (darfIch() && !m.ich) {
+        const reihe = el('div', 'tat-reihe');
+        const zur = m.rolle === 'admin' ? 'member' : 'admin';
+
+        const r = el('button', 'knopf leer',
+          m.rolle === 'admin' ? 'zu Mitglied machen' : 'zu Admin machen');
+        r.type = 'button';
+        r.addEventListener('click', () => rolleTauschen(m, zur));
+        reihe.appendChild(r);
+
+        const wegSchluessel = 'm' + m.id + ':weg';
+        const w = el('button', 'knopf leer',
+          sicher === wegSchluessel ? 'wirklich entfernen' : 'entfernen');
+        w.type = 'button';
+        w.addEventListener('click', () => entfernen(m, wegSchluessel));
+        reihe.appendChild(w);
+
+        const tat = el('div', 'z-tat');
+        tat.appendChild(reihe);
+        z.appendChild(tat);
+      }
+
+      ziel.appendChild(z);
+    });
+  }
+
+  async function rolleTauschen(m, zur) {
+    loesen('m-sagt');
+    try {
+      const d = await ruf('/api/gruppe/mitglied',
+        { gruppe: G, user: m.id, rolle: zur }, 'PATCH');
+      await mitgliederHolen();
+      sagt('m-sagt', zur === 'admin'
+        ? `${m.name} führt die Gruppe jetzt mit.` + nachsatz(d.nachgerueckt)
+        : `${m.name} ist wieder Mitglied.` + nachsatz(d.nachgerueckt));
+    } catch (e) {
+      sagt('m-sagt', e.message, true);
+    }
+  }
+
+  async function entfernen(m, schluessel) {
+    if (sicher !== schluessel) {
+      rueckfrage(schluessel, 'm-sagt',
+        `${m.name} aus der Gruppe entfernen? Die Mitgliedschaft ist dann weg — `
+        + 'Buchungen und offene Beträge bleiben stehen. Herein kommt er nur über '
+        + 'einen neuen Antrag oder einen Einladungslink.',
+        mitgliederZeichnen);
+      return;
+    }
+    loesen('m-sagt');
+    try {
+      const d = await ruf('/api/gruppe/mitglied',
+        { gruppe: G, user: m.id, entfernen: true }, 'PATCH');
+      await mitgliederHolen();
+      sagt('m-sagt', `${m.name} ist raus.` + nachsatz(d.nachgerueckt));
+    } catch (e) {
+      mitgliederZeichnen();
+      sagt('m-sagt', e.message, true);
+    }
+  }
+
+  async function mitgliederHolen() {
+    const d = await ruf('/api/gruppe/mitglieder?g=' + G);
+    mitglieder = d.mitglieder || [];
+    mitgliederZeichnen();
+  }
+
+  // ==========================================================================
+  // (c) Offene Anträge
+  // ==========================================================================
+  /* Steht der Abschnitt schon offen, weil gerade jemand beschieden wurde,
+     BLEIBT er offen — auch wenn er dadurch leer geworden ist. Ohne diesen
+     Merker verschwand er mitsamt dem Satz „Jonas ist abgelehnt", sobald der
+     letzte Antrag weg war: man drückte einen Knopf, und der Knopf, der Antrag
+     und die Antwort waren gemeinsam fort. Beim nächsten Laden ist der
+     Abschnitt dann von selbst wieder verschwunden. */
+  let anfragenBleiben = false;
+
+  function anfragenZeichnen() {
+    // Nur der Gruppenadmin sieht sie, und nur, wenn welche da sind.
+    if (!darfIch() || (!anfragen.length && !anfragenBleiben)) {
+      $('a-block').hidden = true;
+      return;
+    }
+    $('a-block').hidden = false;
+    $('a-zahl').textContent = !anfragen.length ? 'keiner mehr offen'
+      : (anfragen.length === 1 ? 'einer wartet' : anfragen.length + ' warten');
+
+    const ziel = $('a-liste');
+    ziel.textContent = '';
+    if (!anfragen.length) ziel.appendChild(el('p', 'unter', 'Es wartet niemand mehr.'));
+    anfragen.forEach(a => {
+      const z = el('div', 'zeile');
+      z.appendChild(el('div', 'z-name', a.name || 'Ohne Namen'));
+      z.appendChild(el('span', 'z-marke', 'wartet'));
+      const unter = el('div', 'z-unter');
+      unter.appendChild(el('span', null, 'gestellt ' + tagUndZeit(a.gestellt)));
+      z.appendChild(unter);
+
+      const reihe = el('div', 'tat-reihe');
+      const ja = el('button', 'knopf', 'annehmen');
+      ja.type = 'button';
+      ja.addEventListener('click', () => bescheid(a, true));
+      reihe.appendChild(ja);
+
+      /* Ablehnen fragt zurück, annehmen nicht: das eine lässt sich mit einem
+         Klick heilen (wieder entfernen), das andere trifft jemanden, der
+         nichts mehr davon merkt und nur sieht, dass sein Antrag weg ist. */
+      const neinSchluessel = 'a' + a.id + ':nein';
+      const nein = el('button', 'knopf leer',
+        sicher === neinSchluessel ? 'wirklich ablehnen' : 'ablehnen');
+      nein.type = 'button';
+      nein.addEventListener('click', () => bescheid(a, false, neinSchluessel));
+      reihe.appendChild(nein);
+
+      const tat = el('div', 'z-tat');
+      tat.appendChild(reihe);
+      z.appendChild(tat);
+      ziel.appendChild(z);
+    });
+  }
+
+  async function bescheid(a, annehmen, schluessel) {
+    if (!annehmen && sicher !== schluessel) {
+      rueckfrage(schluessel, 'a-sagt',
+        `Den Antrag von ${a.name} ablehnen? Er erfährt es und kann einen neuen stellen.`,
+        anfragenZeichnen);
+      return;
+    }
+    loesen('a-sagt');
+    try {
+      await ruf('/api/gruppe/anfrage/bescheid',
+        { gruppe: G, anfrage: a.id, annehmen: !!annehmen });
+      anfragenBleiben = true;
+      await anfragenHolen();
+      // Angenommen heißt: einer mehr in der Liste darüber. Die muss mit.
+      if (annehmen) await mitgliederHolen();
+      sagt('a-sagt', annehmen ? `${a.name} ist dabei.` : `${a.name} ist abgelehnt.`);
+    } catch (e) {
+      anfragenZeichnen();
+      sagt('a-sagt', e.message, true);
+    }
+  }
+
+  async function anfragenHolen() {
+    if (!darfIch()) { anfragen = []; anfragenZeichnen(); return; }
+    const d = await ruf('/api/gruppe/anfragen?g=' + G);
+    anfragen = d.anfragen || [];
+    anfragenZeichnen();
+  }
+
+  // ==========================================================================
+  // (d) Einladungslinks
+  // ==========================================================================
+  function einladungenZeichnen() {
+    if (!darfIch()) { $('e-block').hidden = true; return; }
+    $('e-block').hidden = false;
+    const gueltig = einladungen.filter(e => e.gueltig).length;
+    $('e-zahl').textContent = gueltig === 1 ? 'einer gültig' : gueltig + ' gültig';
+
+    const ziel = $('e-liste');
+    ziel.textContent = '';
+    if (!einladungen.length) {
+      ziel.appendChild(el('p', 'unter', 'Noch keiner erzeugt.'));
+      return;
+    }
+
+    einladungen.forEach(e => {
+      const z = el('div', e.gueltig ? 'zeile' : 'zeile weg');
+      z.appendChild(el('div', 'z-name', 'Link vom ' + nurTag(e.erstellt)));
+
+      /* Drei Zustände und nicht zwei: „widerrufen" hat jemand getan,
+         „abgelaufen" ist von selbst passiert, und wer den Unterschied nicht
+         sieht, sucht den Kollegen, der ihn angeblich zurückgezogen hat. */
+      const wort = e.widerrufen ? 'widerrufen' : (e.gueltig ? 'gültig' : 'abgelaufen');
+      z.appendChild(el('span', e.gueltig ? 'z-marke' : 'z-marke mit', wort));
+
+      const unter = el('div', 'z-unter');
+      const teil = t => {
+        if (unter.childNodes.length) unter.appendChild(el('span', 'pkt', '·'));
+        unter.appendChild(el('span', null, t));
+      };
+      teil(e.laeuft_ab ? 'läuft ab ' + nurTag(e.laeuft_ab) : 'ohne Ablauf');
+      teil(e.max_nutzung == null
+        ? e.genutzt + ' mal genutzt, unbegrenzt'
+        : e.genutzt + ' von ' + e.max_nutzung + ' genutzt');
+      teil('von ' + (e.von || 'Ehemaliger'));
+      z.appendChild(unter);
+
+      // Widerrufen kann man nur, was noch nicht widerrufen ist — ein
+      // abgelaufener Link darf trotzdem noch zugemacht werden, das ist
+      // dieselbe Zeile in der Datenbank und der Worker nimmt sie an.
+      if (!e.widerrufen) {
+        const schluessel = 'e' + e.kennung + ':weg';
+        const w = el('button', 'knopf leer',
+          sicher === schluessel ? 'wirklich widerrufen' : 'widerrufen');
+        w.type = 'button';
+        w.addEventListener('click', () => widerrufen(e, schluessel));
+        const reihe = el('div', 'tat-reihe');
+        reihe.appendChild(w);
+        const tat = el('div', 'z-tat');
+        tat.appendChild(reihe);
+        z.appendChild(tat);
+      }
+
+      ziel.appendChild(z);
+    });
+  }
+
+  async function widerrufen(e, schluessel) {
+    if (sicher !== schluessel) {
+      rueckfrage(schluessel, 'e-sagt',
+        'Diesen Link widerrufen? Wer ihn schon hat, kommt damit nicht mehr herein. '
+        + 'Wer mit ihm bereits beigetreten ist, bleibt drin.',
+        einladungenZeichnen);
+      return;
+    }
+    loesen('e-sagt');
+    try {
+      await ruf('/api/gruppe/einladung/weg', { gruppe: G, kennung: e.kennung });
+      await einladungenHolen();
+      sagt('e-sagt', 'Der Link ist zu.');
+    } catch (err) {
+      einladungenZeichnen();
+      sagt('e-sagt', err.message, true);
+    }
+  }
+
+  async function einladungenHolen() {
+    if (!darfIch()) { einladungen = []; einladungenZeichnen(); return; }
+    const d = await ruf('/api/gruppe/einladungen?g=' + G);
+    einladungen = d.einladungen || [];
+    einladungenZeichnen();
+  }
+
+  /* --- Der eine Moment ------------------------------------------------------
+     Der Klartext kommt EINMAL, in der Antwort auf das Erzeugen. Er wird
+     nirgends zwischengelagert — nicht im `localStorage`, nicht in einer
+     Variablen, die die Seite überlebt: er steht im Kasten und sonst nirgends,
+     und der Kasten geht weg, wenn der Nutzer sagt, dass er ihn hat.
+
+     Das Nachladen der Liste passiert DANACH und lässt den Kasten stehen
+     (`einladungenZeichnen` fasst `#e-einmal` nicht an) — sonst hätte das
+     Erzeugen den Link im selben Atemzug wieder weggewischt. */
+  $('e-neu').addEventListener('click', async () => {
+    const knopf = $('e-neu');
+    const rumpf = { gruppe: G };
+    const tage = $('e-tage').value.trim();
+    const max = $('e-max').value.trim();
+    // Leer heißt weglassen, nicht null: der Worker liest `null` als „nicht
+    // gesetzt" und würde denselben Weg gehen — aber ein Feld, das gar nicht
+    // im Rumpf steht, kann auch keine Prüfung auslösen.
+    if (tage) rumpf.tage = Number(tage);
+    if (max) rumpf.max_nutzung = Number(max);
+
+    knopf.disabled = true;
+    sagt('e-sagt', '');
+    try {
+      const d = await ruf('/api/gruppe/einladung', rumpf);
+      $('e-kette').textContent = d.link || d.token || '';
+      $('e-einmal').hidden = false;
+      $('e-kopie').textContent = 'kopieren';
+      // Zum Kasten hin und in ihn hinein: wer die Seite gerade unten hat,
+      // soll den Link nicht suchen müssen.
+      $('e-einmal').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      $('e-kette').focus({ preventScroll: true });
+      $('e-tage').value = '';
+      $('e-max').value = '';
+      await einladungenHolen();
+    } catch (e) {
+      sagt('e-sagt', e.message, true);
+    } finally {
+      knopf.disabled = false;
+    }
+  });
+
+  /* Kopieren mit Rückfall. `navigator.clipboard` gibt es nicht überall und
+     nicht immer: über `http://` (außer auf localhost) fehlt der sichere
+     Kontext, und in Safari zählt nur eine Geste, die der Browser als solche
+     erkennt. Fällt er aus, wird der Link MARKIERT — dann liegt er unter dem
+     Finger und das Kontextmenü des Systems kann ihn nehmen. Ein Link, der
+     nicht wiederkommt, darf an einer fehlenden Schnittstelle nicht verloren
+     gehen. */
+  function markieren() {
+    const knoten = $('e-kette');
+    try {
+      const bereich = document.createRange();
+      bereich.selectNodeContents(knoten);
+      const wahl = window.getSelection();
+      wahl.removeAllRanges();
+      wahl.addRange(bereich);
+      return true;
+    } catch { return false; }
+  }
+
+  $('e-kopie').addEventListener('click', async () => {
+    const text = $('e-kette').textContent;
+    const knopf = $('e-kopie');
+    try {
+      if (!navigator.clipboard) throw new Error('kein Zwischenspeicher');
+      await navigator.clipboard.writeText(text);
+      knopf.textContent = 'kopiert';
+      sagt('e-sagt', 'Der Link liegt im Zwischenspeicher. Verschick ihn, solange er da ist.');
+      return;
+    } catch { /* weiter unten */ }
+    // Zweiter Anlauf über den alten Weg — er hängt an einer Markierung und
+    // funktioniert dort, wo die neue Schnittstelle gesperrt ist.
+    if (markieren()) {
+      let ging = false;
+      try { ging = document.execCommand('copy'); } catch { ging = false; }
+      if (ging) {
+        knopf.textContent = 'kopiert';
+        sagt('e-sagt', 'Der Link liegt im Zwischenspeicher.');
+        return;
+      }
+      sagt('e-sagt', 'Der Browser gibt den Zwischenspeicher nicht her. '
+        + 'Der Link ist jetzt markiert — kopier ihn von Hand.', true);
+      return;
+    }
+    sagt('e-sagt', 'Kopieren geht hier nicht. Markier den Link und kopier ihn von Hand.', true);
+  });
+
+  $('e-fertig').addEventListener('click', () => {
+    $('e-einmal').hidden = true;
+    // Und wirklich weg: der Text bleibt sonst im Blatt stehen, unsichtbar,
+    // aber lesbar für jeden, der die Seite untersucht.
+    $('e-kette').textContent = '';
+    sagt('e-sagt', '');
+  });
+
+  // ==========================================================================
+  // Selbst gehen
+  // ==========================================================================
+  function fussZeichnen() {
+    /* Der Wirt kommt über `inGruppe()` auch in Gruppen hinein, in denen er
+       nicht sitzt (`mitglied: false`). Austreten kann er dort nicht — es gibt
+       nichts zu löschen, und der Worker antwortet mit 409. Also steht der
+       Knopf dort gar nicht erst da. */
+    if (!gruppe || !gruppe.mitglied) { $('fuss').hidden = true; return; }
+    $('fuss').hidden = false;
+    $('fuss-sinn').textContent = gruppe.rolle === 'admin'
+      ? 'Wenn du gehst und niemand sonst die Gruppe führt, rückt das dienstälteste '
+      + 'Mitglied nach. Deine Buchungen und offenen Beträge bleiben stehen.'
+      : 'Du kannst jederzeit aufstehen. Deine Buchungen und offenen Beträge bleiben '
+      + 'stehen; zurück kommst du über einen Antrag oder einen Einladungslink.';
+    const k = $('austritt');
+    k.textContent = sicher === 'austritt'
+      ? 'wirklich austreten' : 'Aus dieser Gruppe austreten';
+  }
+
+  $('austritt').addEventListener('click', async () => {
+    if (sicher !== 'austritt') {
+      rueckfrage('austritt', 'f-sagt',
+        `Wirklich aus „${gruppe.name}" austreten? Danach siehst du die Tafel dieser `
+        + 'Gruppe nicht mehr. Buchungen und offene Beträge bleiben stehen.',
+        fussZeichnen);
+      return;
+    }
+    loesen('f-sagt');
+    $('austritt').disabled = true;
+    try {
+      const d = await ruf('/api/gruppe/austritt', { gruppe: G });
+      // Von hier gibt es nichts mehr zu verwalten. Die Seite sagt, was war,
+      // und lässt den Weg zurück stehen — statt sofort wegzuspringen, was
+      // aussähe, als sei etwas schiefgegangen.
+      zeigeTuer('Du bist raus',
+        `Du bist nicht mehr in „${gruppe.name}".` + nachsatz(d.nachgerueckt));
+    } catch (e) {
+      $('austritt').disabled = false;
+      fussZeichnen();
+      sagt('f-sagt', e.message, true);
+    }
+  });
+
+  // ==========================================================================
+  // Laden
+  // ==========================================================================
+  function kopf() {
+    document.title = (gruppe.name || 'Gruppe') + ' verwalten — beerstock';
+    $('g-name').textContent = gruppe.name || 'Ohne Namen';
+    $('g-rolle').textContent = gruppe.mitglied
+      ? (gruppe.rolle === 'admin'
+          ? 'Du führst diese Gruppe.'
+          : 'Du bist Mitglied — ändern kann hier, wer die Gruppe führt.')
+      : 'Du bist hier als Wirt, nicht als Mitglied.';
+  }
+
+  async function laden() {
+    if (!merke()) {
+      zeigeTuer('Erst anmelden',
+        'Diese Seite gehört zu einem Konto. Melde dich auf der Tafel an — mit derselben '
+        + 'Adresse wie immer —, dann steht die Gruppe hier.');
+      return;
+    }
+    if (!Number.isInteger(G) || G <= 0) {
+      zeigeTuer('Welche Gruppe denn?',
+        'In der Adresse fehlt die Gruppe. Sie steht dort als „?g=" mit einer Zahl '
+        + 'dahinter — such sie dir in der Auswahl heraus, dann stimmt sie.');
+      return;
+    }
+    try {
+      gruppe = await ruf('/api/gruppe?g=' + G);
+    } catch (e) {
+      if (e.status === 401) {
+        zeigeTuer('Erst anmelden',
+          'Die Anmeldung gilt hier nicht mehr. Melde dich auf der Tafel neu an, dann '
+          + 'steht die Gruppe wieder da.');
+      } else {
+        // 403 und 404 bringen ihren eigenen Satz mit („Du bist nicht in dieser
+        // Gruppe", „Diese Gruppe gibt es nicht"). Der wird gezeigt, wie er
+        // kommt — er ist genauer als jeder, den diese Seite raten könnte.
+        zeigeTuer('Diese Tafel hängt woanders', e.message);
+      }
+      return;
+    }
+
+    kopf();
+    stammdaten();
+    funktionenZeichnen();
+    geSichtbarkeit();
+    fussZeichnen();
+
+    /* Die Listen zusammen, nicht nacheinander: sie hängen nicht voneinander
+       ab, und mehrere Runden hintereinander sind auf einem Handy ebenso
+       viele sichtbare Sprünge. Wer die Gruppe nicht führt, holt nur eine —
+       die anderen gäben ohnehin 403 (`getraenkeHolen` schneidet sich über
+       `geSichtbarkeit()` selbst ab).
+
+       `catch` an jeder einzelnen: fällt EINE Liste aus, sollen die anderen
+       trotzdem stehen. Die Mitgliederliste ist die einzige, die jeder sieht,
+       darum steht ihr Fehler an ihrem eigenen Satz. */
+    $('skelett').hidden = true;
+    $('blatt').hidden = false;
+
+    await Promise.all([
+      mitgliederHolen().catch(e => sagt('m-sagt', e.message, true)),
+      anfragenHolen().catch(e => sagt('a-sagt', e.message, true)),
+      einladungenHolen().catch(e => sagt('e-sagt', e.message, true)),
+      getraenkeHolen().catch(e => sagt('ge-sagt', e.message, true)),
+      abHolen().catch(e => sagt('ab2-sagt', e.message, true)),
+      zahlwegeHolen().catch(e => sagt('zw-sagt', e.message, true)),
+      hausordnungHolen().catch(e => sagt('ho-sagt', e.message, true)),
+    ]);
+  }
+
+  /* --- Runterwischen führt hinaus -------------------------------------------
+     Dieselbe Geste wie an den Bögen der Tafel und auf den Statistiken,
+     dieselben vier Schwellen und dieselbe Uhr am Ende. Das Original steht in
+     `statistik.html`; hier die Kopie, wie in `admin.html` und
+     `homeassistant.html`.
+
+     Gezogen wird NUR vom Griff aus: hier scrollt das Fenster, und ein Zug nach
+     unten am oberen Anschlag gehört dem Zum-Neuladen-Ziehen von Chrome. Der
+     Griff nimmt ihm die Geste per `touch-action: none` ganz ab.
+
+     DER KLICK MUSS VERSCHLUCKT WERDEN. Ein kurzer Zug, der die Schwelle nicht
+     erreicht, federt zurück — und der Browser schickt hinterher den
+     synthetischen Klick auf den Griff, der dann doch hinausführte. `gezogen`
+     fängt ihn; der nächste `touchstart` setzt den Merker zurück.
+     --------------------------------------------------------------------- */
+  {
+    const ZUG_AUF = 92, ZUG_SCHLUPF = 8, ZUG_VORSPRUNG = 1.5, ZUG_TAKT = 220;
+    const ohneTakt = matchMedia('(prefers-reduced-motion: reduce)');
+    const griff = document.querySelector('.raus-griff');
+    const zieher = document.querySelector('.brett');
+    let zug = null, gezogen = false;
+
+    // Hinausgeführt wird über den Klick auf die vorhandene, nur unsichtbare
+    // Pille: damit gibt es genau EIN Ziel im Markup.
+    const raus = () => document.querySelector('.zur-tafel').click();
+
+    function zurueckfedern() {
+      document.documentElement.classList.remove('zieht');
+      zieher.style.transform = '';
+      zug = null;
+    }
+
+    griff.addEventListener('click', () => {
+      if (gezogen) { gezogen = false; return; }
+      raus();
+    });
+
+    /* Die Zuhörer hängen unbedingt, nicht nur am Finger: ein Notebook mit
+       Berührungsschirm meldet `pointer: fine` und hat trotzdem einen. Von
+       einer Maus kommt ohnehin kein `touch`. */
+    griff.addEventListener('touchstart', ev => {
+      zug = null; gezogen = false;
+      if (ev.touches.length !== 1) return;
+      zug = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, achse: null, weg: 0 };
+    }, { passive: true });
+
+    // `passive: false`, weil das Gummiband des Browsers weg muss, sobald die
+    // Bewegung uns gehört. Vorher NICHT — solange die Achse offen ist, könnte
+    // es noch ein Querwisch werden.
+    griff.addEventListener('touchmove', ev => {
+      if (!zug) return;
+      const t = ev.touches[0];
+      const dx = t.clientX - zug.x, dy = t.clientY - zug.y;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) gezogen = true;
+      if (zug.achse === null) {
+        if (Math.abs(dx) > ZUG_SCHLUPF && Math.abs(dx) > Math.abs(dy)) { zug = null; return; }
+        if (dy < -ZUG_SCHLUPF) { zug = null; return; }
+        if (dy <= ZUG_SCHLUPF || dy <= Math.abs(dx) * ZUG_VORSPRUNG) return;
+        zug.achse = 'runter';
+        document.documentElement.classList.add('zieht');
+      }
+      ev.preventDefault();
+      zug.weg = Math.max(0, dy - ZUG_SCHLUPF);
+      zieher.style.transform = 'translateY(' + zug.weg + 'px)';
+    }, { passive: false });
+
+    griff.addEventListener('touchend', () => {
+      if (!zug || zug.achse !== 'runter' || zug.weg < ZUG_AUF) { zurueckfedern(); return; }
+      zug = null;
+      document.documentElement.classList.remove('zieht');   // erst die Überblendung zurück, dann das Ziel
+      if (navigator.vibrate) navigator.vibrate(12);
+      if (ohneTakt.matches) { zurueckfedern(); raus(); return; }
+      zieher.style.transform = 'translateY(' + window.innerHeight + 'px)';
+      /* Eine Uhr, kein `transitionend`: fällt das Ereignis einmal aus, bliebe
+         die Seite weggeschoben und leer stehen, ohne dass jemand hinauskäme. */
+      setTimeout(raus, ZUG_TAKT);
+    }, { passive: true });
+
+    griff.addEventListener('touchcancel', zurueckfedern, { passive: true });
+  }
+
+  laden();
+</script>
+</body>
+</html>

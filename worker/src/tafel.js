@@ -1,9 +1,17 @@
 // ============================================================================
 // Tafel — der Verteiler hinter der Bierseite.
 //
-// Ein einziges Durable Object fuer alle Besucher (`idFromName('tafel')`). Jede
-// offene Seite haelt eine WebSocket hierher; jede Schreibroute im Worker ruft
-// `melden([...])` und das Objekt schiebt die Marke an alle Leitungen.
+// EIN OBJEKT JE GRUPPE (`idFromName('gruppe:' + id)`, seit Schema 32). Jede
+// offene Seite haelt eine WebSocket zu der Gruppe, die sie gerade zeigt; jede
+// Schreibroute im Worker ruft `melden([...])` und das Objekt schiebt die Marke
+// an alle Leitungen DIESER Gruppe.
+//
+// Die Klasse selbst weiss davon nichts und muss es nicht: sie kennt nur ihre
+// eigenen Sockets. Wer welche bekommt, entscheidet die Adresse - und die
+// vergibt der Worker an genau einer Stelle (`verteile()` in src/index.js).
+// Bis Schema 31 hiess diese eine Adresse `'tafel'`, fuer alle zusammen; wer
+// in einer alten Sitzung noch dort haengt, hoert nichts mehr - beim naechsten
+// Aufbau der Seite verbindet er neu.
 //
 // WAS UEBER DIE LEITUNG GEHT, SIND NUR MARKEN - keine Daten. Eine Marke ist
 // 'tafel' (Bestenliste, Rad, Termine haben sich geaendert) oder ein Ziel wie

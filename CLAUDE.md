@@ -23,8 +23,10 @@ das Datenmodell. Diese Datei hier sagt nur, was ein Agent beim *Arbeiten* am Rep
 Der Abschnitt *Aufbau* im `README.md` beschreibt dasselbe ausführlicher, samt Tabellen und
 Routen.
 
-**Große Dateien nie ganz lesen.** `index.html` ≈ 4.100 Zeilen, `worker/src/index.js`
-≈ 3.500. Erst `grep -n` für den Umriss, dann `Read` mit `offset`/`limit`.
+**Große Dateien nie ganz lesen.** `index.html` ≈ 15.650 Zeilen, `worker/src/index.js`
+≈ 12.100 (Stand nach Etappe 9 des Gruppen-Umbaus, 14.08.2026 — vorher ≈ 4.100/3.500,
+der Umbau hat beide mehr als verdreifacht). Erst `grep -n` für den Umriss, dann `Read`
+mit `offset`/`limit`.
 
 **`bilder.js` ist die einzige geteilte Datei.** Wer eine Grafik ändert, ändert sie für
 *beide* Seiten — Kontor und Verlauf. Farben stehen dort nirgends fest: jede Seite reicht

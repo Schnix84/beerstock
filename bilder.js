@@ -969,7 +969,12 @@ window.Bilder = (function () {
      Das war nie Zierde — acht gleich gefärbte Balken sind eine Liste, eine
      Staffel ist eine Rangfolge, und die Länge allein trennt Platz 1 und
      Platz 2 kaum, wenn beide fast gleich oft dran waren. */
-  function bildLiegend(titel, daten, nameVon, wertVon, was) {
+  /* `opt.tonVon(z, i)` und `opt.format(wert)` seit Etappe 6, fuer "Offene
+     Beträge je Mitglied": das Bild faerbt dort nach STATUS, nicht nach
+     Melder, und zeigt Cent als Euro. Ein sechster Parameter statt eines
+     neuen Bildes, damit die rund dreissig bestehenden Aufrufe unveraendert
+     bleiben - ohne `opt` verhaelt sich die Funktion exakt wie vorher. */
+  function bildLiegend(titel, daten, nameVon, wertVon, was, opt = {}) {
     const box = rahmen(titel);
     if (!daten.length) return leer(box, 'Noch nichts eingetragen.');
     const zeilen = daten.slice(0, 8);
@@ -979,14 +984,22 @@ window.Bilder = (function () {
     const hoehe = Math.max(zeilen.length * (hoch + luft) + 6, 40);
     const svg = s_el('svg', { viewBox: `0 0 ${W} ${hoehe}`, role: 'img' });
     const lx = 66;   // Platz für den Namen
+    /* `opt.format` bekommt seit Etappe 8 ZWEI Argumente: den Wert und die
+       ganze Zeile. Rueckwaertskompatibel - jede bestehende Formatierung nimmt
+       nur das erste und merkt vom zweiten nichts. Gebraucht wird es dort, wo
+       der Balken eine ANZAHL misst, die Beschriftung aber noch eine zweite
+       Zahl aus derselben Zeile nennen soll (das Suendenregister: "3 · 1,50 €",
+       Entscheidung 53). */
+    const text = opt.format || zahl;
     /* Entweder ALLE Zeilen tragen eine Farbe oder keine. Ein gemischtes Bild
        — drei Melder bunt, der vierte im Verlegenheitsgrün — sähe aus, als
-       bedeute das Grün etwas. */
-    const eigen = zeilen.every(z => z && z.farbe != null);
-    const ton = (z, i) => eigen ? menschenFarbe(z.farbe) : REIHE[0];
-    const stufe = i => eigen ? 1 : Math.max(.34, .85 - i * .07);
+       bedeute das Grün etwas. Mit `opt.tonVon` entfaellt die Frage: die Farbe
+       kommt von aussen und bedeutet dort etwas anderes als "dieser Mensch". */
+    const eigen = !opt.tonVon && zeilen.every(z => z && z.farbe != null);
+    const ton = opt.tonVon || ((z, i) => eigen ? menschenFarbe(z.farbe) : REIHE[0]);
+    const stufe = i => (eigen || opt.tonVon) ? 1 : Math.max(.34, .85 - i * .07);
     // Der rechte Rand richtet sich nach der laengsten Zahl, siehe `wertPlatz`.
-    const voll = W - lx - wertPlatz(zeilen.map(z => zahl(wertVon(z))));
+    const voll = W - lx - wertPlatz(zeilen.map(z => text(wertVon(z), z)));
 
     const balken = [];
     zeilen.forEach((z, i) => {
@@ -1005,7 +1018,7 @@ window.Bilder = (function () {
       const w = s_el('text',
         { x: lx + Math.max(b, 1) + WERT_LUFT, y: y + hoch - 4,
           'font-size': 9.5, fill: P.textWeg });
-      w.textContent = zahl(wertVon(z));
+      w.textContent = text(wertVon(z), z);
       svg.appendChild(w);
     });
 
@@ -1017,13 +1030,13 @@ window.Bilder = (function () {
       hervor: an => balken[i].setAttribute('opacity', an ? 1 : stufe(i)),
       inhalt: () => ({
         titel: stolzZusatz(nameVon(z), ton(z, i)),
-        zeilen: [{ farbe: ton(z, i), was: was || 'Anzahl', wert: zahl(wertVon(z)) }],
+        zeilen: [{ farbe: ton(z, i), was: was || 'Anzahl', wert: text(wertVon(z), z) }],
         fuss: summe ? Math.round((wertVon(z) / summe) * 100) + ' % der gezeigten Zeilen' : null,
       }),
     })));
     box.appendChild(svg);
     return tabelleAn(box, ['', was || 'Anzahl'],
-      zeilen.map((z, i) => [stolzZusatz(nameVon(z), ton(z, i)), zahl(wertVon(z))]));
+      zeilen.map((z, i) => [stolzZusatz(nameVon(z), ton(z, i)), text(wertVon(z), z)]));
   }
 
   /* 4 — Ein einziger gestapelter Balken. Die Frage ist der ANTEIL: wie oft

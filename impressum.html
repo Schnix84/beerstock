@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Impressum &amp; Datenschutz — beerstock</title>
+<style>
+  /* ==========================================================================
+     IMPRESSUM & DATENSCHUTZ (Etappe 6 des Gruppen-Umbaus, Entscheidung 39)
+
+     Eine statische Seite, ausdruecklich OHNE Anmeldung erreichbar — anders
+     als `homeassistant.html` oder `statistik.html` gibt es hier nichts, was
+     erst `/api/me` beantworten muesste, und keinen Grund, jemanden vor die
+     Tuer zu stellen. Der Rahmen (Holz, Tafel, Kreide auf Schiefer, dieselbe
+     Hand) ist WORTGLEICH aus `homeassistant.html` uebernommen, gekuerzt um
+     alles, was zu dessen Token-Verwaltung gehoert — hier gibt es kein
+     `/api`, also auch kein Skript, das eines braucht.
+
+     KEIN Wisch-Griff, KEIN `@view-transition`. Beide Mechanismen setzen
+     voraus, dass die Seite aus einem offenen Deckel heraus erreicht wurde
+     und mit einem Klick auf denselben Pfad zurueckfuehrt — hier fuehrt der
+     Weg von einer Fusszeile herein, oft ohne dass je ein Konto bestand, und
+     ein einfacher Link zurueck ist die ehrlichere Zusage.
+
+     KEIN `bilder.js`. Nichts hier ist eine Grafik.
+     ========================================================================== */
+  :root {
+    --schiefer:    #262c2e;
+    --schiefer-t:  #191d1f;
+    --kreide:      #eef1ea;
+    --kreide-matt: #cfd6cd;
+    --kreide-weg:  #93a09a;
+    --gelb:        #e8c766;
+    --hand: 'Chalkduster', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; min-height: 100%;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--kreide);
+    background:
+      radial-gradient(130% 55% at 50% -12%, #e8c76614, transparent 60%),
+      radial-gradient(120% 90% at 50% 0%, #1f2629, #14181a 52%, #0c0f11 100%);
+    background-color: #0c0f11;
+    background-repeat: no-repeat;
+    min-height: 100svh;
+    padding: clamp(10px, 3vw, 28px);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- Der Holzrahmen, wortgleich von `homeassistant.html` -----------------
+     Die lange Begruendung (vier Leisten statt einer Flaeche, warum das
+     Rauschen gefiltert und nicht direkt gezeichnet wird) steht dort, nicht
+     zweimal hier. */
+  .brett {
+    --r: clamp(9px, 2.4vw, 15px);
+    --h-hell:   #f8ecd2;
+    --h-mitte:  #eed5a6;
+    --h-dunkel: #d0b284;
+    --h-tief:   #a98a5e;
+    --fase-hell: .38;
+    --fase-dunkel: .55;
+    position: relative;
+    max-width: 620px; margin: 0 auto;
+    border-radius: 4px;
+    padding: var(--r);
+    box-shadow:
+      0 42px 70px -30px #000e,
+      0 14px 30px -18px #000c,
+      0 0 0 1px #14110d;
+  }
+  .rh {
+    position: absolute; inset: 0; border-radius: inherit;
+    overflow: hidden; pointer-events: none;
+  }
+  .rh-l { position: absolute; inset: 0; }
+  .rh-o { clip-path: polygon(0 0, 100% 0, calc(100% - var(--r)) var(--r), var(--r) var(--r)); }
+  .rh-u { clip-path: polygon(0 100%, var(--r) calc(100% - var(--r)), calc(100% - var(--r)) calc(100% - var(--r)), 100% 100%); }
+  .rh-li { clip-path: polygon(0 0, var(--r) var(--r), var(--r) calc(100% - var(--r)), 0 100%); }
+  .rh-re { clip-path: polygon(100% 0, 100% 100%, calc(100% - var(--r)) calc(100% - var(--r)), calc(100% - var(--r)) var(--r)); }
+  .rh-l {
+    --rh-bild-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='60'%3E%3Cdefs%3E%3Cpattern id='s' width='600' height='15' patternUnits='userSpaceOnUse'%3E%3Crect width='600' height='15' fill='%23eed5a6'/%3E%3Crect y='0' width='600' height='1.5' fill='%23a8825a'/%3E%3Crect y='3.5' width='600' height='0.8' fill='%2386633c'/%3E%3Crect y='6' width='600' height='3' fill='%23e4c48c'/%3E%3Crect y='10' width='600' height='1.2' fill='%23bd9a6c'/%3E%3Crect y='12.5' width='600' height='2' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.025' numOctaves='3' seed='5' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='13' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.05' numOctaves='2' seed='26' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='720' height='180' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='600' height='60' filter='url(%23z)'/%3E%3Crect width='600' height='60' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-bild-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='600'%3E%3Cdefs%3E%3Cpattern id='s' width='15' height='600' patternUnits='userSpaceOnUse'%3E%3Crect width='15' height='600' fill='%23eed5a6'/%3E%3Crect x='0' width='1.5' height='600' fill='%23a8825a'/%3E%3Crect x='3.5' width='0.8' height='600' fill='%2386633c'/%3E%3Crect x='6' width='3' height='600' fill='%23e4c48c'/%3E%3Crect x='10' width='1.2' height='600' fill='%23bd9a6c'/%3E%3Crect x='12.5' width='2' height='600' fill='%23fbecc2'/%3E%3C/pattern%3E%3Cfilter id='w' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.025 0.006' numOctaves='3' seed='17' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='30' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Cfilter id='z'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='25' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.72'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.37 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.44 0'/%3E%3C/filter%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.006' numOctaves='2' seed='38' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.9' intercept='-0.86'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.93 0 0 0 0 0.75 0 0 0 0.52 0'/%3E%3C/filter%3E%3C/defs%3E%3Crect x='-60' y='-60' width='180' height='720' fill='url(%23s)' filter='url(%23w)'/%3E%3Crect width='60' height='600' filter='url(%23z)'/%3E%3Crect width='60' height='600' filter='url(%23p)'/%3E%3C/svg%3E");
+    --rh-flaum:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cfilter id='f1'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='3' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 0.22 0 0 0 0 0.14 0 0 0 0 0.06 0 0 0 0.3 0'/%3E%3C/filter%3E%3Cfilter id='f2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='41' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='1.6' intercept='-0.64'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.95 0 0 0 0 0.84 0 0 0 0.26 0'/%3E%3C/filter%3E%3Crect width='60' height='60' filter='url(%23f1)'/%3E%3Crect width='60' height='60' filter='url(%23f2)'/%3E%3C/svg%3E");
+    --licht-v: linear-gradient(180deg, #ffe4bb28, #ffe4bb00 26%, #2b18051a);
+  }
+  .rh-o {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      linear-gradient(180deg, #ffe4bb3d, #ffe4bb00 42%, #2b180536) 0 0 / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 0 no-repeat,
+      var(--h-mitte);
+  }
+  .rh-u {
+    background:
+      var(--rh-flaum) 0 100% repeat,
+      linear-gradient(180deg, #2b18054f, #2b18051a 60%, #2b180500 82%, #ffe4bb22) 0 100% / 100% var(--r) no-repeat,
+      var(--rh-bild-h) 0 100% no-repeat,
+      var(--h-dunkel);
+  }
+  .rh-li {
+    background:
+      var(--rh-flaum) 0 0 repeat,
+      var(--licht-v) 0 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #ffe4bb30, #2b180536) 0 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) -21px 0 no-repeat,
+      var(--h-mitte);
+  }
+  .rh-re {
+    background:
+      var(--rh-flaum) 100% 0 repeat,
+      var(--licht-v) 100% 0 / var(--r) 100% no-repeat,
+      linear-gradient(90deg, #2b18053e, #2b180520) 100% 0 / var(--r) 100% no-repeat,
+      var(--rh-bild-v) calc(100% + 19px) 0 no-repeat,
+      var(--h-dunkel);
+  }
+  .rh-naht {
+    position: absolute; inset: 0; opacity: .5;
+    background-image:
+      linear-gradient(45deg,  transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-45deg, transparent 49.2%, #00000059 49.9%, #ffffff16 50.6%, transparent 51.3%),
+      linear-gradient(-135deg,transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%),
+      linear-gradient(135deg, transparent 49.2%, #00000059 49.9%, #ffffff0f 50.6%, transparent 51.3%);
+    background-size: var(--r) var(--r);
+    background-position: left top, right top, right bottom, left bottom;
+    background-repeat: no-repeat;
+  }
+  .rh-fase {
+    position: absolute; inset: 0; border-radius: inherit;
+    box-shadow:
+      0 1px 0 rgb(255 232 197 / var(--fase-hell)) inset,
+      1px 0 0 rgb(255 232 197 / calc(var(--fase-hell) * .6)) inset,
+      0 -1px 0 rgb(43 24 5 / var(--fase-dunkel)) inset,
+      -1px 0 0 rgb(43 24 5 / calc(var(--fase-dunkel) * .8)) inset;
+  }
+  .rh-falz {
+    position: absolute; inset: calc(var(--r) - 2px); border-radius: 3px;
+    box-shadow:
+      0 1px calc(var(--r) * .45) #2b180552,
+      0 0 0 1px #17100a,
+      0 1px 0 rgb(255 232 197 / var(--fase-hell));
+  }
+  .tafel {
+    position: relative; border-radius: 3px; overflow: hidden;
+    padding: clamp(18px, 5vw, 30px) clamp(15px, 4.5vw, 26px) clamp(20px, 4vw, 28px);
+    background:
+      radial-gradient(120% 80% at 22% 8%, #37403f 0%, var(--schiefer) 45%, var(--schiefer-t) 100%);
+    box-shadow:
+      0 7px 12px -6px #000a inset,
+      0 0 0 1px #000a inset,
+      0 16px 34px -14px #000b inset,
+      0 -10px 26px -18px #0009 inset;
+  }
+  .tafel::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 0.97 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23k)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='340' height='340' filter='url(%23w)'/%3E%3C/svg%3E");
+  }
+  .tafel::after {
+    content: ""; position: absolute; inset: -8%; pointer-events: none; opacity: .3;
+    background:
+      linear-gradient(112deg, transparent 12%, #ffffff12 22%, #ffffff26 30%, #ffffff0a 38%, transparent 46%),
+      linear-gradient(112deg, transparent 48%, #ffffff0e 58%, #ffffff1c 64%, transparent 74%),
+      linear-gradient(112deg, transparent 72%, #ffffff10 84%, transparent 94%),
+      radial-gradient(65% 30% at 24% 30%, #ffffff1f, transparent 70%),
+      radial-gradient(50% 22% at 74% 64%, #ffffff17, transparent 70%);
+    mix-blend-mode: screen;
+  }
+  .tafel > * { position: relative; z-index: 1; }
+  .kr { text-shadow: 0 0 1px #ffffff5c, 0 1px 2px #00000055; }
+
+  .kopfzeile {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
+    margin-bottom: 14px;
+  }
+  .kopfzeile .zur-tafel {
+    margin-left: auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 40px; padding: 4px 10px;
+    font: inherit; font-size: 12px; text-decoration: none;
+    border: 1px solid #ffffff40; border-radius: 999px;
+    background: #ffffff0a; color: var(--kreide-weg);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .kopfzeile .zur-tafel:hover {
+    background: #ffffff1c; border-color: #ffffff77; color: var(--kreide);
+  }
+
+  h1 {
+    font-family: var(--hand); font-weight: 400;
+    font-size: clamp(26px, 7vw, 36px); line-height: 1.15;
+    margin: 0; transform: rotate(-.8deg); transform-origin: left;
+  }
+  h2 {
+    font-family: var(--hand); font-weight: 400; font-size: 21px;
+    margin: 28px 0 10px; color: var(--kreide);
+  }
+  h2:first-of-type { margin-top: 6px; }
+  p { margin: 0 0 11px; font-size: 14px; line-height: 1.6; color: var(--kreide-matt); }
+  p.leise { color: var(--kreide-weg); font-size: 13px; }
+  ul { margin: 0 0 11px; padding-left: 19px; }
+  li { font-size: 14px; line-height: 1.6; color: var(--kreide-matt); margin-bottom: 5px; }
+  a.hier { color: var(--kreide); border-bottom: 1px dashed #ffffff40; text-decoration: none; }
+  a.hier:hover { border-bottom-color: var(--kreide); }
+</style>
+</head>
+<body>
+<div class="brett">
+
+  <div class="rh" aria-hidden="true">
+    <i class="rh-l rh-o"></i><i class="rh-l rh-u"></i><i class="rh-l rh-li"></i><i class="rh-l rh-re"></i>
+    <i class="rh-naht"></i><i class="rh-fase"></i><i class="rh-falz"></i>
+  </div>
+
+  <div class="tafel">
+    <div class="kopfzeile">
+      <h1 class="kr">Impressum &amp; Datenschutz</h1>
+      <a class="zur-tafel" href="./" aria-label="zurück zur Tafel">←</a>
+    </div>
+
+    <h2 class="kr">Wer betreibt das</h2>
+    <p>
+      BeerStock ist ein privates, nicht-kommerzielles Projekt für den eigenen
+      Freundeskreis — keine Firma, kein Geschäft dahinter. Betrieben und
+      angeboten von Matthias Schneider.
+    </p>
+    <p>
+      Fragen, Wünsche zur eigenen Adresse oder alles andere:
+      <a class="hier" href="mailto:mc.schneider84@gmail.com">mc.schneider84@gmail.com</a>.
+    </p>
+
+    <h2 class="kr">Welche Daten, und wie lange</h2>
+    <p>
+      Wer sich anmeldet, hinterlegt eine E-Mail-Adresse (für den Anmeldelink
+      und, wer es will, für Erinnerungen und Rundmails) und einen frei
+      gewählten Namen. Dazu kommt, je nachdem, was man auf der Tafel tut:
+    </p>
+    <ul>
+      <li>gemeldeter Bierbestand und Kühlschranktemperatur, mit Zeitpunkt</li>
+      <li>Kommentare, Sterne-Bewertungen und Fotos zu Terminen</li>
+      <li>wer bei einer Ziehung des Glücksrads dran war und was daraus wurde</li>
+      <li>Kassenbuchungen einer Gruppe — Getränk, Menge, Preis, wer gebucht hat</li>
+      <li>bei einer Überweisung als Zahlweg: die hinterlegte IBAN und der Kontoinhaber, vom Gruppenadmin selbst eingetragen</li>
+    </ul>
+    <p>
+      Das alles bleibt, solange das Konto besteht — eine Runde verlassen
+      löscht nur die Mitgliedschaft, nicht die Vergangenheit: eine offene
+      Rechnung bleibt offen, wie eine Strichliste am echten Tresen nach dem
+      Auszug auch nicht rückwirkend umgeschrieben wird.
+    </p>
+
+    <h2 class="kr">Wie man sein Konto löscht</h2>
+    <p>
+      Schreib an die Adresse oben — E-Mail-Adresse und Name sind dann sofort
+      weg, ebenso jedes Gerät, das angemeldet war. Vergangene Meldungen,
+      Kommentare und Buchungen bleiben als „Ehemaliger" stehen, ohne dass
+      sich daraus noch zurückverfolgen ließe, wer das war. Ein Gruppenadmin
+      kann dich nur aus seiner eigenen Gruppe entfernen, nicht dein Konto
+      selbst — dafür braucht es diese eine Mail.
+    </p>
+
+    <h2 class="kr">Und das Geld</h2>
+    <p>
+      BeerStock rechnet ab und vermittelt — die eigentliche Zahlung passiert
+      immer außerhalb der App, direkt zwischen Mitglied und Gruppenadmin.
+      Die Seite ist eine Abrechnungshilfe, keine Zahlungsabwicklung: sie
+      berührt kein Konto, keine Karte, kein Geld. Was sie anbietet, sind
+      Wege dahin — ein PayPal-Link, ein Girocode für die Überweisung, eine
+      Wero-Kennung oder ein Satz Freitext für bar —, bezahlt wird immer
+      privat.
+    </p>
+  </div>
+</div>
+</body>
+</html>
