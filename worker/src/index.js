@@ -1886,6 +1886,44 @@ const SALDO_SUMMEN_SQL = `
    hinschreibt. */
 const saldoSummenWerte = (gruppeId, key) => [gruppeId, key, gruppeId, key];
 
+/* SEIT WANN es fuer diese Gruppe Abrechnungsmonate gibt, als 'YYYY-MM'.
+   Der Boden des Monatsblaetterers in `gruppe.html` - und, seit der Meldung vom
+   2026-08-17, auch die Schranke der beiden Routen selbst. Ohne sie blaetterte
+   die Seite unbegrenzt zurueck, bis Dezember 2025 und weiter, in Monate, in
+   denen es die Gruppe nicht gab: leere Liste, darunter ein Knopf
+   "abschliessen". Ein Monatsabschluss ueber ein Nichts, das nie zur Gruppe
+   gehoerte, ist keine Buchhaltung.
+
+   DER BODEN IST DER MONAT DER GRUPPENGRUENDUNG - aber nie spaeter als der
+   aelteste Monat, in dem tatsaechlich etwas liegt. Der Zusatz ist kein
+   Misstrauen gegen `gruppen.erstellt`, sondern gegen dessen Bedeutung bei der
+   Auffanggruppe: die hat migrations/0032 angelegt, ihr `erstellt` ist also der
+   Tag des Rollouts und nicht der Tag, an dem die Runde anfing. Ohne den Zusatz
+   verschwaende ein Monat mit echten Buchungen hinter dem Boden - Daten, die es
+   gibt, waeren nicht mehr erreichbar.
+
+   VIER QUELLEN, und die letzte ist die wichtigste: ein abgeschlossener Monat
+   MUSS erreichbar bleiben, auch wenn seine Buchungen spaeter storniert wurden
+   und die anderen Zweige nichts mehr finden. Die ersten drei sind dieselben wie
+   beim Monatswaehler der Statistikseite - zwei Blaetterer ueber Kalendermonate,
+   eine Regel. */
+const abrechnungSeit = async (env, gruppeId) => {
+  const z = await env.DB.prepare(`
+    SELECT min(m) AS seit FROM (
+      SELECT strftime('%Y-%m', erstellt) AS m FROM gruppen WHERE id = ?1
+      UNION ALL
+      SELECT min(strftime('%Y-%m', gebucht_am)) FROM buchung
+        WHERE gruppe_id = ?1 AND storniert_am IS NULL
+      UNION ALL
+      SELECT min(strftime('%Y-%m', verhaengt_am)) FROM strafe
+        WHERE gruppe_id = ?1 AND art = 'geld' AND status IN ('offen','abgerechnet')
+      UNION ALL
+      SELECT min(printf('%04d-%02d', jahr, monat)) FROM abrechnung WHERE gruppe_id = ?1
+    )
+  `).bind(gruppeId).first();
+  return (z || {}).seit || null;
+};
+
 // Der Monatsabschluss selbst - EIN Statement statt einer Schleife ueber
 // potenziell viele Mitglieder, kein Fenster zwischen Aggregieren und
 // Schreiben. `s.cent > 0`: Guthaben (0 oder negativ, eine Gegenbuchung hat
@@ -7283,39 +7321,22 @@ const ROUTEN = {
     const zahlwegeDa = !!(await env.DB.prepare(
       'SELECT 1 FROM zahlweg WHERE gruppe_id = ? LIMIT 1').bind(g.gruppe.id).first());
 
-    /* SEIT WANN es diesen Monatsblaetterer nach hinten gibt. Ohne diese Zahl
-       blaettert die Seite unbegrenzt zurueck - bis Dezember 2025 und weiter,
-       in Monate, in denen es die Gruppe nicht gab. Dort steht dann eine leere
-       Abrechnung samt Knopf "abschliessen", und ein Monatsabschluss ueber ein
-       Nichts, das nie zur Gruppe gehoerte, ist keine Buchhaltung.
+    const seit = await abrechnungSeit(env, g.gruppe.id);
+    /* UND DIE GRENZE GILT HIER, NICHT NUR IN DER OBERFLAECHE. `seit` allein
+       waere ein Hinweis an eine wohlwollende Seite; wer eine zehn Minuten alte
+       Fassung im Tab hat (GitHub Pages liefert `max-age=600`), ein Lesezeichen
+       benutzt oder curl nimmt, bekaeme fuer Dezember 2025 weiterhin eine
+       vollstaendige, leere Abrechnung ausgeliefert - als haette es die Runde
+       damals gegeben. Genau so ist der Fehler nach dem Ausrollen zurueckgemeldet
+       worden.
 
-       DER BODEN IST DER MONAT DER GRUPPENGRUENDUNG - aber nie spaeter als der
-       aelteste Monat, in dem tatsaechlich etwas liegt. Der Zusatz ist kein
-       Misstrauen gegen `gruppen.erstellt`, sondern gegen dessen Bedeutung bei
-       der Auffanggruppe: die hat migrations/0032 angelegt, ihr `erstellt` ist
-       also der Tag des Rollouts und nicht der Tag, an dem die Runde anfing.
-       Ohne den Zusatz verschwaende ein Monat mit echten Buchungen hinter dem
-       Boden - Daten, die es gibt, waeren nicht mehr erreichbar.
-
-       Drei Quellen fuer "da liegt etwas", dieselben wie beim Monatswaehler der
-       Statistikseite: Buchungen, Geldstrafen und bereits abgeschlossene
-       Monate. Der letzte Zweig ist der wichtigste - ein abgeschlossener Monat
-       MUSS erreichbar bleiben, auch wenn seine Buchungen spaeter storniert
-       wurden und die beiden anderen Zweige nichts mehr finden. */
-    const seitZeile = await env.DB.prepare(`
-      SELECT min(m) AS seit FROM (
-        SELECT strftime('%Y-%m', erstellt) AS m FROM gruppen WHERE id = ?1
-        UNION ALL
-        SELECT min(strftime('%Y-%m', gebucht_am)) FROM buchung
-          WHERE gruppe_id = ?1 AND storniert_am IS NULL
-        UNION ALL
-        SELECT min(strftime('%Y-%m', verhaengt_am)) FROM strafe
-          WHERE gruppe_id = ?1 AND art = 'geld' AND status IN ('offen','abgerechnet')
-        UNION ALL
-        SELECT min(printf('%04d-%02d', jahr, monat)) FROM abrechnung WHERE gruppe_id = ?1
-      )
-    `).bind(g.gruppe.id).first();
-    const seit = (seitZeile || {}).seit || null;
+       409 und nicht 400: die Anfrage ist wohlgeformt, sie passt nur nicht zum
+       Zustand dieser Gruppe - dieselbe Lesart wie beim Abschluss eines noch
+       laufenden Monats ein paar Zeilen weiter unten. */
+    if (seit && key < seit) {
+      return fehler(request,
+        `Diesen Monat gab es die Runde noch nicht — sie besteht seit ${seit}`, 409);
+    }
 
     /* Die Strafen des Monats, Zeile fuer Zeile (Etappe 8). Sie stehen in
        BEIDEN Zweigen - Vorschau wie Abschluss -, weil sie zum Monat gehoeren
@@ -7397,6 +7418,18 @@ const ROUTEN = {
       return fehler(request, 'jahr/monat: ungültig');
     }
     const key = monatSchluessel(jahr, monat);
+
+    /* Die Untergrenze, dieselbe wie beim Abruf. Sie steht HIER und nicht nur
+       dort, weil erst dieser Ruf Folgen hat: ohne sie liesse sich ein Dezember
+       2025 abschliessen, den es fuer diese Runde nie gab - eine `abrechnung`-
+       Zeile ohne Salden, die danach fuer immer in der Buchhaltung steht und
+       (ueber den vierten Zweig von `abrechnungSeit`) den Boden selbst nach
+       hinten zieht. Ein Fehler, der sich beim Begehen festschreibt. */
+    const seit = await abrechnungSeit(env, g.gruppe.id);
+    if (seit && key < seit) {
+      return fehler(request,
+        `Diesen Monat gab es die Runde noch nicht — sie besteht seit ${seit}`, 409);
+    }
 
     const jetzt = await env.DB.prepare("SELECT strftime('%Y-%m','now') AS m").first();
     if (key >= jetzt.m) {
