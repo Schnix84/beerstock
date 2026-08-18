@@ -12897,6 +12897,61 @@
       } });
     }
 
+    /* K-P9 „Der rote Knopf" — der einzige Bereich der Tafel, der im Rückblick
+       nie vorkam. Rang 2: er gehört dazu, aber wenn eine Gruppe beide Seiten
+       führt, weicht er einem Kassenbild.
+
+       KEINE ZAHL ÜBER ANTWORTEN. Der Plan wollte hier „wie viele Rufe eine
+       Antwort bekamen" — die weiß das System nicht: `notrufe` hat kein
+       Antwortfeld, und `notruf_kreis` ist der Empfängerkreis, also wer
+       ANGESCHRIEBEN wurde, nicht wer gekommen ist. Statt eine Hilfsquote zu
+       erfinden, sagt die Kachel, was gerufen wurde. */
+    const nt = r.notruf;
+    if (nt) {
+      const wortlaut = {
+        bier:    'Es ging um Bier.',
+        kamerad: 'Es ging um Gesellschaft.',
+        alles:   'Es ging um Bier und Gesellschaft.',
+      };
+      K.push({ rang: 2, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'DER ROTE KNOPF'));
+        const h = el('div', 'wr-hero wr-kleiner');
+        h.append(wrZahl(nt.rufe) + ' ');
+        h.appendChild(el('span', 'wr-einheit', nt.rufe === 1 ? 'Notruf' : 'Notrufe'));
+        k.appendChild(h);
+        const s = el('p', 'wr-satz');
+        // Der Satz nennt die Mehrheit nur dann, wenn es eine gibt — bei einem
+        // einzigen Ruf wäre „meistens" eine Behauptung über einen Fall.
+        if (nt.rufe > 1 && nt.art_n > nt.rufe / 2) {
+          s.append('Meistens ging es um ');
+          s.appendChild(el('b', null, nt.art === 'bier' ? 'Bier'
+            : nt.art === 'kamerad' ? 'Gesellschaft' : 'beides'));
+          s.append('.');
+        } else {
+          s.append(wortlaut[nt.art] || 'Es ging um Bier.');
+        }
+        k.appendChild(s);
+        /* Der Balken nur bei echter SPREIZUNG, nicht schon ab zwei Namen.
+           `wrBalken` normiert auf das Maximum: zwei Menschen mit je einem Ruf
+           bekämen zwei volle Balken nebeneinander, und das liest sich wie
+           „diese beiden haben durchgedrückt" statt wie „einmal jeder". Ein
+           Bild, in dem alle Balken gleich lang sind, sagt nichts, was die
+           große Zahl darüber nicht schon sagt. */
+        const spreizung = nt.je_mensch.length > 1
+          && nt.je_mensch[0].n > nt.je_mensch[nt.je_mensch.length - 1].n;
+        if (spreizung) {
+          const reihen = nt.je_mensch.map(z => ({ name: z.name, farbe: wrFarbe(z.id), wert: z.n }));
+          k.appendChild(wrBildKarte('Notrufe je Melder', wrBalken(reihen, 'Notrufe')));
+        } else if (nt.je_mensch.length > 1) {
+          // Gleichstand: die Namen als Satz, das ist die ganze Aussage.
+          k.appendChild(el('p', 'wr-satz',
+            `Gedrückt haben ihn ${nt.je_mensch.length} — jeder gleich oft.`));
+        }
+        k.appendChild(el('p', 'wr-neben',
+          'Gedrückt wird er selten. Gelesen wird er sofort.'));
+      } });
+    }
+
     if (d.ich) K.push({ rang: 1, bau(k) {
       const ich = d.ich;
       k.appendChild(el('div', 'wr-oben', 'DEINE BILANZ'));

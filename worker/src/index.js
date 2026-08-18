@@ -4118,6 +4118,29 @@ const wrappedPrivatAbfragen = (env, {
     WHERE autor_id = ?1 AND gruppe_id = ?4
       AND erstellt >= ?2 AND erstellt < ?3
   `).bind(ichId, jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  /* 18 - der rote Knopf (K-P9). Der einzige Bereich der Tafel, der im
+     Rueckblick nie vorkam. `notrufe` traegt seit Schema 33 eine eigene
+     `gruppe_id` - direkter Filter, keine Mitgliedschaft.
+
+     JE MELDER UND ART in EINER Abfrage: die Kachel braucht die Rangfolge (wer
+     hat gerufen) und die haeufigste Sorte ('bier', 'kamerad', 'alles', Schema
+     14). Zwei Abfragen dafuer waeren zwei Durchlaeufe ueber dieselben paar
+     Zeilen; die Aufteilung macht die Auswertung.
+
+     WAS HIER NICHT STEHT, und warum: der Plan (§4.2) wollte "die Zahl der
+     Rufe, die eine Antwort bekamen". Die gibt es nicht. `notrufe` hat kein
+     Antwortfeld, und `notruf_kreis` ist der EMPFAENGERKREIS, nicht das Echo -
+     wer gerufen hat und wer daraufhin gekommen ist, weiss das System nicht.
+     Eine Zahl zu erfinden, die nach Hilfe aussieht und in Wahrheit Adressaten
+     zaehlt, waere schlimmer als keine. Die Kachel sagt darum, WAS gerufen
+     wurde, und nicht, was daraus wurde. */
+  env.DB.prepare(`
+    SELECT n.user_id, n.art, count(*) AS n
+      FROM notrufe n
+     WHERE n.gruppe_id = ?3 AND n.erstellt >= ?1 AND n.erstellt < ?2
+     GROUP BY n.user_id, n.art
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
 ];
 
 const statistikRegeln = (ergebnis, monat) => {
@@ -11834,7 +11857,7 @@ const ROUTEN = {
       abendKommentare = LEER, abendListe = LEER, gastgeberBewertungen = LEER,
       gastgeberAbende = LEER, kommentareZahl = LEER, reaktionDesJahres = LEER,
       bilderSplit = LEER, ichKaltSerie = LEER, ichKaeltestes = LEER,
-      ichSterneVergeben = LEER,
+      ichSterneVergeben = LEER, notrufZeilen = LEER,
     ] = privatErg;
 
     const namen = new Map(leute.results.map(u => [u.id, u.name]));
@@ -11961,6 +11984,32 @@ const ROUTEN = {
       abendeAusgerichtet: abendeJeGastgeber.get(ich.id) || 0,
     };
 
+    /* -- Der rote Knopf ------------------------------------------------------
+       Aus den `(user_id, art)`-Zeilen zwei Bilder: die Rangfolge der Rufer und
+       die haeufigste Sorte. `null`, wenn niemand gerufen hat - die Kachel
+       entfaellt dann, statt eine Null zu behaupten. */
+    const notruf = (() => {
+      const jeMensch = new Map(), jeArt = new Map();
+      let rufe = 0;
+      for (const z of notrufZeilen.results) {
+        rufe += z.n;
+        jeMensch.set(z.user_id, (jeMensch.get(z.user_id) || 0) + z.n);
+        jeArt.set(z.art, (jeArt.get(z.art) || 0) + z.n);
+      }
+      if (!rufe) return null;
+      /* Tie-Break auf beiden Seiten: ohne ihn haengt der Sieger an der
+         Einfuegereihenfolge der Map, und die ist keine Zusicherung. */
+      const arten = [...jeArt.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+      return {
+        rufe,
+        art: arten[0][0], art_n: arten[0][1],
+        je_mensch: [...jeMensch.entries()]
+          .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+          .map(([id, n]) => ({ id, name: namen.get(id) || 'Ehemaliger',
+                               farbe: farben.get(id) ?? null, n })),
+      };
+    })();
+
     // -- Der Verein ------------------------------------------------------------
     /* Dieselbe Bauart wie oben, nur kuerzer: aus jedem Block wird eine Form,
        und ein Feld, dessen Quelle nicht gelaufen ist, ist `null` - nicht 0.
@@ -12056,7 +12105,7 @@ const ROUTEN = {
         meldungen: meldungSumme ? { summe: meldungSumme, monat: meldungMonat } : null,
         kaeltester: momentAntwort(kaeltester.results[0]),
         waermster: momentAntwort(waermster.results[0]),
-        rad, abend, gastgeber, gesagtes,
+        rad, abend, gastgeber, gesagtes, notruf,
       } : null,
       verein: vereinSeite(g.gruppe) ? { seit: vereinSeit, kasse, regeln } : null,
       // Der Ich-Teil entfaellt fuer den Wirt, der nicht Mitglied ist: eine
