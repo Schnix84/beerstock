@@ -9075,8 +9075,14 @@
   const KASSE_MENGE_MAX = 24;   // Deckel wie im Worker (BUCHUNG_MENGE_MAX) - ein Kasten
   let kasseHistorieOffen = false;
 
+  /* GESCHUETZTES Leerzeichen vor dem € (U+00A0), nicht das gewoehnliche. Am
+     Rueckblick aufgefallen (Etappe 11): in der schmalen `wr-paar`-Zelle brach
+     „442,80 €" zwischen Zahl und Zeichen um, und das € stand allein in der
+     zweiten Zeile. Auf der Kasse-Seite faellt das nicht auf, weil die Betraege
+     dort in breiten Zeilen stehen - falsch war es dort trotzdem, ein Betrag
+     ist EIN Wort. */
   const euro = cent => (cent / 100).toLocaleString('de-DE', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€';
   const ksTag = iso => new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
 
   function kasseSagt(text, schlecht) {
@@ -12460,6 +12466,18 @@
      Schema 28 kommt der Platz vom Worker (`farbe`) und wird nicht mehr hier
      aus der Reihenfolge gezählt. Die Reihe dazu ist `MENSCHEN` weiter oben.
      --------------------------------------------------------------------- */
+  /* Wie viele Blätter der Rückblick höchstens hat — Titel, zehn Sachkacheln,
+     Prost. Bei sieben Sekunden je Blatt (`--wr-takt`) sind das gut anderthalb
+     Minuten; eine Gruppe mit Tafel UND Kasse baut sonst siebzehn Sachkacheln,
+     und die sieht niemand zu Ende. Gekürzt wird nach Rang, siehe das Ende von
+     `wrappedKacheln`. */
+  const WR_MAX = 12;
+
+  /* Ab welchem Betrag eine `wr-paar`-Zelle die ganze Breite braucht — in Cent.
+     Hundert Euro sind die Grenze: „99,90 €" passt neben eine zweite Zelle,
+     „442,80 €" nicht mehr. */
+  const GELD_BREIT = 10000;
+
   const WR_MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
     'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
   const wrZahl = n => n.toLocaleString('de-DE');
@@ -12497,8 +12515,16 @@
   function wrappedFarben(d) {
     const karte = new Map();
     const nimm = z => { if (z.farbe != null) karte.set(z.id, menschenFarbe(z.farbe)); };
-    (d.runde.eiskoenig || []).forEach(nimm);
-    ((d.runde.rad && d.runde.rad.gewonnen) || []).forEach(nimm);
+    /* `d.runde` fehlt ganz, wenn die Gruppe keine Privatseite führt (Etappe 11),
+       `d.verein` ebenso ohne Kasse und Hausordnung. Die vier Balkenbilder des
+       Rückblicks stehen jetzt auf beiden Seiten — alle vier speisen dieselbe
+       Karte, damit derselbe Mensch nicht auf einer Kachel bunt und auf der
+       nächsten grau ist. */
+    const r = d.runde || {}, v = d.verein || {};
+    (r.eiskoenig || []).forEach(nimm);
+    ((r.rad && r.rad.gewonnen) || []).forEach(nimm);
+    ((v.kasse && v.kasse.je_mensch) || []).forEach(nimm);
+    ((v.regeln && v.regeln.je_mensch) || []).forEach(nimm);
     return karte;
   }
 
@@ -12528,12 +12554,26 @@
   }
   function wrTipWeg() { $('wr-tip').hidden = true; }
 
-  /* --- Grafik 1: liegende Balken, Identität. Jede Zeile: Marke, Name, Wert. */
-  function wrBalken(reihen, was) {
-    const breite = 330, hoch = 18, luft = 13, lx = 78, rx = 44;
+  /* --- Grafik 1: liegende Balken, Identität. Jede Zeile: Marke, Name, Wert.
+
+     `lx` (die Namensspalte) WÄCHST seit Etappe 11 mit dem längsten Namen. Sie
+     stand fest auf 78 px, und das reicht für Melder und für nichts sonst: die
+     Vereinskacheln beschriften ihre Balken mit Getränkenamen
+     („Alkoholfrei") und Regeltiteln („Licht an gelassen"), und die liefen bei
+     78 px in den Balken hinein. Gedeckelt bei 150, sonst wird aus dem Balken
+     ein Strich; 6.4 px je Zeichen ist die gemessene Breite der 12-px-Schrift
+     hier, mit Reserve.
+
+     `wem` steht im `aria-label` und ist nicht immer „je Melder" — ein Bild über
+     Getränke sagt sonst etwas Falsches, und zwar genau dem, der es nicht sehen
+     kann. */
+  function wrBalken(reihen, was, wem = 'je Melder') {
+    const breite = 330, hoch = 18, luft = 13, rx = 44;
+    const lx = Math.min(150, Math.max(78, ...reihen.map(r => (r.name || '').length * 6.4 + 14)));
     const hoehe = reihen.length * (hoch + luft);
     const max = Math.max(...reihen.map(r => r.wert), 1);
-    const svg = s_el('svg', { viewBox: `0 0 ${breite} ${hoehe}`, role: 'img', 'aria-label': was + ' je Melder' });
+    const svg = s_el('svg', { viewBox: `0 0 ${breite} ${hoehe}`, role: 'img',
+      'aria-label': was + (wem ? ' ' + wem : '') });
     const voll = breite - lx - rx;
     const balken = [];
     reihen.forEach((r, i) => {
@@ -12576,8 +12616,16 @@
   }
 
   /* --- Grafik 2: Monatssäulen, Größe → EIN Farbton. Nur das Extrem trägt
-     seine Zahl, alle zwölf Werte stehen im Tooltip und hinter "Zahlen". */
-  function wrSaeulen(werte, was) {
+     seine Zahl, alle zwölf Werte stehen im Tooltip.
+
+     `abMonat` (0-basiert, Vorgabe 0) trennt zwei Dinge, die vorher eines
+     waren: NULL und ABWESENHEIT. Ein Februar mit null gemeldeten Flaschen ist
+     eine Aussage, und der 2px-Stummel sagt sie — dabei bleibt es. Beim jungen
+     Verein (Kasse seit August) sind Januar bis Juli dagegen keine Null, sondern
+     gab es nicht; dort wäre eine Reihe Stummel eine Behauptung. Diese Monate
+     bekommen keine Säule und einen matten Buchstaben. Ohne den Parameter
+     verhält sich die Funktion wie vorher — die Tafel-Kachel reicht ihn nicht. */
+  function wrSaeulen(werte, was, abMonat = 0) {
     const breite = 330, hoehe = 132, unten = 16, oben = 18;
     const max = Math.max(...werte, 1);
     const spitzeI = werte.indexOf(Math.max(...werte));
@@ -12585,30 +12633,42 @@
     const svg = s_el('svg', { viewBox: `0 0 ${breite} ${hoehe}`, role: 'img', 'aria-label': was + ' je Monat' });
     const grundY = hoehe - unten;
     svg.appendChild(s_el('line', { x1: 0, y1: grundY, x2: breite, y2: grundY, stroke: '#ffffff2e', 'stroke-width': 1 }));
-    const saeulen = [];
+    /* Ein Feld je Monat, nicht je gezeichneter Säule: der Tooltip greift über
+       den Monatsindex zu, und ein `push` hätte die Indizes um jeden
+       übersprungenen Monat verschoben — das falsche Balken-Highlight wäre
+       niemandem aufgefallen, der nicht genau hinsieht. */
+    const saeulen = new Array(werte.length).fill(null);
     werte.forEach((w, i) => {
-      const h = Math.max((w / max) * (grundY - oben), 2);
-      const x = i * slot + (slot - b) / 2, y = grundY - h;
-      const p = s_el('path', {
-        d: `M${x},${grundY} v${-(h - 4)} a4,4 0 0 1 4,-4 h${b - 8} a4,4 0 0 1 4,4 v${h - 4} Z`, fill: '#e8c766',
-      });
-      svg.appendChild(p); saeulen.push(p);
-      const m = s_el('text', { x: x + b / 2, y: hoehe - 4, 'text-anchor': 'middle', 'font-size': 9, fill: '#93a09a' });
-      m.textContent = WR_MONATE[i][0]; svg.appendChild(m);
-      if (i === spitzeI && w > 0) {
-        const t = s_el('text', {
-          x: x + b / 2, y: y - 6, 'text-anchor': 'middle', 'font-size': 12, 'font-weight': 650, fill: '#eef1ea',
+      const gabs = i >= abMonat;
+      const x = i * slot + (slot - b) / 2;
+      if (gabs) {
+        const h = Math.max((w / max) * (grundY - oben), 2);
+        const y = grundY - h;
+        const p = s_el('path', {
+          d: `M${x},${grundY} v${-(h - 4)} a4,4 0 0 1 4,-4 h${b - 8} a4,4 0 0 1 4,4 v${h - 4} Z`, fill: '#e8c766',
         });
-        t.textContent = wrZahl(w); svg.appendChild(t);
+        svg.appendChild(p); saeulen[i] = p;
+        if (i === spitzeI && w > 0) {
+          const t = s_el('text', {
+            x: x + b / 2, y: y - 6, 'text-anchor': 'middle', 'font-size': 12, 'font-weight': 650, fill: '#eef1ea',
+          });
+          t.textContent = wrZahl(w); svg.appendChild(t);
+        }
       }
+      const m = s_el('text', { x: x + b / 2, y: hoehe - 4, 'text-anchor': 'middle', 'font-size': 9,
+        fill: gabs ? '#93a09a' : '#5c6663' });
+      m.textContent = WR_MONATE[i][0]; svg.appendChild(m);
       const treffer = s_el('rect', { x: i * slot, y: 0, width: slot, height: hoehe, fill: 'transparent' });
       treffer.addEventListener('pointermove', ev => {
-        saeulen.forEach((s, j) => s.setAttribute('opacity', j === i ? 1 : .45));
+        saeulen.forEach((s, j) => s && s.setAttribute('opacity', j === i ? 1 : .45));
         const summe = werte.reduce((a, c) => a + c, 0);
-        wrTipZeigen(ev, WR_MONATE[i], [{ farbe: '#e8c766', wert: wrZahl(w), was }],
-          summe ? Math.round(w / summe * 100) + ' % des Jahres' : undefined);
+        wrTipZeigen(ev, WR_MONATE[i], [{ farbe: '#e8c766', wert: gabs ? wrZahl(w) : '—', was }],
+          gabs ? (summe ? Math.round(w / summe * 100) + ' % des Jahres' : undefined)
+               : 'so weit zurück wurde hier noch nicht gerechnet');
       });
-      treffer.addEventListener('pointerleave', () => { saeulen.forEach(s => s.setAttribute('opacity', 1)); wrTipWeg(); });
+      treffer.addEventListener('pointerleave', () => {
+        saeulen.forEach(s => s && s.setAttribute('opacity', 1)); wrTipWeg();
+      });
       svg.appendChild(treffer);
     });
     return svg;
@@ -12672,18 +12732,49 @@
      ========================================================================== */
   function wrappedKacheln(d) {
     const K = [];
+    /* Seit Etappe 11 kann eine ganze SEITE fehlen: `runde` ist null, wenn die
+       Gruppe weder Tafel noch Rad noch Notruf noch Termine führt, `verein` ist
+       null ohne Kasse und Hausordnung. Ein Rückfall auf leere Formen statt
+       eines zweiten Zweigs — die Prüfungen darunter („wenn Daten da sind, dann
+       eine Kachel") tragen den Fall von sich aus. */
+    const r = d.runde || { eiskoenig: [], meldungen: null, kaeltester: null,
+                           waermster: null, rad: null, abend: null,
+                           gastgeber: null, gesagtes: {} };
+    const v = d.verein || { seit: null, kasse: null, regeln: null };
 
-    K.push({ bau(k) {
+    /* Die „seit"-Zeile gehört auf die ERSTE Vereinskachel — welche das ist,
+       steht erst nach der Kürzung fest, und deshalb wird sie erst DORT
+       vergeben (siehe das Ende dieser Funktion). Hier markieren sich die
+       Kacheln nur, die sie tragen können; `bau()` liest sie aus `this.seit`.
+
+       NICHT über einen Merker, den sich die erste bauende Kachel holt: `bau()`
+       läuft bei JEDEM Anzeigen, nicht einmal. Die Zeile stünde dann auf der
+       Kachel, die man zuerst ansieht, und wäre beim zweiten Blättern dorthin
+       verschwunden. Am Prüfbild sofort zu sehen gewesen, im Code nicht.
+
+       Ohne die Zeile behauptet der Hero eine Jahreszahl, die beim jungen
+       Verein eine Halbjahreszahl ist. */
+    const seitZeile = kachel => kachel.seit
+      ? el('p', 'wr-neben', 'Gerechnet wird erst seit ' + wrTagMonat(kachel.seit)
+          + ' — das Jahr ist hier noch keins.')
+      : null;
+
+    K.push({ rang: 0, bau(k) {
       k.appendChild(el('div', 'wr-oben', 'BEERSTOCK WRAPPED'));
       k.appendChild(el('div', 'wr-held kr', 'Dein Jahr'));
       k.appendChild(el('div', 'wr-hero', String(d.jahr)));
-      k.appendChild(el('p', 'wr-satz', 'Zwölf Monate, ein Kühlschrank, ein Rad. Was davon übrig ist, steht auf den nächsten Tafeln.'));
+      /* Der Name der Gruppe steht hier und nicht im Kopf: der Kopf ist auf
+         jedem Rückblick derselbe, und wer in drei Gruppen ist, hat drei
+         Rückblicke, die sich sonst nur an den Zahlen unterscheiden. */
+      k.appendChild(el('p', 'wr-satz', d.gruppe
+        ? `in ${d.gruppe.name}. Zwölf Monate, eine Runde. Was davon übrig ist, steht auf den nächsten Tafeln.`
+        : 'Zwölf Monate, ein Kühlschrank, ein Rad. Was davon übrig ist, steht auf den nächsten Tafeln.'));
       k.appendChild(el('p', 'wr-neben', 'Rechts tippen: weiter. Links: zurück.'));
     } });
 
-    if (d.runde.eiskoenig.length) {
-      const erster = d.runde.eiskoenig[0];
-      K.push({ bau(k) {
+    if (r.eiskoenig.length) {
+      const erster = r.eiskoenig[0];
+      K.push({ rang: 1, bau(k) {
         k.appendChild(el('div', 'wr-oben', 'DER EISKÖNIG'));
         k.appendChild(stolzSchrift(
           el('div', 'wr-held kr', erster.name), stolz(erster.farbe)));
@@ -12695,15 +12786,15 @@
         satz.appendChild(stolzWort(erster.name, erster.farbe));
         satz.append(' stand öfter oben an der Tafel als alle anderen.');
         k.appendChild(satz);
-        const reihen = d.runde.eiskoenig.map(z => ({ name: z.name, farbe: wrFarbe(z.id), wert: z.tage }));
+        const reihen = r.eiskoenig.map(z => ({ name: z.name, farbe: wrFarbe(z.id), wert: z.tage }));
         k.appendChild(wrBildKarte('Tage auf dem Siegerplatz', wrBalken(reihen, 'Tage auf Platz 1')));
       } });
     }
 
-    if (d.runde.meldungen) {
-      const m = d.runde.meldungen;
+    if (r.meldungen) {
+      const m = r.meldungen;
       const spitzeI = m.monat.indexOf(Math.max(...m.monat));
-      K.push({ bau(k) {
+      K.push({ rang: 2, bau(k) {
         k.appendChild(el('div', 'wr-oben', 'WIE OFT GEMELDET WURDE'));
         k.appendChild(el('div', 'wr-hero', wrZahl(m.summe)));
         k.appendChild(el('p', 'wr-satz',
@@ -12713,15 +12804,15 @@
     }
 
     const kalt = wrMomentKachel('DER KÄLTESTE MOMENT',
-      'Knapp über dem Punkt, an dem Bier zu Eis wird und der Wirt zu weinen beginnt.', d.runde.kaeltester);
-    if (kalt) K.push(kalt);
+      'Knapp über dem Punkt, an dem Bier zu Eis wird und der Wirt zu weinen beginnt.', r.kaeltester);
+    if (kalt) K.push({ rang: 2, ...kalt });
     const warm = wrMomentKachel('DER WÄRMSTE MOMENT',
-      'Der Moment, in dem niemand mehr "kalt" sagen wollte.', d.runde.waermster);
-    if (warm) K.push(warm);
+      'Der Moment, in dem niemand mehr "kalt" sagen wollte.', r.waermster);
+    if (warm) K.push({ rang: 3, ...warm });
 
-    if (d.runde.rad) {
-      const rad = d.runde.rad;
-      K.push({ bau(k) {
+    if (r.rad) {
+      const rad = r.rad;
+      K.push({ rang: 1, bau(k) {
         k.appendChild(el('div', 'wr-oben', 'DAS RAD HAT ENTSCHIEDEN'));
         const h = el('div', 'wr-hero wr-kleiner');
         h.append(wrZahl(rad.ziehungen) + ' ');
@@ -12740,9 +12831,9 @@
       } });
     }
 
-    if (d.runde.abend || d.runde.gastgeber) {
-      K.push({ bau(k) {
-        const a = d.runde.abend;
+    if (r.abend || r.gastgeber) {
+      K.push({ rang: 1, bau(k) {
+        const a = r.abend;
         if (a) {
           k.appendChild(el('div', 'wr-oben', 'DER ABEND DES JAHRES'));
           // Auswärts heißt der Abend nach seinem Ort — `gastgeberName` ist
@@ -12769,7 +12860,7 @@
           k.appendChild(el('p', 'wr-neben',
             `${wrZahl(a.kommentare)} Kommentare, ${wrZahl(a.fotos)} Fotos — und mindestens ein Ausklang, über den nicht geschrieben wurde.`));
         }
-        const g = d.runde.gastgeber;
+        const g = r.gastgeber;
         if (g) {
           if (a) k.appendChild(el('hr', 'wr-trenn'));
           else k.appendChild(el('div', 'wr-oben', 'GASTGEBER DES JAHRES'));
@@ -12782,9 +12873,9 @@
       } });
     }
 
-    const ges = d.runde.gesagtes;
+    const ges = r.gesagtes;
     if (ges.kommentare || ges.bilder || ges.gifs || ges.reaktion) {
-      K.push({ bau(k) {
+      K.push({ rang: 2, bau(k) {
         k.appendChild(el('div', 'wr-oben', 'WAS GESAGT WURDE'));
         if (ges.reaktion) {
           k.appendChild(el('div', 'wr-emoji-gross', ges.reaktion));
@@ -12806,7 +12897,7 @@
       } });
     }
 
-    K.push({ bau(k) {
+    if (d.ich) K.push({ rang: 1, bau(k) {
       const ich = d.ich;
       k.appendChild(el('div', 'wr-oben', 'DEINE BILANZ'));
       const h = el('div', 'wr-hero wr-kleiner');
@@ -12831,12 +12922,283 @@
       k.appendChild(p);
     } });
 
-    K.push({ bau(k) {
+    /* ======================================================================
+       Der Verein: Kasse und Hausordnung über ein Jahr (Etappe 11).
+
+       JEDE dieser Kacheln ist ausschließlich aus den vorhandenen `wr-*`-Formen
+       gebaut, und das ist keine Geschmacksfrage: `wrappedKachelZeichnen()`
+       weiter unten liest die fertige Kachel Kind für Kind ab und hat für jede
+       bekannte Form ein Rezept — was es nicht kennt, malt es als schlichten
+       Absatz. Wer hier eine neue Form erfindet, verliert für diese Kachel
+       stillschweigend das geteilte Bild.
+       ====================================================================== */
+    const ks = v.kasse;
+    if (ks && ks.summe) {
+      const spitzeI = ks.monat.indexOf(Math.max(...ks.monat));
+      K.push({ rang: 1, traegt_seit: true, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'WAS DURCHGEGANGEN IST'));
+        k.appendChild(el('div', 'wr-hero', wrZahl(ks.summe)));
+        k.appendChild(el('p', 'wr-satz',
+          `Getränke sind über die Kasse gelaufen. ${WR_MONATE[spitzeI]} war der stärkste Monat.`));
+        const sz = seitZeile(this); if (sz) k.appendChild(sz);
+        /* Die Säulen bekommen den ersten Monat mit Buchung als Grenze: davor
+           gab es die Kasse noch nicht, und ein 2px-Stummel für Januar bis Juli
+           sieht aus wie „ein bisschen was" statt wie „gab es nicht". Ein
+           Nullmonat NACH dem Start behält seinen Stummel — dort ist die Null
+           eine Aussage. */
+        k.appendChild(wrBildKarte('gebuchte Getränke je Monat',
+          wrSaeulen(ks.monat, 'gebucht', ks.monat.findIndex(n => n > 0))));
+      } });
+    }
+
+    if (ks && ks.je_mensch.length) {
+      const erster = ks.je_mensch[0];
+      K.push({ rang: 1, traegt_seit: true, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'DER DURSTIGSTE'));
+        k.appendChild(stolzSchrift(el('div', 'wr-held kr', erster.name), stolz(erster.farbe)));
+        const h = el('div', 'wr-hero wr-kleiner');
+        h.append(wrZahl(erster.n) + ' ');
+        h.appendChild(el('span', 'wr-einheit', erster.n === 1 ? 'Getränk gebucht' : 'Getränke gebucht'));
+        k.appendChild(h);
+        const sz = seitZeile(this); if (sz) k.appendChild(sz);
+        const reihen = ks.je_mensch.map(z => ({ name: z.name, farbe: wrFarbe(z.id), wert: z.n }));
+        k.appendChild(wrBildKarte('gebuchte Getränke je Mensch',
+          wrBalken(reihen, 'gebucht', 'je Mensch')));
+      } });
+    }
+
+    if (ks && ks.je_getraenk.length > 1) {
+      const erstes = ks.je_getraenk[0];
+      const alle = ks.je_getraenk.reduce((a, c) => a + c.n, 0);
+      K.push({ rang: 2, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'DAS GETRÄNK DES JAHRES'));
+        k.appendChild(el('div', 'wr-held kr', erstes.name));
+        const h = el('div', 'wr-hero wr-kleiner');
+        h.append(Math.round(erstes.n / alle * 100) + ' ');
+        h.appendChild(el('span', 'wr-einheit', '% aller Buchungen'));
+        k.appendChild(h);
+        k.appendChild(el('p', 'wr-satz', 'Die Auswahl war größer. Genutzt wurde sie mäßig.'));
+        /* EIN Farbton, kein Melderton: hier stehen Getränke, keine Menschen.
+           `null` wäre falsch — `malFarbe` gibt es unverändert durch, und
+           `fill="null"` ist keine Farbe, der Balken bliebe schwarz. */
+        const reihen = ks.je_getraenk.map(z => ({ name: z.name, farbe: '#e8c766', wert: z.n }));
+        k.appendChild(wrBildKarte('Buchungen je Getränk',
+          wrBalken(reihen, 'gebucht', 'je Getränk')));
+      } });
+    }
+
+    if (ks && (ks.stand.eingenommen || ks.stand.ausgegeben || ks.stand.strafgeld)) {
+      const st = ks.stand;
+      /* Ab hundert Euro passt ein Betrag in 26 px Handschrift nicht mehr in
+         eine halbe `wr-paar`-Zelle — „442,80 €" sind mit dem geschützten
+         Leerzeichen EIN Wort und brechen nicht mehr um, also liefen sie
+         heraus. Dann wird die GANZE Kachel breit: eine halbe Zelle neben
+         einer breiten ließe ein Loch, das nach einer vergessenen Zahl
+         aussieht. Gemessen, nicht geraten — `wrapped-gruppen-probe.mjs`
+         prüft jede Zelle auf Umbruch und Überlauf. */
+      const breit = [st.strafgeld, st.ausgegeben, st.saldo]
+        .some(c => Math.abs(c) >= GELD_BREIT);
+      K.push({ rang: 1, traegt_seit: true, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'WAS DIE KASSE BEWEGT HAT'));
+        k.appendChild(el('div', 'wr-hero wr-kleiner', euro(st.eingenommen)));
+        k.appendChild(el('p', 'wr-satz', 'sind über die Getränke hereingekommen.'));
+        const sz = seitZeile(this); if (sz) k.appendChild(sz);
+        const p = el('div', 'wr-paare');
+        [
+          [euro(st.strafgeld), 'aus der Hausordnung', breit],
+          [euro(st.ausgegeben), 'für Nachschub ausgegeben', breit],
+          [euro(st.saldo), 'bleibt unterm Strich', true],
+        ].forEach(([wert, was, b]) => {
+          const q = el('div', 'wr-paar' + (b ? ' wr-breit' : ''));
+          q.appendChild(el('div', 'wr-wert', wert));
+          q.appendChild(el('div', 'wr-was', was));
+          p.appendChild(q);
+        });
+        k.appendChild(p);
+      } });
+    }
+
+    if (ks && ks.nachschub) {
+      const n = ks.nachschub;
+      K.push({ rang: 3, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'NACHSCHUB'));
+        const h = el('div', 'wr-hero wr-kleiner');
+        h.append(wrZahl(n.lieferungen) + ' ');
+        h.appendChild(el('span', 'wr-einheit', n.lieferungen === 1 ? 'Lieferung' : 'Lieferungen'));
+        k.appendChild(h);
+        k.appendChild(el('p', 'wr-satz', 'hat jemand geschleppt, damit der Kühlschrank nicht leer war.'));
+        const p = el('div', 'wr-paare');
+        [
+          [wrZahl(n.flaschen), 'Flaschen eingeräumt', false],
+          [wrZahl(n.groesste), 'die größte Fuhre', false],
+          [euro(n.wert), 'Einkaufswert', true],
+        ].forEach(([wert, was, b]) => {
+          const q = el('div', 'wr-paar' + (b ? ' wr-breit' : ''));
+          q.appendChild(el('div', 'wr-wert', wert));
+          q.appendChild(el('div', 'wr-was', was));
+          p.appendChild(q);
+        });
+        k.appendChild(p);
+      } });
+    }
+
+    const rg = v.regeln;
+    if (rg && rg.strafen) {
+      K.push({ rang: 1, traegt_seit: true, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'DIE HAUSORDNUNG'));
+        const h = el('div', 'wr-hero wr-kleiner');
+        h.append(wrZahl(rg.strafen) + ' ');
+        h.appendChild(el('span', 'wr-einheit', rg.strafen === 1 ? 'Strafe' : 'Strafen'));
+        k.appendChild(h);
+        /* HIER STEHT KEIN BETRAG, und das ist der Punkt. Die Statusliste dieser
+           Kachel ist die von `regelnAbfragen` (alles, was VERHÄNGT wurde und
+           nicht zurückgenommen ist), die der Kassenkachel die von
+           `SALDO_SUMMEN_SQL` (nur 'offen' und 'abgerechnet' — das Geld, das
+           gilt). Beide Listen sind für ihren Zweck richtig und ergeben
+           verschiedene Summen. Stünden beide als „Strafgeld" in derselben
+           Geschichte, dreißig Sekunden auseinander, läse das jeder als Fehler
+           — und läge damit nicht falsch.
+
+           Also: diese Kachel zählt, die Kassenkachel rechnet. Das Geld gehört
+           dort hin, wo die Kasse steht. */
+        const s = el('p', 'wr-satz');
+        if (rg.je_regel.length > 1) {
+          s.append('Verteilt auf ');
+          s.appendChild(el('b', null, `${wrZahl(rg.je_regel.length)} Regeln`));
+          s.append('. Sie stehen nicht umsonst an der Wand.');
+        } else {
+          s.append('Immer wieder dieselbe Regel. Sie steht nicht umsonst an der Wand.');
+        }
+        k.appendChild(s);
+        const sz = seitZeile(this); if (sz) k.appendChild(sz);
+        if (rg.je_regel.length) {
+          const reihen = rg.je_regel.map(z => ({ name: z.name, farbe: '#e8c766', wert: z.n }));
+          k.appendChild(wrBildKarte('Strafen je Regel',
+            wrBalken(reihen, 'Strafen', 'je Regel')));
+        }
+      } });
+    }
+
+    if (rg && rg.je_mensch.length) {
+      const erster = rg.je_mensch[0];
+      K.push({ rang: 2, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'WER AM HÄUFIGSTEN DRAN WAR'));
+        k.appendChild(stolzSchrift(el('div', 'wr-held kr', erster.name), stolz(erster.farbe)));
+        const h = el('div', 'wr-hero wr-kleiner');
+        h.append(wrZahl(erster.n) + ' ');
+        h.appendChild(el('span', 'wr-einheit', erster.n === 1 ? 'Mal erwischt' : 'Mal erwischt'));
+        k.appendChild(h);
+        const reihen = rg.je_mensch.map(z => ({ name: z.name, farbe: wrFarbe(z.id), wert: z.n }));
+        k.appendChild(wrBildKarte('Strafen je Mensch',
+          wrBalken(reihen, 'Strafen', 'je Mensch')));
+      } });
+    }
+
+    /* „Deine Bilanz im Verein" bleibt eine EIGENE Kachel neben „Deine Bilanz",
+       auch im Zusammenschnitt. Zusammengelegt wären es sechs bis acht
+       `wr-paar`-Felder in einem zweispaltigen Raster — man scrollte durch sie,
+       statt sie anzusehen, und das geteilte Bild zeigte etwas, das niemand
+       teilt. Zwei Kacheln, beide Rang 1, verschiedene Überschrift. */
+    const mv = d.mein_verein;
+    if (mv && (mv.flaschen || mv.strafen || mv.monate)) {
+      const breit = [mv.gezahlt, mv.strafen_cent].some(c => Math.abs(c) >= GELD_BREIT);
+      K.push({ rang: 1, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'DEINE BILANZ IM VEREIN'));
+        /* DER NENNER IST DER PUNKT: „x von y Monaten" führt, der Schnitt steht
+           nur daneben und nur, wenn überhaupt etwas bestätigt wurde. Ein
+           Durchschnitt über die bestätigten allein wäre für den, der nie
+           gezahlt hat, die schmeichelhafteste Zahl der ganzen Kachel.
+
+           „Monaten bezahlt" passte NICHT in die Einheit: bei 38 px bricht die
+           Zeile zwischen den beiden Wörtern, und „bezahlt" stünde allein unter
+           dem Hero wie eine zweite Überschrift. Das Wort trägt darum der Satz
+           darunter und führt ihn an. */
+        if (mv.monate) {
+          const h = el('div', 'wr-hero wr-kleiner');
+          h.append(`${wrZahl(mv.bezahlt)} von ${wrZahl(mv.monate)} `);
+          h.appendChild(el('span', 'wr-einheit', mv.monate === 1 ? 'Monat' : 'Monaten'));
+          k.appendChild(h);
+          const s = el('p', 'wr-satz');
+          s.appendChild(el('b', null, 'bezahlt'));
+          s.append(mv.gerechnet && mv.tage != null
+            ? ` — im Schnitt ${String(mv.tage).replace('.', ',')} Tage von der Meldung bis zur Bestätigung, gerechnet über die ${wrZahl(mv.gerechnet)} bestätigten.`
+            : ' — bestätigt wurde davon noch nichts, ein Schnitt stünde über nichts.');
+          k.appendChild(s);
+        } else {
+          const h = el('div', 'wr-hero wr-kleiner');
+          h.append(wrZahl(mv.flaschen) + ' ');
+          h.appendChild(el('span', 'wr-einheit', mv.flaschen === 1 ? 'Getränk' : 'Getränke'));
+          k.appendChild(h);
+          k.appendChild(el('p', 'wr-satz', 'stehen auf deinem Namen. Abgerechnet wurde in diesem Jahr noch nichts.'));
+        }
+        const p = el('div', 'wr-paare');
+        [
+          [wrZahl(mv.flaschen), 'Getränke auf deinen Namen', breit],
+          [euro(mv.gezahlt), 'dein Anteil', breit],
+          [wrZahl(mv.strafen), mv.strafen === 1 ? 'Strafe kassiert' : 'Strafen kassiert', breit],
+          [euro(mv.strafen_cent), 'davon in Geld', breit],
+        ].forEach(([wert, was, b]) => {
+          const q = el('div', 'wr-paar' + (b ? ' wr-breit' : ''));
+          q.appendChild(el('div', 'wr-wert', wert));
+          q.appendChild(el('div', 'wr-was', was));
+          p.appendChild(q);
+        });
+        k.appendChild(p);
+      } });
+    }
+
+    /* Ein Jahr, in dem nichts zusammenkam — oder eine Runde, die weder Tafel
+       noch Kasse führt. Ohne diese Kachel bestünde der ganze Rückblick aus
+       Titel und Prost, und dazwischen stünde nichts: das sieht nach einem
+       Fehler aus und ist keiner. `K.length === 1` heißt: bis hier ist außer dem
+       Auftakt nichts entstanden. */
+    if (K.length === 1) {
+      K.push({ rang: 1, bau(k) {
+        k.appendChild(el('div', 'wr-oben', 'NOCH NICHTS ZU ERZÄHLEN'));
+        k.appendChild(el('div', 'wr-emoji-gross', '🧊'));
+        k.appendChild(el('p', 'wr-satz',
+          `In ${d.jahr} ist hier nichts zusammengekommen, aus dem sich ein Jahresfilm schneiden ließe.`));
+        k.appendChild(el('p', 'wr-neben',
+          'Eintragen, drehen, buchen — im Dezember steht dann etwas hier.'));
+      } });
+    }
+
+    K.push({ rang: 0, bau(k) {
       k.appendChild(el('div', 'wr-oben', `DAS WAR ${d.jahr}`));
       k.appendChild(el('div', 'wr-emoji-gross', '🍻'));
       k.appendChild(el('div', 'wr-held kr', `Prost auf ${d.jahr + 1}.`));
       k.appendChild(el('p', 'wr-satz', 'Bleib kalt. Die Tafel schreibt schon wieder mit.'));
     } });
+
+    /* Die Kappe. Eine Gruppe mit beiden Seiten baut siebzehn Sachkacheln, und
+       bei sieben Sekunden je Blatt wären das über zwei Minuten Selbstlauf —
+       niemand sieht das zu Ende. Gekürzt wird nach RANG (1 = Kern, 2 = gern,
+       3 = nur wenn Platz), und zwar erst NACH dem Zusammenbauen: welche
+       Kacheln es überhaupt gibt, weiß vorher niemand.
+
+       Titel und Prost tragen Rang 0 und werden übersprungen. Ohne diese
+       Ausnahme fiele am Ende der Prost als hinterste Rang-1-Kachel — genau
+       gegen die eigene Vorgabe „Titel und Prost außen". */
+    while (K.length > WR_MAX) {
+      let raus = -1;
+      for (let i = 0; i < K.length; i++) {
+        if (!K[i].rang) continue;                       // Rang 0: unantastbar
+        /* `>=`, NICHT `>`: bei Gleichstand soll der HINTERSTE des schlechtesten
+           Rangs fallen. Mit `>` bliebe der hinterste stehen und der vorderste
+           fiele — ein Zeichen, das den halben Zusammenschnitt umdreht. */
+        if (raus < 0 || K[i].rang >= K[raus].rang) raus = i;
+      }
+      if (raus < 0) break;      // nur noch Rang 0 übrig, mehr geht nicht weg
+      K.splice(raus, 1);
+    }
+
+    /* Erst JETZT steht fest, welche Vereinskachel die erste ist — vorher hätte
+       die Kürzung sie noch wegnehmen können. Genau eine bekommt die
+       „seit"-Zeile, und sie behält sie, so oft man sie auch ansieht. */
+    if (v.seit) {
+      const erste = K.find(x => x.traegt_seit);
+      if (erste) erste.seit = v.seit;
+    }
 
     return K;
   }
@@ -12949,7 +13311,11 @@
     koerperSperren();
     $('wr-brett').focus();
     try {
-      const r = await fetch(`${API}/api/wrapped?jahr=${jahr}`, { headers: mitToken(), cache: 'no-store' });
+      /* `&g=` seit Etappe 11 — der Rückblick ist eine Gruppensache, nicht eine
+         der Instanz. Ohne den Parameter antwortet der Worker jetzt mit
+         „Welche Gruppe?"; das ist Absicht und kein Rückfall auf irgendeine. */
+      const r = await fetch(`${API}/api/wrapped?jahr=${jahr}&g=${GRUPPE}`,
+        { headers: mitToken(), cache: 'no-store' });
       let d = {};
       try { d = await r.json(); } catch {}
       if (!r.ok) throw new Error(d.fehler || ('Fehler ' + r.status));

@@ -3333,11 +3333,26 @@
   // die Tafel zeigt ihren Knopf nur im Dezember, und die Chronik hängt ihre
   // Jahrgänge erst an ABGESCHLOSSENE Jahre.
   // ==========================================================================
+  /* Der Boden kommt aus `gruppe.seit` (`min(beigetreten)`), nicht mehr aus der
+     Wachstumskurve — Etappe 11. Die Kurve zählt `users.erstellt`: ein Mensch
+     von 2023, der 2026 einer neuen Gruppe beitritt, stand dort mit 2023, und
+     das Kontor bot dann ein Jahr an, das der Worker mit 400 abweist. Es ist
+     dieselbe Quelle, aus der `GET /api/wrapped` seine Untergrenze rechnet —
+     eine zweite Rechnung daneben wäre am nächsten Beitritt schon uneinig.
+
+     Rückfall auf die Kurve, falls ein älterer Worker noch kein `seit` schickt:
+     dann ist die Liste wie vorher zu lang, aber sie ist da. */
   function rueckblickJahre() {
+    const heuer = new Date().getFullYear();
+    const seit = letzteStat && letzteStat.gruppe && letzteStat.gruppe.seit;
+    if (seit) {
+      const erstes = Number(String(seit).slice(0, 4));
+      if (!erstes || erstes > heuer) return [heuer];
+      return Array.from({ length: heuer - erstes + 1 }, (_, i) => heuer - i);
+    }
     const w = letzteStat && letzteStat.wachstum;
     if (!w || !w.length) return [];
     const erstes = Number(String(w[0].tag).slice(0, 4));
-    const heuer = new Date().getFullYear();
     if (!erstes || erstes > heuer) return [heuer];
     // Absteigend: das laufende Jahr zuerst, wie es der Mock zeigt — danach
     // fragt man am häufigsten.
@@ -3394,7 +3409,18 @@
       // dem Kontor offen hält, sondern etwas, das man einmal durchblättert.
       b.addEventListener('click', () => {
         jahrWahlMerken();   // damit die Liste beim Zurückkommen wieder aufliegt
-        location.href = './?wrapped=' + jahr;
+        /* `&g=` seit Etappe 11 — und zwar die Gruppe aus dem Wähler des
+           Statistik-Blatts, nicht irgendeine. Ohne sie fiel die Tafel drüben
+           auf die eigene Gruppe des Wirts zurück, und das Kontor zeigte den
+           Rückblick einer anderen Runde als die Bilder darüber.
+
+           Drüben ist dafür nichts zu bauen — nachgesehen, nicht angenommen:
+           `gruppeFinden()` liest `?g=` schon, prüft es gegen `/api/gruppe` und
+           fällt bei einer fremden Nummer auf die eigene zurück; es steht in der
+           Aufbaukette VOR `wrappedAusAdresse()`; und das entfernt nur
+           `wrapped` aus der Adresse (`p.delete('wrapped')`) und lässt die
+           übrigen Parameter stehen. */
+        location.href = './?wrapped=' + jahr + (statGruppe ? '&g=' + statGruppe : '');
       });
       liste.appendChild(b);
     });

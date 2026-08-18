@@ -1030,6 +1030,17 @@ async function inGruppe(request, env, ich, daten, schalter = null) {
 // gehoert. Der Wirt bekommt aus `inGruppe()` ebenfalls 'admin'.
 const istGruppenAdmin = g => g && g.rolle === 'admin';
 
+/* Welchen CHARAKTER eine Gruppe hat - abgeleitet, nicht gespeichert (Etappe 11).
+   `gruppen` bekommt KEIN `art`-Feld: der Charakter steht schon in der
+   Schalterleiste aus 0032/0038, und `index.html` uebersetzt sie seit Etappe 10
+   in die zwei Blaetter "Privat" und "Verein". Eine zweite Wahrheit daneben waere
+   die Sorte Feld, das am dritten Tag nicht mehr zum Schalterstand passt.
+
+   `statistik_an` steht in KEINER der beiden Listen - er ist der Einstieg, nicht
+   der Inhalt. Eine Gruppe, die nur ihn traegt, hat nichts zu zeigen. */
+const privatSeite = g => !!(g.tafel_an || g.rad_an || g.notruf_an || g.termine_an);
+const vereinSeite = g => !!(g.kasse_an || g.regeln_an);
+
 /* Die Schalter eines Nutzers, aufgeloest: JSON-Spalte ueber die Vorgaben
    gelegt. Fehlende Schluessel gelten als Vorgabe, kaputtes JSON auch - eine
    halb gespeicherte Zeile darf niemanden aus dem Verteiler werfen. */
@@ -3577,6 +3588,537 @@ const regelnAbfragen = (env, gruppeId, jahr, monatZahl, traeger = null) => {
     `).bind(gruppeId),
   ];
 };
+
+/* Die achtzehn Abfragen des Jahresrueckblicks - Privatseite (Etappe 11).
+   Ausgelagert aus `GET /api/wrapped` nach dem Muster von `statistikAbfragen`
+   und `kasseAbfragen`, und aus demselben Grund: sie laufen NUR, wenn die
+   Gruppe eine Privatseite fuehrt (`privatSeite`). Eine Gruppe, die bloss Kasse
+   und Hausordnung hat, hat keinen Eiskoenig, kein Rad und keinen Abend des
+   Jahres - achtzehn Abfragen, die garantiert leer zurueckkommen, sind kein
+   Rundflug, sondern Ballast.
+
+   AUSGELESEN WIRD UEBER `.length` DES BLOCKS, nie ueber eine getippte Position.
+   Das ist der Fehler, den Etappe 6 an der Statistik schon einmal repariert hat:
+   sobald die Zahl der Abfragen an einem SCHALTER haengt, ist jede Zahl im Code
+   bei der ersten Gruppe mit anderer Schalterstellung falsch. */
+/* Die Vereinsseite des Rueckblicks (Etappe 11) - Kasse und Hausordnung ueber
+   ein ganzes Jahr. Alle Quellen tragen eine echte `gruppe_id` (Schema 34/35/38),
+   also ueberall der direkte Filter; die Mitgliedschaft spielt hier keine Rolle,
+   und das ist Absicht: ein Ausgetretener bleibt in "Der Durstigste" stehen,
+   genau wie schon im Kassenbild der Statistik.
+
+   DREI BLOECKE, NICHT EINER, jeder an seinem Schalter:
+     `wrappedVereinSeitAbfragen`  - laeuft bei `vereinSeite`, eine Abfrage
+     `wrappedKasseJahrAbfragen`   - laeuft bei `kasse_an`,  sieben Abfragen
+     `wrappedRegelnJahrAbfragen`  - laeuft bei `regeln_an`, drei Abfragen
+   Ein gemeinsamer Block haette bei `kasse_an = 0, regeln_an = 1` fuenf
+   Kassenabfragen mitgeschleppt, die garantiert leer sind. Ausgelesen wird
+   jeder Block ueber sein eigenes `.length`.
+
+   Die Statuslisten sind WOERTLICH die der Monatsbilder uebernommen, nicht neu
+   erfunden - `kasseAbfragen` fuer das Geld, `regelnAbfragen` fuer die Strafen.
+   Die beiden sind verschieden, und der Unterschied ist begruendet (siehe dort). */
+
+const wrappedVereinSeitAbfragen = (env, { gruppeId }) => [
+  /* SEIT WANN diese Gruppe rechnet. Kasse und Hausordnung sind erst im August
+     2026 ausgerollt worden - der erste Vereins-Rueckblick zeigt ein Jahr, das
+     ein halbes ist. Ohne diese Zahl behauptet der Hero eine Jahressumme, die
+     eine Halbjahressumme ist. `min()` ueber BEIDE Quellen: eine Gruppe mit
+     Hausordnung, aber ohne Kasse hat sonst gar keinen Boden. */
+  env.DB.prepare(`
+    SELECT min(am) AS seit FROM (
+      SELECT min(gebucht_am)   AS am FROM buchung WHERE gruppe_id = ?1
+      UNION ALL
+      SELECT min(verhaengt_am) AS am FROM strafe  WHERE gruppe_id = ?1
+    )
+  `).bind(gruppeId),
+];
+
+const wrappedKasseJahrAbfragen = (env, {
+  gruppeId, traeger, jahr, jahrStartVoll, jahrEndeExkl, ichId,
+}) => [
+  /* 1 - was durchgegangen ist, je Monat. Gegenbuchungen fliegen raus
+     (`grund NOT LIKE 'gegenbuchung:%'`, Entscheidung 31) - sie sind eine
+     Korrektur der Rechnung, kein Schluck. Woertlich wie `kasseAbfragen` 1/2. */
+  env.DB.prepare(`
+    SELECT CAST(strftime('%m', b.gebucht_am) AS INTEGER) AS monat, sum(b.menge) AS n
+    FROM buchung b
+    WHERE b.gruppe_id = ?1 AND b.storniert_am IS NULL
+      AND (b.grund IS NULL OR b.grund NOT LIKE 'gegenbuchung:%')
+      AND b.gebucht_am >= ?2 AND b.gebucht_am < ?3
+    GROUP BY monat ORDER BY monat
+  `).bind(gruppeId, jahrStartVoll, jahrEndeExkl),
+
+  // 2 - der Durstigste: je Mensch, mit Melderfarbe fuer die Balken.
+  env.DB.prepare(`
+    SELECT b.user_id, coalesce(u.name,'Ehemaliger') AS name,
+           ${farbeSql('u', traeger)} AS farbe, sum(b.menge) AS n
+    FROM buchung b JOIN users u ON u.id = b.user_id
+    WHERE b.gruppe_id = ?1 AND b.storniert_am IS NULL
+      AND (b.grund IS NULL OR b.grund NOT LIKE 'gegenbuchung:%')
+      AND b.gebucht_am >= ?2 AND b.gebucht_am < ?3
+    GROUP BY b.user_id ORDER BY n DESC, b.user_id
+  `).bind(gruppeId, jahrStartVoll, jahrEndeExkl),
+
+  /* 3 - das Getraenk des Jahres. `getraenk.name` und nicht die Id: eine
+     abgeschaltete Sorte bleibt fuer immer stehen (Schema 34), und im Rueckblick
+     soll sie ihren Namen behalten. */
+  env.DB.prepare(`
+    SELECT g.name, sum(b.menge) AS n
+    FROM buchung b JOIN getraenk g ON g.id = b.getraenk_id
+    WHERE b.gruppe_id = ?1 AND b.storniert_am IS NULL
+      AND (b.grund IS NULL OR b.grund NOT LIKE 'gegenbuchung:%')
+      AND b.gebucht_am >= ?2 AND b.gebucht_am < ?3
+    GROUP BY b.getraenk_id ORDER BY n DESC, g.name
+  `).bind(gruppeId, jahrStartVoll, jahrEndeExkl),
+
+  /* 4 - was die Kasse bewegt hat. `menge * cent`, NIE `cent` allein:
+     `buchung.cent` ist der eingefrorene EINZELPREIS (Schema 34). Mit nacktem
+     `cent` zaehlten drei Flaschen als eine, UND eine Gegenbuchung (negatives
+     `menge`, positives `cent`) ERHOEHTE die Einnahme statt sie auszugleichen.
+     Das war der vierte Blocker der Etappe-6-Abnahme und ist hier dieselbe
+     Falle. Hier zaehlen Gegenbuchungen MIT - es ist Geld gemeint, kein Konsum.
+     Die Strafgeld-Statusliste ist die von `SALDO_SUMMEN_SQL`, wie im
+     Monatsbild: 'offen' und 'abgerechnet' sind das Geld, das gilt. */
+  env.DB.prepare(`
+    SELECT
+      (SELECT coalesce(sum(menge * cent),0) FROM buchung
+        WHERE gruppe_id = ?1 AND storniert_am IS NULL
+          AND gebucht_am >= ?2 AND gebucht_am < ?3) AS eingenommen,
+      (SELECT coalesce(sum(einkauf_cent),0) FROM bestand
+        WHERE gruppe_id = ?1 AND art = 'lieferung'
+          AND erstellt >= ?2 AND erstellt < ?3) AS ausgegeben,
+      (SELECT coalesce(sum(cent),0) FROM strafe
+        WHERE gruppe_id = ?1 AND art = 'geld'
+          AND status IN ('offen','abgerechnet')
+          AND verhaengt_am >= ?2 AND verhaengt_am < ?3) AS strafgeld
+  `).bind(gruppeId, jahrStartVoll, jahrEndeExkl),
+
+  // 5 - Nachschub: wie oft geschleppt, wie viel, die groesste Fuhre, der Wert.
+  env.DB.prepare(`
+    SELECT count(*) AS lieferungen, coalesce(sum(menge),0) AS flaschen,
+           coalesce(max(menge),0) AS groesste, coalesce(sum(einkauf_cent),0) AS wert
+    FROM bestand
+    WHERE gruppe_id = ?1 AND art = 'lieferung'
+      AND erstellt >= ?2 AND erstellt < ?3
+  `).bind(gruppeId, jahrStartVoll, jahrEndeExkl),
+
+  // 6 - Ich: meine Flaschen und mein Anteil in Geld. Derselbe Ausschluss der
+  // Gegenbuchungen fuer die MENGE, derselbe Einschluss fuer das GELD - darum
+  // zwei Summen in einer Zeile statt zweier Abfragen.
+  env.DB.prepare(`
+    SELECT
+      (SELECT coalesce(sum(menge),0) FROM buchung
+        WHERE gruppe_id = ?1 AND user_id = ?4 AND storniert_am IS NULL
+          AND (grund IS NULL OR grund NOT LIKE 'gegenbuchung:%')
+          AND gebucht_am >= ?2 AND gebucht_am < ?3) AS flaschen,
+      (SELECT coalesce(sum(menge * cent),0) FROM buchung
+        WHERE gruppe_id = ?1 AND user_id = ?4 AND storniert_am IS NULL
+          AND gebucht_am >= ?2 AND gebucht_am < ?3) AS gezahlt
+  `).bind(gruppeId, jahrStartVoll, jahrEndeExkl, ichId),
+
+  /* 7 - Ich: die Zahlmoral. DER NENNER IST DER PUNKT. `avg(...)` allein liesse
+     die Zeilen ohne `bestaetigt_am` (offen, gemeldet, abgelehnt) stillschweigend
+     fallen - wer nie gezahlt hat, bekaeme einen schmeichelhaften Schnitt ueber
+     nichts. Deshalb drei Zahlen: `monate` ist der ehrliche Nenner, `bezahlt`
+     der Zaehler, und `tage` gilt AUSDRUECKLICH nur fuer die `gerechnet`
+     bestaetigten. Die Kachel schreibt "x von y Monaten" als fuehrende Zahl und
+     den Schnitt nur daneben, wenn `gerechnet > 0`. */
+  env.DB.prepare(`
+    SELECT count(*) AS monate,
+           coalesce(sum(s.status = 'bezahlt'),0) AS bezahlt,
+           count(s.bestaetigt_am) AS gerechnet,
+           avg(julianday(s.bestaetigt_am) - julianday(s.gemeldet_am)) AS tage
+    FROM saldo s JOIN abrechnung a ON a.id = s.abrechnung_id
+    WHERE a.gruppe_id = ?1 AND a.jahr = ?2 AND s.user_id = ?3
+  `).bind(gruppeId, jahr, ichId),
+];
+
+const wrappedRegelnJahrAbfragen = (env, {
+  gruppeId, traeger, jahrStartVoll, jahrEndeExkl, ichId,
+}) => [
+  /* 1 - die Hausordnung: Strafen je Regeltitel. `s.titel` und nicht
+     `hausregel.titel`: der Titel ist in `strafe` EINGEFROREN (Schema 38,
+     dieselbe Bauweise wie `buchung.cent`), und eine spaeter umbenannte Regel
+     soll den Rueckblick nicht rueckwirkend umschreiben.
+
+     DIE STATUSLISTE IST DIE VON `regelnAbfragen`, nicht die von
+     `SALDO_SUMMEN_SQL`: 'vorgeschlagen' und 'verworfen' fallen heraus (ein
+     Balken ist eine Summe und kann keinen Status nennen - ein Vorschlag waere
+     von einer verhaengten Strafe nicht zu unterscheiden), 'bestritten' bleibt
+     drin (die Strafe ist verhaengt, der Einspruch laeuft erst).
+
+     `sum(cent)`, NICHT `sum(menge*cent)` - eine Strafe hat keine Menge (0038),
+     der genaue Gegensatz zur `buchung` eine Funktion weiter oben. */
+  env.DB.prepare(`
+    SELECT s.titel AS name, count(*) AS n,
+           coalesce(sum(CASE WHEN s.art = 'geld' THEN s.cent ELSE 0 END),0) AS cent
+    FROM strafe s
+    WHERE s.gruppe_id = ?1
+      AND s.status NOT IN ('erlassen','verworfen','vorgeschlagen')
+      AND s.verhaengt_am >= ?2 AND s.verhaengt_am < ?3
+    GROUP BY s.titel ORDER BY n DESC, s.titel
+  `).bind(gruppeId, jahrStartVoll, jahrEndeExkl),
+
+  // 2 - wer am haeufigsten dran war.
+  env.DB.prepare(`
+    SELECT s.user_id, coalesce(u.name,'Ehemaliger') AS name,
+           ${farbeSql('u', traeger)} AS farbe, count(*) AS n,
+           coalesce(sum(CASE WHEN s.art = 'geld' THEN s.cent ELSE 0 END),0) AS cent
+    FROM strafe s JOIN users u ON u.id = s.user_id
+    WHERE s.gruppe_id = ?1
+      AND s.status NOT IN ('erlassen','verworfen','vorgeschlagen')
+      AND s.verhaengt_am >= ?2 AND s.verhaengt_am < ?3
+    GROUP BY s.user_id ORDER BY n DESC, s.user_id
+  `).bind(gruppeId, jahrStartVoll, jahrEndeExkl),
+
+  // 3 - Ich: meine Strafen, Anzahl und davon in Geld.
+  env.DB.prepare(`
+    SELECT count(*) AS n,
+           coalesce(sum(CASE WHEN art = 'geld' THEN cent ELSE 0 END),0) AS cent
+    FROM strafe
+    WHERE gruppe_id = ?1 AND user_id = ?4
+      AND status NOT IN ('erlassen','verworfen','vorgeschlagen')
+      AND verhaengt_am >= ?2 AND verhaengt_am < ?3
+  `).bind(gruppeId, jahrStartVoll, jahrEndeExkl, ichId),
+];
+
+/* Die Namens- und Farbkarte. Ein EIGENER Block, der immer laeuft - sie war
+   Abfrage 0 der Privatseite, und dort ist sie ab Etappe 11 falsch aufgehoben:
+   auch die Vereinsbalken ("Der Durstigste", "Wer am haeufigsten dran war")
+   brauchen Namen und Melderfarben, und eine Gruppe ohne Privatseite haette sie
+   sonst nicht.
+
+   BLEIBT ABSICHTLICH WEIT ueber alle `users`: diese Zeilen werden nie
+   ausgegeben, sondern nur nachgeschlagen. Wer ausgetreten ist, taucht ueber
+   `buchung`, `strafe` oder `termine` trotzdem in einem Balken auf und braucht
+   dort seinen Namen. Geschnitten werden die AGGREGATE, nicht das Woerterbuch -
+   und keine einzige Kennzahl liest von hier.
+
+   Die Melderfarbe kommt seit Schema 28 von hier und wird nicht mehr auf der
+   Seite aus der Reihenfolge gezaehlt: sonst haette derselbe Mensch im
+   Rueckblick eine andere Kreide als am Rad und in der Statistik. */
+const wrappedNamenAbfragen = (env, { traeger }) => [
+  env.DB.prepare(`SELECT u.id, coalesce(u.name,'Ehemaliger') AS name,
+                         ${farbeSql('u', traeger)} AS farbe
+                  FROM users u ORDER BY u.id`),
+];
+
+const wrappedPrivatAbfragen = (env, {
+  gruppeId, traeger, jahrStart, letzterTag, jahrStartVoll, jahrEndeExkl, jahrPrefix,
+  ichId, meinFenster,
+}) => [
+  /* 1 - Eiskoenig: Tage auf Platz 1, Tagesende-Stand mit Carry-Forward.
+     `roh` schneidet die Historie auf das Jahr plus GENAU EINE Carry-in-
+     Zeile je Melder (statt der ganzen Vergangenheit) - das war der
+     Hebel, der die Laufzeit bei der Pruefung von 1,26s auf 0,03s brachte.
+     `tages` haelt je Melder und Kalendertag nur die letzte Meldung,
+     `intervall` spannt daraus Gueltigkeitsfenster, `stand` verbindet sie
+     mit dem Tageskalender - mit Verfallsfrist, sonst gewinnt eine
+     einzelne fruehe Meldung den Rest des Jahres. `rang` laesst Tage ohne
+     jede kalte Flasche (biere = 0) ohne Sieger.
+
+     DER GRUPPENSCHNITT SITZT ALS `EXISTS` IM `WHERE` VON `roh`, nicht als
+     JOIN in seinem FROM - und das ist kein Stilfrage. Die 1,26 s -> 0,03 s
+     dieser Abfrage kamen ALLEIN daraus, die Historie auf das Jahr plus
+     GENAU EINE Carry-in-Zeile je Melder zu schneiden (der korrelierte
+     `max()`-Subquery unten, ueber `reports_user_zeit`). Ein
+     `JOIN gruppen_mitglied` im FROM haette SQLite eine andere
+     Zugriffsreihenfolge angeboten und diesen Indextreffer kosten koennen.
+     Nachgemessen, nicht angenommen (siehe ideas/PROJECT-MEMORY.md).
+
+     Die Klausel `r.gemeldet_am >= m.beigetreten` ist Entscheidung W1: ohne
+     sie schleppt ein Dezember-Beitritt eif fremde Monate in den Rueckblick
+     einer Gruppe, in der er zehn Monate nicht war. Sie greift auch auf die
+     Carry-in-Zeile - wer im Maerz beitrat, hat keine aus dem Vorjahr, und
+     das ist richtig. Der AUSGETRETENE verschwindet weiterhin rueckwirkend:
+     das ist 0032s ausdrueckliches "die Runde, wie sie heute ist" und bleibt
+     so. Dass `buchung`, `strafe` und `termine` daneben eine echte
+     `gruppe_id` fuehren und ihn deshalb BEHALTEN, ist ein Unterschied, der
+     hierher in den Kommentar gehoert und nicht in eine Vereinheitlichung. */
+  env.DB.prepare(`
+    WITH RECURSIVE tage(tag) AS (
+      SELECT date(?1) WHERE date(?1) <= ?2
+      UNION ALL
+      SELECT date(tag,'+1 day') FROM tage WHERE tag < ?2
+    ),
+    roh AS (
+      SELECT r.id, r.user_id, r.biere, r.gemeldet_am
+      FROM reports r
+      WHERE r.gemeldet_am < datetime(?2,'+1 day')
+        AND EXISTS (
+          SELECT 1 FROM gruppen_mitglied m
+           WHERE m.user_id = r.user_id AND m.gruppe_id = ?4
+             AND r.gemeldet_am >= m.beigetreten)
+        AND r.gemeldet_am >= coalesce(
+          (SELECT max(v.gemeldet_am) FROM reports v
+            WHERE v.user_id = r.user_id AND v.gemeldet_am < ?1), '')
+    ),
+    tages AS (
+      SELECT id, user_id, biere, gemeldet_am FROM (
+        SELECT id, user_id, biere, gemeldet_am,
+          ROW_NUMBER() OVER (PARTITION BY user_id, date(gemeldet_am)
+                             ORDER BY gemeldet_am DESC, id DESC) AS rn
+        FROM roh
+      ) WHERE rn = 1
+    ),
+    intervall AS (
+      SELECT id, user_id, biere, gemeldet_am,
+        LEAD(gemeldet_am) OVER (PARTITION BY user_id ORDER BY gemeldet_am) AS bis
+      FROM tages
+    ),
+    stand AS (
+      SELECT t.tag, i.user_id, i.biere, i.gemeldet_am, i.id
+      FROM tage t JOIN intervall i
+        ON i.gemeldet_am < datetime(t.tag,'+1 day')
+       AND (i.bis IS NULL OR i.bis >= datetime(t.tag,'+1 day'))
+       AND julianday(t.tag) - julianday(date(i.gemeldet_am)) < ?3
+    ),
+    rang AS (
+      SELECT tag, user_id,
+        ROW_NUMBER() OVER (PARTITION BY tag
+                           ORDER BY biere DESC, gemeldet_am ASC, id ASC) AS r
+      FROM stand WHERE biere > 0
+    )
+    SELECT user_id, count(*) AS tage FROM rang WHERE r = 1
+    GROUP BY user_id ORDER BY tage DESC, user_id
+  `).bind(jahrStart, letzterTag, WRAPPED_VERFALL_TAGE, gruppeId),
+
+  /* 2 - wie oft im Jahr gemeldet wurde, je Monat. Kein geschaetzter
+     Verbrauch (LAG-Differenzen unterschaetzen bei Trinken-und-Nachlegen
+     zwischen zwei Meldungen systematisch) - eine ehrliche Zahl statt
+     einer geschoenten, mit dem Nutzer so abgestimmt.
+
+     `reports` traegt keine Gruppe und soll keine tragen (0033: "die MELDUNG
+     GEHOERT DER PERSON") - der Schnitt laeuft ueber die Mitgliedschaft, wie
+     in `statistikAbfragen`, plus die W1-Klausel. */
+  env.DB.prepare(`
+    SELECT CAST(strftime('%m', r.gemeldet_am) AS INTEGER) AS monat, count(*) AS n
+    FROM reports r
+    JOIN gruppen_mitglied m ON m.user_id = r.user_id AND m.gruppe_id = ?3
+                           AND r.gemeldet_am >= m.beigetreten
+    WHERE r.gemeldet_am >= ?1 AND r.gemeldet_am < ?2
+    GROUP BY monat ORDER BY monat
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  /* 3 - der kaelteste Moment. Die Grenze ist dieselbe wie in
+     POST /api/report (MIN_GRAD/MAX_GRAD) - dort haelt sie jeden neuen
+     Wert schon ein, hier faengt sie nur Ausreisser aus Altbestand oder
+     einem Handgriff direkt in D1 ab (siehe ideas/PROJECT-MEMORY.md). */
+  env.DB.prepare(`
+    SELECT r.temperatur AS grad, r.user_id, coalesce(u.name,'Ehemaliger') AS name,
+           u.quelle, r.gemeldet_am AS am
+    FROM reports r JOIN users u ON u.id = r.user_id
+    JOIN gruppen_mitglied m ON m.user_id = r.user_id AND m.gruppe_id = ?5
+                          AND r.gemeldet_am >= m.beigetreten
+    WHERE r.gemeldet_am >= ?1 AND r.gemeldet_am < ?2
+      AND r.temperatur BETWEEN ?3 AND ?4
+    ORDER BY r.temperatur ASC LIMIT 1
+  `).bind(jahrStartVoll, jahrEndeExkl, MIN_GRAD, MAX_GRAD, gruppeId),
+
+  // 4 - der waermste Moment, spiegelbildlich.
+  env.DB.prepare(`
+    SELECT r.temperatur AS grad, r.user_id, coalesce(u.name,'Ehemaliger') AS name,
+           u.quelle, r.gemeldet_am AS am
+    FROM reports r JOIN users u ON u.id = r.user_id
+    JOIN gruppen_mitglied m ON m.user_id = r.user_id AND m.gruppe_id = ?5
+                          AND r.gemeldet_am >= m.beigetreten
+    WHERE r.gemeldet_am >= ?1 AND r.gemeldet_am < ?2
+      AND r.temperatur BETWEEN ?3 AND ?4
+    ORDER BY r.temperatur DESC LIMIT 1
+  `).bind(jahrStartVoll, jahrEndeExkl, MIN_GRAD, MAX_GRAD, gruppeId),
+
+  // 5 - das Rad: Ausgang der Ziehungen des Jahres. `los` traegt seit
+  // Schema 33 eine echte `gruppe_id`, und der Index `los_tag` fuehrt sie
+  // als erste Spalte - der Filter ist hier auch der billigste Weg.
+  env.DB.prepare(`
+    SELECT status, count(*) AS n FROM los
+    WHERE gruppe_id = ?2 AND tag LIKE ?1 GROUP BY status
+  `).bind(jahrPrefix, gruppeId),
+
+  // 6 - gewonnene (zugesagte) Lose je Melder.
+  env.DB.prepare(`
+    SELECT user_id, count(*) AS n FROM los
+    WHERE gruppe_id = ?2 AND tag LIKE ?1 AND status = 'zugesagt'
+    GROUP BY user_id ORDER BY n DESC
+  `).bind(jahrPrefix, gruppeId),
+
+  // 7 - Bewertungen der Termine des Jahres, ueber den JOIN statt einer
+  // ID-Liste - so bleibt alles in diesem einen batch.
+  /* Alle Ereignistabellen ab hier tragen ihre `gruppe_id` selbst (Schema
+     33/34/38) - ein `AND x.gruppe_id = ?` genuegt. Wo zwei Tabellen im
+     Spiel sind, wird BEIDES gefiltert: der Join allein liesse sonst eine
+     Bewertung aus Gruppe B an einem Termin aus Gruppe A durch, falls die
+     beiden Spalten je auseinanderlaufen. Zwei billige Praedikate gegen
+     einen stillen Riss. */
+  env.DB.prepare(`
+    SELECT b.ziel_art, b.ziel_id, b.sterne
+    FROM bewertungen b JOIN termine t ON t.id = b.ziel_id AND b.ziel_art = 'termin'
+    WHERE b.gruppe_id = ?3 AND t.gruppe_id = ?3
+      AND t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  // 8 - Kommentar- und Fotozahl je Termin des Jahres. Die Zahl der Bilder
+  // kommt aus `kommentare.bild_key`, nicht aus `bild_uploads` - ein Filter
+  // genuegt also, ohne zweite Tabelle.
+  env.DB.prepare(`
+    SELECT k.ziel_id, count(*) AS kommentare, sum(k.bild_key IS NOT NULL) AS fotos
+    FROM kommentare k JOIN termine t ON t.id = k.ziel_id AND k.ziel_art = 'termin'
+    WHERE k.gruppe_id = ?3 AND t.gruppe_id = ?3 AND k.geloescht_am IS NULL
+      AND t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
+    GROUP BY k.ziel_id
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  // 9 - die Termine des Jahres selbst: wann, bei wem. Ein Abend auswaerts
+  // steht mit drin - er kann Abend des Jahres werden wie jeder andere,
+  // er heisst dann nur nach seinem Ort statt nach einem Gastgeber.
+  env.DB.prepare(`
+    SELECT t.id, t.beginnt_am, t.gastgeber_id, t.ort,
+           coalesce(u.name,'Ehemaliger') AS gastgeber_name
+    FROM termine t JOIN users u ON u.id = t.gastgeber_id
+    WHERE t.gruppe_id = ?3
+      AND t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  // 10 - Bewertungen fuer "Gastgeber des Jahres": die Dauer-Bewertung,
+  // aber nur die Stimmen DIESES Jahres.
+  env.DB.prepare(`
+    SELECT ziel_id, sterne FROM bewertungen
+    WHERE gruppe_id = ?3 AND ziel_art = 'user'
+      AND erstellt >= ?1 AND erstellt < ?2
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  // 11 - wie viele Abende je Gastgeber im Jahr stattfanden. Ohne die
+  // auswaerts: sie zaehlen fuer niemanden (migrations/0024).
+  env.DB.prepare(`
+    SELECT gastgeber_id, count(*) AS abende FROM termine
+    WHERE gruppe_id = ?3
+      AND beginnt_am >= ?1 AND beginnt_am < ?2 AND abgesagt_am IS NULL
+      AND ort IS NULL
+    GROUP BY gastgeber_id
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  // 12 - wie viele Kommentare insgesamt.
+  env.DB.prepare(`
+    SELECT count(*) AS n FROM kommentare
+    WHERE gruppe_id = ?3 AND geloescht_am IS NULL
+      AND erstellt >= ?1 AND erstellt < ?2
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  /* 13 - die Reaktion des Jahres. `art` als zweiter Sortierschluessel
+     macht einen Gleichstand deterministisch statt zufaellig.
+
+     `reaktionen` traegt BEWUSST keine eigene `gruppe_id` (0033: sie haengt
+     als Kindtabelle am `kommentar_id`, das die Gruppe schon fuehrt, und
+     eine zweite Auskunft kann falsch werden) - der Schnitt laeuft darum
+     ueber den Join auf `kommentare`, genau wie in `statistikAbfragen`. */
+  env.DB.prepare(`
+    SELECT x.art, count(*) AS n FROM reaktionen x
+    JOIN kommentare k ON k.id = x.kommentar_id AND k.gruppe_id = ?3
+    WHERE x.erstellt >= ?1 AND x.erstellt < ?2
+    GROUP BY x.art ORDER BY n DESC, x.art LIMIT 1
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  /* 14 - Bilder und GIFs, aus den tatsaechlich abgeschickten Kommentaren
+     (nicht `bild_uploads`, die zaehlt auch Verwaistes mit). Fotos und
+     Memes sind serverseitig nicht zu unterscheiden - beide laufen als
+     image/jpeg ueber /api/bild, siehe ideas/gifs-und-memes.md. Deshalb
+     zwei Kacheln statt der im Plan skizzierten drei: Bilder und GIFs. */
+  env.DB.prepare(`
+    SELECT sum(bild_key LIKE '%.gif') AS gifs,
+           sum(bild_key NOT LIKE '%.gif') AS bilder
+    FROM kommentare
+    WHERE gruppe_id = ?3 AND geloescht_am IS NULL AND bild_key IS NOT NULL
+      AND erstellt >= ?1 AND erstellt < ?2
+  `).bind(jahrStartVoll, jahrEndeExkl, gruppeId),
+
+  /* 15 - Ich: die Kalt-Serie. Dieselbe Tagesserie wie Eiskoenig, aber auf
+     den Abrufenden zugeschnitten - die Historie ist schon in `roh` auf
+     diesen einen Nutzer gefiltert statt erst danach, das haelt die
+     Pipeline auf einem Bruchteil der Zeilen (Empfehlung aus der
+     Pruefung).
+
+     DIE W1-GRENZE GILT AUCH HIER, und das steht so in keinem Plan. Der
+     Gedanke war: 15/16/17 sind schon auf den Abrufenden gefiltert, eine
+     Mitgliedschaftspruefung im Vorfeld genuegt. Sie genuegt NICHT. Weil
+     `reports` keine Gruppe traegt, waeren die eigene Kalt-Serie und das
+     eigene kaelteste Bier in JEDER Gruppe, in der man ist, dieselbe Zahl -
+     waehrend `platz1` direkt daneben aus Abfrage 1 kommt und dort sehr wohl
+     bei `beigetreten` anfaengt. Auf einer Kachel stuenden dann zwei Zahlen,
+     die ueber verschiedene Zeitraeume gerechnet sind: eine Serie aus
+     Monaten, in denen man noch nicht dabei war, neben einer Platz-1-Zahl,
+     die genau diese Monate auslaesst. `?6` ist darum mein Beitritt. */
+  env.DB.prepare(`
+    WITH RECURSIVE tage(tag) AS (
+      SELECT date(?1) WHERE date(?1) <= ?2
+      UNION ALL
+      SELECT date(tag,'+1 day') FROM tage WHERE tag < ?2
+    ),
+    roh AS (
+      SELECT r.id, r.biere, r.temperatur, r.gemeldet_am
+      FROM reports r
+      WHERE r.user_id = ?3
+        AND r.gemeldet_am >= ?6
+        AND r.gemeldet_am < datetime(?2,'+1 day')
+        AND r.gemeldet_am >= coalesce(
+          (SELECT max(v.gemeldet_am) FROM reports v
+            WHERE v.user_id = ?3 AND v.gemeldet_am < ?1
+              AND v.gemeldet_am >= ?6), '')
+    ),
+    tages AS (
+      SELECT id, biere, temperatur, gemeldet_am FROM (
+        SELECT id, biere, temperatur, gemeldet_am,
+          ROW_NUMBER() OVER (PARTITION BY date(gemeldet_am)
+                             ORDER BY gemeldet_am DESC, id DESC) AS rn
+        FROM roh
+      ) WHERE rn = 1
+    ),
+    intervall AS (
+      SELECT id, biere, temperatur, gemeldet_am,
+        LEAD(gemeldet_am) OVER (ORDER BY gemeldet_am) AS bis
+      FROM tages
+    ),
+    mein AS (
+      SELECT t.tag, i.biere, i.temperatur
+      FROM tage t JOIN intervall i
+        ON i.gemeldet_am < datetime(t.tag,'+1 day')
+       AND (i.bis IS NULL OR i.bis >= datetime(t.tag,'+1 day'))
+       AND julianday(t.tag) - julianday(date(i.gemeldet_am)) < ?4
+    ),
+    markiert AS (
+      SELECT tag, CASE WHEN biere > 0 AND temperatur < ?5 THEN 1 ELSE 0 END AS kalt
+      FROM mein
+    ),
+    inseln AS (
+      SELECT tag, kalt,
+        julianday(tag) - ROW_NUMBER() OVER (PARTITION BY kalt ORDER BY tag) AS grp
+      FROM markiert
+    )
+    SELECT min(tag) AS von, max(tag) AS bis, count(*) AS laenge
+    FROM inseln WHERE kalt = 1
+    GROUP BY grp ORDER BY laenge DESC, von ASC LIMIT 1
+  `).bind(jahrStart, letzterTag, ichId, WRAPPED_VERFALL_TAGE, WRAPPED_KALT_GRAD,
+          meinFenster),
+
+  // 16 - Ich: das eigene kaelteste Bier des Jahres. Dieselbe W1-Grenze wie
+  // 15, aus demselben Grund.
+  env.DB.prepare(`
+    SELECT min(temperatur) AS grad FROM reports
+    WHERE user_id = ?1 AND gemeldet_am >= ?2 AND gemeldet_am < ?3
+      AND gemeldet_am >= ?4
+  `).bind(ichId, jahrStartVoll, jahrEndeExkl, meinFenster),
+
+  /* 17 - Ich: die Sterne, die ich in diesem Jahr vergeben habe. Hier keine
+     W1-Klausel, sondern der direkte Filter: `bewertungen` traegt seit 0033
+     eine echte `gruppe_id`, und sie sagt, in WELCHER Gruppe die Stimme
+     abgegeben wurde. Das ist die genauere Auskunft - eine Sternvergabe ist
+     ein Ereignis, keine Eigenschaft eines Menschen. */
+  env.DB.prepare(`
+    SELECT sterne FROM bewertungen
+    WHERE autor_id = ?1 AND gruppe_id = ?4
+      AND erstellt >= ?2 AND erstellt < ?3
+  `).bind(ichId, jahrStartVoll, jahrEndeExkl, gruppeId),
+];
 
 const statistikRegeln = (ergebnis, monat) => {
   const [jeMensch, offen, seit] = ergebnis;
@@ -11077,10 +11619,22 @@ const ROUTEN = {
       // Fuer den Gruppenwaehler im Kontor (Entscheidung 25): ALLE Gruppen,
       // nicht nur die, in denen der Wirt selbst Mitglied ist.
       env.DB.prepare('SELECT id, name FROM gruppen ORDER BY name COLLATE NOCASE'),
+      /* SEIT WANN diese Gruppe existiert - fuer die Jahresliste des
+         Rueckblicks im Kontor (Etappe 11). Sie rechnete bis dahin aus der
+         Wachstumskurve, und die zaehlt `users.erstellt`: ein Mensch von 2023,
+         der 2026 einer neuen Gruppe beitritt, steht dort mit 2023: Das Kontor
+         bot dann ein Jahr an, das `GET /api/wrapped` mit 400 abweist. Dieselbe
+         Quelle wie dort - `min(beigetreten)`, aus `users.erstellt`
+         zurueckgefuellt (0032) und deshalb auch fuer die Auffanggruppe richtig,
+         die erst im August 2026 angelegt wurde. */
+      env.DB.prepare(
+        'SELECT min(beigetreten) AS seit FROM gruppen_mitglied WHERE gruppe_id = ?')
+        .bind(g.gruppe.id),
     ]);
 
     const [mails, mailsJeTag, pushs, postwillig,
-           aufrufeJeNutzerTag, aufrufeJeNutzer, aufrufeInsgesamt, alleGruppenZeilen] =
+           aufrufeJeNutzerTag, aufrufeJeNutzer, aufrufeInsgesamt, alleGruppenZeilen,
+           gruppeSeit] =
       ergebnis.slice(runde.length);
 
     /* Die Saeule je Tag, aus den flachen Zeilen gebaut: eine Gruppe je Tag,
@@ -11104,7 +11658,9 @@ const ROUTEN = {
       tage,
       // Welche Runde diese elf Bilder zeigen, und was sich sonst waehlen
       // liesse - der Gruppenwaehler im Kontor (Entscheidung 25).
-      gruppe: { id: g.gruppe.id, name: g.gruppe.name },
+      // `seit` ist der Boden der Jahresliste im Kontor - siehe die Abfrage.
+      gruppe: { id: g.gruppe.id, name: g.gruppe.name,
+                seit: (gruppeSeit.results[0] || {}).seit || null },
       gruppen: alleGruppenZeilen.results,
       ...statistikRunde(ergebnis, tage),
       mails: mails.results.map(m => ({ ...m, kaputt: m.kaputt || 0 })),
@@ -11136,6 +11692,25 @@ const ROUTEN = {
     const ich = await nutzer(request, env);
     if (!ich) return fehler(request, 'Nicht angemeldet', 401);
 
+    /* Die Gruppe, und zwar VOR allem anderen (Etappe 11). Bis hierher rechnete
+       der Rueckblick ueber die ganze Instanz: "Eiskoenig" zaehlte Platz-1-Tage
+       aller Menschen und zeigte ihre NAMEN in einem Balkenbild, "Das Rad"
+       summierte alle Lose, "Was gesagt wurde" alle Kommentare. Mit der zweiten
+       Gruppe war das eine Preisgabe ueber die Gruppengrenze hinweg - genau das,
+       wogegen `inGruppe()` gebaut wurde. Der Rueckblick war die letzte
+       Leseroute des Repos ohne diese Pruefung. */
+    const g = await inGruppe(request, env, ich, null);
+    if (g instanceof Response) return g;
+    /* Der Schalter von HAND und nicht ueber `inGruppe(…, 'statistik_an')` -
+       genau wie bei `GET /api/admin/statistik`: der Wirt fuehrt Aufsicht ueber
+       die ganze Instanz (Entscheidung 25) und soll eine Runde nicht deshalb
+       nicht mehr einsehen koennen, weil ihr Admin den Einstieg fuer sich
+       abgeschaltet hat. */
+    if (!istAdmin(ich) && !g.gruppe.statistik_an) {
+      return fehler(request, `Das ist in „${g.gruppe.name}" abgeschaltet`, 403);
+    }
+    const gruppeId = g.gruppe.id;
+
     const url = new URL(request.url);
     const jahr = Number(url.searchParams.get('jahr'));
     const heuteJahr = new Date().getUTCFullYear();
@@ -11146,12 +11721,48 @@ const ROUTEN = {
     }
     if (jahr > heuteJahr) return fehler(request, 'Dieses Jahr ist noch nicht dran');
 
-    /* Vor dem grossen Rundflug: gibt es die Runde in diesem Jahr ueberhaupt
+    /* Vor dem grossen Rundflug: gibt es DIESE GRUPPE in diesem Jahr ueberhaupt
        schon? Billiger, hier abzubrechen, als erst den ganzen batch zu fahren
-       und danach wegzuwerfen. */
-    const erster = await env.DB.prepare('SELECT min(erstellt) AS erstellt FROM users').first();
-    const ersteJahr = erster && erster.erstellt ? Number(erster.erstellt.slice(0, 4)) : heuteJahr;
-    if (jahr < ersteJahr) return fehler(request, `Vor ${ersteJahr} gab es diese Runde noch nicht`);
+       und danach wegzuwerfen.
+
+       `min(beigetreten)` aus `gruppen_mitglied`, nicht `min(users.erstellt)`
+       (instanzweit und ab Etappe 11 falsch) und ausdruecklich auch nicht
+       `gruppen.erstellt`: die Auffanggruppe "Crew WAF" wurde von Migration 0032
+       mit `datetime('now')` angelegt, also im August 2026 - sie wuerde 2025
+       abweisen, obwohl ihre Daten weiter zurueckreichen. `beigetreten` ist
+       dagegen aus `users.erstellt` zurueckgefuellt worden (0032, ausdruecklich
+       und mit Begruendung) und ist damit genau die Quelle, die hier gebraucht
+       wird.
+
+       In derselben Runde: MEIN Beitrittsdatum. Es begrenzt die drei
+       persoenlichen Abfragen (15/16/17) - siehe den langen Kommentar dort. Ein
+       Wirt ohne Mitgliedschaft hat keines; dann entfaellt der Ich-Teil. */
+    const [erster, meins] = await env.DB.batch([
+      env.DB.prepare(
+        'SELECT min(beigetreten) AS beigetreten FROM gruppen_mitglied WHERE gruppe_id = ?')
+        .bind(gruppeId),
+      env.DB.prepare(
+        'SELECT beigetreten FROM gruppen_mitglied WHERE gruppe_id = ? AND user_id = ?')
+        .bind(gruppeId, ich.id),
+    ]);
+    const ersteZeile = erster.results[0] || {};
+    const ersteJahr = ersteZeile.beigetreten
+      ? Number(ersteZeile.beigetreten.slice(0, 4)) : heuteJahr;
+    if (jahr < ersteJahr) {
+      return fehler(request, `Vor ${ersteJahr} gab es „${g.gruppe.name}" noch nicht`);
+    }
+    /* `meinBeitritt` ist null fuer den Wirt, der ohne Mitgliedschaft
+       hereinkommt. Die Ich-Abfragen laufen dann trotzdem mit - ein batch hat
+       eine feste Laenge, und ein Loch darin waere die Sorte gezaehlte Position,
+       die Etappe 6 gerade beseitigt hat. Sie bekommen stattdessen ein Fenster,
+       das nichts durchlaesst, und die ANTWORT traegt `ich: null`.
+
+       Der Platzhalter statt `bind(null)`: `gemeldet_am >= NULL` ist in SQL
+       NULL, nicht falsch, und wuerde je nach Umgebung still alles ODER nichts
+       liefern. Eine Jahreszahl, hinter der es keine Meldung gibt, ist die
+       Antwort, die man beim Lesen sofort versteht. */
+    const meinBeitritt = (meins.results[0] || {}).beigetreten || null;
+    const meinFenster = meinBeitritt || '9999-12-31 00:00:00';
 
     /* Datumsgrenzen. `letzterTag` ist der letzte Kalendertag, der in die
        Tagesserien eingeht - bei einem laufenden Jahr heute, sonst der 31.12.
@@ -11177,256 +11788,54 @@ const ROUTEN = {
        Blatt darin, stuende derselbe Mensch auf einer Seite in zwei Farben. */
     const traeger = await stolzTraeger(env);
 
-    const ergebnis = await env.DB.batch([
-      /* 0 - alle Melder mit Namen UND Melderfarbe. Der Platz kommt seit
-         Schema 28 von hier und wird nicht mehr auf der Seite aus der
-         Reihenfolge gezaehlt: sonst haette derselbe Mensch im Rueckblick eine
-         andere Kreide als am Rad und in der Statistik. */
-      env.DB.prepare(`SELECT u.id, coalesce(u.name,'Ehemaliger') AS name,
-                             ${farbeSql('u', traeger)} AS farbe
-                      FROM users u ORDER BY u.id`),
+    /* Welche Bloecke ueberhaupt laufen, entscheidet der WORKER - die Seite
+       entscheidet nur, wie viele Kacheln davon uebrig bleiben (Etappe 11).
+       Dieselbe Arbeitsteilung wie bei `GET /api/statistik`, und aus demselben
+       Grund: eine Gruppe ohne Kasse soll keine Kassenabfrage bezahlen, und die
+       Seite soll nicht aus leeren Zahlen erraten muessen, ob etwas fehlt oder
+       nichts da ist.
 
-      /* 1 - Eiskoenig: Tage auf Platz 1, Tagesende-Stand mit Carry-Forward.
-         `roh` schneidet die Historie auf das Jahr plus GENAU EINE Carry-in-
-         Zeile je Melder (statt der ganzen Vergangenheit) - das war der
-         Hebel, der die Laufzeit bei der Pruefung von 1,26s auf 0,03s brachte.
-         `tages` haelt je Melder und Kalendertag nur die letzte Meldung,
-         `intervall` spannt daraus Gueltigkeitsfenster, `stand` verbindet sie
-         mit dem Tageskalender - mit Verfallsfrist, sonst gewinnt eine
-         einzelne fruehe Meldung den Rest des Jahres. `rang` laesst Tage ohne
-         jede kalte Flasche (biere = 0) ohne Sieger. */
-      env.DB.prepare(`
-        WITH RECURSIVE tage(tag) AS (
-          SELECT date(?1) WHERE date(?1) <= ?2
-          UNION ALL
-          SELECT date(tag,'+1 day') FROM tage WHERE tag < ?2
-        ),
-        roh AS (
-          SELECT r.id, r.user_id, r.biere, r.gemeldet_am
-          FROM reports r
-          WHERE r.gemeldet_am < datetime(?2,'+1 day')
-            AND r.gemeldet_am >= coalesce(
-              (SELECT max(v.gemeldet_am) FROM reports v
-                WHERE v.user_id = r.user_id AND v.gemeldet_am < ?1), '')
-        ),
-        tages AS (
-          SELECT id, user_id, biere, gemeldet_am FROM (
-            SELECT id, user_id, biere, gemeldet_am,
-              ROW_NUMBER() OVER (PARTITION BY user_id, date(gemeldet_am)
-                                 ORDER BY gemeldet_am DESC, id DESC) AS rn
-            FROM roh
-          ) WHERE rn = 1
-        ),
-        intervall AS (
-          SELECT id, user_id, biere, gemeldet_am,
-            LEAD(gemeldet_am) OVER (PARTITION BY user_id ORDER BY gemeldet_am) AS bis
-          FROM tages
-        ),
-        stand AS (
-          SELECT t.tag, i.user_id, i.biere, i.gemeldet_am, i.id
-          FROM tage t JOIN intervall i
-            ON i.gemeldet_am < datetime(t.tag,'+1 day')
-           AND (i.bis IS NULL OR i.bis >= datetime(t.tag,'+1 day'))
-           AND julianday(t.tag) - julianday(date(i.gemeldet_am)) < ?3
-        ),
-        rang AS (
-          SELECT tag, user_id,
-            ROW_NUMBER() OVER (PARTITION BY tag
-                               ORDER BY biere DESC, gemeldet_am ASC, id ASC) AS r
-          FROM stand WHERE biere > 0
-        )
-        SELECT user_id, count(*) AS tage FROM rang WHERE r = 1
-        GROUP BY user_id ORDER BY tage DESC, user_id
-      `).bind(jahrStart, letzterTag, WRAPPED_VERFALL_TAGE),
+       ALLES IN EINEM `batch()`, ausgelesen ueber die `.length` der Bloecke und
+       NIEMALS ueber eine getippte Position - genau der Fehler, den Etappe 6 an
+       der Statistik schon einmal repariert hat. `nimm()` schiebt den Zeiger
+       selbst weiter; eine Zahl steht in diesem Abschnitt nirgends. */
+    const gemeinsam = { gruppeId, traeger, jahr, jahrStart, letzterTag,
+                        jahrStartVoll, jahrEndeExkl, jahrPrefix,
+                        ichId: ich.id, meinFenster };
+    const abNamen  = wrappedNamenAbfragen(env, gemeinsam);
+    const abPrivat = privatSeite(g.gruppe) ? wrappedPrivatAbfragen(env, gemeinsam) : [];
+    const abSeit   = vereinSeite(g.gruppe) ? wrappedVereinSeitAbfragen(env, gemeinsam) : [];
+    const abKasse  = g.gruppe.kasse_an     ? wrappedKasseJahrAbfragen(env, gemeinsam) : [];
+    const abRegeln = g.gruppe.regeln_an    ? wrappedRegelnJahrAbfragen(env, gemeinsam) : [];
 
-      // 2 - wie oft im Jahr gemeldet wurde, je Monat. Kein geschaetzter
-      // Verbrauch (LAG-Differenzen unterschaetzen bei Trinken-und-Nachlegen
-      // zwischen zwei Meldungen systematisch) - eine ehrliche Zahl statt
-      // einer geschoenten, mit dem Nutzer so abgestimmt.
-      env.DB.prepare(`
-        SELECT CAST(strftime('%m', gemeldet_am) AS INTEGER) AS monat, count(*) AS n
-        FROM reports WHERE gemeldet_am >= ?1 AND gemeldet_am < ?2
-        GROUP BY monat ORDER BY monat
-      `).bind(jahrStartVoll, jahrEndeExkl),
-
-      /* 3 - der kaelteste Moment. Die Grenze ist dieselbe wie in
-         POST /api/report (MIN_GRAD/MAX_GRAD) - dort haelt sie jeden neuen
-         Wert schon ein, hier faengt sie nur Ausreisser aus Altbestand oder
-         einem Handgriff direkt in D1 ab (siehe ideas/PROJECT-MEMORY.md). */
-      env.DB.prepare(`
-        SELECT r.temperatur AS grad, r.user_id, coalesce(u.name,'Ehemaliger') AS name,
-               u.quelle, r.gemeldet_am AS am
-        FROM reports r JOIN users u ON u.id = r.user_id
-        WHERE r.gemeldet_am >= ?1 AND r.gemeldet_am < ?2
-          AND r.temperatur BETWEEN ?3 AND ?4
-        ORDER BY r.temperatur ASC LIMIT 1
-      `).bind(jahrStartVoll, jahrEndeExkl, MIN_GRAD, MAX_GRAD),
-
-      // 4 - der waermste Moment, spiegelbildlich.
-      env.DB.prepare(`
-        SELECT r.temperatur AS grad, r.user_id, coalesce(u.name,'Ehemaliger') AS name,
-               u.quelle, r.gemeldet_am AS am
-        FROM reports r JOIN users u ON u.id = r.user_id
-        WHERE r.gemeldet_am >= ?1 AND r.gemeldet_am < ?2
-          AND r.temperatur BETWEEN ?3 AND ?4
-        ORDER BY r.temperatur DESC LIMIT 1
-      `).bind(jahrStartVoll, jahrEndeExkl, MIN_GRAD, MAX_GRAD),
-
-      // 5 - das Rad: Ausgang der Ziehungen des Jahres.
-      env.DB.prepare(`
-        SELECT status, count(*) AS n FROM los WHERE tag LIKE ?1 GROUP BY status
-      `).bind(jahrPrefix),
-
-      // 6 - gewonnene (zugesagte) Lose je Melder.
-      env.DB.prepare(`
-        SELECT user_id, count(*) AS n FROM los
-        WHERE tag LIKE ?1 AND status = 'zugesagt'
-        GROUP BY user_id ORDER BY n DESC
-      `).bind(jahrPrefix),
-
-      // 7 - Bewertungen der Termine des Jahres, ueber den JOIN statt einer
-      // ID-Liste - so bleibt alles in diesem einen batch.
-      env.DB.prepare(`
-        SELECT b.ziel_art, b.ziel_id, b.sterne
-        FROM bewertungen b JOIN termine t ON t.id = b.ziel_id AND b.ziel_art = 'termin'
-        WHERE t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
-      `).bind(jahrStartVoll, jahrEndeExkl),
-
-      // 8 - Kommentar- und Fotozahl je Termin des Jahres.
-      env.DB.prepare(`
-        SELECT k.ziel_id, count(*) AS kommentare, sum(k.bild_key IS NOT NULL) AS fotos
-        FROM kommentare k JOIN termine t ON t.id = k.ziel_id AND k.ziel_art = 'termin'
-        WHERE k.geloescht_am IS NULL
-          AND t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
-        GROUP BY k.ziel_id
-      `).bind(jahrStartVoll, jahrEndeExkl),
-
-      // 9 - die Termine des Jahres selbst: wann, bei wem. Ein Abend auswaerts
-      // steht mit drin - er kann Abend des Jahres werden wie jeder andere,
-      // er heisst dann nur nach seinem Ort statt nach einem Gastgeber.
-      env.DB.prepare(`
-        SELECT t.id, t.beginnt_am, t.gastgeber_id, t.ort,
-               coalesce(u.name,'Ehemaliger') AS gastgeber_name
-        FROM termine t JOIN users u ON u.id = t.gastgeber_id
-        WHERE t.beginnt_am >= ?1 AND t.beginnt_am < ?2 AND t.abgesagt_am IS NULL
-      `).bind(jahrStartVoll, jahrEndeExkl),
-
-      // 10 - Bewertungen fuer "Gastgeber des Jahres": die Dauer-Bewertung,
-      // aber nur die Stimmen DIESES Jahres.
-      env.DB.prepare(`
-        SELECT ziel_id, sterne FROM bewertungen
-        WHERE ziel_art = 'user' AND erstellt >= ?1 AND erstellt < ?2
-      `).bind(jahrStartVoll, jahrEndeExkl),
-
-      // 11 - wie viele Abende je Gastgeber im Jahr stattfanden. Ohne die
-      // auswaerts: sie zaehlen fuer niemanden (migrations/0024).
-      env.DB.prepare(`
-        SELECT gastgeber_id, count(*) AS abende FROM termine
-        WHERE beginnt_am >= ?1 AND beginnt_am < ?2 AND abgesagt_am IS NULL
-          AND ort IS NULL
-        GROUP BY gastgeber_id
-      `).bind(jahrStartVoll, jahrEndeExkl),
-
-      // 12 - wie viele Kommentare insgesamt.
-      env.DB.prepare(`
-        SELECT count(*) AS n FROM kommentare
-        WHERE geloescht_am IS NULL AND erstellt >= ?1 AND erstellt < ?2
-      `).bind(jahrStartVoll, jahrEndeExkl),
-
-      // 13 - die Reaktion des Jahres. `art` als zweiter Sortierschluessel
-      // macht einen Gleichstand deterministisch statt zufaellig.
-      env.DB.prepare(`
-        SELECT art, count(*) AS n FROM reaktionen
-        WHERE erstellt >= ?1 AND erstellt < ?2
-        GROUP BY art ORDER BY n DESC, art LIMIT 1
-      `).bind(jahrStartVoll, jahrEndeExkl),
-
-      /* 14 - Bilder und GIFs, aus den tatsaechlich abgeschickten Kommentaren
-         (nicht `bild_uploads`, die zaehlt auch Verwaistes mit). Fotos und
-         Memes sind serverseitig nicht zu unterscheiden - beide laufen als
-         image/jpeg ueber /api/bild, siehe ideas/gifs-und-memes.md. Deshalb
-         zwei Kacheln statt der im Plan skizzierten drei: Bilder und GIFs. */
-      env.DB.prepare(`
-        SELECT sum(bild_key LIKE '%.gif') AS gifs,
-               sum(bild_key NOT LIKE '%.gif') AS bilder
-        FROM kommentare
-        WHERE geloescht_am IS NULL AND bild_key IS NOT NULL
-          AND erstellt >= ?1 AND erstellt < ?2
-      `).bind(jahrStartVoll, jahrEndeExkl),
-
-      /* 15 - Ich: die Kalt-Serie. Dieselbe Tagesserie wie Eiskoenig, aber auf
-         den Abrufenden zugeschnitten - die Historie ist schon in `roh` auf
-         diesen einen Nutzer gefiltert statt erst danach, das haelt die
-         Pipeline auf einem Bruchteil der Zeilen (Empfehlung aus der
-         Pruefung). */
-      env.DB.prepare(`
-        WITH RECURSIVE tage(tag) AS (
-          SELECT date(?1) WHERE date(?1) <= ?2
-          UNION ALL
-          SELECT date(tag,'+1 day') FROM tage WHERE tag < ?2
-        ),
-        roh AS (
-          SELECT r.id, r.biere, r.temperatur, r.gemeldet_am
-          FROM reports r
-          WHERE r.user_id = ?3
-            AND r.gemeldet_am < datetime(?2,'+1 day')
-            AND r.gemeldet_am >= coalesce(
-              (SELECT max(v.gemeldet_am) FROM reports v
-                WHERE v.user_id = ?3 AND v.gemeldet_am < ?1), '')
-        ),
-        tages AS (
-          SELECT id, biere, temperatur, gemeldet_am FROM (
-            SELECT id, biere, temperatur, gemeldet_am,
-              ROW_NUMBER() OVER (PARTITION BY date(gemeldet_am)
-                                 ORDER BY gemeldet_am DESC, id DESC) AS rn
-            FROM roh
-          ) WHERE rn = 1
-        ),
-        intervall AS (
-          SELECT id, biere, temperatur, gemeldet_am,
-            LEAD(gemeldet_am) OVER (ORDER BY gemeldet_am) AS bis
-          FROM tages
-        ),
-        mein AS (
-          SELECT t.tag, i.biere, i.temperatur
-          FROM tage t JOIN intervall i
-            ON i.gemeldet_am < datetime(t.tag,'+1 day')
-           AND (i.bis IS NULL OR i.bis >= datetime(t.tag,'+1 day'))
-           AND julianday(t.tag) - julianday(date(i.gemeldet_am)) < ?4
-        ),
-        markiert AS (
-          SELECT tag, CASE WHEN biere > 0 AND temperatur < ?5 THEN 1 ELSE 0 END AS kalt
-          FROM mein
-        ),
-        inseln AS (
-          SELECT tag, kalt,
-            julianday(tag) - ROW_NUMBER() OVER (PARTITION BY kalt ORDER BY tag) AS grp
-          FROM markiert
-        )
-        SELECT min(tag) AS von, max(tag) AS bis, count(*) AS laenge
-        FROM inseln WHERE kalt = 1
-        GROUP BY grp ORDER BY laenge DESC, von ASC LIMIT 1
-      `).bind(jahrStart, letzterTag, ich.id, WRAPPED_VERFALL_TAGE, WRAPPED_KALT_GRAD),
-
-      // 16 - Ich: das eigene kaelteste Bier des Jahres.
-      env.DB.prepare(`
-        SELECT min(temperatur) AS grad FROM reports
-        WHERE user_id = ?1 AND gemeldet_am >= ?2 AND gemeldet_am < ?3
-      `).bind(ich.id, jahrStartVoll, jahrEndeExkl),
-
-      // 17 - Ich: die Sterne, die ich in diesem Jahr vergeben habe.
-      env.DB.prepare(`
-        SELECT sterne FROM bewertungen
-        WHERE autor_id = ?1 AND erstellt >= ?2 AND erstellt < ?3
-      `).bind(ich.id, jahrStartVoll, jahrEndeExkl),
+    const alles = await env.DB.batch([
+      ...abNamen, ...abPrivat, ...abSeit, ...abKasse, ...abRegeln,
     ]);
+    let ab = 0;
+    const nimm = block => alles.slice(ab, ab += block.length);
+    const namenErg  = nimm(abNamen);
+    const privatErg = nimm(abPrivat);
+    const seitErg   = nimm(abSeit);
+    const kasseErg  = nimm(abKasse);
+    const regelnErg = nimm(abRegeln);
 
+    const [leute] = namenErg;
+    /* Die Privatseite kann GANZ fehlen (eine Gruppe mit Kasse und Hausordnung,
+       ohne Tafel, Rad, Notruf und Termine) - dann ist `privatErg` leer, und
+       jeder dieser Namen faellt auf `LEER` zurueck. Ein Rueckfall statt eines
+       `if` um den halben Auswertungsblock: die Rechnungen darunter kommen mit
+       leeren Listen von sich aus auf null und Nullen, und die ANTWORT laesst
+       `runde` dann ganz weg (siehe unten). Ein zweiter Zweig waere derselbe
+       Code ein zweites Mal. */
+    const LEER = { results: [] };
     const [
-      leute, eiskoenigZeilen, meldungenJeMonat, kaeltester, waermster,
-      radUebersicht, radGewonnen, abendBewertungen, abendKommentare, abendListe,
-      gastgeberBewertungen, gastgeberAbende, kommentareZahl, reaktionDesJahres,
-      bilderSplit, ichKaltSerie, ichKaeltestes, ichSterneVergeben,
-    ] = ergebnis;
+      eiskoenigZeilen = LEER, meldungenJeMonat = LEER, kaeltester = LEER, waermster = LEER,
+      radUebersicht = LEER, radGewonnen = LEER, abendBewertungen = LEER,
+      abendKommentare = LEER, abendListe = LEER, gastgeberBewertungen = LEER,
+      gastgeberAbende = LEER, kommentareZahl = LEER, reaktionDesJahres = LEER,
+      bilderSplit = LEER, ichKaltSerie = LEER, ichKaeltestes = LEER,
+      ichSterneVergeben = LEER,
+    ] = privatErg;
 
     const namen = new Map(leute.results.map(u => [u.id, u.name]));
     // Die Melderfarbe daneben: dieselbe Zeile traegt sie schon, und beide
@@ -11528,7 +11937,7 @@ const ROUTEN = {
     const reaktion = reaktionDesJahres.results[0] || null;
     const bilderZeile = bilderSplit.results[0] || {};
     const gesagtes = {
-      kommentare: kommentareZahl.results[0].n,
+      kommentare: (kommentareZahl.results[0] || { n: 0 }).n,
       reaktion: reaktion ? reaktion.art : null,
       reaktionN: reaktion ? reaktion.n : 0,
       bilder: bilderZeile.bilder || 0,
@@ -11547,23 +11956,117 @@ const ROUTEN = {
       serie: serie ? serie.laenge : 0,
       serieVon: serie ? serie.von : null,
       platz1: meinPlatz1 ? meinPlatz1.tage : 0,
-      kaeltestes: ichKaeltestes.results[0].grad,
+      kaeltestes: (ichKaeltestes.results[0] || {}).grad ?? null,
       sterneVergeben,
       abendeAusgerichtet: abendeJeGastgeber.get(ich.id) || 0,
     };
 
+    // -- Der Verein ------------------------------------------------------------
+    /* Dieselbe Bauart wie oben, nur kuerzer: aus jedem Block wird eine Form,
+       und ein Feld, dessen Quelle nicht gelaufen ist, ist `null` - nicht 0.
+       Die Seite baut eine Kachel, WENN ihre Daten da sind (`wrappedKacheln`
+       hat diesen Vertrag schon), und `null` heisst dort "gibt es hier nicht",
+       waehrend 0 heisst "gibt es, war aber nichts". Die beiden zu verwechseln
+       hiesse, einer Gruppe ohne Hausordnung eine Kachel "0 Strafen"
+       hinzustellen. */
+    const seitZeile = seitErg.length ? (seitErg[0].results[0] || {}) : {};
+    const vereinSeit = seitZeile.seit || null;
+
+    const [kasseMonat = LEER, kasseJeMensch = LEER, kasseJeGetraenk = LEER,
+           kasseStand = LEER, kasseNachschub = LEER, meineBuchungen = LEER,
+           meineZahlmoral = LEER] = kasseErg;
+    const [strafenJeRegel = LEER, strafenJeMensch = LEER, meineStrafen = LEER] = regelnErg;
+
+    const kasse = kasseErg.length ? (() => {
+      const monat = Array(12).fill(0);
+      for (const z of kasseMonat.results) monat[z.monat - 1] = z.n;
+      const summe = monat.reduce((a, c) => a + c, 0);
+      const stand = kasseStand.results[0] || { eingenommen: 0, ausgegeben: 0, strafgeld: 0 };
+      const n = kasseNachschub.results[0]
+        || { lieferungen: 0, flaschen: 0, groesste: 0, wert: 0 };
+      return {
+        summe, monat,
+        je_mensch: kasseJeMensch.results.map(z => ({
+          id: z.user_id, name: z.name, farbe: z.farbe, n: z.n })),
+        je_getraenk: kasseJeGetraenk.results,
+        stand: {
+          eingenommen: stand.eingenommen,
+          strafgeld: stand.strafgeld || 0,
+          ausgegeben: stand.ausgegeben,
+          // Gerechnet, nicht gespeichert - wie im Monatsbild (statistikKasse).
+          saldo: stand.eingenommen + (stand.strafgeld || 0) - stand.ausgegeben,
+        },
+        nachschub: n.lieferungen ? n : null,
+      };
+    })() : null;
+
+    const regeln = regelnErg.length ? (() => {
+      const jeRegel = strafenJeRegel.results;
+      return {
+        strafen: jeRegel.reduce((a, c) => a + c.n, 0),
+        /* KEINE Geldsumme hier, und das ist Absicht. Sie liesse sich aus
+           `cent` bilden - nur waere sie eine ANDERE als die `strafgeld` der
+           Kassenkachel: diese Abfrage zaehlt, was verhaengt wurde
+           (Statusliste von `regelnAbfragen`), jene, was als Geld gilt
+           ('offen' und 'abgerechnet', Liste von `SALDO_SUMMEN_SQL`). Beide
+           sind fuer ihren Zweck richtig, und beide in EINER Geschichte
+           auszugeben - dreissig Sekunden auseinander, beide "Strafgeld"
+           genannt - waere ein Widerspruch, den kein Leser aufloesen kann.
+           Das Geld steht in der Kassenkachel, hier steht die Zahl. */
+        je_regel: jeRegel,
+        je_mensch: strafenJeMensch.results.map(z => ({
+          id: z.user_id, name: z.name, farbe: z.farbe, n: z.n, cent: z.cent })),
+      };
+    })() : null;
+
+    /* Meine Vereinsbilanz. Sie steht NEBEN `ich` und nicht darin: die eine ist
+       die Bilanz an der Tafel, die andere die in der Kasse, und §4.4 des Plans
+       haelt sie ausdruecklich als ZWEI Kacheln auseinander - eine
+       zusammengelegte haette acht `wr-paar`-Felder, durch die man scrollt statt
+       sie anzusehen. */
+    const meinVerein = (kasseErg.length || regelnErg.length) ? (() => {
+      const b = meineBuchungen.results[0] || { flaschen: 0, gezahlt: 0 };
+      const z = meineZahlmoral.results[0] || { monate: 0, bezahlt: 0, gerechnet: 0, tage: null };
+      const st = meineStrafen.results[0] || { n: 0, cent: 0 };
+      return {
+        flaschen: b.flaschen, gezahlt: b.gezahlt,
+        strafen: st.n, strafen_cent: st.cent,
+        monate: z.monate, bezahlt: z.bezahlt || 0,
+        // `gerechnet` ist der Nenner des Schnitts, `monate` der der Quote -
+        // zwei verschiedene Zahlen, und genau deshalb reisen beide mit. Wer
+        // nie bezahlt hat, hat `gerechnet = 0`, und dann gibt es keinen
+        // Schnitt statt eines schmeichelhaften.
+        gerechnet: z.gerechnet,
+        tage: z.gerechnet && z.tage != null ? Math.round(z.tage * 10) / 10 : null,
+      };
+    })() : null;
+
     return antwort(request, {
       jahr,
-      runde: {
+      // Welche Gruppe dieser Rueckblick zeigt - die Seite schreibt den Namen in
+      // die Auftakt-Kachel. Wer in drei Gruppen ist, hat drei Rueckblicke, und
+      // ohne den Namen saehen alle drei gleich aus.
+      gruppe: { id: g.gruppe.id, name: g.gruppe.name },
+      /* `null` statt eines leeren Gegenstuecks, auf BEIDEN Seiten: die Seite
+         baut eine Kachel, wenn ihre Daten existieren. Ein `runde` voller
+         Nullen waere ein Rueckblick, der behauptet, es sei nichts passiert -
+         statt zu sagen, dass es diese Seite hier nicht gibt. */
+      runde: privatSeite(g.gruppe) ? {
         eiskoenig,
         meldungen: meldungSumme ? { summe: meldungSumme, monat: meldungMonat } : null,
         kaeltester: momentAntwort(kaeltester.results[0]),
         waermster: momentAntwort(waermster.results[0]),
         rad, abend, gastgeber, gesagtes,
-      },
-      ich: ichAntwort,
+      } : null,
+      verein: vereinSeite(g.gruppe) ? { seit: vereinSeit, kasse, regeln } : null,
+      // Der Ich-Teil entfaellt fuer den Wirt, der nicht Mitglied ist: eine
+      // eigene Bilanz in einer Gruppe, in der man nicht ist, gibt es nicht.
+      ich: meinBeitritt && privatSeite(g.gruppe) ? ichAntwort : null,
+      mein_verein: meinBeitritt ? meinVerein : null,
       // Ein abgeschlossenes Jahr aendert sich nie wieder - die Edge darf es
       // laenger halten. Das laufende Jahr bleibt privat/kurz wie die Bestenliste.
+      // `?g=` ist Teil der URL und damit Teil des Cache-Schluessels; `Vary`
+      // steht schon da, ein fremder Rueckblick kann hier nicht herauskommen.
     }, 200, jahr < heuteJahr
       ? { 'Cache-Control': 'private, max-age=86400', 'Vary': 'Origin, Authorization' }
       : KEIN_FREMDER_CACHE);
